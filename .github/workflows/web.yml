@@ -1,0 +1,30 @@
+name: web
+
+on:
+  pull_request:
+    paths: ['web/**', 'data/**', 'api/app/**', '.github/workflows/web.yml']
+  push:
+    branches: [main]
+    paths: ['web/**', 'data/**', 'api/app/**', '.github/workflows/web.yml']
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      # uv runs the API's Python to build the preview terrain tiles (and to regenerate the client when needed)
+      - uses: astral-sh/setup-uv@v6
+      - run: npm ci
+      - run: npm run tiles
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

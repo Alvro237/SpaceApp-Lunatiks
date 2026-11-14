@@ -19,3 +19,9 @@ dist/
 .vercel/
 .claude/settings.local.json
 *.log
+
+# Frontend static data: copied from data/ and built by web/scripts (npm run tiles), never committed
+web/public/data/
+web/public/tiles/
+web/test-results/
+web/playwright-report/
