@@ -22,6 +22,8 @@ export const MASTS_M = [0, 2, 5, 10] as const
 /** How places are drawn on the map and globe (three mock-ups to choose from). */
 export type MarkerStyle = 'pin' | 'crater' | 'cross'
 
+export type BlockView = 'moon' | 'ground'
+
 /** Site screening by the browser engine over the analysis window; null = not used. */
 export interface Screen {
   minSunPct: number | null
@@ -61,6 +63,10 @@ export interface Prefs {
   /** Text typed in the site search; the map shows the sites that match it. */
   siteQuery: string
   screen: Screen
+  /** Block Moon: the educational mode, the same places and times drawn as a world of cubes. */
+  blocks: boolean
+  /** In Block Moon: the whole Moon, or the ground around the chosen place. */
+  blockView: BlockView
 }
 
 /** The last place removed with a right click, so the removal can be undone. */
@@ -140,6 +146,8 @@ export const useApp = create<AppState>()((set, get) => ({
   markerStyle: 'pin',
   siteQuery: '',
   screen: NO_SCREEN,
+  blocks: false,
+  blockView: 'moon',
   mapEntry: null,
   enterMap: (lat, lon) =>
     set((s) => ({

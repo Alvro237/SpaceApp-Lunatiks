@@ -10,10 +10,18 @@
  *   - Bottom: the bare timeline.
  * A right click on a place removes it; a toast offers to undo it.
  * The panels report the space they cover so the map centres the Moon in the free area.
+ *
+ * Two systems share these top bars: the planner (the map, the place panel, the timeline) and Block Moon, the
+ * educational world of cubes (blocks/, SW-2). Loading and caching:
+ *   - The planner stays mounted once loaded. While Block Moon is on it is paused (its canvas draws no frames),
+ *     hidden and out of the tab order, so coming back is instant: same camera, tiles still in memory, no new WebGL.
+ *   - Block Moon's code is a lazy chunk, fetched the first time (and prefetched when the pointer or the focus
+ *     reaches its switch). It unmounts when switched off and frees its GPU memory; the heights it builds from
+ *     (globe, tileset, overview) stay in the shared React Query cache, so turning it on again downloads nothing.
  */
-import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { type ReactNode, Suspense, lazy, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
+import { loadBlockMode } from '../blocks/preload'
 import { ComparePanel } from '../compare/ComparePanel'
-import { SkyDial } from '../charts/SkyDial'
 import { Timeline } from '../charts/Timeline'
 import { DatePill } from '../panels/DatePill'
 import { MissionPanel } from '../panels/MissionPanel'
@@ -42,6 +50,9 @@ import { ToolSlotContext } from '../ui/toolSlotContext'
  */
 const reducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
+/** Block Moon, loaded the first time it is switched on (the same promise as the switch's prefetch). */
+const BlockMode = lazy(loadBlockMode)
+
 export function NavigatorPage() {
   const { restoredFromCorruptLink } = useUrlSync()
   useClock()
@@ -49,6 +60,9 @@ export function NavigatorPage() {
   const scale = useApp((s) => s.scale)
   const section = usePanels((s) => s.section)
   const comparing = useApp((s) => s.compareMode && s.compare.length >= 2)
+  const blocks = useApp((s) => s.blocks)
+  // the horizon view belongs to the planner: it waits (section kept) while Block Moon is on
+  const horizonOn = section === 'horizon' && !blocks
   const root = useRef<HTMLDivElement>(null)
   // Transition between the map and the horizon view, derived from the section while rendering (no effect needed
   // to start it); timers only end a phase.
@@ -72,22 +86,40 @@ export function NavigatorPage() {
     <NowProvider>
       <DiveTarget />
       <ToolSlotContext.Provider value={slot}>
-        <div className={`navigator${section === 'horizon' ? ' is-horizon' : ''}${phase === 'diving' ? ' is-diving' : ''}${phase === 'returning' ? ' is-returning' : ''}`} ref={root}>
+        <div
+          className={`navigator${horizonOn ? ' is-horizon' : ''}${blocks ? ' is-blocks' : ''}${!blocks && phase === 'diving' ? ' is-diving' : ''}${!blocks && phase === 'returning' ? ' is-returning' : ''}`}
+          ref={root}
+        >
           <h1 className="sr-only">Lunar Landing Site Navigator</h1>
-          {/* the map stays mounted (and keeps its camera) under the horizon view, paused and out of the tab order */}
-          <div className="map-layer" inert={section === 'horizon' ? true : undefined} aria-hidden={section === 'horizon' ? true : undefined}>
+          {/* The map stays mounted (and keeps its camera and tiles) under the horizon view and under Block Moon:
+              paused, hidden and out of the tab order. */}
+          <div
+            className={`map-layer${blocks ? ' is-dormant' : ''}`}
+            inert={horizonOn || blocks ? true : undefined}
+            aria-hidden={horizonOn || blocks ? true : undefined}
+          >
             {scale === 'globe' ? <GlobeView /> : <TerrainView />}
           </div>
-          {section === 'horizon' && phase === 'horizon' && <HorizonView animate={!reducedMotion()} />}
+          {horizonOn && phase === 'horizon' && <HorizonView animate={!reducedMotion()} />}
+          {blocks && (
+            <Suspense
+              fallback={
+                <p className="map-loading" role="status">
+                  Loading Block Moon…
+                </p>
+              }
+            >
+              <BlockMode />
+            </Suspense>
+          )}
           {restoredFromCorruptLink && (
             <p className="toast" role="alert">
               The shared link could not be read; the default scenario is shown.
             </p>
           )}
-          <SkyDial />
           <div className="top-left">
-            <div className="where-when" role="group" aria-label={mode === 'study' ? 'Where and when' : 'When'}>
-              {mode === 'study' && (
+            <div className="where-when" role="group" aria-label={blocks || mode === 'study' ? 'Where and when' : 'When'}>
+              {(blocks || mode === 'study') && (
                 <>
                   <SiteSearch />
                   <CoordsButton />
@@ -96,7 +128,7 @@ export function NavigatorPage() {
               <DatePill />
             </div>
             <div className="toolstrip" role="toolbar" aria-label="Map tools">
-              {mode === 'mission' && (
+              {!blocks && mode === 'mission' && (
                 <Popover label="Mission filters" button={<IconFilter size={18} />} buttonClass="tool-btn" align="left" className="mission-pop">
                   <h2 className="pop-title">
                     <IconFilter size={18} /> Mission filters
@@ -105,19 +137,24 @@ export function NavigatorPage() {
                 </Popover>
               )}
               <div className="toolslot" ref={setSlot} />
-              <PlaceTools />
+              {!blocks && <PlaceTools />}
             </div>
           </div>
-          {comparing ? (
-            <SidePanel wide>{(titleId) => <ComparePanel titleId={titleId} />}</SidePanel>
-          ) : (
-            section && <SidePanel wide={section === 'power'}>{(titleId) => <SectionDrawer titleId={titleId} />}</SidePanel>
+          {/* Block Moon brings its own panels ("The sky now", the days along the bottom) */}
+          {!blocks && (
+            <>
+              {comparing ? (
+                <SidePanel wide>{(titleId) => <ComparePanel titleId={titleId} />}</SidePanel>
+              ) : (
+                section && <SidePanel wide={section === 'power'}>{(titleId) => <SectionDrawer titleId={titleId} />}</SidePanel>
+              )}
+              <RemovedToast />
+              <QuestPanel />
+              <div className="float float-bottom">
+                <Timeline />
+              </div>
+            </>
           )}
-          <RemovedToast />
-          <QuestPanel />
-          <div className="float float-bottom">
-            <Timeline />
-          </div>
         </div>
       </ToolSlotContext.Provider>
     </NowProvider>

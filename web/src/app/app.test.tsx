@@ -17,6 +17,7 @@ import { colorAt, luminance, textOn } from '../terrain/colormaps'
 
 vi.mock('../terrain/TerrainView', () => ({ TerrainView: () => <div role="img" aria-label="Map (test stub)" /> }))
 vi.mock('../globe/GlobeView', () => ({ GlobeView: () => <div role="img" aria-label="Globe (test stub)" /> }))
+vi.mock('../blocks/BlockMode', () => ({ default: () => <div role="img" aria-label="Block Moon (test stub)" /> }))
 
 const ROOT = resolve(__dirname, '../../..')
 const sitesDoc = JSON.parse(readFileSync(resolve(ROOT, 'data/sites.json'), 'utf8')) as {
@@ -98,10 +99,9 @@ describe('navigator', () => {
     await waitFor(() => expect(search).toHaveAttribute('placeholder', expect.stringMatching(/IM-2/)))
     expect(screen.getByRole('button', { name: 'Coordinates' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Date and duration' })).toBeInTheDocument()
-    // no side panel until a section is asked for: the sky dial keeps the Sun and Earth on screen
-    expect(await screen.findByRole('img', { name: /Sky above IM-2/ }, { timeout: 5000 })).toBeInTheDocument()
+    // no side panel until a section is asked for: the timeline shows when the place is sunlit and sees the Earth
+    expect(await screen.findByRole('img', { name: /Sunlit .*% and Earth in view/ }, { timeout: 5000 })).toBeInTheDocument()
     expect(document.querySelector('.side-panel')).toBeNull()
-    expect(screen.getByRole('img', { name: /Sunlit .*% and Earth in view/ })).toBeInTheDocument()
     const tools = screen.getByRole('group', { name: 'Place tools' })
     expect(within(tools).getByRole('button', { name: 'Multiselect' })).toHaveAttribute('aria-pressed', 'false')
     await noAxeViolations(container)
@@ -150,6 +150,25 @@ describe('navigator', () => {
     await user.click(screen.getByRole('button', { name: 'Close Power' }))
     expect(document.querySelector('.side-panel')).toBeNull()
    }, 30_000)
+
+  it('Block Moon loads on demand; the planner sleeps under it and comes back without being rebuilt', async () => {
+    const user = userEvent.setup()
+    renderAt('/')
+    const globe = await screen.findByRole('img', { name: 'Globe (test stub)' })
+    const toggle = screen.getByRole('switch', { name: 'Block Moon' })
+    await user.click(toggle)
+    expect(await screen.findByRole('img', { name: 'Block Moon (test stub)' })).toBeInTheDocument()
+    // the planner is still mounted (same node), hidden from assistive technology and out of the tab order
+    const layer = document.querySelector('.map-layer')!
+    expect(layer).toHaveClass('is-dormant')
+    expect(layer).toHaveAttribute('aria-hidden', 'true')
+    expect(layer.contains(globe)).toBe(true)
+    expect(screen.queryByRole('region', { name: /Place/ })).not.toBeInTheDocument()
+    await user.click(toggle)
+    expect(screen.queryByRole('img', { name: 'Block Moon (test stub)' })).not.toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Globe (test stub)' })).toBe(globe)
+    expect(layer).not.toHaveClass('is-dormant')
+  })
 
   it('opens on the globe; the map replaces it when entered', async () => {
     renderAt('/')
@@ -229,7 +248,7 @@ describe('navigator', () => {
   it('multiselect: two places open the comparison with a radar, strips over time and removal with undo', async () => {
     const user = userEvent.setup()
     const { container } = renderAt('/')
-    await screen.findByRole('img', { name: /Sky above IM-2/ }, { timeout: 5000 })
+    await screen.findByRole('img', { name: /Sunlit .*% and Earth in view/ }, { timeout: 5000 })
     const tools = screen.getByRole('group', { name: 'Place tools' })
     await user.click(within(tools).getByRole('button', { name: 'Multiselect' }))
     // the single-place sections step aside; with one place the bar says what to do next
@@ -267,7 +286,7 @@ describe('navigator', () => {
     vi.stubGlobal('fetch', fakeFetch(false))
     const user = userEvent.setup()
     renderAt('/')
-    expect(await screen.findByRole('img', { name: /Sky above IM-2/ }, { timeout: 5000 })).toBeInTheDocument()
+    expect(await screen.findByRole('img', { name: /Sunlit .*% and Earth in view/ }, { timeout: 5000 })).toBeInTheDocument()
     // the catalogue comes from the static copy, and the search list says so
     await user.click(screen.getByRole('combobox', { name: 'Search sites and missions' }))
     expect(await screen.findByText(/Site catalogue: the API did not answer/, undefined, { timeout: 5000 })).toBeInTheDocument()

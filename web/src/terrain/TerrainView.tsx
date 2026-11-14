@@ -24,9 +24,9 @@ import { IconCube, IconFit, IconGlobe, IconMinus, IconPlus } from '../ui/icons'
 import { terrainRegistry } from './registry'
 import { type Tileset, inExtent, polarLatLon, polarXY, scaleFactor } from './tileset'
 
-const TILES_BASE = `${import.meta.env.BASE_URL}tiles/`
+export const TILES_BASE = `${import.meta.env.BASE_URL}tiles/`
 
-async function loadTileset(): Promise<Tileset> {
+export async function loadTileset(): Promise<Tileset> {
   const res = await fetch(`${TILES_BASE}tileset.json`)
   if (!res.ok) throw new Error(`tileset.json: HTTP ${res.status}`)
   return (await res.json()) as Tileset
@@ -72,7 +72,10 @@ function MapView({ tileset }: { tileset: Tileset }) {
   const set = useApp((s) => s.set)
   const mode = useApp((s) => s.mode)
   // paused while the horizon view covers the map
-  const covered = useHorizonTransition((s) => s.phase === 'horizon')
+  // paused (no frames drawn) while the horizon view or Block Moon covers the map; it keeps its camera and tiles
+  const underHorizon = useHorizonTransition((s) => s.phase === 'horizon')
+  const underBlocks = useApp((s) => s.blocks)
+  const covered = underHorizon || underBlocks
 
   useEffect(() => rig.setTilt(view === '3d' ? TILT_3D : 0), [rig, view])
 

@@ -118,7 +118,7 @@ actually used, and optionally the zone neighbours (`db/horizons.py: zone`).
 panels; timeline; mission mode; comparison), client generated from `/openapi.json`, web CI. Calls `/state`,
 `/series`, `/points/*`, `/candidates/search`, `/power`, `/craters` when they are deployed; contract for the
 terrain tiles in `docs/web-tileset.md`. Live terrain levels z8-z10 (20 m and 10 m LOLA DEMs read block by block
-from PGDA) on `feat/sw2-live-dem`; production needs the CORS proxy deployed (team decision). Deploy not set up (team decision). Typed client generated from `/openapi.json`; a GitHub Actions workflow running both test
+from PGDA) on `feat/sw2-live-dem`; production needs the CORS proxy deployed (team decision). Block Moon, an educational mode drawn as a world of cubes from the same LOLA data and engine, on `feat/sw2-block-moon`. Deploy not set up (team decision). Typed client generated from `/openapi.json`; a GitHub Actions workflow running both test
 suites; a public host that answers `/health` with no login. Ask the team before deploying anything.
 
 ---

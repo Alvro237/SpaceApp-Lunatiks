@@ -8,9 +8,9 @@
  *   SectionDrawer: the side panel that shows the open section, with the place's name, the horizon it is computed
  *   over, and a close button. Escape closes it and focus goes back to its button.
  *
- * The Sun and Earth over the horizon stay on screen in the sky dial. Horizon also opens the first-person horizon
- * view over the map (NavigatorPage); its panel steers that view and adds the Sun and Earth cards with the time to
- * the next set or rise.
+ * With no section open the map keeps the whole screen and the timeline shows when the place is sunlit and sees
+ * the Earth. Horizon opens the first-person horizon view over the map (NavigatorPage); its panel steers that view
+ * and adds the Sun and Earth cards with the time to the next set or rise.
  */
 import { type ReactNode, useEffect, useId, useRef } from 'react'
 import { type SectionId, usePanels } from '../state/panels'

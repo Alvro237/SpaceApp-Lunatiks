@@ -28,7 +28,7 @@ export const MAP_DISC_LAT = -60
 const ENTER_MAP_DIST = MOON_R_KM * 1.18
 const RELIEF_EXAGGERATION = 4
 
-interface GlobeMeta {
+export interface GlobeMeta {
   file: string
   width: number
   height: number
@@ -36,7 +36,7 @@ interface GlobeMeta {
   max: number
 }
 
-async function loadGlobe(): Promise<{ meta: GlobeMeta; heights: Float32Array }> {
+export async function loadGlobe(): Promise<{ meta: GlobeMeta; heights: Float32Array }> {
   const meta = (await (await fetch(`${DATA_BASE}globe/globe.json`)).json()) as GlobeMeta
   const loader = new TileLoader(1)
   try {
@@ -61,7 +61,10 @@ export function GlobeView() {
   const [orbit] = useState(() => new OrbitRig(START))
   const anchored = useGlobe((s) => s.anchored)
   // In the horizon view the globe is hidden and paused: it must not start turning there, nor right after.
-  const covered = useHorizonTransition((s) => s.phase === 'horizon')
+  // paused (no frames drawn) while the horizon view or Block Moon covers the map; it keeps its camera and tiles
+  const underHorizon = useHorizonTransition((s) => s.phase === 'horizon')
+  const underBlocks = useApp((s) => s.blocks)
+  const covered = underHorizon || underBlocks
   useEffect(() => orbit.touch(), [covered, orbit])
 
   // Opening the horizon view: turn to the place and come down over it; back to the previous view when it closes.
