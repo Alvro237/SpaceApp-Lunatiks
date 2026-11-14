@@ -3,18 +3,21 @@
  * Decodes tiles off the main thread (plan: "Fuera del hilo principal"): fetch the PNG, inflate it and turn it
  * into heights in metres (Float32Array) or a layer's value + alpha bytes. The buffers are transferred back.
  */
+import type { LiveTileRequest } from './live/cog'
 import { decodePng, heightsFromRgb } from './png'
 
 export interface DecodeRequest {
   id: number
   url: string
-  kind: 'height' | 'layer'
+  /** 'live': heights sampled from a remote DEM block by block (live/cog.ts) instead of a PNG tile. */
+  kind: 'height' | 'layer' | 'live'
   min?: number
   max?: number
+  live?: Omit<LiveTileRequest, 'url'>
 }
 
 export type DecodeResponse =
-  | { id: number; ok: true; width: number; height: number; heights?: Float32Array; bytes?: Uint8Array }
+  | { id: number; ok: true; width: number; height: number; heights?: Float32Array; bytes?: Uint8Array; min?: number; max?: number }
   | { id: number; ok: false; error: string }
 
 const ctx = self as unknown as DedicatedWorkerGlobalScope
@@ -22,6 +25,16 @@ const ctx = self as unknown as DedicatedWorkerGlobalScope
 ctx.onmessage = async (e: MessageEvent<DecodeRequest>) => {
   const { id, url, kind, min = 0, max = 1 } = e.data
   try {
+    if (kind === 'live') {
+      // geotiff.js (about 300 kB) loads only when the first live tile is asked for
+      const { readLiveTile } = await import('./live/cog')
+      const t = await readLiveTile({ url, ...e.data.live! })
+      ctx.postMessage(
+        { id, ok: true, width: t.samples, height: t.samples, heights: t.heights, min: t.min, max: t.max } satisfies DecodeResponse,
+        [t.heights.buffer],
+      )
+      return
+    }
     const res = await fetch(url)
     if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`)
     const png = await decodePng(await res.arrayBuffer())

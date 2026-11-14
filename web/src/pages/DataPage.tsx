@@ -70,8 +70,21 @@ export function DataPage() {
             </tr>
             <tr>
               <th scope="row">Relief tiles and elevation</th>
-              <td>LOLA LDEM_60S_240MPP_ADJ (960 m preview cells)</td>
+              <td>
+                LOLA LDEM_60S_240MPP_ADJ (960 m cells, whole map) and{' '}
+                <a href="https://pgda.gsfc.nasa.gov/products/90">LDEM_80S_80MPP_ADJ</a> (480 to 60 m cells within about 300 km of the pole), PGDA product 90
+              </td>
               <td>2D and 3D terrain, shadows at the chosen instant</td>
+            </tr>
+            <tr>
+              <th scope="row">Finest relief, read while you zoom</th>
+              <td>
+                LOLA DEMs read on demand and kept in this browser's storage (the oldest are deleted above 45 % of the site's quota):{' '}
+                <a href="https://trek.nasa.gov/moon/">NASA Moon Trek</a> 100 m and 30 m south-pole DEMs (120 and 60 m cells across the whole map) and
+                its 5 m DEM (3.75 m cells near the pole); PGDA product 90 LDEM_80S_20MPP_ADJ (30 m cells) and LDEM_83S_10MPP_ADJ (15 and 7.5 m cells)
+                {import.meta.env.DEV || import.meta.env.VITE_PGDA_PROXY ? '' : ' (the PGDA ones are not enabled in this build)'}
+              </td>
+              <td>2D and 3D terrain when you zoom in</td>
             </tr>
             <tr>
               <th scope="row">Slope</th>
@@ -145,8 +158,8 @@ export function DataPage() {
           <DataTable
             summary="Tile height at each terrain site against the catalogue"
             caption="Height of the terrain tiles at the catalogue sites"
-            head={['Site', 'Catalogue (m)', 'Tiles (m)', 'Difference (m)']}
-            rows={ts.validation.siteHeights.map((s) => [s.site, s.catalogueGroundM, s.tileM, s.differenceM])}
+            head={['Site', 'Catalogue (m)', 'Tiles (m)', 'Difference (m)', 'Finest level']}
+            rows={ts.validation.siteHeights.map((s) => [s.site, s.catalogueGroundM, s.tileM, s.differenceM, s.finestLevel ?? '—'])}
           />
         </>
       )}
