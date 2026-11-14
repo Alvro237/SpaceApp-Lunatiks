@@ -71,8 +71,8 @@ export function DataPage() {
             <tr>
               <th scope="row">The whole Moon, read while you zoom</th>
               <td>
-                <a href="https://trek.nasa.gov/moon/">NASA Moon Trek</a> global LOLA DEM (256 px/deg, 118 m; down to 168 m cells) and LROC WAC global
-                mosaic (303 px/deg, 100 m), read on demand and kept in this browser's storage
+                <a href="https://trek.nasa.gov/moon/">NASA Moon Trek</a> LOLA DEMs (global 256 px/deg between 45° S and 45° N, 100 m polar DEMs beyond;
+                down to 168 m cells) and LROC WAC global mosaic (303 px/deg, 100 m), read on demand and kept in this browser's storage
               </td>
               <td>Sharper relief shading on the globe; the optional photo view (the WAC mosaic keeps the lighting it was photographed with)</td>
             </tr>

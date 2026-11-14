@@ -182,20 +182,36 @@ north, value = elevation in degrees mapped from [−10, 40] to 0..255. The engin
 ## Globe detail tiles (outside the polar map)
 
 The globe ships with LDEM_16 reduced to 4 px/deg (7.6 km, `data/globe`). While the user zooms, the browser reads
-finer tiles from two global Moon Trek ImageServer layers (`web/src/globe/detail`): the LOLA DEM
-`LRO_LOLA_DEM_Global_256ppd_v06` (float32 metres above the 1737.4 km sphere) for the relief shading, and, in the
-optional photo view, the LROC WAC mosaic `LRO_WAC_Mosaic_Global_303ppd_v02` (8-bit grey).
+finer tiles from NASA Moon Trek (`web/src/globe/detail`): LOLA heights for the relief shading and, in the optional
+photo view, the LROC WAC mosaic.
 
 - Grid: geographic, level z has tiles of 90 / 2^z degrees (4·2^z × 2·2^z tiles from 180° W, 90° N), 256 × 256
   cell-centred cells. Levels 2 to 6 for the view (2.7 km to 168 m cells, the level whose cells match a screen
   pixel, at most 48 tiles); level 1 (32 tiles of 45°) is the photo view's base. Boxes never cross ±180° or ±90°.
-- Requests: `exportImage`, bilinear on the server, one extra row below the tile (dropped) because Moon Trek
-  answers the last row with zeros; the south-pole row of tiles has no extra row and a last row of zeros is
-  replaced by the row above. On the WAC mosaic, Moon Trek also answers the column at ±180° with zeros; it is
-  replaced by its neighbour. The DEM does not do this (measured 2026-11-14).
+- Heights, by where the tile is (all measured 2026-11-14): between 45° S and 45° N the global DEM
+  `LRO_LOLA_DEM_Global_256ppd_v06`; poleward of 45° the 100 m polar DEMs in geographic form
+  (`LRO_LOLA_DEM_SPole45_100mp_v04_EQ`, `..._NPole45_...`), which answer every level in about 1.3 s where the
+  global DEM takes 5-60 s (or HTTP 500) for large polar tiles. The polar ones return half-metres (× 0.5). The global
+  128 px/deg v04 DEM is not used: its gaps between LOLA tracks show as north-south bands near the equator (the v06
+  DEM still has some there; that is the data, LOLA's track spacing near the equator).
+- Photo: the WMTS cache of `LRO_WAC_Mosaic_Global_303ppd_v02` (JPEG, same grid: matrix z + 1, row y, column x,
+  about 0.85 s per tile).
+- Requests: DEM tiles by `exportImage`, bilinear on the server, one extra row below the tile (dropped) because Moon
+  Trek answers the last row with zeros; the south-pole row of tiles has no extra row and a last row of zeros is
+  replaced by the row above. 15 s time limit, two attempts; a failed tile is asked for again after 10, 20 and 40 s.
+- Order: tiles are chosen for where the camera is going (not for the frames of the flight there); the few tiles two
+  levels coarser come first, then the view's level from the centre outward. From an empty cache a view loads in
+  2-6 s (closest zoom at the equator 5.4 s, 41 tiles; 70° S 2.7 s, 34 tiles), on a connection with about 0.7 s of
+  latitude to Moon Trek.
 - Checks before caching: size, georeference (DEM), no no-data, no row of zeros (DEM). Cached in the browser's
   block cache under the URL.
-- Measured: the DEM tile 22.5-28.125° E, 0-5.625° N has a mean height within 0.25 m of LDEM_16 over the same box.
-- Drawing: the mesh relief stays the shipped grid; the fragment shader shades with the finest loaded tile that is
-  not finer than the view's level (slopes exaggerated ×1.5 there, ×3 on the 7.6 km grid). The photo keeps its own,
-  photographed lighting; the chosen instant only sets day and night.
+- Measured: DEM tile means within 0.25 m (global, 22.5-28.125° E, 0-5.625° N) and 13 m (south polar, 22.5-28.125° E,
+  67.5-73.125° S) of LDEM_16 over the same boxes.
+- Drawing: the mesh relief is the shipped grid, interpolated bilinearly, with its exaggeration easing from ×4 (whole
+  Moon) to ×1 (closest zoom), so the fine shading does not slide over exaggerated steps of the coarse mesh; the 513
+  vertices at each pole share one height (they used to fan out into spikes). The fragment shader shades with the
+  finest loaded tile that is not finer than the view's level (slopes exaggerated ×1.5 there, ×3 on the 7.6 km
+  grid), stepping inside the tile at its edges. The photo keeps its own, photographed lighting; the chosen instant
+  only sets day and night.
+- Known limit: near the poles the geographic tiles are thin wedges, so a view there stays at coarser levels (2.7 km
+  cells around 80° S); the detailed south-polar map is the place for that region.
