@@ -96,6 +96,42 @@ Before the 80 m levels the sites differed by up to 52 m.
 The CI job (`.github/workflows/web.yml`) has no copy of the DEM, so it builds and checks the 960 m levels only; a
 deploy that should show the 80 m detail needs the DEM (189 MB) downloaded before `npm run tiles`.
 
+## Live levels (z8-z10, read on demand)
+
+Below the static pyramid the engine adds three levels that are not files on our host: the browser reads them from
+NASA PGDA while you zoom (`web/src/terrain/live/`).
+
+| z | Cell | Source (PGDA product 90) | Coverage | Tiles available |
+| --- | --- | --- | --- | --- |
+| 8 | 30 m | `LDEM_80S_20MPP_ADJ.TIF`, 20 m, 30 400 × 30 400 px, 2.70 GB | children of every z7 tile inside ±303 960 m | 5 776 |
+| 9 | 15 m | `LDEM_83S_10MPP_ADJ.TIF`, 10 m, 43 280 × 43 280 px, 5.12 GB | children of every z8 tile inside ±216 380 m | 12 544 |
+| 10 | 7.5 m | same 10 m DEM | children of every z9 tile | 50 176 |
+
+- **How.** Both DEMs are Cloud Optimized GeoTIFFs (float32, 512 × 512 deflate blocks, floating-point predictor,
+  overviews; read from their headers on 2026-11-14). The decode worker opens a file once with geotiff.js, reads
+  only the pixel window under a tile with HTTP Range requests, and samples the 257 × 257 vertices exactly as
+  `web/scripts/fine_levels.py` does (bilinear on pixel centres, global vertex indices, so shared edges are
+  identical; unit-tested). One source per level, so neighbouring tiles never mix DEMs. Heights need no
+  conversion: both DEMs are metres above the 1737.4 km sphere in the same projection. Measured at the 12
+  catalogue sites inside them, the 10 m DEM differs from the catalogue's `groundHeightM` by at most 0.05 m and
+  the 20 m DEM by at most 0.61 m.
+- **Proxy.** PGDA answers Range requests (206) but sends no `Access-Control-Allow-Origin` (checked 2026-11-14), so
+  a browser cannot read it directly. Development uses the Vite proxy `/pgda/`; production needs the Cloudflare
+  Worker in `web/src/proxy/pgdaProxy.ts` (`web/proxy/wrangler.toml`), deployed by the team and passed to the build
+  as `VITE_PGDA_PROXY`. The Worker forwards only the two files above, only single ranges up to 16 MiB, checks that
+  the answer matches the range (PGDA sometimes truncates them) and keeps each range in the edge cache. Without
+  `VITE_PGDA_PROXY` a production build has no live levels and the map ends at z7 (60 m).
+- **Cache in the browser.** Blocks of 64 KiB are stored in IndexedDB (`lunatiks-dem-blocks`). After writes, at
+  most every 5 s, the cache reads `navigator.storage.estimate()`; above 45 % of this site's quota it deletes the
+  least recently used blocks down to 35 %. The quota is set by each browser, so the rule is a share, not a size.
+  geotiff.js keeps another 16 MiB of blocks in memory.
+- **Failure.** A tile whose blocks cannot be read is retried three times, then left out for the session; its
+  parent stays on screen. Measured with PGDA blocked: 70 live tiles failed, the 60 m tiles stayed, no page errors.
+- **Measured on 2026-11-14** (headless Chromium, development proxy, zoomed in at the pole near Shackleton, 20 zoom
+  steps): 16 tiles of z10 and 1 of z9 drawn, 42 live tiles loaded, 0 failed; 16 requests to PGDA, 13.4 MB.
+  Reloading with the same browser profile: 5 requests and 3.3 MB on the second run, 0 on the third (the rest
+  came from IndexedDB, 18 MB on disk).
+
 ## Shadows and horizon maps
 
 The engine computes shadows on the GPU from `overview` (ray march toward the Sun with the curvature drop, 175 km,

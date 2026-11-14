@@ -77,6 +77,15 @@ export function DataPage() {
               <td>2D and 3D terrain, shadows at the chosen instant</td>
             </tr>
             <tr>
+              <th scope="row">Finest relief, read while you zoom</th>
+              <td>
+                LOLA LDEM_80S_20MPP_ADJ (30 m cells) and LDEM_83S_10MPP_ADJ (15 and 7.5 m cells), PGDA product 90: blocks of the NASA files read on demand
+                and kept in this browser's storage (the oldest are deleted above 45 % of the site's quota)
+                {import.meta.env.DEV || import.meta.env.VITE_PGDA_PROXY ? '' : '. Not enabled in this build'}
+              </td>
+              <td>2D and 3D terrain within about 300 km of the pole</td>
+            </tr>
+            <tr>
               <th scope="row">Slope</th>
               <td>LOLA LDSM_60S_240MPP_ADJ, PGDA product 90</td>
               <td>Slope layer, slope hard filter</td>
