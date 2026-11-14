@@ -181,6 +181,16 @@ API: the frontend chooses what to show. Max 20 000 samples. Shared request base 
      survive the longest night.
 - Inputs as a parameter dataclass with units; three hand-worked cases as tests.
 
+## MECH · Sun over a mission window
+
+**Status:** done on `feat/mech-power`. `POST /api/v1/sun` with the shared window request. Returns the state at
+start (elevation, azimuth, visible fraction, skyline height in the Sun's direction), elevation / azimuth /
+visible-fraction series, elevation stats, sunlit fraction, hours and ranges, longest sunlit and dark stretches,
+next sunset or sunrise (to about one second) and hours to sunset, eclipses (Earth over the Sun: partial or total,
+start, end, duration) with fraction and ranges. Check: the 2025-03-14 eclipse at Blue Ghost 1 comes out total,
+05:01-09:51 UTC at a 1-minute step (4.85 h).
+**Files:** `logic/sun.py`, `routers/sun.py`, `schemas/sun.py`, `tests/test_sun.py`.
+
 ## MECH · Thermal model and maximum temperature
 
 **Status:** to do. **Files:** `logic/thermal.py`, `logic/constraints/temperature.py`.
