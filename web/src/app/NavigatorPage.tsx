@@ -3,7 +3,7 @@
  * the chosen place on the right, playback along the bottom, and the live comparison above it when on.
  * The panels report the space they cover so the map centres the Moon in the free area.
  */
-import { type ReactNode, useId, useLayoutEffect, useRef, useState } from 'react'
+import { type ReactNode, Suspense, lazy, useId, useLayoutEffect, useRef, useState } from 'react'
 import { CompareLive } from '../compare/CompareLive'
 import { Timeline } from '../charts/Timeline'
 import { MissionPanel } from '../panels/MissionPanel'
@@ -18,8 +18,8 @@ import { GlobeView } from '../globe/GlobeView'
 import { TerrainView } from '../terrain/TerrainView'
 import { useClock } from '../time/useClock'
 import { QuestPanel } from '../learn/QuestPanel'
-import { BlockPanels } from '../blocks/BlockPanels'
-import { BlockWorld } from '../blocks/BlockWorld'
+
+const BlockMode = lazy(() => import('../blocks/BlockMode'))
 
 const narrow = () => typeof window !== 'undefined' && window.innerWidth < 760
 
@@ -35,10 +35,15 @@ export function NavigatorPage() {
       <div className="navigator" ref={root}>
         <h1 className="sr-only">Lunar Landing Site Navigator</h1>
         {blocks ? (
-          <>
-            <BlockWorld />
-            <BlockPanels />
-          </>
+          <Suspense
+            fallback={
+              <p className="map-loading" role="status">
+                Loading Block Moon…
+              </p>
+            }
+          >
+            <BlockMode />
+          </Suspense>
         ) : (
           <Planner restoredFromCorruptLink={restoredFromCorruptLink} />
         )}
