@@ -63,9 +63,9 @@ export interface Prefs {
   /** Text typed in the site search; the map shows the sites that match it. */
   siteQuery: string
   screen: Screen
-  /** Block Moon: the educational mode, the same places and times drawn as a world of cubes. */
+  /** Learn mode: the educational mode, the same places and times drawn as a world of cubes. */
   blocks: boolean
-  /** In Block Moon: the whole Moon, or the ground around the chosen place. */
+  /** In Learn mode: the whole Moon, or the ground around the chosen place. */
   blockView: BlockView
 }
 

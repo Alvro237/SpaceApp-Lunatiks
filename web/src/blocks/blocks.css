@@ -1,5 +1,5 @@
 /*
- * Block Moon. The world is made of cubes; the panels are the navigator's own (theme.css and panels.css tokens:
+ * Learn mode. The world is made of cubes; the panels are the navigator's own (theme.css and panels.css tokens:
  * dark glass, 12-16 px corners, Space Grotesk text and Plex Mono numbers), so the two modes read as one product.
  * Only the day blocks and the switch keep a square, "block" shape. Sun = amber, Earth = blue and dashed, as
  * everywhere else; each state also changes text or shape, never colour alone. The mode is always over a night

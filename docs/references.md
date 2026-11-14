@@ -79,7 +79,7 @@ asks for this list; keep it current when something is added.
 - U.S. Standard Atmosphere, 1976 (NOAA/NASA/USAF): molar mass of dry air 28.9644 g/mol. CODATA 2018: gas constant
   R = 8.314462618 J/mol K and Stefan-Boltzmann constant.
 
-Mission facts told in Block Moon's mission log (`web/src/blocks/story.ts`); every number in its answers comes from
+Mission facts told in Learn mode's mission log (`web/src/blocks/story.ts`); every number in its answers comes from
 the engine, these only support the short historical texts:
 
 - NASA SP-4214, *Where No Man Has Gone Before*, ch. 6 "Mission and science planning": sun elevation at landing as

@@ -1,5 +1,5 @@
 /**
- * Block Moon's mission log: six short chapters built on real Moon missions, for learners and the public. Each
+ * Learn mode's mission log: six short chapters built on real Moon missions, for learners and the public. Each
  * chapter puts the world where a real mission was (place and date), tells what happened there in two or three
  * sentences with its source, gives a task done in the tool (find the Sun, play the days, compare two places), and
  * answers with the engine's own numbers: the same JPL tables and LOLA horizons as the planner, never a typed value.

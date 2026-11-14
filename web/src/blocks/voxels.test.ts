@@ -31,7 +31,7 @@ describe('sampleGround', () => {
     expect(g.heightsM[2 * 5 + 2]).toBeCloseTo(0, 6)
   })
 
-  it('scales the curvature drop when asked (Block Moon draws it at true size under stretched relief)', () => {
+  it('scales the curvature drop when asked (Learn mode draws it at true size under stretched relief)', () => {
     const full = sampleGround(() => 0, polarXY, -85, 30, 5, 1000)!
     const quarter = sampleGround(() => 0, polarXY, -85, 30, 5, 1000, 0.25)!
     expect(quarter.heightsM[0]).toBeCloseTo(full.heightsM[0] * 0.25, 6)

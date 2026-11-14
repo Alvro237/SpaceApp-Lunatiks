@@ -1,5 +1,5 @@
 /**
- * Block Moon: the navigator's place and time drawn as a world of cubes, for learners.
+ * Learn mode: the navigator's place and time drawn as a world of cubes, for learners.
  *
  * Two views. "Whole Moon": the global LOLA heights as a sphere of cubes, lit by the Sun at the chosen time.
  * "Ground": the LOLA polar DEM around the chosen place as columns of cubes, with the Sun and the Earth as cubes

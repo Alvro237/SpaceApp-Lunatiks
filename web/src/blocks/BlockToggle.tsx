@@ -1,4 +1,4 @@
-/** The Block Moon switch in the top bar: the same place and time, drawn as a world of cubes for learners. */
+/** The Learn switch in the top bar: the same place and time, drawn as a world of cubes for learners. */
 import { useApp } from '../state/store'
 import { loadBlockMode } from './preload'
 import './blocks.css'
@@ -12,7 +12,7 @@ export function BlockToggle() {
       role="switch"
       aria-checked={blocks}
       className="block-toggle"
-      // fetch the Block Moon code as soon as the pointer or the focus shows the intent, so the switch does not wait
+      // fetch the Learn mode code as soon as the pointer or the focus shows the intent, so the switch does not wait
       onPointerEnter={() => void loadBlockMode()}
       onFocus={() => void loadBlockMode()}
       onClick={() => {
@@ -23,7 +23,7 @@ export function BlockToggle() {
       <span className="track" aria-hidden="true">
         <span className="knob" />
       </span>
-      Block Moon
+      Learn
     </button>
   )
 }

@@ -1,5 +1,5 @@
 /**
- * Block Moon's small shared state: what the 3D view can see (published by the scene, read by the story), and the
+ * Learn mode's small shared state: what the 3D view can see (published by the scene, read by the story), and the
  * learner's place in the mission log. Progress is kept in this browser only (a convenience; nothing depends on it).
  */
 import { create } from 'zustand'
