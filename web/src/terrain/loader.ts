@@ -41,6 +41,11 @@ export class TileLoader {
     return this.keys.has(key) || this.failed.has(key)
   }
 
+  /** Let a failed key be asked for again (the globe's detail tiles retry after a pause). */
+  forget(key: string): void {
+    this.failed.delete(key)
+  }
+
   request(key: string, req: Omit<DecodeRequest, 'id'>): Promise<Ok> {
     return new Promise<Ok>((resolve, reject) => {
       this.keys.add(key)

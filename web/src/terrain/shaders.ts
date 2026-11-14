@@ -5,6 +5,16 @@
  *
  * Output is written as sRGB directly (no tone mapping, no colour-space conversion), so the layer colours on
  * the map are exactly the colours of the legend.
+ *
+ * GPU cost (it ran at 10 ms per frame, 15-19 ms at peaks, for a tilted view at device pixel ratio 2, measured with
+ * a GPU timer, so frames were dropped once the shadow pass or a larger window was added):
+ * - DISC_EDGE: only tiles that reach past the map's disc carry the discard; a shader that can discard loses the
+ *   GPU's hidden-surface removal, so in tilted views every hidden layer of terrain was shaded too.
+ * - FLOAT_LINEAR (where float textures filter linearly): the slope comes from 4 hardware-filtered reads of the
+ *   height texture instead of 16 texel fetches.
+ * - The Sun's direction in the scene is worked out per vertex (it changes smoothly over a tile: the error of the
+ *   linear interpolation is about (vertex spacing / R)^2 / 8, under 0.002 degrees for the 29 km of level 0), not per
+ *   pixel, and without trigonometry.
  */
 import { R_M } from './tileset'
 
@@ -14,10 +24,13 @@ export const TERRAIN_VERT = /* glsl */ `
 uniform sampler2D uHeight;   // 257 x 257 heights, metres, NEAREST
 uniform vec4 uBounds;        // xMin, yMax, size (m), vertical exaggeration
 uniform float uSkirtKm;
+uniform vec3 uSun;           // unit vector to the Sun, MOON_ME
 in float skirt;
 out vec2 vUv;
 out vec2 vMap;
 out float vHeight;
+out vec3 vSunScene;          // the Sun's direction in the scene at this point (not normalised)
+const float R = ${R_M.toFixed(1)};
 void main() {
   ivec2 texel = ivec2(round(uv * 256.0));
   float h = texelFetch(uHeight, texel, 0).r;
@@ -26,6 +39,23 @@ void main() {
   vUv = uv;
   vMap = map;
   vHeight = h;
+  // Local east/north/up of the sphere at this point, drawn on the polar map, without trigonometry: the south polar
+  // stereographic radius r gives colatitude 2 atan(r / 2R), so with t = r / 2R, cos(lat) = 2t / (1 + t^2) and
+  // sin(lat) = -(1 - t^2) / (1 + t^2); longitude atan(x, y) gives cos(lon) = y / r, sin(lon) = x / r. On the pole
+  // itself (a vertex of every level) the longitude is undefined (atan(0, 0) is undefined in GLSL) and any value gives
+  // the same result, so 0 is used.
+  float r = length(map);
+  float t = r / (2.0 * R);
+  float k = 1.0 / (1.0 + t * t);
+  float cosLat = 2.0 * t * k;
+  float sinLat = -(1.0 - t * t) * k;
+  vec2 cs = r > 0.0 ? vec2(map.y, map.x) / r : vec2(1.0, 0.0);   // cos(lon), sin(lon)
+  vec3 up = vec3(cosLat * cs.x, cosLat * cs.y, sinLat);
+  vec3 east = vec3(-cs.y, cs.x, 0.0);
+  vec3 north = vec3(-sinLat * cs.x, -sinLat * cs.y, cosLat);
+  vSunScene = dot(uSun, east) * vec3(cs.x, 0.0, cs.y)
+            + dot(uSun, north) * vec3(cs.y, 0.0, -cs.x)
+            + dot(uSun, up) * vec3(0.0, 1.0, 0.0);
   gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
 }
 `
@@ -51,62 +81,37 @@ uniform float uDiscR;        // the map is the disc of this projected radius (m)
 in vec2 vUv;
 in vec2 vMap;
 in float vHeight;
+in vec3 vSunScene;
 layout(location = 0) out highp vec4 fragColor;
-const float R = ${R_M.toFixed(1)};
-const float PI = 3.141592653589793;
 
+// Heights between samples, bilinear. The slope below is the difference of two such reads one sample apart on either
+// side, which equals the central-difference gradients at the four samples around the fragment blended bilinearly:
+// smooth across cells, without the square facets that differentiating the bilinear surface within a cell shows on
+// a coarse tile seen from close up.
+#ifdef FLOAT_LINEAR
+// the 257 samples sit at texel centres: sample i of 0..256 is at (i + 0.5) / 257
+float hBil(vec2 uv) { return texture(uHeight, (clamp(uv, 0.0, 1.0) * 256.0 + 0.5) / 257.0).r; }
+#else
 float hAt(ivec2 t) { return texelFetch(uHeight, clamp(t, ivec2(0), ivec2(256)), 0).r; }
-
-// Colour layer at a layer uv, bilinear between cell centres and weighted by each cell's alpha, so the 960 m
-// cells read as a smooth field when the camera is much closer than one cell, and cells without data neither
-// pull their neighbours towards zero nor leave a hard staircase edge. Returns value (x) and coverage (y).
-// Display interpolation only: the legend states the cell size of the data.
-vec2 layerAt(vec2 luv) {
-  ivec2 n = textureSize(uLayer, 0);
-  vec2 p = luv * vec2(n) - 0.5;
-  ivec2 i = ivec2(floor(p));
-  vec2 f = p - floor(p);
-  ivec2 hi = n - 1;
-  vec2 a = texelFetch(uLayer, clamp(i, ivec2(0), hi), 0).rg;
-  vec2 b = texelFetch(uLayer, clamp(i + ivec2(1, 0), ivec2(0), hi), 0).rg;
-  vec2 c = texelFetch(uLayer, clamp(i + ivec2(0, 1), ivec2(0), hi), 0).rg;
-  vec2 d = texelFetch(uLayer, clamp(i + ivec2(1, 1), ivec2(0), hi), 0).rg;
-  vec4 w = vec4((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
-  vec4 wa = w * step(0.5, vec4(a.y, b.y, c.y, d.y));
-  float cover = wa.x + wa.y + wa.z + wa.w;
-  float v = cover > 0.0 ? dot(wa, vec4(a.x, b.x, c.x, d.x)) / cover : 0.0;
-  return vec2(v, cover);
-}
-// Height gradient (dh/dx, dh/dy in map metres) by central differences at a sample, then blended bilinearly
-// between the four samples around the fragment. Differentiating the bilinear surface instead gives one
-// constant normal per cell, which shows as square facets when a coarse tile is seen from close up.
-vec2 gAt(ivec2 t) {
-  return vec2(hAt(t + ivec2(1, 0)) - hAt(t - ivec2(1, 0)), hAt(t - ivec2(0, 1)) - hAt(t + ivec2(0, 1))) / (2.0 * uCellM);
-}
-vec2 gBil(vec2 uv) {
+float hBil(vec2 uv) {
   vec2 f = clamp(uv, 0.0, 1.0) * 256.0;
   ivec2 i = ivec2(floor(f));
   vec2 t = fract(f);
-  return mix(mix(gAt(i), gAt(i + ivec2(1, 0)), t.x), mix(gAt(i + ivec2(0, 1)), gAt(i + ivec2(1, 1)), t.x), t.y);
+  return mix(mix(hAt(i), hAt(i + ivec2(1, 0)), t.x), mix(hAt(i + ivec2(0, 1)), hAt(i + ivec2(1, 1)), t.x), t.y);
 }
+#endif
 
 void main() {
   float rMap = length(vMap);
+#ifdef DISC_EDGE
   if (rMap > uDiscR) discard;
-  vec2 g = gBil(vUv);
-  vec3 nrm = normalize(vec3(-g.x, 1.0, g.y));   // scene axes: X = x, Y = up, Z = -y
+#endif
+  float du = 1.0 / 256.0;
+  float hx = (hBil(vUv + vec2(du, 0.0)) - hBil(vUv - vec2(du, 0.0))) / (2.0 * uCellM);
+  float hy = (hBil(vUv - vec2(0.0, du)) - hBil(vUv + vec2(0.0, du))) / (2.0 * uCellM);
+  vec3 nrm = normalize(vec3(-hx, 1.0, hy));   // scene axes: X = x, Y = up, Z = -y
 
-  // Sun direction in the scene at this point (local east/north/up of the sphere, drawn on the polar map).
-  float colat = 2.0 * atan(length(vMap) / (2.0 * R));
-  float lat = colat - 0.5 * PI;
-  float lon = atan(vMap.x, vMap.y);
-  vec3 up = vec3(cos(lat) * cos(lon), cos(lat) * sin(lon), sin(lat));
-  vec3 east = vec3(-sin(lon), cos(lon), 0.0);
-  vec3 north = vec3(-sin(lat) * cos(lon), -sin(lat) * sin(lon), cos(lat));
-  vec3 sunScene = dot(uSun, east) * vec3(cos(lon), 0.0, sin(lon))
-                + dot(uSun, north) * vec3(sin(lon), 0.0, -cos(lon))
-                + dot(uSun, up) * vec3(0.0, 1.0, 0.0);
-  float lambert = max(0.0, dot(nrm, normalize(sunScene)));
+  float lambert = max(0.0, dot(nrm, normalize(vSunScene)));
 
   float visible = 1.0;
   if (uShadowReady > 0.5) {
@@ -122,9 +127,12 @@ void main() {
     base = texture(uLut, vec2(clamp((vHeight - uElevRange.x) / (uElevRange.y - uElevRange.x), 0.0, 1.0), 0.5)).rgb;
     coloured = true;
   } else if (uLayerMode == 1 && uHasLayer > 0.5) {
-    vec2 l = layerAt(uLayerXf.xy + vUv * uLayerXf.zw);
-    if (l.y > 0.5) {
-      base = texture(uLut, vec2(l.x, 0.5)).rgb;
+    // bilinear between cell centres, so the 960 m cells read as a smooth field when zoomed in: r is value ×
+    // coverage (value 0 where there is no data), g the coverage, so r / g is the mean of the cells with data and
+    // cells without data neither pull their neighbours towards zero nor leave a staircase edge
+    vec4 l = texture(uLayer, uLayerXf.xy + vUv * uLayerXf.zw);
+    if (l.g > 0.5) {
+      base = texture(uLut, vec2(clamp(l.r / l.g, 0.0, 1.0), 0.5)).rgb;
       coloured = true;
     }
   }
