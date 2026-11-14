@@ -13,6 +13,8 @@ Three layers of checks, all through the HTTP layer so they test exactly what the
    (long-term Sun and Earth visibility maps) through the engine.
 6. **Manual points** against Horizons at every fixture place, against the site endpoint, and terrain against
    smooth sphere: the lower skyline always sees more.
+7. **Terrain reference** of the point endpoints: NASA PGDA's long-term values point the same way as our own
+   terrain masks.
 
 Pytest uses the functions below (tests/test_state.py). The same checks print a report from the command line:
 
@@ -241,13 +243,16 @@ def series_invariants(r: dict) -> list[str]:
     return bad
 
 
-def series_matches_state(client, site_id: str, r: dict, every: int = 97) -> list[str]:
+def series_matches_state(client, site_id: str | None, r: dict, every: int = 97, state_path: str | None = None,
+                         extra: dict | None = None) -> list[str]:
     """Samples equal the state endpoint at the same instant, and every inner range edge flips state's flag
-    between 2 s before and the edge itself (edges are refined to ~1 s)."""
+    between 2 s before and the edge itself (edges are refined to ~1 s). For a point, pass
+    ``state_path=POINT_STATE`` and ``extra={"lat": ..., "lon": ...}``."""
     bad = []
-    params = {"mast_m": r["mast_m"], "comms_min_fraction": r["comms_min_fraction"]}
+    path = state_path or STATE.format(site_id=site_id)
+    params = {"mast_m": r["mast_m"], "comms_min_fraction": r["comms_min_fraction"], **(extra or {})}
     for i in range(0, r["samples"], every):
-        st = client.get(STATE.format(site_id=site_id), params={"t": r["t"][i], **params}).json()
+        st = client.get(path, params={"t": r["t"][i], **params}).json()
         for b in ("sun", "earth"):
             for k in ("az", "el", "horizon_el", "visible_fraction", "visible"):
                 if abs(float(st[b][k]) - float(r[b][k][i])) > 1e-9:
@@ -258,9 +263,8 @@ def series_matches_state(client, site_id: str, r: dict, every: int = 97) -> list
                 if cut:
                     continue
                 at = _parse(x[edge])
-                now = client.get(STATE.format(site_id=site_id), params={"t": _iso(at), **params}).json()[body]["visible"]
-                before = client.get(STATE.format(site_id=site_id),
-                                    params={"t": _iso(at - timedelta(seconds=2)), **params}).json()[body]["visible"]
+                now = client.get(path, params={"t": _iso(at), **params}).json()[body]["visible"]
+                before = client.get(path, params={"t": _iso(at - timedelta(seconds=2)), **params}).json()[body]["visible"]
                 if now != inside or before == inside:
                     bad.append(f"{key} {edge} {x[edge]}: state before={before} at={now}, expected a flip to {inside}")
     return bad
@@ -537,6 +541,85 @@ POINT_SWEEP = [(-89.9999, 0.0), (-89.5, 129.78), (-85.0, -42.0), (-70.0, 100.0),
                (0.0, 180.0), (45.0, 90.0), (89.9999, 0.0)]
 
 
+# ---------------------------------------------------------------------------- points/series and terrain reference
+
+POINT_SERIES = "/api/v1/points/series"
+TERRAIN_EFFECT_MIN = 0.05   # judge the sign only where our masks show a clear terrain effect
+
+
+def _point_series_first_sample(client, lat: float, lon: float, utc: str):
+    r = client.get(POINT_SERIES, params={"lat": lat, "lon": lon, "start": utc, "duration_h": 1, "step_min": 60})
+    if r.status_code == 400:
+        return None
+    r.raise_for_status()
+    body = r.json()
+    return {k: (body[k]["az"][0], body[k]["el"][0]) for k in ("sun", "earth")}
+
+
+def points_series_horizons_comparisons(client) -> list[dict]:
+    """Horizons at all 11 fixture places through points/series (first sample of a window starting at t)."""
+    rows = []
+    for case in json.loads(FIXTURE.read_text(encoding="utf-8"))["cases"]:
+        for sample in case["samples"]:
+            got = _point_series_first_sample(client, case["lat"], case["lon"], sample["utc"])
+            if got is None:
+                continue
+            for name in ("sun", "earth"):
+                az, el = got[name]
+                rows.append({"case": case["name"], "utc": sample["utc"], "body": name,
+                             "error_deg": sky_error_deg(az, el, sample[name]["az"], sample[name]["el"])})
+    return rows
+
+
+def point_series_equals_site(client, site_id: str, start: str, hours: float) -> list[str]:
+    """At a smooth-sphere catalogue site points/series equals sites/{id}/series except site_id."""
+    q = {"start": start, "duration_h": hours, "mast_m": 2}
+    site = client.get(SERIES.format(site_id=site_id), params=q).json()
+    pt = client.get(POINT_SERIES, params={"lat": site["lat"], "lon": site["lon"], **q}).json()
+    diff = [k for k in site if k != "site_id" and site[k] != pt[k]]
+    return [f"{site_id}: points/series differs from sites/series in {diff}"] if diff else []
+
+
+def terrain_reference_checks(client) -> tuple[list[str], int]:
+    """At the 13 terrain sites: the sign of terrain_reference.difference (PGDA - smooth) matches the sign of the
+    effect measured with our own terrain masks (engine, terrain - smooth, same period and definitions) wherever
+    that effect exceeds TERRAIN_EFFECT_MIN; smooth_sphere recomputed independently; the reference is identical in
+    points/state and points/series. Returns violations and the number of clear cases judged."""
+    from app import services
+    from app.db.store import get_store
+    from app.logic.engine import evaluate, time_grid
+
+    store = get_store()
+    t = time_grid(services.to_ms(services.LONG_TERM_START), services.LONG_TERM_HOURS, services.LONG_TERM_STEP_MIN)
+    bad, judged = [], 0
+    for site in client.get("/api/v1/sites", params={"terrain_only": True}).json()["sites"]:
+        q = {"lat": site["lat"], "lon": site["lon"], "mast_m": 2}
+        ref = client.get(POINT_STATE, params={"t": SWEEP_TIMES[0], **q}).json()["terrain_reference"]
+        ref_series = client.get(POINT_SERIES, params={"start": SWEEP_TIMES[0], "duration_h": 1, **q}).json()
+        if ref_series["terrain_reference"] != ref:
+            bad.append(f"{site['id']}: terrain_reference differs between points/state and points/series")
+        terr = evaluate(store.ephemeris, services.model_for_site(store, store.sites.get(site["id"]), 2.0), t)
+        smooth = evaluate(store.ephemeris, services.model_for_point(store, site["lat"], site["lon"], 2.0), t)
+        for key, fn in (("sun_mean_visible_fraction", lambda s: float(s.sun_frac.mean())),
+                        ("earth_any_visible_fraction", lambda s: float((s.earth_frac > 0).mean()))):
+            x = ref[key]
+            if abs(x["smooth_sphere"] - fn(smooth)) > 1e-12 or abs(x["difference"] - (x["pgda"] - x["smooth_sphere"])) > 1e-12:
+                bad.append(f"{site['id']} {key}: smooth_sphere or difference not reproduced")
+            effect = fn(terr) - fn(smooth)
+            if abs(effect) >= TERRAIN_EFFECT_MIN:
+                judged += 1
+                if x["difference"] * effect <= 0:
+                    bad.append(f"{site['id']} {key}: terrain effect {effect:+.3f} but PGDA says {x['difference']:+.3f}")
+    for lat, lon in ((0.0, 0.0), (-60.0, 0.0), (45.0, 90.0)):
+        if client.get(POINT_STATE, params={"lat": lat, "lon": lon, "t": SWEEP_TIMES[0]}).json()["terrain_reference"] is not None:
+            bad.append(f"({lat}, {lon}): terrain_reference outside PGDA's maps is not null")
+    return bad, judged
+
+
+POINT_SERIES_CASES = [(-84.7906, 29.1957, "2026-11-20T12:00:00Z", 336, 10), (-89.5, 129.78, "2027-03-01T00:00:00Z", 240, 30),
+                      (-70.0, 100.0, "2028-06-15T06:30:00Z", 120, 5), (0.67416, 23.47314, "2029-06-25T12:00:00Z", 36, 10)]
+
+
 def main() -> int:
     from fastapi.testclient import TestClient
 
@@ -646,6 +729,28 @@ def main() -> int:
     print(f"[{'PASS' if not bad else 'FAIL'}] terrain vs smooth sphere: the lower skyline always sees more "
           f"({total['terrain_lower']} cases terrain below, {total['terrain_higher']} above, {total['mixed']} mixed "
           "and not judged)" + "".join(f"\n    {m}" for m in bad[:20]))
+    bad = []
+    for lat, lon, start, hours, step in POINT_SERIES_CASES:
+        q = {"lat": lat, "lon": lon}
+        r = client.get(POINT_SERIES, params={"start": start, "duration_h": hours, "step_min": step, **q}).json()
+        bad += [f"({lat}, {lon}) {start}: {m}" for m in series_invariants(r)
+                + series_matches_state(client, None, r, state_path=POINT_STATE, extra=q)]
+    for site_id in ("apollo-11", "slim"):
+        bad += point_series_equals_site(client, site_id, SERIES_CASES[0][1], 72)
+    ok &= not bad
+    print(f"[{'PASS' if not bad else 'FAIL'}] points/series: consistent, equal to points/state (samples and edges) and "
+          f"to sites/series at smooth-sphere sites ({len(POINT_SERIES_CASES)} windows)" + "".join(f"\n    {m}" for m in bad[:20]))
+    rows = points_series_horizons_comparisons(client)
+    worst = max(rows, key=lambda x: x["error_deg"])
+    passed = worst["error_deg"] < HORIZONS_TOL_DEG
+    ok &= passed
+    print(f"[{'PASS' if passed else 'FAIL'}] points/series vs JPL Horizons at 11 places: {len(rows)} comparisons, "
+          f"worst {worst['error_deg']:.6f} deg")
+    bad, judged = terrain_reference_checks(client)
+    ok &= not bad
+    print(f"[{'PASS' if not bad else 'FAIL'}] terrain_reference: PGDA's sign matches our terrain masks in all "
+          f"{judged} clear cases (effect >= {TERRAIN_EFFECT_MIN}), values reproduced, null north of 65 S"
+          + "".join(f"\n    {m}" for m in bad))
     return 0 if ok else 1
 
 

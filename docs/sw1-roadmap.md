@@ -12,7 +12,7 @@ holds the order, the decisions and the validation plan. Branch: `seryitron-branc
 | 2 | `GET /api/v1/sites/{site_id}/series` | The mission window: timeline, Gantt, fractions and ranges; the hard filters and `/power` build on the same engine series | Done, validated |
 | 3 | `GET /api/v1/sites/{site_id}/horizon` | The 360° skyline for the panorama; no time dependence, small | Done, validated |
 | 4 | `GET /api/v1/points/state` | `state` with `lat`/`lon` instead of an id (smooth-sphere horizon); reuses `state_response` | Done, validated |
-| 5 | `GET /api/v1/points/series` | `series` with `lat`/`lon`; reuses the series builder | To do |
+| 5 | `GET /api/v1/points/series` | `series` with `lat`/`lon`; reuses the series builder | Done, validated |
 
 `GET /api/v1/points/info` is listed under SW-1 in `docs/endpoints.md` but has no owner in the team's endpoint
 table; it is not part of this roadmap until someone assigns it.
@@ -182,4 +182,52 @@ reused, so a point and a site can never be shaped differently.
    `reference_sphere`; catalogue terrain sites say `lola_site`, the others `reference_sphere`.
 6. **State invariants** (the `state` validator) on a sweep of points, and transitions that flip the state.
 7. **Errors**: 422 for missing or out-of-range `lat`/`lon` (including the poles), 400 outside the tables.
+
+## 5. `GET /api/v1/points/series`: plan (done; as built in `docs/sw1-output-format.md`)
+
+`series` for manual coordinates, plus the terrain reference that tells the user which way the smooth sphere errs
+at that point (part C of the validated fix for the terrain-horizon rule). Files: `routers/points.py`,
+`schemas/points.py` (now needed: the point responses add one field), `tests/test_points.py`.
+
+### Request
+
+`lat`, `lon` as in `points/state`; `start`, `duration_h`, `step_min`, `mast_m`, `comms_min_fraction` as in
+`series` (same parameters from `routers/params.py`, same 20 000-sample cap).
+
+### Response
+
+`series`' model with `site_id: null`, `horizon_kind: "smooth_sphere"`, `ground_source`, built by
+`series_response`. Both point endpoints (`points/state` and `points/series`) gain `terrain_reference`.
+
+### `terrain_reference`
+
+What real terrain does at this point according to NASA, against what the smooth sphere gives there:
+
+- `pgda`: the 18.6-year average from PGDA product 69 (Mazarico et al., terrain-aware, 960 m cells) at the point.
+- `smooth_sphere`: the same quantity from the engine over the smooth sphere at the point, 2025-2035 every 6 h
+  (16 053 samples, a few milliseconds).
+- `difference` = `pgda - smooth_sphere`. Negative: the smooth sphere overstates (crater, slope). Positive: it
+  understates (summit, ridge facing the body).
+- For the Sun the quantity is the mean visible fraction of the disc; for the Earth, the share of time with any part
+  of the disc visible (PGDA's own definitions; the comms threshold is not used here).
+- `null` north of 65° S, where PGDA has no map. No label or threshold is added: the numbers are the answer.
+
+Measured during planning (engine with our terrain masks vs smooth sphere, against PGDA vs smooth sphere): the sign
+agrees at all 13 terrain sites wherever the terrain effect exceeds 0.05, e.g. IM-2 Earth +0.141 measured,
++0.128 PGDA; Shackleton Sun -0.515 both; Mons Malapert Earth +0.238 measured, +0.046 PGDA (the 960 m cell
+dilutes the summit).
+
+### Validation plan
+
+1. **Equal to `points/state`**: sampled instants match; every inner range edge flips `points/state` at the
+   published second.
+2. **Equal to `sites/{id}/series`** at smooth-sphere catalogue sites, except `site_id` (and `terrain_reference`,
+   absent from site responses).
+3. **Series invariants** (arrays, ranges against samples, metrics) on points from pole to pole.
+4. **JPL Horizons through `points/series`** at all 11 fixture places (first sample of a window starting at each
+   fixture time).
+5. **Terrain reference**: at the 13 terrain sites, the sign of `difference` matches the sign measured with our own
+   terrain masks wherever that effect exceeds 0.05; `smooth_sphere` recomputed independently; `null` north of
+   65° S; identical in `points/state` and `points/series`.
+6. **Errors**: 422 (coordinates, window, cap), 400 (window outside the tables).
 

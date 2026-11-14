@@ -10,7 +10,7 @@ the meaning, units and edge cases. One section per endpoint, added as each one i
 | `GET /api/v1/sites/{site_id}/series` | Done, validated (this file) |
 | `GET /api/v1/sites/{site_id}/horizon` | Done, validated (this file) |
 | `GET /api/v1/points/state` | Done, validated (this file) |
-| `GET /api/v1/points/series` | To do (same output as `sites/{id}/series`, `site_id: null`) |
+| `GET /api/v1/points/series` | Done, validated (this file) |
 
 Conventions in every response: Moon Mean-Earth frame (MOON_ME); angles in degrees; azimuth clockwise from
 north, 0..360; times ISO 8601 UTC with a trailing `Z`; snake_case fields; `horizon_kind` always present.
@@ -444,8 +444,9 @@ With `include_zone=true` the response is about 72 KB; without it about 9 KB.
 
 ## `GET /api/v1/points/state`
 
-`state` for any point typed in by the user instead of a catalogue site. Same output model (`StateResponse`), same
-fields and meaning, built by the same function; what changes is where the horizon and the ground come from.
+`state` for any point typed in by the user instead of a catalogue site. Same fields and meaning as `state`, built
+by the same function, plus `terrain_reference` (below); what changes is where the horizon and the ground come
+from.
 
 ### Request
 
@@ -463,7 +464,8 @@ GET /api/v1/points/state?lat=-84.7906&lon=29.1957&t=2026-11-20T12:00:00Z&mast_m=
 
 ### Response 200
 
-The `state` model with `site_id: null`. Real response (floats rounded for reading):
+The `state` model with `site_id: null` and `terrain_reference` (see the next section, shortened here). Real
+response (floats rounded for reading):
 
 ```json
 {
@@ -480,11 +482,12 @@ The `state` model with `site_id: null`. Real response (floats rounded for readin
   "eclipse": "none", "sun_eclipsed_fraction": 0.0,
   "next_sun_transition":   { "kind": "set", "at": "2026-12-01T02:40:48Z", "in_hours": 254.68 },
   "next_earth_transition": { "kind": "set", "at": "2026-12-03T11:42:53Z", "in_hours": 311.715 },
-  "transition_search_days": 45.0
+  "transition_search_days": 45.0,
+  "terrain_reference": { "...": "see GET /api/v1/points/series" }
 }
 ```
 
-Fields: see `GET /api/v1/sites/{site_id}/state` above.
+Fields: see `GET /api/v1/sites/{site_id}/state` above, and `terrain_reference` below.
 
 ### What differs from a catalogue site
 
@@ -523,4 +526,89 @@ Fields: see `GET /api/v1/sites/{site_id}/state` above.
    **invariants** of `state` on points from 89.9999° S to 89.9999° N; **transitions** flip the state at the
    published second.
 5. **The validator is tested**: a site response doctored to see the full Sun under a higher skyline is caught.
+
+---
+
+## `GET /api/v1/points/series`
+
+`series` for any point typed in by the user: the same arrays, ranges and metrics as
+`GET /api/v1/sites/{site_id}/series`, built by the same function, over a smooth-sphere horizon, plus
+`terrain_reference`.
+
+### Request
+
+| Parameter | In | Type | Default | Range | Meaning |
+| --- | --- | --- | --- | --- | --- |
+| `lat`, `lon` | query | float, deg | **required** | as in `points/state` | Manual coordinates (0..360 longitude normalised; exact poles rejected) |
+| `start`, `duration_h` | query | | **required** | as in `series` | Window |
+| `step_min` | query | float, min | `10` | 1..1440 | As in `series`; at most 20 000 samples |
+| `mast_m`, `comms_min_fraction` | query | | `0`, `0.5` | as in `series` | |
+
+```
+GET /api/v1/points/series?lat=-84.7906&lon=29.1957&start=2026-11-20T12:00:00Z&duration_h=336&mast_m=2
+```
+
+### Response 200
+
+The `series` model (all fields as documented for `GET /api/v1/sites/{site_id}/series`) with `site_id: null`,
+`horizon_kind: "smooth_sphere"`, `mast_used_m` = `mast_m`, `ground_source` as in `points/state`, and:
+
+```json
+"terrain_reference": {
+  "source": "NASA PGDA product 69 (Mazarico et al.), 18.6-year averages over LOLA terrain, 960 m cells",
+  "smooth_sphere_period": "2025-01-01T00:00:00Z .. 2035-12-28T00:00:00Z",
+  "sun_mean_visible_fraction":  { "pgda": 0.4609, "smooth_sphere": 0.5058, "difference": -0.0449 },
+  "earth_any_visible_fraction": { "pgda": 0.9228, "smooth_sphere": 0.7944, "difference":  0.1284 }
+}
+```
+
+(Real values for IM-2's coordinates at a 2 m mast: on Mons Mouton the smooth sphere overstates the Sun slightly
+and understates the Earth by 13 points of the time.)
+
+### `terrain_reference` (both point endpoints)
+
+A smooth sphere is an estimate, not a bound: real terrain lowers light and comms in craters and raises them on
+summits. This block says which way, and roughly how much, at the requested point, from NASA's terrain-aware maps.
+
+| Field | Type | Unit | Meaning |
+| --- | --- | --- | --- |
+| `source` | string | | The PGDA product the `pgda` values come from |
+| `smooth_sphere_period` | string | UTC | Period the `smooth_sphere` values average over (the ephemeris tables), every 6 h |
+| `sun_mean_visible_fraction` | object | 0..1 | Mean visible fraction of the solar disc (PGDA `AVGVISIB_65S_240M_201608`) |
+| `earth_any_visible_fraction` | object | 0..1 | Share of time with any part of the Earth's disc visible (PGDA `AVGVISIB_65S_240M_201608_EARTH`) |
+| `*.pgda` | float | 0..1 | PGDA at the point: 18.6-year average over real LOLA terrain, 960 m cell, 4 decimals as stored |
+| `*.smooth_sphere` | float | 0..1 | The same quantity from this engine over the smooth sphere at the point and the requested mast |
+| `*.difference` | float | | `pgda − smooth_sphere`. **Negative**: the smooth sphere overstates here (crater, slope). **Positive**: it understates (summit or ridge facing the body) |
+
+- `null` north of 65° S: PGDA has no map there and nothing replaces it.
+- Long-term averages, not the requested window: they tell the direction and size of the bias of the smooth sphere
+  at this place, not the answer for these dates.
+- The Earth quantity uses PGDA's "any part of the disc" definition, not `comms_min_fraction`.
+- PGDA averages 18.6 years (the full libration cycle); the smooth-sphere value averages 2025-2035. PGDA's cell is
+  960 m wide, so a narrow summit is diluted: the sign is reliable, the size is indicative (Mons Malapert, Earth:
+  +0.046 from PGDA against +0.238 from our terrain mask).
+- Adds a few milliseconds per request (16 053 engine samples).
+
+### Errors
+
+As `points/state` for the coordinates and as `series` for the window: 422 (missing or out-of-range `lat`/`lon`,
+`start`, `duration_h`, `step_min`, more than 20 000 samples), 400 (window outside the ephemeris tables).
+
+### How it was validated
+
+`cd api && uv run python -m tests.sw1_validation` (pytest: `tests/test_points.py`):
+
+1. **Equal to `points/state`**: sampled instants of four windows (IM-2's coordinates, near Shackleton, 70° S,
+   Apollo 11's coordinates; steps 5 to 30 min) match `points/state` to 1e-9; every inner range edge flips
+   `points/state` at the published second; the first sunset and Earthset equal its `next_*_transition.at`.
+2. **Equal to `sites/{id}/series`** at smooth-sphere catalogue sites (Apollo 11, SLIM), except `site_id`.
+3. **Series invariants**: arrays, grid, ranges against samples, metrics recomputed.
+4. **JPL Horizons at all 11 fixture places** through `points/series`: 352 comparisons, worst 0.00086°.
+5. **Terrain reference against our own terrain masks**: at the 13 terrain sites, the engine over the LOLA mask and
+   over the smooth sphere (same period, same definitions) gives the real terrain effect; wherever it is at least
+   0.05, PGDA's `difference` has the same sign: **23 of 23 clear cases**. `smooth_sphere` and `difference` are
+   reproduced independently; the block is identical in `points/state` and `points/series`; `null` at 60° S, the
+   equator and 45° N.
+6. **Errors** and the 20 000-sample cap; **longitude** normalisation; **the validator is tested** (a flipped
+   terrain reference is caught).
 

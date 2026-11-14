@@ -123,3 +123,108 @@ def test_the_lower_skyline_validator_catches_a_wrong_fraction(monkeypatch):
     monkeypatch.setattr(client, "get", fake_get)
     bad, _ = v.lower_skyline_sees_more(client, "shackleton", ["2027-03-01T00:00:00Z", "2027-06-01T00:00:00Z"])
     assert bad, "a terrain fraction above the smooth sphere's under a higher skyline was not detected"
+
+
+# ---------------------------------------------------------------------------- points/series
+
+SERIES_URL = "/api/v1/points/series"
+
+
+def get_series(**params):
+    return client.get(SERIES_URL, params={"start": T, "duration_h": 336, **IM2, **params})
+
+
+def test_series_happy_path_matches_the_contract():
+    from app.schemas.points import PointSeriesResponse
+    r = get_series()
+    assert r.status_code == 200
+    body = PointSeriesResponse.model_validate(r.json())
+    assert body.site_id is None and body.horizon_kind == "smooth_sphere" and body.samples == 2017
+    assert body.ground_source == "lola_grid" and body.terrain_reference is not None
+
+
+@pytest.mark.parametrize("lat,lon,start,hours,step", v.POINT_SERIES_CASES)
+def test_series_is_consistent_and_equals_points_state(lat, lon, start, hours, step):
+    q = {"lat": lat, "lon": lon}
+    r = client.get(SERIES_URL, params={"start": start, "duration_h": hours, "step_min": step, **q}).json()
+    assert v.series_invariants(r) == []
+    assert v.series_matches_state(client, None, r, every=211, state_path=URL, extra=q) == []
+
+
+@pytest.mark.parametrize("site", ["apollo-11", "slim"])
+def test_series_equals_the_site_series_at_smooth_sphere_sites(site):
+    assert v.point_series_equals_site(client, site, T, 72) == []
+
+
+def test_series_matches_jpl_horizons_at_every_fixture_place():
+    rows = v.points_series_horizons_comparisons(client)
+    assert len(rows) == 352 and max(r["error_deg"] for r in rows) < v.HORIZONS_TOL_DEG
+
+
+def test_series_first_sunset_is_points_state_next_sunset():
+    s = get_series(mast_m=2).json()
+    st = get(mast_m=2).json()
+    assert s["sunlit_ranges"][0]["end"] == st["next_sun_transition"]["at"]
+    assert s["comms_ranges"][0]["end"] == st["next_earth_transition"]["at"]
+
+
+def test_series_longitude_0_360_is_normalised():
+    a = client.get(SERIES_URL, params={"lat": -85, "lon": 330, "start": T, "duration_h": 24}).json()
+    b = client.get(SERIES_URL, params={"lat": -85, "lon": -30, "start": T, "duration_h": 24}).json()
+    assert a == b and a["lon"] == -30.0
+
+
+@pytest.mark.parametrize("params", [{"lat": None}, {"lon": 400}, {"start": None}, {"duration_h": None},
+                                    {"duration_h": 0}, {"step_min": 0.1}, {"duration_h": 24 * 365}])
+def test_series_invalid_input_is_422(params):
+    query = {"start": T, "duration_h": 24, **IM2, **params}
+    assert client.get(SERIES_URL, params={k: x for k, x in query.items() if x is not None}).status_code == 422
+
+
+def test_series_window_outside_the_tables_is_400():
+    assert get_series(start="2035-12-31T00:00:00Z", duration_h=48).status_code == 400
+
+
+# ---------------------------------------------------------------------------- terrain reference
+
+def test_terrain_reference_points_the_same_way_as_our_terrain_masks():
+    bad, judged = v.terrain_reference_checks(client)
+    assert bad == [] and judged >= 20
+
+
+def test_terrain_reference_on_mons_mouton_and_shackleton():
+    """IM-2's summit: the smooth sphere overstates the Sun a little and understates the Earth. Shackleton's floor:
+    PGDA says permanent shadow, the smooth sphere would give about half the time lit."""
+    im2 = get(mast_m=2).json()["terrain_reference"]
+    assert im2["sun_mean_visible_fraction"]["difference"] < 0 < im2["earth_any_visible_fraction"]["difference"]
+    sh = client.get(URL, params={"t": T, "lat": -89.67, "lon": 129.78, "mast_m": 2}).json()["terrain_reference"]
+    assert sh["sun_mean_visible_fraction"]["pgda"] == 0.0 and sh["sun_mean_visible_fraction"]["difference"] < -0.4
+
+
+def test_terrain_reference_is_null_where_pgda_has_no_map():
+    assert get(lat=-60.0, lon=0.0).json()["terrain_reference"] is None
+    assert get(lat=10.0, lon=0.0).json()["terrain_reference"] is None
+
+
+def test_the_terrain_reference_validator_catches_a_flipped_sign(monkeypatch):
+    real_get = client.get
+
+    def fake_get(url, params=None):
+        r = real_get(url, params=params)
+        if url in (URL, SERIES_URL) and r.status_code == 200 and r.json().get("terrain_reference"):
+            body = copy.deepcopy(r.json())
+            for k in ("sun_mean_visible_fraction", "earth_any_visible_fraction"):
+                x = body["terrain_reference"][k]
+                x["pgda"], x["difference"] = x["smooth_sphere"] - x["difference"], -x["difference"]
+
+            class Fake:
+                status_code = 200
+
+                def json(self):
+                    return body
+            return Fake()
+        return r
+
+    monkeypatch.setattr(client, "get", fake_get)
+    bad, _ = v.terrain_reference_checks(client)
+    assert any("PGDA says" in m for m in bad), "a flipped terrain reference was not detected"

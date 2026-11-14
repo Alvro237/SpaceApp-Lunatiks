@@ -174,3 +174,38 @@ def site_ground_source(site: Site) -> str:
 def point_ground_source(store: DataStore, lat: float, lon: float) -> str:
     """Same look-up as ``model_for_point``: the LOLA grid when it covers the point, else the reference sphere."""
     return "reference_sphere" if store.grids.sample("lola_elevation_60s", lat, lon) is None else "lola_grid"
+
+
+# ---------------------------------------------------------------------------- SW-1: terrain reference for a point
+
+LONG_TERM_START = datetime(2025, 1, 1, tzinfo=timezone.utc)
+LONG_TERM_HOURS = 24 * 365 * 11 - 48        # to 2035-12-30, inside the 2025-2035 tables
+LONG_TERM_STEP_MIN = 360.0                  # every 6 h: 16 053 samples, a few milliseconds
+PGDA_PRODUCT = "NASA PGDA product 69 (Mazarico et al.), 18.6-year averages over LOLA terrain, 960 m cells"
+
+
+@dataclass(frozen=True)
+class LongTermValues:
+    sun_mean_visible_fraction: float
+    earth_any_visible_fraction: float
+
+
+def smooth_sphere_long_term(store: DataStore, lat: float, lon: float, mast_m: float) -> LongTermValues:
+    """Long-term light and Earth visibility at a point over the smooth sphere, with PGDA's definitions: mean
+    visible solar-disc fraction, share of time with any of the Earth's disc visible."""
+    s = evaluate_window(store, model_for_point(store, lat, lon, mast_m), to_ms(LONG_TERM_START), LONG_TERM_HOURS,
+                        LONG_TERM_STEP_MIN)
+    return LongTermValues(float(s.sun_frac.mean()), float((s.earth_frac > 0.0).mean()))
+
+
+def pgda_long_term(store: DataStore, lat: float, lon: float) -> LongTermValues | None:
+    """PGDA product 69 at the point (terrain-aware); None outside its maps (north of 65 S)."""
+    sun = store.grids.sample("sun_illumination_65s", lat, lon)
+    earth = store.grids.sample("earth_visibility_65s", lat, lon)
+    if sun is None or earth is None:
+        return None
+    return LongTermValues(round(sun, 4), round(earth, 4))      # the grids store 0.0001 steps
+
+
+def period_label() -> str:
+    return f"{iso_utc(to_ms(LONG_TERM_START))} .. {iso_utc(to_ms(LONG_TERM_START) + LONG_TERM_HOURS * 3_600_000.0)}"
