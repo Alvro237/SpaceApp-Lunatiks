@@ -159,10 +159,12 @@ one) as tests with the source of each date in `docs/references.md`.
 
 ## AERO-2 · Radio link levels
 
-**Status:** in progress. Done on `feat/aero2-ground-stations`: the station dataset (18 antennas in `dsn`, `estrack`,
-`jaxa`; elevation masks), the Moon in the Earth-fixed frame, and the geometry that gives the Moon's azimuth and
-elevation from any antenna (`logic/stations.py`, `db/stations.py`). To do: the `/link` endpoint, user-defined antennas
-in the request, level 2 (link budget). **Files:** `logic/link.py`, `routers/link.py`, `schemas/link.py`, `tests/test_link.py`.
+**Status:** level 1 in review (branch `feat/aero2-link-level1`, built on `feat/aero2-ground-stations`: the station
+dataset, the Moon in the Earth-fixed frame, `logic/stations.py`, `db/stations.py`). `POST /api/v1/link` answers level 1
+with the networks you select (`networks`), your own antennas (`custom_stations`) and a `direction` (downlink, uplink
+low or high power); `GET /api/v1/link/stations` lists the catalogue. To do: level 2 (link budget), and moving the
+hard filters `comms_hours` / `max_blackout` to the combined contact series.
+**Files:** `logic/link.py`, `routers/link.py`, `schemas/link.py`, `tests/test_link.py`.
 
 - `POST /api/v1/link` with `level` (team decision 2026-11-14: contact needs BOTH ends, so station visibility is
   part of level 1 and the link budget is level 2; each level includes the one before):
