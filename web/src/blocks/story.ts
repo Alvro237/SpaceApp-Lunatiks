@@ -1,9 +1,10 @@
 /**
- * Learn mode's mission log: six short chapters built on real Moon missions, for learners and the public. Each
+ * Learn mode's mission log: six short chapters built on real Moon missions, written for children. Each
  * chapter puts the world where a real mission was (place and date), tells what happened in a few one-line facts
  * with their source, gives a task done in the tool (find the Sun, play the days, compare two places), and answers
  * with a few big numbers from the engine: the same JPL tables and LOLA horizons as the planner, never a typed value.
- * Text is kept short on purpose: one idea per line, numbers as tiles, no paragraphs.
+ * Text is kept short and simple on purpose: one idea per line, plain words, no jargon, numbers as tiles
+ * (days rather than percentages), no paragraphs.
  *
  * Facts and their sources (also in docs/references.md):
  *   - Apollo: sun elevation at landing drove the launch time; landings near the sunrise terminator put the Sun
@@ -128,10 +129,13 @@ export interface Chapter {
 }
 
 const H = 3_600_000
-const pct = (v: number) => `${Math.round(v)} %`
 const deg = (v: number) => `${v.toFixed(1)}°`
+/** A whole number of days or hours, said the way a child would read it aloud. */
+const count = (n: number, unit: 'day' | 'hour') => `${n} ${unit}${n === 1 ? '' : 's'}`
 /** A duration as people say it: hours below two days, whole days above. */
-export const dur = (h: number) => (h >= 48 ? `${Math.round(h / 24)} days` : `${Math.round(h)} h`)
+export const dur = (h: number) => (h >= 48 ? count(Math.round(h / 24), 'day') : count(Math.round(h), 'hour'))
+/** A share of the window told as days out of the window ("21 days" out of 30): easier for children than a percentage. */
+export const daysOf = (pctOfTime: number, windowDays: number) => count(Math.round((pctOfTime / 100) * windowDays), 'day')
 const same = (a: Selection | null, b: Selection) =>
   !!a && (a.kind === 'site' ? b.kind === 'site' && a.id === b.id : b.kind === 'point' && a.lat === b.lat && a.lon === b.lon)
 
@@ -155,75 +159,78 @@ export const CHAPTERS: Chapter[] = [
     where: 'Sea of Tranquillity',
     when: '20 July 1969',
     story: [
-      'Eagle landed here in the local morning.',
-      'NASA timed every Apollo landing for a low Sun behind the lander.',
-      'No glare for the pilots, and long shadows that show every bump.',
+      'The first astronauts on the Moon landed right here!',
+      'NASA picked a morning landing, with the Sun low behind them.',
+      'So the Sun was not in their eyes, and shadows showed every rock.',
     ],
     source: { label: 'NASA SP-4214', url: 'https://www.nasa.gov/wp-content/uploads/static/history/SP-4214/ch6-2.html' },
     scene: { site: APOLLO11, atMs: APOLLO11_LANDING_MS, view: 'ground', lookAway: true },
-    hint: 'Drag the world sideways until the golden ball comes into view.',
-    lesson: 'Low Sun, long shadows: you can see the shape of the ground.',
-    steps: (c) => [{ text: 'Turn around and find the Sun', done: c.view === 'ground' && c.sunOnScreen }],
+    hint: 'Drag the picture sideways until you see the golden ball.',
+    lesson: 'A low Sun makes long shadows, and shadows show the shape of the ground.',
+    steps: (c) => [{ text: 'Turn around and find the Sun (the golden ball)', done: c.view === 'ground' && c.sunOnScreen }],
     question: {
-      text: 'How high was the Sun when Eagle touched down?',
+      text: 'Was the Sun high or low when they landed?',
       choices: [
-        { id: 'low', label: 'Low, under 20°' },
-        { id: 'high', label: 'High, over 45°' },
+        { id: 'low', label: 'Low, near the ground' },
+        { id: 'high', label: 'High, above their heads' },
       ],
       answer: (c) => (c.memory.startSunEl === null ? null : c.memory.startSunEl < 20 ? 'low' : c.memory.startSunEl > 45 ? 'high' : null),
     },
     found: (c) =>
       c.memory.startSunEl === null
         ? null
-        : { stats: [{ value: deg(c.memory.startSunEl), label: 'Sun height at touchdown, 20:17 UTC' }], note: 'Look how long the shadows of the cubes are.' },
+        : {
+            stats: [{ value: deg(c.memory.startSunEl), label: 'how high the Sun was (0° is the ground, 90° is straight up)' }],
+            note: 'Low Sun, long shadows. Look at the shadows of the cubes!',
+          },
   },
   {
     id: 'chandrayaan-3',
     tag: '2023 · Chandrayaan-3',
-    title: 'One lunar day',
-    where: '69° S, near the south pole',
+    title: 'A very long day',
+    where: 'Near the South Pole',
     when: '23 August 2023',
-    story: ['India’s lander touched down at sunrise.', 'It worked while the Sun was up.', 'It went to sleep before the night and never woke up.'],
-    note: 'Our Sun tables start in 2025, so you replay a sunrise here in our own years.',
+    story: ['India’s robot lander touched down here at sunrise.', 'It worked hard while the Sun was shining.', 'When night came it went to sleep, and never woke up.'],
+    note: 'Our Sun data starts in 2025, so we replay a sunrise from our own time.',
     source: { label: 'ISRO', url: 'https://www.isro.gov.in/Chandrayaan3_Details.html' },
     scene: { site: CHANDRAYAAN3, view: 'ground', atSunrise: true, speed: '1d' },
-    hint: 'The play button at the bottom makes the days go by. It stops by itself at sunset.',
-    lesson: 'Away from the poles: about two weeks of light, then two weeks of night.',
+    hint: 'Press the play button at the bottom. It stops by itself when the Sun goes down.',
+    lesson: 'A Moon day lasts about two weeks, and so does a Moon night.',
     steps: (c) => [
       { text: 'Press play', done: c.memory.startTMs !== null && Math.abs(c.tMs - c.memory.startTMs) >= H },
-      { text: 'Watch until the Sun sets', done: c.memory.targetMs !== null && c.tMs >= c.memory.targetMs },
+      { text: 'Watch until the Sun goes down', done: c.memory.targetMs !== null && c.tMs >= c.memory.targetMs },
     ],
     found: (c) => {
       const { startTMs, targetMs } = c.memory
       const stats: Stat[] = []
-      if (startTMs !== null && targetMs !== null) stats.push({ value: `${((targetMs - startTMs) / (24 * H)).toFixed(1)} days`, label: 'of sunlight' })
-      if (c.metrics) stats.push({ value: dur(c.metrics.longestDarkH), label: 'longest night' })
-      return stats.length ? { stats, note: 'A lander must sleep through the cold night or carry a lot of stored energy.' } : null
+      if (startTMs !== null && targetMs !== null) stats.push({ value: `${((targetMs - startTMs) / (24 * H)).toFixed(1)} days`, label: 'of sunshine, from sunrise to sunset' })
+      if (c.metrics) stats.push({ value: dur(c.metrics.longestDarkH), label: 'of night, the longest one' })
+      return stats.length ? { stats, note: 'Moon nights are colder than any freezer. A robot has to stay warm until morning.' } : null
     },
   },
   {
     id: 'im-2',
     tag: '2025 · IM-2 Athena',
-    title: 'The Sun skims the ground',
-    where: 'Mons Mouton, 158 km from the pole',
+    title: 'The Sun that stays low',
+    where: 'Mons Mouton, near the South Pole',
     when: '6 March 2025',
-    story: ['Athena landed on its side in a small crater.', 'The Sun was low and its panels faced the wrong way.', 'The batteries ran out the next day.'],
+    story: ['The lander Athena landed here, but it tipped over.', 'Here the Sun is always low, and its solar panels faced away.', 'Its batteries could not charge, so it stopped the next day.'],
     source: {
       label: 'Spaceflight Now',
       url: 'https://spaceflightnow.com/2025/03/07/intuitive-machines-im-2-mission-ends-with-lander-on-its-side-on-the-moon/',
     },
     scene: { site: IM2, atMs: IM2_LANDING_DAY_MS, view: 'ground', lookAway: true, speed: '6h' },
-    hint: 'Find the golden ball first, then press play and watch where it goes.',
-    lesson: 'Near the poles the Sun stays low: a slope or a crater wall decides light or dark.',
+    hint: 'First find the golden ball. Then press play and watch where it goes.',
+    lesson: 'Near the poles the Sun stays low, so a hill can hide it.',
     steps: (c) => [
       { text: 'Find the Sun', done: c.view === 'ground' && c.sunOnScreen },
-      { text: 'Play one Earth day and watch it move', done: c.memory.startTMs !== null && Math.abs(c.tMs - c.memory.startTMs) >= 24 * H },
+      { text: 'Press play and watch the Sun for a whole day', done: c.memory.startTMs !== null && Math.abs(c.tMs - c.memory.startTMs) >= 24 * H },
     ],
     question: {
-      text: 'Near the pole, how does the Sun move?',
+      text: 'How does the Sun move here?',
       choices: [
-        { id: 'around', label: 'It slides along the horizon' },
-        { id: 'over', label: 'It climbs high and sets' },
+        { id: 'around', label: 'It goes around, close to the ground' },
+        { id: 'over', label: 'It climbs up high, then sets' },
       ],
       answer: (c) => (c.sunElMax === null ? null : c.sunElMax < 15 ? 'around' : 'over'),
     },
@@ -231,34 +238,34 @@ export const CHAPTERS: Chapter[] = [
       c.sunElMax === null
         ? null
         : {
-            stats: [{ value: deg(c.sunElMax), label: `highest Sun in ${c.windowDays} days` }],
-            note: 'The Sun circles close to the horizon: a crater wall, or a lander on its side, loses it.',
+            stats: [{ value: deg(c.sunElMax), label: `the highest the Sun gets in ${c.windowDays} days (90° is straight up)` }],
+            note: 'The Sun goes round and round, close to the ground. A hill, or a tipped-over lander, can block it.',
           },
   },
   {
     id: 'light-ice',
-    tag: 'Artemis · south pole',
-    title: 'Peaks of light, craters of ice',
+    tag: 'Artemis · South Pole',
+    title: 'Sunny mountains, icy craters',
     where: 'Mons Malapert and Shackleton crater',
-    when: 'Now',
+    when: 'Today',
     story: [
-      'Artemis aims for ridges and crater rims near the south pole.',
-      'The deep crater floors next to them never see the Sun.',
-      'In 2009 NASA’s LCROSS hit one, Cabeus, and found water.',
+      'NASA’s Artemis astronauts may land on hills near the South Pole.',
+      'Next to them are deep craters where the Sun never shines.',
+      'In 2009 a NASA probe crashed into one on purpose and found water!',
     ],
     source: { label: 'NASA, LCROSS', url: 'https://science.nasa.gov/mission/lcross/' },
     scene: { site: MALAPERT, view: 'ground' },
     hint: 'Type “Shackleton” in the search box at the top left. The Sun row at the bottom shows each day.',
-    lesson: 'Peaks catch the low Sun; dark crater floors keep the ice.',
+    lesson: 'Mountains catch the Sun, and dark craters keep the ice.',
     steps: (c) => [
-      { text: 'Look at the Sun row on Mons Malapert, a mountain', done: MALAPERT in c.memory.visited },
-      { text: 'Search for Shackleton crater and look again', done: SHACKLETON in c.memory.visited },
+      { text: 'Look at the Sun row at the bottom: this is a mountain', done: MALAPERT in c.memory.visited },
+      { text: 'Now search for Shackleton crater and look again', done: SHACKLETON in c.memory.visited },
     ],
     question: {
-      text: 'Which one gets more sunlight?',
+      text: 'Which one gets more sunshine?',
       choices: [
         { id: MALAPERT, label: 'The mountain' },
-        { id: SHACKLETON, label: 'The crater floor' },
+        { id: SHACKLETON, label: 'The crater' },
       ],
       answer: (c) => {
         const a = c.memory.visited[MALAPERT]
@@ -272,30 +279,30 @@ export const CHAPTERS: Chapter[] = [
       if (!a || !b) return null
       return {
         stats: [
-          { value: pct(a.sunPct), label: `${c.names(MALAPERT)} sunlit` },
-          { value: pct(b.sunPct), label: `${c.names(SHACKLETON)} sunlit` },
+          { value: daysOf(a.sunPct, c.windowDays), label: `of sunshine on ${c.names(MALAPERT)}, out of ${c.windowDays}` },
+          { value: daysOf(b.sunPct, c.windowDays), label: `of sunshine in ${c.names(SHACKLETON)}, out of ${c.windowDays}` },
         ],
-        note: `Over ${c.windowDays} days, with the real LOLA skyline.`,
+        note: 'Mountains poke up into the sunshine. Deep craters stay dark and freezing, so ice can last there.',
       }
     },
   },
   {
     id: 'call-home',
     tag: 'Every mission',
-    title: 'Calling home',
-    where: 'Faustini crater, near the pole',
-    when: 'Now',
-    story: ['Every lander must send its data home.', 'Radio needs the Earth above the skyline.', 'The Earth wobbles a little in the sky, so hills can hide it.'],
+    title: 'Phone home',
+    where: 'Faustini crater, near the South Pole',
+    when: 'Today',
+    story: ['Every lander needs to talk to Earth.', 'Radio only works if the Earth is above the hills.', 'Here the Earth wobbles a little in the sky, so hills can hide it.'],
     source: { label: 'NASA SVS, Moon libration', url: 'https://svs.gsfc.nasa.gov/5588' },
     scene: { site: FAUSTINI, view: 'ground', speed: '1d' },
     hint: 'The Earth is the blue ball. Then press play, or click a dark block in the Earth row.',
-    lesson: 'No Earth in the sky, no direct call home.',
+    lesson: 'No Earth in the sky means no call home.',
     steps: (c) => {
       const never = c.metrics !== null && c.metrics.commsPct >= 99.9
       return [
         { text: 'Find the Earth (the blue ball)', done: c.view === 'ground' && c.earthOnScreen },
         {
-          text: never ? 'The Earth never hides here. Search another crater, then play until “Can we see Earth?” says No' : 'Play until “Can we see Earth?” says No',
+          text: never ? 'The Earth never hides here! Search for another crater, then press play until “Can we see Earth?” says No' : 'Press play until “Can we see Earth?” says No',
           done: c.earthContact === false,
         },
       ]
@@ -304,49 +311,49 @@ export const CHAPTERS: Chapter[] = [
       c.metrics
         ? {
             stats: [
-              { value: pct(c.metrics.commsPct), label: 'of the time the Earth is in view' },
-              { value: dur(c.metrics.longestBlackoutH), label: 'longest wait for the Earth' },
+              { value: daysOf(c.metrics.commsPct, c.windowDays), label: `with the Earth in view, out of ${c.windowDays}` },
+              { value: dur(c.metrics.longestBlackoutH), label: 'the longest time with no call home' },
             ],
-            note: 'Right now the Earth is behind the hills: no direct call.',
+            note: 'Right now the Earth is behind the hills: no calling home!',
           }
         : null,
   },
   {
     id: 'yours',
     tag: 'Your mission',
-    title: 'Plan a landing',
+    title: 'Your turn: plan a landing',
     where: 'Anywhere you like',
     when: 'You choose',
-    story: ['Launch dates slip, and every new date changes the sky.', 'Now you are the planner.'],
+    story: ['Now you are the mission planner!', 'Find a place and a time with the Sun up and the Earth in view.'],
     source: { label: 'NASA Space Apps 2026', url: 'https://www.spaceappschallenge.org/2026/challenges/lunar-landing-site-navigator/' },
     scene: { view: 'moon' },
-    hint: 'Search a place or click one on the Whole Moon. Change the date with the date button, or click a day block.',
-    lesson: 'Check the Sun, the Earth and the ground for every date, and again when it slips.',
+    hint: 'Search for a place, or click one on the Whole Moon. Click a day block to change the day.',
+    lesson: 'Mission planners check the Sun, the Earth and the ground for every date.',
     steps: (c) => {
       const moved = c.memory.startSel !== null && !same(c.memory.startSel, c.selection)
       return [
         { text: 'Pick a new place', done: moved },
-        { text: 'Pick a time: Sun up, Earth in view', done: moved && c.sunUp === true && c.earthContact === true },
+        { text: 'Pick a time with the Sun up and the Earth in view', done: moved && c.sunUp === true && c.earthContact === true },
         { text: 'Press “Stand here” and look around', done: moved && c.view === 'ground' },
       ]
     },
     found: (c) => {
       const m = c.metrics
       const where = c.placeName ?? 'Your place'
-      const skyline =
+      const hills =
         c.horizonKind === 'smooth_sphere'
-          ? 'No real skyline here yet: the Moon is taken as smooth, so real hills could make it better or worse.'
-          : 'Real LOLA skyline.'
+          ? 'Nobody has mapped the hills here yet, so real hills could change these numbers.'
+          : 'These numbers use the real hills, measured by NASA’s LRO spacecraft.'
       return {
         stats: m
           ? [
-              { value: pct(m.sunlightPct), label: 'Sun' },
-              { value: pct(m.commsPct), label: 'Earth in view' },
-              { value: dur(m.longestDarkH), label: 'longest night' },
-              { value: dur(m.longestBlackoutH), label: 'longest wait for Earth' },
+              { value: daysOf(m.sunlightPct, c.windowDays), label: `of sunshine, out of ${c.windowDays}` },
+              { value: daysOf(m.commsPct, c.windowDays), label: `with the Earth in view, out of ${c.windowDays}` },
+              { value: dur(m.longestDarkH), label: 'the longest night' },
+              { value: dur(m.longestBlackoutH), label: 'the longest time with no call home' },
             ]
           : [],
-        note: `${where}: ready for landing. Next ${c.windowDays} days. ${skyline}`,
+        note: `${where}: ready to land! ${hills}`,
       }
     },
   },

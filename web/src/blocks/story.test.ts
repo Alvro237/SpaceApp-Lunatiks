@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CHAPTERS, EMPTY_MEMORY, dur, MALAPERT, SHACKLETON, type StoryCtx, chapterDone, firstDay, questionReady, stepsOf } from './story'
+import { CHAPTERS, EMPTY_MEMORY, daysOf, dur, MALAPERT, SHACKLETON, type StoryCtx, chapterDone, firstDay, questionReady, stepsOf } from './story'
 
 const base: StoryCtx = {
   view: 'moon',
@@ -70,8 +70,8 @@ describe('mission log', () => {
     const later = { ...start, tMs: 13.6 * 24 * H, sunUp: false }
     expect(chapterDone(c, later)).toBe(true)
     expect(c.found(later)?.stats).toEqual([
-      { value: '13.5 days', label: 'of sunlight' },
-      { value: '14 days', label: 'longest night' },
+      { value: '13.5 days', label: 'of sunshine, from sunrise to sunset' },
+      { value: '14 days', label: 'of night, the longest one' },
     ])
   })
 
@@ -92,7 +92,7 @@ describe('mission log', () => {
     expect(questionReady(c, aDay)).toBe(true)
     expect(c.question!.answer(aDay)).toBe('around')
     expect(c.question!.answer({ ...aDay, sunElMax: 40 })).toBe('over')
-    expect(c.found({ ...aDay, memory: { ...aDay.memory, answer: 'around' } })?.stats[0]).toEqual({ value: '6.2°', label: 'highest Sun in 30 days' })
+    expect(c.found({ ...aDay, memory: { ...aDay.memory, answer: 'around' } })?.stats[0]).toEqual({ value: '6.2°', label: 'the highest the Sun gets in 30 days (90° is straight up)' })
   })
 
   it('Peaks of light: visit both places, then the answer is the one with more sunlight', () => {
@@ -104,8 +104,8 @@ describe('mission log', () => {
     const done = { ...ctx, memory: { ...ctx.memory, answer: SHACKLETON } }
     expect(chapterDone(c, done)).toBe(true)
     expect(c.found(done)?.stats).toEqual([
-      { value: '71 %', label: 'Mons Malapert sunlit' },
-      { value: '0 %', label: 'Shackleton crater sunlit' },
+      { value: '21 days', label: 'of sunshine on Mons Malapert, out of 30' },
+      { value: '0 days', label: 'of sunshine in Shackleton crater, out of 30' },
     ])
   })
 
@@ -113,7 +113,7 @@ describe('mission log', () => {
     const c = ch('call-home')
     const ctx = { ...base, view: 'ground' as const, earthOnScreen: true, earthContact: false }
     expect(chapterDone(c, ctx)).toBe(true)
-    expect(c.found(ctx)?.stats.map((s) => s.value)).toEqual(['83 %', '5 days'])
+    expect(c.found(ctx)?.stats.map((s) => s.value)).toEqual(['25 days', '5 days'])
     const never = { ...base, metrics: { ...base.metrics!, commsPct: 100 } }
     expect(c.steps(never)[1].text).toContain('never hides')
   })
@@ -126,15 +126,19 @@ describe('mission log', () => {
     const point = { kind: 'point' as const, lat: -70, lon: 10 }
     const ready = { ...start, selection: point, sunUp: true, earthContact: true, view: 'ground' as const, horizonKind: 'smooth_sphere' as const, placeName: '70.000° S, 10.000° E' }
     expect(chapterDone(c, ready)).toBe(true)
-    expect(c.found(ready)?.note).toContain('70.000° S, 10.000° E: ready for landing')
-    expect(c.found(ready)?.note).toContain('taken as smooth')
-    expect(c.found({ ...ready, horizonKind: 'terrain' })?.note).toContain('Real LOLA skyline')
+    expect(c.found(ready)?.note).toContain('70.000° S, 10.000° E: ready to land!')
+    expect(c.found(ready)?.note).toContain('Nobody has mapped the hills here yet')
+    expect(c.found({ ...ready, horizonKind: 'terrain' })?.note).toContain('real hills')
     expect(c.found(ready)?.stats).toHaveLength(4)
   })
 
   it('says durations as hours below two days and as whole days above', () => {
-    expect(dur(30)).toBe('30 h')
+    expect(dur(1)).toBe('1 hour')
+    expect(dur(30)).toBe('30 hours')
     expect(dur(123.5)).toBe('5 days')
+    // a share of the window told as days, for children
+    expect(daysOf(71.2, 30)).toBe('21 days')
+    expect(daysOf(3, 30)).toBe('1 day')
   })
 
   it('keeps a step ticked once reached (latched), even if the view moves on', () => {

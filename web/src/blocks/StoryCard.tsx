@@ -206,13 +206,13 @@ export function StoryCard() {
         <div className="blk-story-top">
           <LanderBadge />
           <div className="blk-story-head">
-            <p className="blk-kicker">Mission log · {CHAPTERS.length} chapters</p>
+            <p className="blk-kicker">{CHAPTERS.length} Moon missions</p>
             <h2 id={headingId} className="blk-title">
-              Why the Sun and the Earth decide
+              Be a Moon explorer!
             </h2>
           </div>
         </div>
-        <p className="blk-intro">Stand where real missions landed. See what the Sun and the Earth did to them.</p>
+        <p className="blk-intro">Go where real spacecraft landed. Find out how the Sun and the Earth helped them, or got them in trouble.</p>
         <ol className="blk-intro-list">
           {CHAPTERS.map((c) => (
             <li key={c.id}>
@@ -222,7 +222,7 @@ export function StoryCard() {
         </ol>
         <div className="blk-story-actions">
           <button type="button" className="blk-big" onClick={begin}>
-            Start the first mission
+            Let’s go!
           </button>
         </div>
       </section>
@@ -300,11 +300,11 @@ export function StoryCard() {
 
       {!ready ? (
         <p className="blk-meta" role="status">
-          Moving to the place and date…
+          Flying there…
         </p>
       ) : (
         <>
-          <h3 className="blk-task-h">Your task</h3>
+          <h3 className="blk-task-h">What to do</h3>
           <ol className="blk-tasks">
             {steps.map((s, i) => (
               <li key={i} className={s.done ? 'is-done' : ''}>
@@ -333,7 +333,7 @@ export function StoryCard() {
           {!complete && (
             <>
               <button type="button" className="blk-link" aria-expanded={hint} onClick={() => setHint(!hint)}>
-                {hint ? 'Hide the hint' : 'Need a hint?'}
+                {hint ? 'Hide the help' : 'Need help?'}
               </button>
               {hint && <p className="blk-hint-text">{ch.hint}</p>}
             </>
@@ -344,7 +344,7 @@ export function StoryCard() {
       <div role="status" aria-live="polite">
         {complete && (
           <div className="blk-found">
-            <p className="blk-found-h">{right === null ? 'What the data says' : right ? 'Right! What the data says' : 'Not quite. What the data says'}</p>
+            <p className="blk-found-h">{right === null ? 'What NASA data says' : right ? 'Yes, well done!' : 'Not quite! Here is what NASA data says'}</p>
             {found && found.stats.length > 0 && (
               <ul className="blk-stats">
                 {found.stats.map((s) => (
@@ -368,7 +368,7 @@ export function StoryCard() {
 
       {complete && last && (
         <div className="blk-found">
-          <p className="blk-found-h">Mission log complete. You found out that:</p>
+          <p className="blk-found-h">All missions done! You found out that:</p>
           <ul>
             {CHAPTERS.map((c) => (
               <li key={c.id}>{c.lesson}</li>
@@ -385,7 +385,7 @@ export function StoryCard() {
         )}
         {complete && last && (
           <button type="button" className="blk-big" onClick={restart}>
-            Start again
+            Play again
           </button>
         )}
       </div>
