@@ -15,7 +15,7 @@ from .. import services
 from ..db.store import DataStore, get_store
 from ..logic.horizon import HorizonProfile
 from ..schemas.horizon import HorizonResponse, ProfileSummary, Zone, ZonePoint
-from .state import DEFAULT_MAST_M, MastParam
+from .params import DEFAULT_MAST_M, MastParam
 
 router = APIRouter(prefix="/sites", tags=["horizon"])
 
