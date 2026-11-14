@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cameraFor, compass16, earthPhase, project, separation, tickStep, unproject, wrap180 } from './project'
+import { cameraFor, compass16, earthPhase, followPitch, project, separation, tickStep, unproject, wrap180 } from './project'
 
 describe('horizon view projection', () => {
   const cam = cameraFor(90, 5, 80, 800, 400, 300) // 0.1 degree per pixel, looking east at 5° up
@@ -52,5 +52,21 @@ describe('labels and ticks', () => {
     expect(compass16(359)).toBe('N')
     expect(tickStep(0.1)).toBe(10)
     expect(tickStep(0.01)).toBe(1)
+  })
+})
+
+describe('following a body', () => {
+  // field 45°: the skyline is kept 0.12 x 45 = 5.4° below the centre
+  it('raises the view over the skyline when the body is under it', () => {
+    expect(followPitch(-9.6, 1.0, 45)).toBeCloseTo(6.4, 9)
+  })
+
+  it('raises the view when the body sits just above the skyline', () => {
+    expect(followPitch(3, 1.0, 45)).toBeCloseTo(6.4, 9)
+  })
+
+  it('centres a body well above the skyline, up to 60°', () => {
+    expect(followPitch(18.1, 1.0, 45)).toBe(18.1)
+    expect(followPitch(75, 1.0, 45)).toBe(60)
   })
 })

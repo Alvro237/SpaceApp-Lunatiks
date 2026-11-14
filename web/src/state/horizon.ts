@@ -54,7 +54,8 @@ export const useHorizonCam = create<HorizonCam>()((set) => ({
   mode: 'sun',
   yaw: 0,
   pitch: 4,
-  fov: 45,
+  // wide enough to show the skyline with the window's Sun and Earth tracks over it (+/− narrow it)
+  fov: 90,
   setMode: (mode) => set({ mode }),
   look: (yaw, pitch) => set({ mode: 'free', yaw: ((yaw % 360) + 360) % 360, pitch: clamp(pitch, PITCH_MIN, PITCH_MAX) }),
   zoom: (factor) => set((s) => ({ fov: clamp(s.fov * factor, FOV_MIN, FOV_MAX) })),

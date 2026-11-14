@@ -75,8 +75,8 @@ function drawGrid(ctx: CanvasRenderingContext2D, W: number, H: number, c: Camera
 function drawTrack(ctx: CanvasRenderingContext2D, W: number, c: Camera, track: { az: number; el: number }[], colour: string) {
   if (track.length < 2) return
   ctx.strokeStyle = colour
-  ctx.globalAlpha = 0.45
-  ctx.lineWidth = 1.5
+  ctx.globalAlpha = 0.7
+  ctx.lineWidth = 2
   ctx.setLineDash([3, 5])
   ctx.beginPath()
   let prev: { x: number; y: number } | null = null
