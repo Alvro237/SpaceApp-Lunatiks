@@ -56,7 +56,9 @@ Numbers given as defaults below are placeholders for the owner to set with a cit
 
 ## SW-1 · Horizon profile
 
-**Status:** to do. `GET /api/v1/sites/{site_id}/horizon?mast_m=` returns the 720 azimuth values, `kind`, the mast
+**Status:** done in branch `seryitron-branchito`, validated (output format: `docs/sw1-output-format.md`).
+**Files:** `routers/horizon.py`, `schemas/horizon.py`, `tests/test_horizon.py`.
+`GET /api/v1/sites/{site_id}/horizon?mast_m=&include_zone=` returns the 720 azimuth values, `kind`, the mast
 actually used, and optionally the zone neighbours (`db/horizons.py: zone`).
 
 ## SW-1 · Manual coordinates

@@ -9,6 +9,8 @@ Three layers of checks, all through the HTTP layer so they test exactly what the
 3. **Self-consistency of events**: a reported sunset/Earthset really flips the state one minute either side.
 4. **Eclipses** against NASA's lunar eclipse catalogue (tests/fixtures/nasa_lunar_eclipses_2025_2035.json):
    at greatest eclipse of every total lunar eclipse the Sun is fully hidden behind the Earth.
+5. **Horizon masks** bit-exact against an independent read of the data files, and against NASA PGDA product 69
+   (long-term Sun and Earth visibility maps) through the engine.
 
 Pytest uses the functions below (tests/test_state.py). The same checks print a report from the command line:
 
@@ -266,6 +268,157 @@ SERIES_CASES = [("im-2", "2026-11-20T12:00:00Z", 720, 10), ("shackleton", "2027-
                 ("mons-malapert", "2028-06-15T06:30:00Z", 240, 5), ("apollo-11", "2029-06-25T12:00:00Z", 36, 10)]
 
 
+# ---------------------------------------------------------------------------- horizon
+
+HORIZON = "/api/v1/sites/{site_id}/horizon"
+DATA_DIR = Path(__file__).resolve().parents[2] / "data"
+MOON_R_M = 1_737_400.0
+
+
+def _raw_masks(site_id: str) -> tuple[dict, dict]:
+    """Independent decode of data/horizons.i16 and data/zones.i16 (int16 hundredths of a degree) from the
+    offsets in data/sites.json, without the API's repository code: {mast: values}, {zone index: values}."""
+    import numpy as np
+    doc = json.loads((DATA_DIR / "sites.json").read_text(encoding="utf-8"))
+    n, masts = doc["azimuthCount"], doc["mastsM"]
+    terrain = next(x for x in doc["sites"] if x["id"] == site_id).get("terrain", {})
+    if "horizonOffset" not in terrain:
+        return {}, {}
+    h = np.fromfile(DATA_DIR / "horizons.i16", dtype="<i2")
+    z = np.fromfile(DATA_DIR / "zones.i16", dtype="<i2")
+    by_mast = {float(m): (h[(terrain["horizonOffset"] * len(masts) + i) * n:][:n] / 100.0).tolist()
+               for i, m in enumerate(masts)}
+    k = len(terrain["zone"]["points"])
+    by_zone = {j: (z[(terrain["zoneOffset"] * k + j) * n:][:n] / 100.0).tolist() for j in range(k)}
+    return by_mast, by_zone
+
+
+def _distance_bearing(lat1, lon1, lat2, lon2) -> tuple[float, float]:
+    """Great-circle distance (m, R = 1737.4 km) and initial bearing (degrees from north) from point 1 to 2."""
+    p1, l1, p2, l2 = map(math.radians, (lat1, lon1, lat2, lon2))
+    a = math.sin((p2 - p1) / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin((l2 - l1) / 2) ** 2
+    d = 2 * MOON_R_M * math.asin(math.sqrt(a))
+    b = math.degrees(math.atan2(math.sin(l2 - l1) * math.cos(p2),
+                                math.cos(p1) * math.sin(p2) - math.sin(p1) * math.cos(p2) * math.cos(l2 - l1)))
+    return d, b % 360.0
+
+
+def _profile_summary_errors(name: str, x: dict, values: list[float], step: float) -> list[str]:
+    bad = []
+    i_max = max(range(len(values)), key=values.__getitem__)
+    i_min = min(range(len(values)), key=values.__getitem__)
+    if x["max_deg"] != values[i_max] or x["max_az_deg"] != i_max * step:
+        bad.append(f"{name}: max {x['max_deg']} at {x['max_az_deg']} vs {values[i_max]} at {i_max * step}")
+    if x["min_deg"] != values[i_min] or x["min_az_deg"] != i_min * step:
+        bad.append(f"{name}: min {x['min_deg']} at {x['min_az_deg']} vs {values[i_min]} at {i_min * step}")
+    if abs(x["mean_deg"] - sum(values) / len(values)) > 1e-9:
+        bad.append(f"{name}: mean_deg wrong")
+    return bad
+
+
+def horizon_invariants(r: dict) -> list[str]:
+    """One horizon response against the files, the catalogue, geometry and its own summary."""
+    bad: list[str] = []
+
+    def need(cond: bool, msg: str):
+        if not cond:
+            bad.append(msg)
+
+    n, step = len(r["elevation_deg"]), r["az_step_deg"]
+    need(n == 720 and step == 0.5 and r["az"] == [i * step for i in range(n)], "azimuth grid is not 720 x 0.5 deg")
+    bad += _profile_summary_errors("site", r, r["elevation_deg"], step)
+    by_mast, by_zone = _raw_masks(r["site_id"])
+    if r["horizon_kind"] == "terrain":
+        need(r["mast_used_m"] == min(by_mast, key=lambda m: abs(m - r["mast_m"])), "mast_used_m is not the nearest mask")
+        need(r["elevation_deg"] == by_mast[r["mast_used_m"]], "values differ from an independent read of horizons.i16")
+        need(r["masts_available_m"] == sorted(by_mast), "masts_available_m wrong")
+        if r["mast_used_m"] == 2.0:          # the catalogue summarises the 2 m mask, rounded to 0.01 deg
+            cat = next(x for x in json.loads((DATA_DIR / "sites.json").read_text(encoding="utf-8"))["sites"]
+                       if x["id"] == r["site_id"])["terrain"]
+            need(abs(r["max_deg"] - cat["horizon2mMaxDeg"]) < 0.005 and abs(r["mean_deg"] - cat["horizon2mMeanDeg"]) < 0.005,
+                 f"summary {r['max_deg']}/{r['mean_deg']} vs catalogue {cat['horizon2mMaxDeg']}/{cat['horizon2mMeanDeg']}")
+    else:
+        dip = -math.degrees(math.acos(MOON_R_M / (MOON_R_M + r["mast_m"])))
+        need(all(abs(v - dip) < 1e-12 for v in r["elevation_deg"]), f"smooth sphere is not -acos(R/(R+h)) = {dip}")
+        need(r["masts_available_m"] == [] and not r["zone_available"] and r["zone"] is None, "smooth sphere with masks")
+    if r["zone"] is not None:
+        pts = r["zone"]["points"]
+        need(r["zone"]["mast_m"] == 2.0 and len(pts) == len(by_zone), "zone size or mast wrong")
+        need(pts[0]["distance_m"] == 0.0 and pts[0]["elevation_deg"] == by_mast[2.0], "zone centre != site 2 m mask")
+        for j, pt in enumerate(pts):
+            need(len(pt["elevation_deg"]) == n, f"zone point {j}: not {n} values")
+            need(pt["elevation_deg"] == by_zone[j], f"zone point {j}: differs from an independent read of zones.i16")
+            bad += _profile_summary_errors(f"zone point {j}", pt, pt["elevation_deg"], step)
+            if pt["distance_m"] > 0:
+                d, b = _distance_bearing(r["lat"], r["lon"], pt["lat"], pt["lon"])
+                need(abs(d - pt["distance_m"]) < 1.0, f"zone point {j}: {d:.1f} m away, says {pt['distance_m']}")
+                need(min(abs(b - pt["bearing_deg"]), 360 - abs(b - pt["bearing_deg"])) < 0.5,
+                     f"zone point {j}: bearing {b:.2f}, says {pt['bearing_deg']}")
+    return bad
+
+
+def horizon_mast_monotonic(client, site_id: str) -> list[str]:
+    """Raising the mast can only lower the skyline: mask(0) >= mask(2) >= mask(5) >= mask(10) at every azimuth."""
+    masks = [client.get(HORIZON.format(site_id=site_id), params={"mast_m": m}).json()["elevation_deg"]
+             for m in (0, 2, 5, 10)]
+    bad = []
+    for lo, hi, a, b in zip((0, 2, 5), (2, 5, 10), masks, masks[1:]):
+        n_up = sum(y > x for x, y in zip(a, b))
+        if n_up:
+            bad.append(f"{site_id}: {n_up} azimuths higher at {hi} m than at {lo} m")
+    return bad
+
+
+def _interp(values: list[float], step: float, az: float) -> float:
+    x = (az / step) % len(values)
+    i = int(math.floor(x)) % len(values)
+    f = x - math.floor(x)
+    return values[i] + (values[(i + 1) % len(values)] - values[i]) * f
+
+
+def horizon_matches_state(client, site_id: str, t: str, mast_m: float) -> list[str]:
+    """state's horizon_el is this profile interpolated at the Sun's and the Earth's azimuth."""
+    h = client.get(HORIZON.format(site_id=site_id), params={"mast_m": mast_m}).json()
+    st = client.get(STATE.format(site_id=site_id), params={"t": t, "mast_m": mast_m}).json()
+    bad = []
+    for body in ("sun", "earth"):
+        expect = _interp(h["elevation_deg"], h["az_step_deg"], st[body]["az"])
+        if abs(st[body]["horizon_el"] - expect) > 1e-9:
+            bad.append(f"{site_id} {t} {body}: state horizon_el {st[body]['horizon_el']} vs profile {expect}")
+    return bad
+
+
+PGDA_TOL = 0.02
+
+
+def horizon_vs_pgda(client) -> list[dict]:
+    """Independent NASA check of the served masks. For every terrain site, the engine runs 2025-2035 (6-hourly)
+    over each zone point's mask as served by the API, giving the mean visible solar-disc fraction and the share
+    of time with any of the Earth's disc visible. PGDA product 69 (Mazarico et al., 18.6-year averages over
+    960 m cells) must fall inside the range across the zone points, +/- PGDA_TOL."""
+    from app import services
+    from app.db.store import get_store
+    from app.logic.engine import evaluate, make_model, time_grid
+    from app.logic.horizon import HorizonProfile
+
+    store = get_store()
+    t = time_grid(services.to_ms(datetime(2025, 1, 1, tzinfo=timezone.utc)), 24 * 365 * 11 - 48, 360)
+    rows = []
+    for site in client.get("/api/v1/sites", params={"terrain_only": True}).json()["sites"]:
+        r = client.get(HORIZON.format(site_id=site["id"]), params={"mast_m": 2, "include_zone": True}).json()
+        sun, earth = [], []
+        for pt in r["zone"]["points"]:
+            model = make_model(pt["lat"], pt["lon"], pt["ground_m"], HorizonProfile(pt["elevation_deg"]), 2.0)
+            s = evaluate(store.ephemeris, model, t)
+            sun.append(float(s.sun_frac.mean()))
+            earth.append(float((s.earth_frac > 0).mean()))
+        for kind, grid, vals in (("sun", "sun_illumination_65s", sun), ("earth", "earth_visibility_65s", earth)):
+            ref = store.grids.sample(grid, r["lat"], r["lon"])
+            rows.append({"site": r["site_id"], "kind": kind, "pgda": ref, "centre": vals[0], "lo": min(vals),
+                         "hi": max(vals), "ok": min(vals) - PGDA_TOL <= ref <= max(vals) + PGDA_TOL})
+    return rows
+
+
 def main() -> int:
     from fastapi.testclient import TestClient
 
@@ -314,6 +467,26 @@ def main() -> int:
     ok &= passed
     print(f"[{'PASS' if passed else 'FAIL'}] series vs JPL Horizons: {len(rows)} comparisons, worst "
           f"{worst['error_deg']:.6f} deg")
+    bad = []
+    for site in client.get("/api/v1/sites").json()["sites"]:
+        for m in (0, 2, 3, 10):
+            r = client.get(HORIZON.format(site_id=site["id"]), params={"mast_m": m, "include_zone": True}).json()
+            bad += [f"{site['id']} {m} m: {x}" for x in horizon_invariants(r)]
+        if site["terrain_available"]:
+            bad += horizon_mast_monotonic(client, site["id"])
+        bad += horizon_matches_state(client, site["id"], SWEEP_TIMES[0], 2)
+    ok &= not bad
+    print(f"[{'PASS' if not bad else 'FAIL'}] horizon: bit-exact vs data files, catalogue, geometry, mast "
+          "monotonic, equal to state's horizon_el (every site)" + "".join(f"\n    {m}" for m in bad[:20]))
+    rows = horizon_vs_pgda(client)
+    fails = [x for x in rows if not x["ok"]]
+    ok &= not fails
+    n_sun = sum(x["ok"] for x in rows if x["kind"] == "sun")
+    n_earth = sum(x["ok"] for x in rows if x["kind"] == "earth")
+    print(f"[{'PASS' if not fails else 'FAIL'}] horizon vs NASA PGDA product 69 (2025-2035 engine over the served "
+          f"masks): Sun {n_sun}/{len(rows) // 2}, Earth {n_earth}/{len(rows) // 2} inside the zone range +/-{PGDA_TOL}"
+          + "".join(f"\n    {x['site']} {x['kind']}: PGDA {x['pgda']:.3f} vs zone [{x['lo']:.3f}, {x['hi']:.3f}]"
+                    for x in fails))
     return 0 if ok else 1
 
 

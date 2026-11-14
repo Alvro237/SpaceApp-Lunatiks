@@ -10,7 +10,7 @@ holds the order, the decisions and the validation plan. Branch: `seryitron-branc
 | --- | --- | --- | --- |
 | 1 | `GET /api/v1/sites/{site_id}/state` | The only mandatory objective of the challenge; its pieces (body state, transitions) are reused by all the others | Done, validated |
 | 2 | `GET /api/v1/sites/{site_id}/series` | The mission window: timeline, Gantt, fractions and ranges; the hard filters and `/power` build on the same engine series | Done, validated |
-| 3 | `GET /api/v1/sites/{site_id}/horizon` | The 360° skyline for the panorama; no time dependence, small | To do |
+| 3 | `GET /api/v1/sites/{site_id}/horizon` | The 360° skyline for the panorama; no time dependence, small | Done, validated |
 | 4 | `GET /api/v1/points/state` | `state` with `lat`/`lon` instead of an id (smooth-sphere horizon); reuses `state_response` | To do |
 | 5 | `GET /api/v1/points/series` | `series` with `lat`/`lon`; reuses the series builder | To do |
 
@@ -85,4 +85,47 @@ Cost: about 12 single-instant evaluations per edge; a 30-day window has a few do
 - Published edges are rounded **up** to the whole second, in `series` ranges and in `state` transitions alike.
   The validator found that truncating printed an instant still in the old state (a sunrise at 18:53:50.7 shown
   as 18:53:50, when the Sun was not yet up). `state`'s transition check is now "2 s before / at the instant".
+
+## 3. `GET /api/v1/sites/{site_id}/horizon`: plan (done; as built in `docs/sw1-output-format.md`)
+
+The skyline the frontend draws under the Sun and Earth tracks, and the evidence of how much the terrain decides:
+the 360° LOLA horizon mask of a site and, on request, the masks of its neighbours a few hundred metres away.
+No time dependence and no new physics: the masks are precomputed by the pipeline (`data/horizons.i16`,
+`data/zones.i16`); the endpoint decodes, summarises and returns them. Files: `routers/horizon.py`,
+`schemas/horizon.py`, `tests/test_horizon.py` (one router per endpoint group, registered in `main.py`).
+
+### Request
+
+| Parameter | Default | Bounds | Notes |
+| --- | --- | --- | --- |
+| `mast_m` | 0 | 0..20, null = 0 | As in `state`; terrain sites snap to the nearest stored mask (0, 2, 5, 10 m) |
+| `include_zone` | false | bool | Also return the neighbours' masks (site centre plus 16 points: 8 bearings × 500 m and 1.5 km). They exist only for the 2 m mast; the response says so |
+
+### Response
+
+- Echo and context: `site_id`, `lat`, `lon`, `ground_m`, `mast_m`, `mast_used_m`, `masts_available_m`,
+  `horizon_kind`.
+- The profile: `az_step_deg` (0.5), `az` (720 azimuths, 0 to 359.5, clockwise from north) and `elevation_deg`
+  (720 values, degrees). Linear interpolation between azimuths, wrapping at 360°, is the engine's rule.
+- Summary: `max_deg`, `max_az_deg`, `min_deg`, `min_az_deg`, `mean_deg`.
+- `zone`: `null` unless requested and available. Otherwise `{mast_m: 2, points: [...]}` with, per point,
+  `bearing_deg`, `distance_m`, `lat`, `lon`, `ground_m`, `elevation_deg` (720) and the same summary.
+  `zone_available` says whether the site has neighbour masks (13 terrain sites yes, smooth-sphere sites no).
+
+### Validation plan
+
+1. **Bit-exact decode**: the API's values equal an independent read of `horizons.i16` / `zones.i16` (int16 / 100)
+   at the documented offsets.
+2. **Catalogue summary**: max and mean at 2 m equal `sites.json` (`horizon2mMaxDeg`, `horizon2mMeanDeg`).
+3. **Physics**: a higher mast never sees a higher skyline (mask at 0 ≥ 2 ≥ 5 ≥ 10 m at every azimuth, checked on
+   all 13 sites); the smooth sphere equals `-acos(R / (R + h))` by hand; the zone centre equals the site's 2 m
+   mask; neighbour coordinates lie at their stated distance and bearing (haversine, R = 1737.4 km).
+4. **Consistency with `state`**: `state`'s `horizon_el` equals this profile interpolated at the Sun's and the
+   Earth's azimuth.
+5. **Independent NASA product** (PGDA product 69, Mazarico et al., 18.6-year averages, 960 m cells): over
+   2025-2035 the engine with these masks gives a mean visible solar-disc fraction, and a share of time with any
+   of the Earth's disc visible, whose range across the zone points contains PGDA's value (±0.02) at all 13
+   terrain sites. Measured during planning: Sun 13/13, Earth 13/13 once the definitions match (PGDA's Earth map
+   counts "any part of the disc visible"; the engine's comms flag uses half the disc, which reads lower).
+6. **Errors**: 404 unknown id, 422 bad `mast_m`.
 

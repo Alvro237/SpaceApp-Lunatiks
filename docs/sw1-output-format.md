@@ -8,7 +8,7 @@ the meaning, units and edge cases. One section per endpoint, added as each one i
 | --- | --- |
 | `GET /api/v1/sites/{site_id}/state` | Done, validated (this file) |
 | `GET /api/v1/sites/{site_id}/series` | Done, validated (this file) |
-| `GET /api/v1/sites/{site_id}/horizon` | To do |
+| `GET /api/v1/sites/{site_id}/horizon` | Done, validated (this file) |
 | `GET /api/v1/points/state` | To do (same output as `sites/{id}/state`, `site_id: null`) |
 | `GET /api/v1/points/series` | To do (same output as `sites/{id}/series`, `site_id: null`) |
 
@@ -320,4 +320,117 @@ Metrics (from the samples, so at the grid's resolution):
    leaving the tables; 30 days answer in under 2 s (measured ~0.16 s).
 7. **The validator is tested**: tampered series (wrong percentage, flipped flags, missing ranges, a power array)
    are rejected.
+
+---
+
+## `GET /api/v1/sites/{site_id}/horizon`
+
+The 360° skyline of a catalogue site: the elevation of the terrain horizon at every half degree of azimuth, from
+the LOLA masks the pipeline ray-traced to 175 km (`data/horizons.i16`). Optionally the same for the neighbours on
+two rings around the site (`data/zones.i16`), which shows how much a few hundred metres change the sky. No time
+dependence. This is the curve the panorama draws under the Sun and Earth tracks, and the `horizon_el` that
+`state` and `series` report is this profile read at the body's azimuth.
+
+### Request
+
+| Parameter | In | Type | Default | Range | Meaning |
+| --- | --- | --- | --- | --- | --- |
+| `site_id` | path | string | required | an id from `GET /api/v1/sites` | Catalogue site |
+| `mast_m` | query | float, m | `0` | 0..20 | As in `state`: absent, empty or `null` = 0 m. Terrain sites snap to the nearest stored mask |
+| `include_zone` | query | bool | `false` | `true`/`false` | Also return the neighbours' masks (2 m mast only) |
+
+```
+GET /api/v1/sites/im-2/horizon?mast_m=2&include_zone=true
+```
+
+### Response 200
+
+Real response, arrays shortened here (each has 720 values):
+
+```json
+{
+  "site_id": "im-2", "lat": -84.78, "lon": 29.13, "ground_m": 5312.6,
+  "mast_m": 2.0, "mast_used_m": 2.0, "masts_available_m": [0.0, 2.0, 5.0, 10.0],
+  "horizon_kind": "terrain",
+  "az_step_deg": 0.5,
+  "az": [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, "...", 359.5],
+  "elevation_deg": [-0.47, -0.47, -0.47, -0.47, -0.5, -0.54, "...", -0.49],
+  "max_deg": 4.01, "max_az_deg": 118.0,
+  "min_deg": -1.46, "min_az_deg": 328.0,
+  "mean_deg": 1.0188,
+  "zone_available": true,
+  "zone": {
+    "mast_m": 2.0,
+    "points": [
+      { "bearing_deg": 0.0, "distance_m": 0.0, "lat": -84.78, "lon": 29.13, "ground_m": 5312.6,
+        "elevation_deg": [-0.47, -0.47, -0.47, "..."],
+        "max_deg": 4.01, "max_az_deg": 118.0, "min_deg": -1.46, "min_az_deg": 328.0, "mean_deg": 1.0188 },
+      { "bearing_deg": 0.0, "distance_m": 500.0, "lat": -84.76351, "lon": 29.13, "ground_m": 5291.1,
+        "elevation_deg": [-0.39, -0.39, -0.38, "..."],
+        "max_deg": 4.02, "max_az_deg": 119.5, "min_deg": -1.4, "min_az_deg": 327.5, "mean_deg": 1.1919 },
+      "... 15 more: bearings 0, 45, ..., 315 at 500 m, then the same at 1500 m"
+    ]
+  }
+}
+```
+
+With `include_zone=true` the response is about 72 KB; without it about 9 KB.
+
+### Fields
+
+| Field | Type | Unit | Meaning |
+| --- | --- | --- | --- |
+| `site_id`, `lat`, `lon`, `ground_m` | | | As in `state` |
+| `mast_m` | float | m | Mast requested |
+| `mast_used_m` | float | m | Mast of the profile returned: nearest stored terrain mask, or `mast_m` on a smooth sphere |
+| `masts_available_m` | float[] | m | Masts with a stored terrain mask; `[]` on a smooth sphere (any mast is computed exactly) |
+| `horizon_kind` | `terrain` \| `smooth_sphere` | | Where the profile comes from |
+| `az_step_deg` | float | deg | Azimuth spacing (0.5) |
+| `az` | float[720] | deg | Azimuths, clockwise from north, 0 to 359.5 |
+| `elevation_deg` | float[720] | deg | Skyline elevation at each azimuth. Stored to 0.01°. Between azimuths interpolate linearly, wrapping at 360° (the engine's rule) |
+| `max_deg`, `max_az_deg` | float | deg | Highest skyline point and its azimuth (first one if repeated) |
+| `min_deg`, `min_az_deg` | float | deg | Lowest skyline point and its azimuth |
+| `mean_deg` | float | deg | Mean over the 720 azimuths |
+| `zone_available` | bool | | The site has neighbour masks (the 13 terrain sites) |
+| `zone` | object \| null | | `null` unless `include_zone=true` and `zone_available` |
+| `zone.mast_m` | float | m | Always 2: the pipeline stores neighbours for the 2 m mast only, whatever `mast_m` asked |
+| `zone.points[]` | object | | Site centre first (`distance_m` 0, the same mask as the site at 2 m), then 8 bearings at 500 m, then 8 at 1500 m. Each has `bearing_deg`, `distance_m`, `lat`, `lon`, `ground_m`, `elevation_deg` (720) and the same summary fields |
+
+### Errors
+
+| Status | When |
+| --- | --- |
+| 404 | Unknown `site_id` |
+| 422 | `mast_m` outside 0..20 or not a number; `include_zone` not a boolean |
+
+### Edge cases and reading notes
+
+- Negative elevations are normal: from a raised point the horizon dips below the horizontal.
+- A smooth-sphere site (Apollo, Blue Ghost, SLIM) returns a flat profile at `-acos(R / (R + mast))`
+  (`-0.087°` at 2 m, `0` at 0 m), `masts_available_m: []` and no zone.
+- Asking `mast_m=3` on a terrain site returns the 2 m mask (`mast_used_m: 2`); `state` and `series` do the same.
+- The zone shows how sensitive the site is. At Mons Malapert the long-term sunlight across the 17 points ranges
+  from 25 % to 73 %: a lander a few hundred metres off target sees a very different sky.
+
+### How it was validated
+
+`cd api && uv run python -m tests.sw1_validation` (pytest: `tests/test_horizon.py`):
+
+1. **Bit-exact against the files**: every value (site at each mast, and all 17 zone points) equals an independent
+   read of `horizons.i16` / `zones.i16` (int16 / 100) at the offsets in `sites.json`, without the API's own
+   repository code. All 21 sites × masts 0, 2, 3, 10.
+2. **Catalogue**: max and mean at 2 m equal `sites.json` (`horizon2mMaxDeg`, `horizon2mMeanDeg`).
+3. **Physics and geometry**: a higher mast never sees a higher skyline (0 ≥ 2 ≥ 5 ≥ 10 m at all 720 azimuths, 13
+   sites); the smooth sphere equals `-acos(R / (R + h))`; the zone centre is the site's 2 m mask; every
+   neighbour is at its stated distance (< 1 m) and bearing (< 0.5°) by haversine; summaries recomputed.
+4. **Consistency with `state`**: `state`'s `horizon_el` for the Sun and the Earth equals this profile
+   interpolated at their azimuths (1e-9).
+5. **Independent NASA product (PGDA product 69, Mazarico et al.)**: the engine runs 2025-2035 over each served
+   zone mask; the mean visible solar-disc fraction and the share of time with any of the Earth's disc visible,
+   taken across the 17 zone points, bracket PGDA's 18.6-year average (960 m cells) within ±0.02 at **13 of 13
+   sites for the Sun and 13 of 13 for the Earth**. The six permanently shadowed craters are 0 in both. PGDA's
+   Earth map counts "any part of the disc visible", so the comparison uses that definition; the comms flag
+   (half the disc) reads lower.
+6. **The validator is tested**: a value changed by 0.01°, a wrong azimuth of the maximum, a neighbour moved by
+   0.01°, a reversed zone mask and a wrong `mast_used_m` are each rejected.
 

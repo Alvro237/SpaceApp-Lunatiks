@@ -13,6 +13,7 @@ import numpy as np
 from .db.sites import Site
 from .db.store import DataStore
 from .logic.constraints import ConstraintContext
+from .logic.horizon import HorizonProfile
 from .logic.engine import (DEFAULT_PARAMS, AnalysisParams, Metrics, RefinedRange, Series, SiteModel, Transition,
                            compute_metrics, evaluate, make_model, next_transition, refined_ranges, time_grid)
 
@@ -143,3 +144,22 @@ def series_window(store: DataStore, model: SiteModel, start_ms: float, duration_
                         sunlit=refined_ranges(eph, model, s, "sun", params),
                         comms=refined_ranges(eph, model, s, "earth", params),
                         eclipse=refined_ranges(eph, model, s, "eclipse", params))
+
+
+# ---------------------------------------------------------------------------- SW-1: horizon profile
+
+@dataclass(frozen=True)
+class HorizonView:
+    profile: HorizonProfile
+    mast_used_m: float
+    zone: list[tuple[dict, HorizonProfile]]   # (point, mask) pairs; empty when not requested or not available
+    zone_available: bool
+
+
+def horizon_view(store: DataStore, site: Site, mast_m: float, include_zone: bool) -> HorizonView:
+    """The site's skyline at the nearest stored mast (smooth sphere when it has no terrain), and optionally the
+    neighbours' 2 m masks."""
+    zone = store.horizons.zone(site)
+    return HorizonView(profile=store.horizons.for_site(site, mast_m),
+                       mast_used_m=store.horizons.nearest_mast(mast_m) if site.has_terrain else mast_m,
+                       zone=zone if include_zone else [], zone_available=bool(zone))
