@@ -7,20 +7,17 @@ import numpy as np
 from fastapi import APIRouter, Depends, HTTPException
 
 from .. import services
-from ..db.stations import Station, StationRepository
+from ..db.stations import StationRepository
 from ..db.store import DataStore, get_store
 from ..logic.ephemeris import OutOfCoverage
 from ..logic.engine import AnalysisParams
-from ..logic.link import (LinkBudgetParams, StationSpec, combine_contact, free_space_loss_db, margin_db,
-                          max_data_rate_bps, station_view)
+from ..logic.link import LinkBudgetParams, combine_contact, free_space_loss_db, margin_db, max_data_rate_bps
 from ..logic.sun import longest_run_h
 from ..schemas.link import (LinkBudgetResult, LinkNow, LinkRequest, LinkResponse, SkippedStation, StationBudget,
                             StationCatalogue, StationInfo, StationResult)
 from .common import ranges, resolve_model, window_fields, window_ms
 
 router = APIRouter(prefix="/link", tags=["link"])
-
-DIRECTION_KIND = {"downlink": "receive", "uplink_low_power": "transmit_low", "uplink_high_power": "transmit_high"}
 
 ASSUMPTIONS = [
     "Contact means the lunar site sees the Earth (at least comms_min_fraction of its disc above the local horizon) "
@@ -73,44 +70,24 @@ def link(req: LinkRequest, store: DataStore = Depends(get_store)) -> LinkRespons
     model = resolve_model(req, store)
     start_ms = window_ms(req, store)
 
-    kind = DIRECTION_KIND[req.direction]
     try:
-        catalogue: list[Station] = repo.in_networks(req.networks)
+        ls = services.link_stations(store, req.networks, req.direction, req.custom_stations)
     except KeyError as exc:
         raise HTTPException(status_code=422, detail=(
             f"Unknown network {exc.args[0]!r}; available: {sorted(repo.networks())}")) from None
-    clash = sorted({c.id for c in req.custom_stations} & {s.id for s in repo.all()})
-    if clash:
-        raise HTTPException(status_code=422, detail=f"Custom station ids clash with catalogue ids: {clash}")
-
-    specs: list[StationSpec] = []
-    meta: dict[str, dict] = {}
-    skipped: list[SkippedStation] = []
-    for s in catalogue:
-        limit, step = s.limit(kind)
-        if limit is None:
-            skipped.append(SkippedStation(id=s.id, reason=f"no {req.direction} elevation limit is published for this antenna"))
-            continue
-        specs.append(StationSpec(s.id, s.lat_deg, s.lon_deg, s.height_m, limit, step))
-        meta[s.id] = dict(name=s.name, network=s.network, source=s.elevation_limits["source"])
-    for c in req.custom_stations:
-        specs.append(StationSpec(c.id, c.lat_deg, c.lon_deg, c.height_m, c.min_elevation_deg, None))
-        meta[c.id] = dict(name=c.name or c.id, network="custom", source="user")
-    if not specs:
-        raise HTTPException(status_code=422, detail=(
-            f"No selected antenna has a {req.direction} elevation limit; choose another direction or add a custom station"))
-
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    specs, meta = ls.specs, ls.meta
+    skipped = [SkippedStation(id=i, reason=r) for i, r in ls.skipped]
     engine_params = AnalysisParams(comms_min_fraction=req.comms_min_fraction)
     series = services.evaluate_window(store, model, start_ms, req.duration_h, req.step_min, engine_params)
     t = series.t_ms
     try:
-        moon = repo.moon.positions(t)
+        views = services.link_views(store, series, ls)
     except OutOfCoverage:
         raise HTTPException(status_code=400, detail=(
             "The window is outside the Moon table used for the ground antennas (2025-2035); "
             "see GET /api/v1/meta/datasets")) from None
-
-    views = {sp.id: station_view(sp, moon) for sp in specs}
     spec_by_id = {sp.id: sp for sp in specs}
     c = combine_contact(series.comms(engine_params), {k: v.sees_moon for k, v in views.items()})
     step_h = series.step_ms / 3_600_000.0

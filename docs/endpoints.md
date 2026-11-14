@@ -164,7 +164,9 @@ station dataset, the Moon in the Earth-fixed frame, `logic/stations.py`, `db/sta
 with the networks you select (`networks`), your own antennas (`custom_stations`) and a `direction` (downlink, uplink
 low or high power); level 2 adds a `budget` (frequency, EIRP, G/T, data rate, required Eb/N0: all supplied by the user,
 none is defaulted) and returns the Eb/N0 margin per antenna and the time the link is closed. `GET /api/v1/link/stations`
-lists the catalogue. To do: moving the hard filters `comms_hours` / `max_blackout` to the combined contact series.
+lists the catalogue. The hard filters `comms_hours` / `max_blackout` use the combined contact series when the context
+is built with `services.constraint_context(..., link_networks=[...])` (SW-2: pass the networks the user selected);
+without it they keep using the Earth's line of sight alone.
 **Files:** `logic/link.py`, `routers/link.py`, `schemas/link.py`, `tests/test_link.py`.
 
 - `POST /api/v1/link` with `level` (team decision 2026-11-14: contact needs BOTH ends, so station visibility is
@@ -179,8 +181,8 @@ lists the catalogue. To do: moving the hard filters `comms_hours` / `max_blackou
      Eb/N0, margin, achievable data rate. Contact then means margin >= a minimum margin given by the user.
      Every parameter has a unit and a source.
 - Satellite relays in lunar orbit are out of scope for now (team decision 2026-11-14).
-- The hard filters `comms_hours` and `max_blackout` currently use the Earth line of sight only (the old level 1);
-  they move to the combined contact series of level 1 once the station dataset exists.
+- The hard filters `comms_hours` and `max_blackout` use the combined contact series of level 1 when the
+  `ConstraintContext` carries it (`ctx.contact`, filled by `services.constraint_context(link_networks=...)`).
 - `logic/link.py` is pure: inputs are arrays and parameter dataclasses, outputs are arrays.
 
 MECH integration guide (requests, fields to show, conventions, errors): `docs/api-guide-mech.md`.

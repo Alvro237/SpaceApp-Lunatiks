@@ -46,6 +46,18 @@ A fifth commit on the new branch adds this file.
   module `lunarnav/ground_stations.py` loads kernels by relative name; the older pipeline code does not, so build the
   data from a path without accents.
 
+## 3b. Additive edits to shared backend files (team notice)
+
+Nothing was renamed or removed; callers that do not use the new options behave exactly as before.
+
+- `api/app/db/store.py`: new optional field `DataStore.stations` (and one line in `load_store`).
+- `api/app/logic/constraints/base.py`: new optional field `ConstraintContext.contact` (bool series, default `None`).
+- `api/app/services.py`: new functions `link_stations`, `link_views`, `link_contact` (end of file) and two optional
+  parameters of `constraint_context`, `link_networks` and `link_direction`. SW-2: pass `link_networks=[...]` when the
+  user selected antenna networks and `comms_hours` / `max_blackout` will use ground-antenna contact instead of the
+  Earth's line of sight alone.
+- `api/app/main.py`: one import and one `include_router` line for the link router.
+
 ## 4. Notice for the frontend (nothing under `web/` was touched)
 
 `web/src/panels/LinkPanel.tsx` currently shows only the Earth's disc from the browser engine and the text
