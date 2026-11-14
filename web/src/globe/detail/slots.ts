@@ -10,10 +10,10 @@ import * as THREE from 'three'
 import { type DetailKind, type DetailTile, TILE_CELLS, keyOf, tileBox } from './grid'
 
 /**
- * Layers per kind: up to 48 view tiles, the coarse tiles asked for first (about a dozen at most) and the 32 photo-base
- * tiles (96 × 256 KB = 25 MB of float heights).
+ * Layers per kind: up to 48 view tiles, the coarse tiles asked for first (about a dozen at most), the siblings that
+ * come with DEM quads, and the 32 photo-base tiles (128 × 256 KB = 34 MB of float heights).
  */
-export const CAPACITY = 96
+export const CAPACITY = 128
 
 export class DetailSlots {
   readonly texture: THREE.DataArrayTexture

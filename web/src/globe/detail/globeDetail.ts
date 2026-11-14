@@ -7,12 +7,43 @@
  *   no request is spent on levels the camera only passes through;
  * - the few coarse tiles (COARSE_STEP levels up) come first, then the view's level from the centre outward, then
  *   (photo) the 32 base tiles;
+ * - DEM tiles from QUAD_MIN_LEVEL on come four per request (grid.ts, Quad);
  * - a tile that failed is asked for again after RETRY_BASE_S, doubling, up to MAX_RETRIES times.
  */
 import type * as THREE from 'three'
+import type { DecodeRequest } from '../../terrain/decode.worker'
 import { TileLoader } from '../../terrain/loader'
-import { type DetailKind, MIN_HEIGHT_LEVEL, PHOTO_BASE_LEVEL, type View, allTiles, demSource, extraRows, keyOf, tileBox, trekTileUrl, wantedTiles } from './grid'
+import {
+  type DetailKind,
+  type DetailTile,
+  MIN_HEIGHT_LEVEL,
+  PHOTO_BASE_LEVEL,
+  QUAD_MIN_LEVEL,
+  TILE_CELLS,
+  type View,
+  allTiles,
+  demSource,
+  extraRows,
+  keyOf,
+  quadBox,
+  quadExtraRows,
+  quadKey,
+  quadOf,
+  quadTiles,
+  quadUrl,
+  tileBox,
+  trekTileUrl,
+  wantedTiles,
+} from './grid'
 import { DetailSlots } from './slots'
+import { splitQuad } from './trekGeo'
+
+/** One request: a single tile, or (DEM, level QUAD_MIN_LEVEL and finer) the four tiles of a quad. */
+interface Job {
+  key: string
+  tiles: DetailTile[]
+  req: Omit<DecodeRequest, 'id'>
+}
 
 /** How often the wanted tiles are worked out, seconds. */
 const INTERVAL_S = 0.15
@@ -66,29 +97,70 @@ export class GlobeDetail {
     material.uniforms.uMaxLevel.value = kind === 'photo' ? Math.max(level, PHOTO_BASE_LEVEL) : level
     const tiles = [...w.coarse, ...w.tiles, ...(kind === 'photo' ? allTiles(PHOTO_BASE_LEVEL) : [])]
     slots.setWanted(tiles)
-    const rank = new Map(tiles.map((t, i) => [keyOf(kind, t), i]))
+    const jobs = this.jobsFor(kind, tiles)
+    const rank = new Map(jobs.map((j, i) => [j.key, i]))
     this.loader.prioritise((k) => rank.get(k) ?? null)
-    for (const t of tiles) {
-      const key = keyOf(kind, t)
-      if (slots.has(t)) continue
-      const f = this.failures.get(key)
+    for (const job of jobs) {
+      const f = this.failures.get(job.key)
       if (f) {
         if (f.count > MAX_RETRIES || this.clockS < f.retryAt) continue
-        this.loader.forget(key)
+        this.loader.forget(job.key)
       }
-      if (this.loader.known(key)) continue
+      if (this.loader.known(job.key)) continue
       this.loader
-        .request(key, { url: trekTileUrl(kind, t), kind: 'globe', globe: { kind, box: tileBox(t), extraRows: extraRows(kind, t), scale: kind === 'dem' ? demSource(t).scale : 1 } })
+        .request(job.key, job.req)
         .then((r) => {
-          this.failures.delete(key)
-          slots.put(t, kind === 'dem' ? r.heights! : r.bytes!)
+          this.failures.delete(job.key)
+          if (kind === 'photo') slots.put(job.tiles[0], r.bytes!)
+          else if (job.tiles.length === 1) slots.put(job.tiles[0], r.heights!)
+          else splitQuad(r.heights!).forEach((h, i) => slots.put(job.tiles[i], h))
         })
         .catch((e: Error) => {
           if (e.message === 'cancelled') return // no longer in view; asked for again if it comes back
-          const count = (this.failures.get(key)?.count ?? 0) + 1
-          this.failures.set(key, { count, retryAt: this.clockS + RETRY_BASE_S * 2 ** (count - 1) })
+          const count = (this.failures.get(job.key)?.count ?? 0) + 1
+          this.failures.set(job.key, { count, retryAt: this.clockS + RETRY_BASE_S * 2 ** (count - 1) })
         })
     }
+  }
+
+  /** The requests for the wanted tiles not loaded yet, in the tiles' order (a quad ranks with its first tile). */
+  private jobsFor(kind: DetailKind, tiles: DetailTile[]): Job[] {
+    const slots = this.slots[kind]
+    const jobs: Job[] = []
+    const seen = new Set<string>()
+    for (const t of tiles) {
+      if (slots.has(t)) continue
+      if (kind === 'dem' && t.z >= QUAD_MIN_LEVEL) {
+        const q = quadOf(t)
+        const key = quadKey(q)
+        if (seen.has(key)) continue
+        seen.add(key)
+        const parent = { z: q.z - 1, x: q.x, y: q.y }
+        jobs.push({
+          key,
+          tiles: quadTiles(q),
+          req: {
+            url: quadUrl(q),
+            kind: 'globe',
+            globe: { kind, box: quadBox(q), extraRows: quadExtraRows(q), scale: demSource(parent).scale, cells: 2 * TILE_CELLS },
+          },
+        })
+      } else {
+        const key = keyOf(kind, t)
+        if (seen.has(key)) continue
+        seen.add(key)
+        jobs.push({
+          key,
+          tiles: [t],
+          req: {
+            url: trekTileUrl(kind, t),
+            kind: 'globe',
+            globe: { kind, box: tileBox(t), extraRows: extraRows(kind, t), scale: kind === 'dem' ? demSource(t).scale : 1 },
+          },
+        })
+      }
+    }
+    return jobs
   }
 
   /** Tiles loaded and requests in flight, for the status line. */

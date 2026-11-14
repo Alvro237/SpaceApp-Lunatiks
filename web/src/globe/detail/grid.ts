@@ -17,7 +17,10 @@
  * - south of 45° S and north of 45° N, the 100 m polar DEMs in geographic form (`..._100mp_v04_EQ`): about 1.3 s at
  *   every level, and dense there, where the global DEM answers large polar tiles in 5-60 s or HTTP 500. They return
  *   the stored value, half-metres (DN × 0.5 = metres: 5.6-22.5° tile means then within 15 m of LDEM_16).
- * All are metres above the 1737.4 km sphere. Moon Trek
+ * All are metres above the 1737.4 km sphere. Every DEM answer is asked for as 16-bit integers in half-metres, which
+ * is a third to a half of the bytes of float32 (the downloads, not Moon Trek's time, were what limited loading): the
+ * polar DEMs store half-metres already; the global DEM is doubled on the server first (an Arithmetic rendering rule;
+ * at most 0.25 m from its float32 answer, measured; heights of −9.1 to +10.8 km fit in 16 bits). Moon Trek
  * fills the last row of every exportImage answer with zeros (as in the polar levels, terrain/live/config.ts), so
  * each DEM request asks for one extra row below the tile, dropped by the client, except for the tiles that touch
  * the south pole, where the box would leave the globe.
@@ -85,16 +88,49 @@ export function tileBox(t: DetailTile): TileBox {
   return { lon0: -180 + t.x * s, lat0: 90 - (t.y + 1) * s, size: s }
 }
 
+/**
+ * DEM tiles from this level on are asked for four at a time: their parent's box at 512 × 512 cells, split into the
+ * four children by the client. One 512 px answer takes about 1.8-2 s against 1.3 s for 256 px (2-4 s for the
+ * 11-22° boxes of level 3), so the four tiles arrive about three times sooner over the browser's six connections
+ * to Moon Trek (measured 2026-11-14).
+ */
+export const QUAD_MIN_LEVEL = 3
+
+/** Four sibling tiles of level z: the children of tile (z − 1, x, y). */
+export interface Quad {
+  z: number
+  x: number
+  y: number
+}
+
+export const quadOf = (t: DetailTile): Quad => ({ z: t.z, x: t.x >> 1, y: t.y >> 1 })
+export const quadKey = (q: Quad): string => `dem4/${q.z}/${q.x}/${q.y}`
+/** The quad's tiles in the order splitQuad returns them: north-west, north-east, south-west, south-east. */
+export const quadTiles = (q: Quad): DetailTile[] => [
+  { z: q.z, x: 2 * q.x, y: 2 * q.y },
+  { z: q.z, x: 2 * q.x + 1, y: 2 * q.y },
+  { z: q.z, x: 2 * q.x, y: 2 * q.y + 1 },
+  { z: q.z, x: 2 * q.x + 1, y: 2 * q.y + 1 },
+]
+export const quadBox = (q: Quad): TileBox => tileBox({ z: q.z - 1, x: q.x, y: q.y })
+/** Extra rows below a quad's answer: 1, or 0 for the quads on the south pole. */
+export const quadExtraRows = (q: Quad): number => (q.y === rows(q.z - 1) - 1 ? 0 : 1)
+
 /** Extra rows below a tile in the answer: 1 for DEM tiles (0 on the south pole), 0 for photo tiles. */
 export const extraRows = (kind: DetailKind, t: DetailTile): number => (kind === 'photo' || t.y === rows(t.z) - 1 ? 0 : 1)
 
-/** The DEM a tile is read from, and the factor from its values to metres. */
+/** The DEM a tile is read from, and the factor from its 16-bit answer to metres (all half-metres). */
 export function demSource(t: DetailTile): { service: string; scale: number } {
   const b = tileBox(t)
   if (b.lat0 + b.size <= -POLAR_DEM_LAT) return { service: DEM_SOUTH, scale: 0.5 }
   if (b.lat0 >= POLAR_DEM_LAT) return { service: DEM_NORTH, scale: 0.5 }
-  return { service: DEM_SERVICE, scale: 1 }
+  return { service: DEM_SERVICE, scale: 0.5 }
 }
+
+/** Server-side ×2 of the global DEM (float32 metres), so its 16-bit answer is in half-metres like the polar DEMs. */
+const DOUBLE_RULE = encodeURIComponent(
+  JSON.stringify({ rasterFunction: 'Arithmetic', rasterFunctionArguments: { Raster: '$$', Raster2: 2, Operation: 3 }, outputPixelType: 'F32' }),
+)
 
 /**
  * URL of a tile. DEM: exportImage, 256 cells wide and 256 + extraRows tall, bilinear on the server. Photo: the WMTS
@@ -102,13 +138,21 @@ export function demSource(t: DetailTile): { service: string; scale: number } {
  */
 export function trekTileUrl(kind: DetailKind, t: DetailTile): string {
   if (kind === 'photo') return `${PHOTO_WMTS}${t.z + 1}/${t.y}/${t.x}.jpg`
-  const b = tileBox(t)
-  const c = b.size / TILE_CELLS
-  const extra = extraRows(kind, t)
+  return demUrl(demSource(t).service, tileBox(t), TILE_CELLS, extraRows(kind, t))
+}
+
+/** exportImage URL of a quad: the parent's box at 512 × (512 + extra) cells, from the parent's DEM. */
+export function quadUrl(q: Quad): string {
+  return demUrl(demSource({ z: q.z - 1, x: q.x, y: q.y }).service, quadBox(q), 2 * TILE_CELLS, quadExtraRows(q))
+}
+
+function demUrl(service: string, b: TileBox, cells: number, extra: number): string {
+  const c = b.size / cells
   const bbox = [b.lon0, b.lat0 - extra * c, b.lon0 + b.size, b.lat0 + b.size].join(',')
+  const rule = service === DEM_SERVICE ? `&renderingRule=${DOUBLE_RULE}` : ''
   return (
-    `${TREK_SERVICES}${demSource(t).service}/ImageServer/exportImage?bbox=${bbox}&size=${TILE_CELLS},${TILE_CELLS + extra}` +
-    '&format=tiff&pixelType=F32&compression=LZ77&interpolation=RSP_BilinearInterpolation&f=image'
+    `${TREK_SERVICES}${service}/ImageServer/exportImage?bbox=${bbox}&size=${cells},${cells + extra}` +
+    `&format=tiff&pixelType=S16&compression=LZ77&interpolation=RSP_BilinearInterpolation${rule}&f=image`
   )
 }
 

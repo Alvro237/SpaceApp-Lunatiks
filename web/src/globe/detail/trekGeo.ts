@@ -28,13 +28,26 @@ export interface GeoTileRequest {
   extraRows: number
   /** DEM: factor from the served values to metres (grid.ts, demSource). */
   scale?: number
+  /** Cells per side: 256 for a tile, 512 for a quad (grid.ts, quadUrl). */
+  cells?: number
 }
 
 export type GeoTile = { kind: 'dem'; heights: Float32Array } | { kind: 'photo'; bytes: Uint8Array }
 
-const N = TILE_CELLS
+/** A quad's 512 × 512 heights as its four 256 × 256 tiles: north-west, north-east, south-west, south-east. */
+export function splitQuad(h: Float32Array): Float32Array[] {
+  const n = TILE_CELLS
+  const out = [0, 1, 2, 3].map(() => new Float32Array(n * n))
+  for (let r = 0; r < 2 * n; r++) {
+    const top = r < n ? 0 : 2
+    const row = r % n
+    out[top].set(h.subarray(r * 2 * n, r * 2 * n + n), row * n)
+    out[top + 1].set(h.subarray(r * 2 * n + n, (r + 1) * 2 * n), row * n)
+  }
+  return out
+}
 
-export async function decodeDemTile(buf: ArrayBuffer, box: TileBox, extraRows: number, scale = 1): Promise<Float32Array> {
+export async function decodeDemTile(buf: ArrayBuffer, box: TileBox, extraRows: number, scale = 1, N = TILE_CELLS): Promise<Float32Array> {
   const tiff = await fromArrayBuffer(buf)
   const image = await tiff.getImage(0)
   if (image.getWidth() !== N || image.getHeight() !== N + extraRows) {
@@ -75,6 +88,7 @@ export function greyFromRgba(rgba: Uint8ClampedArray | Uint8Array): Uint8Array {
 }
 
 export async function decodePhotoTile(buf: ArrayBuffer): Promise<Uint8Array> {
+  const N = TILE_CELLS
   const bitmap = await createImageBitmap(new Blob([buf], { type: 'image/jpeg' }), { colorSpaceConversion: 'none' })
   try {
     if (bitmap.width !== N || bitmap.height !== N) throw new Error(`Trek photo tile is ${bitmap.width} x ${bitmap.height}, expected ${N} x ${N}`)
@@ -95,7 +109,7 @@ function store(): Promise<BlockStore> {
 
 async function decode(buf: ArrayBuffer, req: GeoTileRequest): Promise<GeoTile> {
   return req.kind === 'dem'
-    ? { kind: 'dem', heights: await decodeDemTile(buf, req.box, req.extraRows, req.scale) }
+    ? { kind: 'dem', heights: await decodeDemTile(buf, req.box, req.extraRows, req.scale, req.cells) }
     : { kind: 'photo', bytes: await decodePhotoTile(buf) }
 }
 

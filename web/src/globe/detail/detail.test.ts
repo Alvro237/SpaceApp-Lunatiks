@@ -21,8 +21,13 @@ import {
   trekTileUrl,
   wantedTiles,
   demSource,
+  quadBox,
+  quadExtraRows,
+  quadOf,
+  quadTiles,
+  quadUrl,
 } from './grid'
-import { decodeDemTile, greyFromRgba, readGeoTile } from './trekGeo'
+import { decodeDemTile, greyFromRgba, readGeoTile, splitQuad } from './trekGeo'
 
 const fixture = (name: string) => {
   const b = readFileSync(new URL(`./__fixtures__/${name}`, import.meta.url))
@@ -39,18 +44,50 @@ describe('detail grid', () => {
     expect(tileBox(T)).toEqual({ lon0: 22.5, lat0: 0, size: 5.625 })
     expect(trekTileUrl('dem', T)).toBe(
       'https://trek.nasa.gov/moon/trekarcgis/rest/services/LRO_LOLA_DEM_Global_256ppd_v06/ImageServer/exportImage' +
-        '?bbox=22.5,-0.02197265625,28.125,5.625&size=256,257&format=tiff&pixelType=F32&compression=LZ77' +
-        '&interpolation=RSP_BilinearInterpolation&f=image',
+        '?bbox=22.5,-0.02197265625,28.125,5.625&size=256,257&format=tiff&pixelType=S16&compression=LZ77' +
+        '&interpolation=RSP_BilinearInterpolation&renderingRule=' +
+        encodeURIComponent('{"rasterFunction":"Arithmetic","rasterFunctionArguments":{"Raster":"$$","Raster2":2,"Operation":3},"outputPixelType":"F32"}') +
+        '&f=image',
     )
   })
 
   it('reads tiles poleward of 45 degrees from the polar DEMs (half-metres) and the others from the global DEM', () => {
-    expect(demSource(T)).toEqual({ service: 'LRO_LOLA_DEM_Global_256ppd_v06', scale: 1 })
+    expect(demSource(T)).toEqual({ service: 'LRO_LOLA_DEM_Global_256ppd_v06', scale: 0.5 })
     expect(demSource(P)).toEqual({ service: 'LRO_LOLA_DEM_SPole45_100mp_v04_EQ', scale: 0.5 })
     expect(demSource({ z: 2, x: 0, y: 0 })).toEqual({ service: 'LRO_LOLA_DEM_NPole45_100mp_v04_EQ', scale: 0.5 })
     // a tile reaching across 45 S stays on the global DEM
     expect(demSource({ z: 2, x: 0, y: 5 }).service).toBe('LRO_LOLA_DEM_Global_256ppd_v06')
     expect(trekTileUrl('dem', P)).toContain('/LRO_LOLA_DEM_SPole45_100mp_v04_EQ/ImageServer/exportImage?bbox=22.5,-73.14697265625,28.125,-67.5&')
+  })
+
+  it('asks for four sibling DEM tiles at once: the parent box at 512 cells', () => {
+    const q = quadOf(T)
+    expect(q).toEqual({ z: 4, x: 18, y: 7 })
+    expect(quadTiles(q)).toEqual([
+      { z: 4, x: 36, y: 14 },
+      { z: 4, x: 37, y: 14 },
+      { z: 4, x: 36, y: 15 },
+      { z: 4, x: 37, y: 15 },
+    ])
+    expect(quadTiles(q)).toContainEqual(T)
+    expect(quadBox(q)).toEqual({ lon0: 22.5, lat0: 0, size: 11.25 })
+    expect(quadUrl(q)).toContain('/LRO_LOLA_DEM_Global_256ppd_v06/ImageServer/exportImage?bbox=22.5,-0.02197265625,33.75,11.25&size=512,513&')
+    // the quads on the south pole have no extra row; poleward of 45 S they come from the polar DEM
+    const pole = quadOf({ z: 5, x: 10, y: rows(5) - 1 })
+    expect(quadExtraRows(pole)).toBe(0)
+    expect(quadUrl(pole)).toContain('/LRO_LOLA_DEM_SPole45_100mp_v04_EQ/')
+    expect(quadUrl(pole)).toContain('&size=512,512&')
+  })
+
+  it('splits a quad into its four tiles in quadTiles order', () => {
+    const h = new Float32Array(512 * 512)
+    for (let r = 0; r < 512; r++) for (let c = 0; c < 512; c++) h[r * 512 + c] = (r < 256 ? 0 : 2) + (c < 256 ? 0 : 1) + (r % 256) * 1000 + (c % 256) * 0.001
+    const parts = splitQuad(h)
+    parts.forEach((p, i) => {
+      expect(p).toHaveLength(256 * 256)
+      expect(p[0]).toBeCloseTo(i, 6)
+      expect(p[255 * 256 + 255]).toBeCloseTo(i + 255 * 1000 + 0.255, 1)
+    })
   })
 
   it('maps a tile to the WMTS photo tile of the same box (matrix z + 1, row y, column x)', () => {
@@ -128,11 +165,12 @@ describe('detail grid', () => {
 })
 
 describe('Moon Trek global tiles', () => {
-  it('decodes the DEM tile, drops the extra row and matches LDEM_16 over the same box', async () => {
-    const h = await decodeDemTile(fixture('dem_4_36_15.tif'), tileBox(T), 1)
+  it('decodes the DEM tile (16-bit half-metres), drops the extra row and matches LDEM_16 over the same box', async () => {
+    const h = await decodeDemTile(fixture('dem_4_36_15.tif'), tileBox(T), 1, demSource(T).scale)
     expect(h).toHaveLength(256 * 256)
-    expect(h[0]).toBeCloseTo(-1866.16, 1)
-    expect(h[256 * 256 - 1]).toBeCloseTo(-2138.34, 1)
+    // float32 answer of the same request: -1866.16 and -2138.34 (the 16-bit one is within 0.25 m)
+    expect(h[0]).toBe(-1866)
+    expect(h[256 * 256 - 1]).toBe(-2138.5)
     let sum = 0
     for (const v of h) sum += v
     // LDEM_16 (PDS, the source of the shipped globe): mean of the 90 x 90 pixels of this box is -2019.27 m
@@ -141,10 +179,10 @@ describe('Moon Trek global tiles', () => {
 
   it('scales the polar DEM from half-metres to metres, matching LDEM_16 over the same box', async () => {
     const h = await decodeDemTile(fixture('dem_4_36_28.tif'), tileBox(P), 1, demSource(P).scale)
-    expect(h[0]).toBeCloseTo(1316.25, 1)
+    expect(h[0]).toBe(1316.5)
     let sum = 0
     for (const v of h) sum += v
-    // LDEM_16: mean of the 90 x 90 pixels of this box is 725.31 m (unscaled, the tile's mean would be 1424.86)
+    // LDEM_16: mean of the 90 x 90 pixels of this box is 725.31 m (unscaled, the tile's mean would be twice that)
     expect(Math.abs(sum / h.length - 725.31)).toBeLessThan(15)
   })
 

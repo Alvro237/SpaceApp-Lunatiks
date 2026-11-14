@@ -198,13 +198,18 @@ photo view, the LROC WAC mosaic.
   DEM still has some there; that is the data, LOLA's track spacing near the equator).
 - Photo: the WMTS cache of `LRO_WAC_Mosaic_Global_303ppd_v02` (JPEG, same grid: matrix z + 1, row y, column x,
   about 0.85 s per tile).
-- Requests: DEM tiles by `exportImage`, bilinear on the server, one extra row below the tile (dropped) because Moon
-  Trek answers the last row with zeros; the south-pole row of tiles has no extra row and a last row of zeros is
+- Requests: DEM tiles by `exportImage`, bilinear on the server, as 16-bit integers in half-metres (the polar DEMs
+  store half-metres; the global DEM is doubled on the server by an Arithmetic rendering rule first, at most 0.25 m
+  from its float32 answer): a third to a half of the bytes of float32, which is what limited loading. From level 3
+  on, four sibling tiles come in one 512 × 512 answer (about 1.8 s against 1.3 s for one 256 px tile). One extra
+  row below the box (dropped) because Moon Trek answers the last row with zeros; the south-pole row of tiles has no extra row and a last row of zeros is
   replaced by the row above. 15 s time limit, two attempts; a failed tile is asked for again after 10, 20 and 40 s.
 - Order: tiles are chosen for where the camera is going (not for the frames of the flight there); the few tiles two
   levels coarser come first, then the view's level from the centre outward. From an empty cache a view loads in
-  2-6 s (closest zoom at the equator 5.4 s, 41 tiles; 70° S 2.7 s, 34 tiles), on a connection with about 0.7 s of
-  latitude to Moon Trek.
+  about 1.5-3 s (50° S 1.4 s, 30 tiles; 70° S 2.3 s, 34 tiles; equator at 50 km 3.0 s, 21 tiles), on a connection
+  with about 0.7 s of latency to Moon Trek. Moon Trek sometimes takes 14-23 s for one answer in a region it has
+  not served recently (seen for float32, 16-bit and rule requests alike); such a view waits for it or for the 15 s
+  limit and the retry.
 - Checks before caching: size, georeference (DEM), no no-data, no row of zeros (DEM). Cached in the browser's
   block cache under the URL.
 - Measured: DEM tile means within 0.25 m (global, 22.5-28.125° E, 0-5.625° N) and 13 m (south polar, 22.5-28.125° E,
@@ -217,3 +222,12 @@ photo view, the LROC WAC mosaic.
   only sets day and night.
 - Known limit: near the poles the geographic tiles are thin wedges, so a view there stays at coarser levels (2.7 km
   cells around 80° S); the detailed south-polar map is the place for that region.
+
+## Colour layers in the map
+
+The layer tiles (sunlight, Earth visibility, slope, permanent shadow) are 960 m cells, the resolution of the grids
+in `data/grids` (COG overviews of the 240 m PGDA products). They are drawn with bilinear filtering between cell
+centres, weighted by coverage (the value is stored as 0 where there is no data and divided by the filtered
+coverage in the shader), so zooming in shows a smooth field instead of 960 m blocks. This does not add detail: the
+data are still 960 m cells, as the legend and the data page say.
+
