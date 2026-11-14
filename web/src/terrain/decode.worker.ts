@@ -58,12 +58,14 @@ ctx.onmessage = async (e: MessageEvent<DecodeRequest>) => {
       const heights = heightsFromRgb(png, min, max)
       ctx.postMessage({ id, ok: true, width: png.width, height: png.height, heights } satisfies DecodeResponse, [heights.buffer])
     } else {
-      // keep two channels (value, alpha) whatever the source layout
+      // keep two channels (value, alpha) whatever the source layout; the value is 0 where there is no data, so
+      // that bilinear filtering on the GPU gives value × coverage and the shader can divide by the coverage
       const n = png.width * png.height
       const bytes = new Uint8Array(n * 2)
       for (let i = 0; i < n; i++) {
-        bytes[2 * i] = png.data[i * png.channels]
-        bytes[2 * i + 1] = png.channels === 2 || png.channels === 4 ? png.data[i * png.channels + png.channels - 1] : 255
+        const alpha = png.channels === 2 || png.channels === 4 ? png.data[i * png.channels + png.channels - 1] : 255
+        bytes[2 * i] = alpha === 0 ? 0 : png.data[i * png.channels]
+        bytes[2 * i + 1] = alpha
       }
       ctx.postMessage({ id, ok: true, width: png.width, height: png.height, bytes } satisfies DecodeResponse, [bytes.buffer])
     }

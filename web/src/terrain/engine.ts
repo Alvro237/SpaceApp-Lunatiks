@@ -435,7 +435,9 @@ export class TerrainEngine {
       .request(lk, { url: `${this.base}layers/${id}/${t.z}/${t.x}/${t.y}.png`, kind: 'layer' })
       .then((res) => {
         const tex = new THREE.DataTexture(res.bytes!, res.width, res.height, THREE.RGFormat, THREE.UnsignedByteType)
-        tex.minFilter = tex.magFilter = THREE.NearestFilter
+        // bilinear between cell centres (the shader divides by the filtered coverage), so 960 m cells read as a
+        // smooth field instead of blocks when zoomed in
+        tex.minFilter = tex.magFilter = THREE.LinearFilter
         tex.colorSpace = THREE.NoColorSpace
         tex.needsUpdate = true
         this.layerTextures.set(lk, tex)

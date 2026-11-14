@@ -97,9 +97,10 @@ void main() {
     base = texture(uLut, vec2(clamp((vHeight - uElevRange.x) / (uElevRange.y - uElevRange.x), 0.0, 1.0), 0.5)).rgb;
     coloured = true;
   } else if (uLayerMode == 1 && uHasLayer > 0.5) {
+    // bilinear: r is value × coverage (value 0 where there is no data), g the coverage
     vec4 l = texture(uLayer, uLayerXf.xy + vUv * uLayerXf.zw);
     if (l.g > 0.5) {
-      base = texture(uLut, vec2(l.r, 0.5)).rgb;
+      base = texture(uLut, vec2(clamp(l.r / l.g, 0.0, 1.0), 0.5)).rgb;
       coloured = true;
     }
   }
