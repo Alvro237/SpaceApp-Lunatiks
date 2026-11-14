@@ -152,6 +152,8 @@ work: merged, tested, called on a running server. Not before.
 | Endpoint | `POST /api/v1/radiation` | `routers/radiation.py`, `logic/radiation.py`, `db/radiation.py` | MECH | GCR dose from LRO CRaTER x open sky / 4π; climatology; mSv only with given factors |
 | Hard filter | `max_dose` | `logic/constraints/radiation.py` | MECH | Mission GCR dose in mGy(Si) at the point |
 | Endpoint | `POST /api/v1/sweep` | `routers/sweep.py`, `logic/sweep.py` | MECH | Places x landing dates for one stay: light, comms, power, battery, dose; ~1 s for 21 x 365 |
+| Endpoint | `POST /api/v1/thermal` | `routers/thermal.py`, `logic/thermal.py` | MECH | 1-D regolith conduction + equipment node; limits discrete/continuous; all properties inputs |
+| Hard filter | `max_temperature` | `logic/constraints/temperature.py` | MECH | Surface or equipment temperature vs `max_k`, discrete or continuous |
 
 Also in place and verified: the engine in `app/logic` (ephemeris, geometry, horizon, disc-visible fraction,
 series, metrics, time ranges, next sunset/Earthset; reproduces JPL Horizons to better than 0.01 degrees) and the

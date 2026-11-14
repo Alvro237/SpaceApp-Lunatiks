@@ -222,9 +222,18 @@ GCR dose per stay (CRaTER climatology). Every window equals the single-window en
 
 ## MECH · Thermal model and maximum temperature
 
-**Status:** to do. **Files:** `logic/thermal.py`, `logic/constraints/temperature.py`.
+**Status:** done on `feat/mech-power`. **Files:** `logic/thermal.py`, `logic/constraints/temperature.py`,
+`routers/thermal.py`, `schemas/thermal.py`, `tests/test_thermal.py`.
 
-- `max_temperature`: threshold `{ "max_k": float, "mode": "discrete" | "continuous", "max_hours_above": float }`.
+- `POST /api/v1/thermal`: regolith surface temperature from 1-D conduction (constant properties, geometric grid
+  from the diurnal skin depth, explicit sub-steps) forced by the absorbed solar flux on flat ground (horizon and
+  eclipses included); optional lumped equipment node; optional `limits` (`max_k`, `min_k`, discrete or
+  continuous) with fraction, longest run and ranges beyond each limit. Every property is an input (no cited
+  default yet). With test inputs (albedo 0.12, eps 0.95, k 0.002, rho 1500, c 600) the equator gives 386 K at
+  noon and 96 K at night. Not modelled: terrain infrared (shadowed floors come out too cold: Shackleton 24 K),
+  temperature-dependent properties, slope, spin-up before the window.
+- `max_temperature`: threshold `{ "max_k": float, "mode": "discrete" | "continuous", "max_hours_above": float,
+  "regolith": {...}, "equipment": {...} optional }`.
   Discrete fails if the limit is exceeded at any sample; continuous fails if it stays exceeded longer than
   `max_hours_above` (use `engine.longest_run`). Fill `fraction` and `ranges` of the time above the limit.
 - The temperature series comes from a model (state its assumptions) or from a measured dataset added through
