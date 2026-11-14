@@ -111,7 +111,11 @@ export function PlacePanel() {
           <p className="meta-line">
             <span>{formatUtc(view.tMs)}</span>
             <span className={`badge badge-${view.horizonKind}`}>
-              {view.horizonKind === 'terrain' ? `LOLA horizon · ${view.mastUsedM} m` : `Smooth sphere · ${view.mastUsedM} m`}
+              {info?.horizonSource === 'traced'
+                ? `Traced horizon · ${info.demCellM ?? '?'} m DEM · ${view.mastUsedM} m`
+                : view.horizonKind === 'terrain'
+                  ? `LOLA horizon · ${view.mastUsedM} m`
+                  : `Smooth sphere · ${view.mastUsedM} m`}
             </span>
             <SourceTag source={view.source} />
           </p>

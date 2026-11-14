@@ -18,7 +18,7 @@ def resolve_model(req: WindowRequest, store: DataStore) -> SiteModel:
         if site is None:
             raise HTTPException(status_code=404, detail=f"Unknown site id {req.site_id!r}; see GET /api/v1/sites")
         return services.model_for_site(store, site, req.mast_m)
-    return services.model_for_point(store, req.lat, req.lon, req.mast_m)
+    return services.model_for_point(store, req.lat, req.lon, req.mast_m, horizon=req.horizon)
 
 
 def window_ms(req: WindowRequest, store: DataStore) -> float:

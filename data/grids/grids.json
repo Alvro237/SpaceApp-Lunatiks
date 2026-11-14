@@ -175,6 +175,31 @@
     "serverLastModified": "Thu, 20 Mar 2025 15:02:17 GMT"
    },
    "builtUtc": "2026-11-14T10:25:23+00:00"
+  },
+  "lola_elevation_80s": {
+   "file": "lola_elevation_80s.npz",
+   "description": "LOLA elevation above the 1737.4 km sphere at the full 240 m resolution, south of about 80 S (a 608 km box centred on the pole); near field of ray-traced horizons",
+   "unit": "m",
+   "scale": 0.5,
+   "width": 2534,
+   "height": 2534,
+   "pixelM": 240.0,
+   "xLeftM": -304080.0,
+   "yTopM": 304080.0,
+   "sourcePixelM": 240.0,
+   "aggregation": "none: the source pixels inside the box",
+   "min": -7286.3071,
+   "max": 7024.77,
+   "mean": -1500.7684,
+   "validFraction": 1.0,
+   "source": {
+    "agency": "NASA GSFC PGDA (LRO / LOLA)",
+    "url": "https://pgda.gsfc.nasa.gov/data/LOLA_20mpp/LDEM_60S_240MPP_ADJ.TIF",
+    "product": "https://pgda.gsfc.nasa.gov/products/90",
+    "bytes": 218961039,
+    "serverLastModified": "Fri, 07 Jul 2023 22:04:03 GMT"
+   },
+   "builtUtc": "2026-11-14T16:46:36+00:00"
   }
  },
  "projection": "south polar stereographic, true scale at the pole, R = 1737400 m, MOON_ME; x = r sin(lon), y = r cos(lon), r = 2R tan((90 + lat)/2)",
