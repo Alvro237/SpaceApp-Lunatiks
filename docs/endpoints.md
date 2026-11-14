@@ -156,34 +156,127 @@ one) as tests with the source of each date in `docs/references.md`.
      Eb/N0, margin, achievable data rate. Every parameter has a unit and a source.
 - `logic/link.py` is pure: inputs are arrays and parameter dataclasses, outputs are arrays.
 
-## AERO-2 · Radiation
+MECH integration guide (requests, fields to show, conventions, errors): `docs/api-guide-mech.md`.
 
-**Status:** to do. **Files:** `logic/radiation.py`, `logic/constraints/radiation.py`.
+## MECH · Radiation (moved from AERO-2, team decision 2026-11-14)
 
-- No dose dataset is loaded. Proposal to evaluate: an open-sky dose rate from a cited NASA source scaled by the
-  sky solid angle at the point (`ctx.lookups["sky_visibility_sr"]`, a flat plain sees 2π sr), integrated over
-  the mission duration; threshold `{ "max_dose": float, "unit": str }`.
-- If no defensible reference value is found, register the filter and return `basis="unavailable"`.
+**Status:** done on `feat/mech-power`. **Files:** `logic/radiation.py`, `logic/constraints/radiation.py`,
+`db/radiation.py`, `routers/radiation.py`, `schemas/radiation.py`, `tests/test_radiation.py`,
+`pipeline/lunarnav/crater_dose.py`, `data/radiation/crater_dosimeter_daily.json`.
+
+- Data: LRO CRaTER dosimeter daily dose rate (2009-06-19 to 2013-04-30), free-space GCR equivalent, mGy(Si)/day.
+- `POST /api/v1/radiation`: surface GCR dose = free-space x (open sky / 4π), sky from PGDA 69 (south of 65° S) or
+  2π on a smooth sphere; mission dose as low / mean / high (5th, mean, 95th percentile daily rate);
+  `basis="climatology"` (mission dates are outside the record). Effective dose in mSv and the share of the
+  NASA-STD-3001 career limit (600 mSv) only when the caller gives `si_to_tissue_factor` and `quality_factor`
+  (no cited value yet). Largest SPE day of the record reported for context (2012-03-08, 84 mGy in orbit).
+- Si -> water conversion defaults to 1.333 (CRaTER team, NASA ISWA CRaTER page). `quality_factor` stays an
+  input (MSL RAD cruise, Zeitlin et al. 2013, implies about 3.8: to verify in the paper).
+- `risk` (with `quality_factor`): astronaut risk 1-10 = 1 + 3 log10(share of the 600 mSv career limit / 0.1 %),
+  clipped; 0.1 % -> 1, 1 % -> 4, 10 % -> 7, 100 % -> 10 (a presentation scale, team decision). Also the index if
+  the record's largest storm day hit the mission (storm with Q = 1, lower bound, isotropic approximation).
+- Hard filter `max_dose`: threshold `{ "max_mgy_si": float }`, GCR only.
+- Not modelled: albedo particles from the regolith (surface value is a lower bound), habitat shielding, SPE forecasts.
 
 ---
 
 ## MECH · Power levels
 
-**Status:** to do. **Files:** `logic/power.py`, `routers/power.py`, `schemas/power.py`, `tests/test_power.py`.
+**Status:** done on `feat/mech-power`. `site_id` or `lat`/`lon`. Every panel and battery parameter is a
+required input (no cited default yet); `night_load_w` defaults to `load_w`. No educational/advanced switch in the
+API: the frontend chooses what to show. Max 20 000 samples. Eclipses: array power x (1 - obscuration), where
+obscuration is the fraction of the solar disc covered by the Earth (`logic/eclipse.py`); the engine's
+`power_w_m2` alone ignores eclipses. Response adds `obscuration`, eclipse ranges and `eclipse_energy_loss_wh`. Shared request base `schemas/common.py`
+(`WindowRequest`, `WindowResponse`) and helpers `routers/common.py`, reused by the next MECH endpoints.
+**Files:** `logic/power.py`, `routers/power.py`, `routers/common.py`, `schemas/power.py`, `schemas/common.py`,
+`tests/test_power.py`.
 
-- `POST /api/v1/power` with `level`:
-  1. Fraction of the solar disc visible (engine).
-  2. Array power: `series.power_w_m2` (irradiance × visible fraction × panel factor) × area × efficiency ×
-     derating; the three panel models are in `engine.panel_factor`.
-  3. Energy balance: load, battery capacity and state of charge through the dark stretches; does the mission
-     survive the longest night.
-- Inputs as a parameter dataclass with units; three hand-worked cases as tests.
+Contract = the team's API rules (2026-11-14), flat fields:
+
+- Input, always: `site_id` or `lat` + `lon`, `start`, `duration_h`, `step_min`, `mast_m`, `panel`, `level` (1-3).
+  Level 2: `panel_area_m2`, `cell_efficiency`, `derating`. Level 3: `load_w`, `battery_capacity_wh`,
+  `battery_initial_soc`, `battery_min_soc`, `charge_efficiency`, `discharge_efficiency`. Extra: `night_load_w`.
+- Response, always: `level`, `horizon_kind`, `assumptions[]`. Level 1: `t[]`, `sun_fraction[]`, `sun_el_deg[]`,
+  `sunlit_ranges[]`. Level 2 adds `irradiance_w_m2[]` (irradiance reaching the panel: solar irradiance x visible
+  fraction x orientation factor x (1 - eclipse obscuration)), `power_w[]`, `mean_power_w`, `energy_wh`. Level 3 adds
+  `net_power_w[]` (power - load), `battery_soc[]`, `min_soc`, `survives`, `first_depletion_at`, `longest_dark_h`,
+  `energy_margin_wh` ((min_soc - battery_min_soc) x capacity when it survives, minus the unserved energy when not).
+  Fields of a higher level are null at lower levels. Extras beyond the rules (eclipse ranges and loss, peak power,
+  load profile, final SoC, depleted ranges, unserved / curtailed energy, usable capacity) may be ignored.
+  Extra `mean_power_w_m2` (all levels): mean of `irradiance_w_m2` over the window, W/m2, for comparing places
+  without a panel size; the same value as `/sweep` `mean_power_w_m2` for that landing.
+- The same flat names are used by `/sweep` and by the `battery_survives` hard filter threshold.
+
+Level 4, colony analysis (team decision 2026-11-14; an extension beyond the API rules). **Files:**
+`logic/colony.py`, `logic/thermal.py` (`surface_implicit`), `tests/test_colony.py`.
+
+- Input: levels 2-3 without `load_w`, plus `critical_load_w`, `deferrable_load_w`, `comms_load_w` (only while the
+  Earth is visible; `comms_critical` false by default), `shed_soc` (deferrable loads off below it),
+  `max_charge_w`, `max_discharge_w`, `habitat` (two-node model: `crew_count`, `t_set_k`, `t_min_k`, `ua_w_k`,
+  `area_m2`, `skin_absorptivity`, `skin_emissivity`, `structure_mass_kg`, `structure_specific_heat_j_kgk`,
+  `air_volume_m3`, `air_pressure_pa`, optional `metabolic_w_per_crew`) and `regolith` (as `/thermal`).
+  `duration_h` at least one synodic month (708.7 h); a year is recommended at the poles.
+- Heating: interior held at `t_set_k`; skin solved each step against sunlight on 0.5 x area, ground view factor
+  0.5 (both team decisions), ground infrared from the regolith model; heater = leak - crew heat - electrical load
+  served inside (all of it ends as heat). Crew heat default 140.6 W per person = mean of the 40-year-old male and
+  female rates of NASA BVAD Table 3-21 (team decision). Surplus heat is a cooling demand, without electrical cost.
+- Failure = critical load (life support + holding heater, + comms if critical) not served; shedding the
+  deferrable loads is degraded mode. Status: `failure_after_x_days` (simulated time), `survives_independently`
+  (battery ends the last whole synodic month at least as full as it started, possibly after repeating the window
+  from its end state, so the repeated window never fails) or `survives_window_declining`.
+- Output, besides the levels 1-3 fields (taken from this model): status and failure time, SoC change per synodic
+  month, critical and total demand, heater, cooling demand, interior / skin / ground temperatures, autonomy (hours
+  on battery alone), sunrise margin (in the dark: stored energy minus what is needed until sunrise), degraded
+  ranges and days, interior-below-minimum ranges, energy breakdown (conserved to 1e-6 Wh in tests), crew heat,
+  heat capacity, unheated equilibrium and cold-soak hours at the coldest moment, and the smallest battery and
+  array that survive independently (bisection, within 0.4 %). A year at one-hour steps takes about 1.5 s.
+
+## MECH · Sun over a mission window
+
+**Status:** done on `feat/mech-power`. `POST /api/v1/sun` with the shared window request. Returns the state at
+start (elevation, azimuth, visible fraction, skyline height in the Sun's direction), elevation / azimuth /
+visible-fraction series, elevation stats, sunlit fraction, hours and ranges, longest sunlit and dark stretches,
+next sunset or sunrise (to about one second) and hours to sunset, eclipses (Earth over the Sun: partial or total,
+start, end, duration) with fraction and ranges. Check: the 2025-03-14 eclipse at Blue Ghost 1 comes out total,
+05:01-09:51 UTC at a 1-minute step (4.85 h).
+**Files:** `logic/sun.py`, `routers/sun.py`, `schemas/sun.py`, `tests/test_sun.py`.
+
+## MECH · Earth over a mission window
+
+**Status:** done on `feat/mech-power`. `POST /api/v1/earth` with the shared window request plus
+`comms_min_fraction` (default 0.5, team convention). Returns the state at start (elevation, azimuth, visible
+fraction, skyline height, distance, angular radius), series, visibility windows (fraction, hours, ranges), longest
+window and longest blackout, next Earthset or Earthrise and hours to Earthset, and the libration wander (azimuth and
+elevation span over the window). Geometry only: the link budget is a separate model. Checks: equator at 0° E always
+sees the Earth, 180° E never; Malapert 100 %, Shackleton floor 0 % in March 2027.
+**Files:** `logic/earth.py`, `routers/earth.py`, `schemas/earth.py`, `tests/test_earth.py`.
+
+## MECH · Replanning sweep
+
+**Status:** done on `feat/mech-power`. `POST /api/v1/sweep`: up to 25 places (`site_id` or `lat`/`lon`) x up to
+2000 landing times (`first_landing`, `landings`, `landing_step_h`) for one `stay_h`. One series per place;
+prefix sums for fractions, windows processed as a matrix for longest runs and the battery. Per landing:
+sunlight, comms and both fractions, longest dark and blackout, eclipse hours, mean power per m2 (eclipses
+included); with the panel fields (`panel_area_m2`, `cell_efficiency`, `derating`) the mean array power; adding
+the battery fields of `/power` level 3, survival, minimum SoC and unserved energy.
+GCR dose per stay (CRaTER climatology). Every window equals the single-window endpoints (tests). Measured:
+21 sites x 365 landings x 14-day stay with battery in about 1 s.
+**Files:** `logic/sweep.py`, `routers/sweep.py`, `schemas/sweep.py`, `tests/test_sweep.py`.
 
 ## MECH · Thermal model and maximum temperature
 
-**Status:** to do. **Files:** `logic/thermal.py`, `logic/constraints/temperature.py`.
+**Status:** done on `feat/mech-power`. **Files:** `logic/thermal.py`, `logic/constraints/temperature.py`,
+`routers/thermal.py`, `schemas/thermal.py`, `tests/test_thermal.py`.
 
-- `max_temperature`: threshold `{ "max_k": float, "mode": "discrete" | "continuous", "max_hours_above": float }`.
+- `POST /api/v1/thermal`: regolith surface temperature from 1-D conduction (constant properties, geometric grid
+  from the diurnal skin depth, explicit sub-steps) forced by the absorbed solar flux on flat ground (horizon and
+  eclipses included); optional lumped equipment node; optional `limits` (`max_k`, `min_k`, discrete or
+  continuous) with fraction, longest run and ranges beyond each limit. Every property is an input (no cited
+  default yet). With test inputs (albedo 0.12, eps 0.95, k 0.002, rho 1500, c 600) the equator gives 386 K at
+  noon and 96 K at night. Not modelled: terrain infrared (shadowed floors come out too cold: Shackleton 24 K),
+  temperature-dependent properties, slope, spin-up before the window.
+- `max_temperature`: threshold `{ "max_k": float, "mode": "discrete" | "continuous", "max_hours_above": float,
+  "regolith": {...}, "equipment": {...} optional }`.
   Discrete fails if the limit is exceeded at any sample; continuous fails if it stays exceeded longer than
   `max_hours_above` (use `engine.longest_run`). Fill `fraction` and `ranges` of the time above the limit.
 - The temperature series comes from a model (state its assumptions) or from a measured dataset added through
@@ -191,8 +284,24 @@ one) as tests with the source of each date in `docs/references.md`.
 
 ## MECH · Soft score
 
-**Status:** reference in place (`logic/scoring.py`: sunlight, comms, continuity). Decide the criteria and the
-default weights with the team, add criteria as functions in `CRITERIA`, keep every weight visible in responses.
+**Status:** verdict done on `feat/mech-power`; default weights (0.5 / 0.3 / 0.2) and bands (75 / 50) are still
+the prototype's, not yet decided with a source. `POST /api/v1/verdict` (RF-11): runs the requested hard filters
+(`hard_filters`: id -> threshold), then the soft score with visible, adjustable `weights`, `favourable_min`,
+`marginal_min`. Verdict: `unfeasible` if any filter fails, `unknown` if any cannot be evaluated (unless
+`unknown_passes`), else the score band. New hard filter `battery_survives` (`logic/constraints/power.py`,
+threshold = the flat level-3 fields of `/power`), same model as `/power` level 3.
+**Files:** `logic/scoring.py` (`overall_verdict`, band arguments), `routers/verdict.py`, `schemas/verdict.py`,
+`logic/constraints/power.py`, `tests/test_verdict.py`.
+
+## MECH · Validation report
+
+**Status:** done on `feat/mech-power`. `GET /api/v1/validation`: the pipeline's validation (`data/validation.json`:
+ephemeris vs JPL Horizons and the Apollo tables, terrain vs LROC) plus 8 MECH model checks run live on the real
+datasets, each with reference, source, computed value, tolerance and pass/fail: Blue Ghost eclipse 2025-03-14
+(NASA GSFC), disc-overlap analytic case, near/far-side Earth visibility, thermal radiative equilibrium, dark
+equipment balance, energy conservation of the battery model, sweep vs single window, radiation flat-ground
+shielding and CRaTER record. First call about 0.6 s, then cached.
+**Files:** `app/validation_checks.py`, `routers/validation.py`, `tests/test_validation.py`.
 
 ## MECH · Demo video and form texts
 
