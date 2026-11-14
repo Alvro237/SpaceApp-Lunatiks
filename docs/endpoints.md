@@ -68,6 +68,12 @@ actually used, and optionally the zone neighbours (`db/horizons.py: zone`).
 **Files:** `routers/points.py`, `schemas/points.py` (the site models plus `terrain_reference`),
 `tests/test_points.py`.
 
+- `GET /api/v1/points/horizon?lat=&lon=&mast_m=`: 360-degree skyline of any point, ray-traced over the LOLA
+  elevation grids (`lola_elevation_80s` 240 m near the pole, `lola_elevation_60s` 960 m to 60 S; smooth sphere
+  outside). Exact curvature, 720 azimuths to 250 km (`logic.horizon.ray_traced_horizon`, `services.point_horizon`).
+  Measured against the 13 catalogue masks: median RMS 0.21 deg, 11 of 13 within 0.5 deg, worst Mons Malapert
+  3.25 deg (`tests/test_point_horizon.py`). `points/state`, `points/series` and the MECH window endpoints take
+  `horizon=terrain` to use it; the default stays `smooth_sphere` (the contract they were validated on).
 - `GET /api/v1/points/state`, `/points/series`: same as the site endpoints with `lat`, `lon` instead of an id
   (`services.model_for_point`).
 - `GET /api/v1/points/info?lat=&lon=`: what the datasets say at the point (`services.point_lookups`): ground

@@ -14,6 +14,7 @@ import type {
   DatasetsMeta,
   Health,
   PowerRequest,
+  PointHorizon,
   PowerResponse,
   RadiationRequest,
   RadiationResponse,
@@ -103,12 +104,15 @@ export const api = {
 
   siteState: (id: string, p: StateParams, signal?: AbortSignal) =>
     request<SiteState>('GET', `/api/v1/sites/${encodeURIComponent(id)}/state?${q({ ...p })}`, undefined, signal),
+  // Manual coordinates ask for the skyline ray-traced over LOLA terrain, the same one the browser engine uses.
+  pointHorizon: (lat: number, lon: number, mast_m: number, signal?: AbortSignal) =>
+    request<PointHorizon>('GET', `/api/v1/points/horizon?${q({ lat, lon, mast_m })}`, undefined, signal),
   pointState: (lat: number, lon: number, p: StateParams, signal?: AbortSignal) =>
-    request<SiteState>('GET', `/api/v1/points/state?${q({ lat, lon, ...p })}`, undefined, signal),
+    request<SiteState>('GET', `/api/v1/points/state?${q({ lat, lon, ...p, horizon: 'terrain' })}`, undefined, signal),
   siteSeries: (id: string, p: SeriesParams, signal?: AbortSignal) =>
     request<SiteSeries>('GET', `/api/v1/sites/${encodeURIComponent(id)}/series?${q({ ...p })}`, undefined, signal),
   pointSeries: (lat: number, lon: number, p: SeriesParams, signal?: AbortSignal) =>
-    request<SiteSeries>('GET', `/api/v1/points/series?${q({ lat, lon, ...p })}`, undefined, signal),
+    request<SiteSeries>('GET', `/api/v1/points/series?${q({ lat, lon, ...p, horizon: 'terrain' })}`, undefined, signal),
 
   searchCandidates: (body: CandidateSearchRequest) =>
     request<CandidateSearchResponse>('POST', '/api/v1/candidates/search', body),
