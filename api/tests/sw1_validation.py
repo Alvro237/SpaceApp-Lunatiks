@@ -93,41 +93,63 @@ def _iso(t: datetime) -> str:
     return t.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def horizons_comparisons(client, path: str = "/api/v1/sites/{site_id}/state") -> list[dict]:
-    """Every fixture sample for the matching catalogue sites, through HTTP: one row per body."""
+def _state_at(client, site_id: str, utc: str):
+    r = client.get(f"/api/v1/sites/{site_id}/state", params={"t": utc})
+    if r.status_code == 400:
+        return None
+    r.raise_for_status()
+    body = r.json()
+    return {k: (body[k]["az"], body[k]["el"]) for k in ("sun", "earth")}
+
+
+def _series_first_sample(client, site_id: str, utc: str):
+    r = client.get(f"/api/v1/sites/{site_id}/series", params={"start": utc, "duration_h": 1, "step_min": 60})
+    if r.status_code == 400:
+        return None
+    r.raise_for_status()
+    body = r.json()
+    return {k: (body[k]["az"][0], body[k]["el"][0]) for k in ("sun", "earth")}
+
+
+ENDPOINT_AT = {"state": _state_at, "series": _series_first_sample}
+
+
+def horizons_comparisons(client, endpoint: str = "state") -> list[dict]:
+    """Every fixture sample for the matching catalogue sites, through HTTP (``state`` at t, or the first sample
+    of a ``series`` starting at t): one row per body with the angular error against JPL Horizons."""
+    fetch = ENDPOINT_AT[endpoint]
     rows = []
     for case in json.loads(FIXTURE.read_text(encoding="utf-8"))["cases"]:
         site_id = SITE_FOR_CASE.get(case["name"])
         if site_id is None:
             continue
         for sample in case["samples"]:
-            r = client.get(path.format(site_id=site_id), params={"t": sample["utc"]})
-            if r.status_code == 400:      # outside the tables
+            got = fetch(client, site_id, sample["utc"])
+            if got is None:               # outside the tables
                 continue
-            r.raise_for_status()
-            body = r.json()
             for name in ("sun", "earth"):
+                az, el = got[name]
                 rows.append({"case": case["name"], "utc": sample["utc"], "body": name,
-                             "error_deg": sky_error_deg(body[name]["az"], body[name]["el"],
-                                                        sample[name]["az"], sample[name]["el"])})
+                             "error_deg": sky_error_deg(az, el, sample[name]["az"], sample[name]["el"])})
     return rows
 
 
 def transition_flips(client, path: str, t: str, body: str, extra: dict | None = None) -> list[str]:
-    """The reported next transition really changes the state: same as now 60 s before, opposite 60 s after."""
+    """The reported next transition really changes the state: same as now 2 s before ``at`` (edges are refined
+    to ~1 s), already changed at the published ``at`` itself."""
     params = {"t": t, **(extra or {})}
     now = client.get(path, params=params).json()
     tr = now[f"next_{body}_transition"]
     if tr is None:
         return []
     at = _parse(tr["at"])
-    before = client.get(path, params={**params, "t": _iso(at - timedelta(seconds=60))}).json()[body]["visible"]
-    after = client.get(path, params={**params, "t": _iso(at + timedelta(seconds=60))}).json()[body]["visible"]
+    before = client.get(path, params={**params, "t": _iso(at - timedelta(seconds=2))}).json()[body]["visible"]
+    after = client.get(path, params={**params, "t": _iso(at)}).json()[body]["visible"]
     bad = []
     if before != now[body]["visible"]:
-        bad.append(f"{body} {tr['kind']} at {tr['at']}: state already changed 60 s before")
+        bad.append(f"{body} {tr['kind']} at {tr['at']}: state already changed 2 s before")
     if after == now[body]["visible"]:
-        bad.append(f"{body} {tr['kind']} at {tr['at']}: state not changed 60 s after")
+        bad.append(f"{body} {tr['kind']} at {tr['at']}: state not changed at the published instant")
     return bad
 
 
@@ -143,6 +165,105 @@ def sweep_invariants(client) -> list[str]:
                 r = client.get(f"/api/v1/sites/{site['id']}/state", params={"t": t, "comms_min_fraction": comms})
                 bad += [f"{site['id']} {t} comms {comms}: {m}" for m in state_invariants(r.json())]
     return bad
+
+
+# ---------------------------------------------------------------------------- series
+
+SERIES = "/api/v1/sites/{site_id}/series"
+STATE = "/api/v1/sites/{site_id}/state"
+
+
+def _in_ranges(t: datetime, ranges: list[dict]) -> bool:
+    """Visible at t according to refined ranges: [start, end), closed at end when the range runs past the window."""
+    for r in ranges:
+        a, b = _parse(r["start"]), _parse(r["end"])
+        if a <= t < b or (r["ends_after_window"] and t == b):
+            return True
+    return False
+
+
+def series_invariants(r: dict) -> list[str]:
+    """Internal consistency of one series response: shapes, grid, flags, ranges against samples, metrics."""
+    bad: list[str] = []
+
+    def need(cond: bool, msg: str):
+        if not cond:
+            bad.append(msg)
+
+    n = r["samples"]
+    arrays = [r["t"], r["eclipse"], r["sun_eclipsed_fraction"]] + [r[b][k] for b in ("sun", "earth")
+                                                                   for k in ("az", "el", "horizon_el",
+                                                                             "visible_fraction", "visible")]
+    need(all(len(a) == n for a in arrays), "arrays of different lengths")
+    t = [_parse(x) for x in r["t"]]
+    need(r["t"][0] == r["start"] and r["t"][-1] == r["end"], "t does not run from start to end")
+    step = timedelta(minutes=r["step_min"])
+    need(all(abs((b - a) - step) <= timedelta(seconds=1) for a, b in zip(t, t[1:])), "uneven time grid")
+    for name, thr in (("sun", None), ("earth", r["comms_min_fraction"])):
+        b = r[name]
+        need(all(0.0 <= a < 360.0 for a in b["az"]), f"{name}.az outside 0..360")
+        need(all(0.0 <= f <= 1.0 for f in b["visible_fraction"]), f"{name}.visible_fraction outside 0..1")
+        expect = [f > 0.0 if thr is None else f >= thr for f in b["visible_fraction"]]
+        need(b["visible"] == expect, f"{name}.visible disagrees with visible_fraction")
+    for e, f in zip(r["eclipse"], r["sun_eclipsed_fraction"]):
+        if (e == "none") != (f == 0.0) or (e == "total") != (f == 1.0):
+            bad.append(f"eclipse {e} vs eclipsed fraction {f}")
+            break
+    flags = {"sunlit_ranges": r["sun"]["visible"], "comms_ranges": r["earth"]["visible"],
+             "eclipse_ranges": [e != "none" for e in r["eclipse"]]}
+    for key, flag in flags.items():
+        rr = r[key]
+        bounds = [(_parse(x["start"]), _parse(x["end"])) for x in rr]
+        need(all(a < b for a, b in bounds), f"{key}: empty or reversed range")
+        need(all(b1 <= a2 for (_, b1), (a2, _) in zip(bounds, bounds[1:])), f"{key}: overlapping or unsorted")
+        need(all(t[0] <= a and b <= t[-1] for a, b in bounds), f"{key}: range outside the window")
+        need(all(x["starts_before_window"] == (_parse(x["start"]) == t[0] and flag[0]) for x in rr),
+             f"{key}: starts_before_window flag wrong")
+        mismatch = [r["t"][i] for i in range(n) if flag[i] != _in_ranges(t[i], rr)]
+        need(not mismatch, f"{key}: samples disagree with ranges, first at {mismatch[:1]}")
+        for x, (a, b) in zip(rr, bounds):
+            need(abs(x["duration_h"] - (b - a).total_seconds() / 3600.0) < 1e-6, f"{key}: duration_h != end - start")
+    m = r["metrics"]
+    sun, earth = r["sun"]["visible"], r["earth"]["visible"]
+    need(abs(m["sunlight_pct"] - 100.0 * sum(sun) / n) < 1e-9, "sunlight_pct != share of sunlit samples")
+    need(abs(m["comms_pct"] - 100.0 * sum(earth) / n) < 1e-9, "comms_pct != share of comms samples")
+    need(abs(m["both_pct"] - 100.0 * sum(a and b for a, b in zip(sun, earth)) / n) < 1e-9, "both_pct wrong")
+    need(m["continuous_light"] == all(sun) and m["continuous_comms"] == all(earth), "continuous flags wrong")
+    need(abs(m["max_sun_el_deg"] - max(r["sun"]["el"])) < 1e-9 and abs(m["min_sun_el_deg"] - min(r["sun"]["el"])) < 1e-9,
+         "solar elevation extremes wrong")
+    need(m["eclipse_events"] == len(r["eclipse_ranges"]), "eclipse_events != number of eclipse ranges")
+    for gone in ("panel", "irradiance_w_m2", "power_w_m2", "mean_power_w_m2"):
+        need(gone not in r and gone not in m, f"{gone} belongs to the power endpoint")
+    return bad
+
+
+def series_matches_state(client, site_id: str, r: dict, every: int = 97) -> list[str]:
+    """Samples equal the state endpoint at the same instant, and every inner range edge flips state's flag
+    between 2 s before and the edge itself (edges are refined to ~1 s)."""
+    bad = []
+    params = {"mast_m": r["mast_m"], "comms_min_fraction": r["comms_min_fraction"]}
+    for i in range(0, r["samples"], every):
+        st = client.get(STATE.format(site_id=site_id), params={"t": r["t"][i], **params}).json()
+        for b in ("sun", "earth"):
+            for k in ("az", "el", "horizon_el", "visible_fraction", "visible"):
+                if abs(float(st[b][k]) - float(r[b][k][i])) > 1e-9:
+                    bad.append(f"sample {r['t'][i]} {b}.{k}: series {r[b][k][i]} vs state {st[b][k]}")
+    for key, body in (("sunlit_ranges", "sun"), ("comms_ranges", "earth")):
+        for x in r[key]:
+            for edge, inside, cut in (("start", True, x["starts_before_window"]), ("end", False, x["ends_after_window"])):
+                if cut:
+                    continue
+                at = _parse(x[edge])
+                now = client.get(STATE.format(site_id=site_id), params={"t": _iso(at), **params}).json()[body]["visible"]
+                before = client.get(STATE.format(site_id=site_id),
+                                    params={"t": _iso(at - timedelta(seconds=2)), **params}).json()[body]["visible"]
+                if now != inside or before == inside:
+                    bad.append(f"{key} {edge} {x[edge]}: state before={before} at={now}, expected a flip to {inside}")
+    return bad
+
+
+SERIES_CASES = [("im-2", "2026-11-20T12:00:00Z", 720, 10), ("shackleton", "2027-03-01T00:00:00Z", 336, 30),
+                ("mons-malapert", "2028-06-15T06:30:00Z", 240, 5), ("apollo-11", "2029-06-25T12:00:00Z", 36, 10)]
 
 
 def main() -> int:
@@ -179,6 +300,20 @@ def main() -> int:
     ok &= not bad
     print(f"[{'PASS' if not bad else 'FAIL'}] {len(totals)} NASA total lunar eclipses 2025-2035: Sun fully hidden"
           + "".join(f"\n    {m}" for m in bad))
+    bad = []
+    for site_id, start, hours, step in SERIES_CASES:
+        r = client.get(SERIES.format(site_id=site_id), params={"start": start, "duration_h": hours, "step_min": step})
+        r.raise_for_status()
+        bad += [f"{site_id} {start}: {m}" for m in series_invariants(r.json()) + series_matches_state(client, site_id, r.json())]
+    ok &= not bad
+    print(f"[{'PASS' if not bad else 'FAIL'}] series: arrays, ranges and metrics consistent and equal to state, "
+          f"refined edges flip state ({len(SERIES_CASES)} windows)" + "".join(f"\n    {m}" for m in bad[:20]))
+    rows = horizons_comparisons(client, "series")
+    worst = max(rows, key=lambda x: x["error_deg"])
+    passed = worst["error_deg"] < HORIZONS_TOL_DEG
+    ok &= passed
+    print(f"[{'PASS' if passed else 'FAIL'}] series vs JPL Horizons: {len(rows)} comparisons, worst "
+          f"{worst['error_deg']:.6f} deg")
     return 0 if ok else 1
 
 

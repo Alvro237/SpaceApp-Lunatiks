@@ -8,11 +8,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
+import numpy as np
+
 from .db.sites import Site
 from .db.store import DataStore
 from .logic.constraints import ConstraintContext
-from .logic.engine import (DEFAULT_PARAMS, AnalysisParams, Series, SiteModel, Transition, compute_metrics,
-                           evaluate, make_model, next_transition, time_grid)
+from .logic.engine import (DEFAULT_PARAMS, AnalysisParams, Metrics, RefinedRange, Series, SiteModel, Transition,
+                           compute_metrics, evaluate, make_model, next_transition, refined_ranges, time_grid)
 
 
 def to_ms(utc: datetime) -> float:
@@ -115,3 +117,29 @@ def state_at(store: DataStore, model: SiteModel, t_ms: float,
         next_sun=next_transition(store.ephemeris, model, t_ms, "sun", params, TRANSITION_SEARCH_DAYS),
         next_earth=next_transition(store.ephemeris, model, t_ms, "earth", params, TRANSITION_SEARCH_DAYS),
     )
+
+
+# ---------------------------------------------------------------------------- SW-1: series over a window
+
+@dataclass(frozen=True)
+class WindowSeries:
+    """Sampled series, its metrics, horizon at each body's azimuth and the refined ranges."""
+    series: Series
+    metrics: Metrics
+    sun_horizon_el: np.ndarray
+    earth_horizon_el: np.ndarray
+    sunlit: list[RefinedRange]
+    comms: list[RefinedRange]
+    eclipse: list[RefinedRange]
+
+
+def series_window(store: DataStore, model: SiteModel, start_ms: float, duration_h: float, step_min: float,
+                  params: AnalysisParams = DEFAULT_PARAMS) -> WindowSeries:
+    """Everything the series endpoints return. Raises ``OutOfCoverage`` outside the tables."""
+    s = evaluate_window(store, model, start_ms, duration_h, step_min, params)
+    eph = store.ephemeris
+    return WindowSeries(series=s, metrics=compute_metrics(s, params),
+                        sun_horizon_el=model.horizon.at(s.sun_az), earth_horizon_el=model.horizon.at(s.earth_az),
+                        sunlit=refined_ranges(eph, model, s, "sun", params),
+                        comms=refined_ranges(eph, model, s, "earth", params),
+                        eclipse=refined_ranges(eph, model, s, "eclipse", params))

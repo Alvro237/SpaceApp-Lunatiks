@@ -62,3 +62,65 @@ class StateResponse(BaseModel):
         description="Next Earthset or Earthrise for comms; null if none within the search span")
     transition_search_days: float = Field(description="Days searched ahead for the transitions (capped by "
                                                       "the end of the ephemeris tables)")
+
+
+# ---------------------------------------------------------------------------- series over a mission window
+
+class BodySeries(BaseModel):
+    """One value per sample, aligned with ``SeriesResponse.t``."""
+    az: list[float] = Field(description="Azimuth of the disc centre, degrees clockwise from north, 0..360")
+    el: list[float] = Field(description="Elevation of the disc centre, degrees (airless, apparent)")
+    horizon_el: list[float] = Field(description="Horizon elevation at the body's azimuth, degrees")
+    visible_fraction: list[float] = Field(description="Fraction of the disc above the horizon, 0..1")
+    visible: list[bool] = Field(description="Sun: visible_fraction > 0. Earth: >= comms_min_fraction")
+
+
+class TimeRange(BaseModel):
+    start: str = Field(description="First instant in the state, ISO 8601 UTC (refined to ~1 s), or the window "
+                                   "start when starts_before_window")
+    end: str = Field(description="First instant out of the state, ISO 8601 UTC (refined to ~1 s), or the window "
+                                 "end when ends_after_window")
+    duration_h: float = Field(description="end - start, hours (a lower bound when cut by the window)")
+    starts_before_window: bool = Field(description="Already in the state at the window start")
+    ends_after_window: bool = Field(description="Still in the state at the window end")
+
+
+class SeriesMetrics(BaseModel):
+    """The engine's Metrics over the window, from the samples. No power figures (MECH's /power)."""
+    window_hours: float = Field(description="Span from the first to the last sample, hours")
+    sunlight_pct: float = Field(description="Share of samples with the Sun visible, percent")
+    comms_pct: float = Field(description="Share of samples with the Earth visible for comms, percent")
+    both_pct: float = Field(description="Share of samples with both, percent")
+    longest_dark_h: float = Field(description="Longest run of samples without Sun, hours (grid resolution)")
+    longest_blackout_h: float = Field(description="Longest run of samples without comms, hours (grid resolution)")
+    continuous_light: bool = Field(description="Sun visible at every sample")
+    continuous_comms: bool = Field(description="Earth visible for comms at every sample")
+    eclipse_minutes: float = Field(description="Time with any eclipse (partial or total), minutes, from samples")
+    eclipse_events: int = Field(description="Number of separate eclipse stretches in the window")
+    max_sun_el_deg: float = Field(description="Highest solar elevation in the window, degrees")
+    min_sun_el_deg: float = Field(description="Lowest solar elevation in the window, degrees")
+
+
+class SeriesResponse(BaseModel):
+    site_id: str | None = Field(None, description="Catalogue id; null for manual coordinates")
+    lat: float = Field(description="Planetocentric latitude, degrees, Moon Mean-Earth frame")
+    lon: float = Field(description="East-positive longitude, degrees, -180..180")
+    ground_m: float = Field(description="Ground height above the 1737.4 km reference sphere, metres")
+    start: str = Field(description="Window start, ISO 8601 UTC")
+    end: str = Field(description="Last sample, ISO 8601 UTC")
+    duration_h: float = Field(description="Requested window length, hours")
+    step_min: float = Field(description="Sample spacing, minutes")
+    samples: int = Field(description="Number of samples (length of every array)")
+    mast_m: float = Field(description="Mast height requested, metres")
+    mast_used_m: float = Field(description="Mast height of the horizon actually used, metres")
+    comms_min_fraction: float = Field(description="Share of the Earth's disc required for comms, 0..1")
+    horizon_kind: HorizonKind = Field(description="'terrain' (LOLA mask) or 'smooth_sphere' (geometric dip only)")
+    t: list[str] = Field(description="Sample instants, ISO 8601 UTC")
+    sun: BodySeries
+    earth: BodySeries
+    eclipse: list[EclipseState] = Field(description="The Earth covering the Sun, per sample")
+    sun_eclipsed_fraction: list[float] = Field(description="Share of the solar disc hidden by the Earth, per sample")
+    sunlit_ranges: list[TimeRange] = Field(description="Stretches with the Sun visible")
+    comms_ranges: list[TimeRange] = Field(description="Stretches with the Earth visible for comms")
+    eclipse_ranges: list[TimeRange] = Field(description="Stretches with any eclipse (partial or total)")
+    metrics: SeriesMetrics

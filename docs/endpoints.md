@@ -45,11 +45,13 @@ Numbers given as defaults below are placeholders for the owner to set with a cit
 
 ## SW-1 · Series over a window
 
-**Status:** to do. **Files:** `routers/state.py` (same router), `schemas/state.py`.
+**Status:** done in branch `seryitron-branchito`, validated (output format: `docs/sw1-output-format.md`, plan:
+`docs/sw1-roadmap.md`). **Files:** `routers/state.py` (same router), `schemas/state.py`, `tests/test_series.py`.
 
 - `GET /api/v1/sites/{site_id}/series?start=&duration_h=&step_min=&mast_m=...`
-- Response: arrays (`t`, Sun and Earth az/el/fraction, `power_w_m2`, `eclipse`), `metrics` (the `Metrics`
-  dataclass), `sunlit_ranges` and `comms_ranges` (time ranges), `horizon_kind`.
+- Response: arrays (`t`, Sun and Earth az/el/horizon_el/fraction/visible, `eclipse`, `sun_eclipsed_fraction`),
+  `metrics` (the `Metrics` dataclass without power), `sunlit_ranges`, `comms_ranges` and `eclipse_ranges` (edges
+  refined to the second), `horizon_kind`. No power: MECH's `/power` (owner's decision).
 - Guard: cap the number of samples (for example 20 000) and return 422 above it.
 
 ## SW-1 · Horizon profile
