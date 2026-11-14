@@ -16,6 +16,7 @@
  *   linear interpolation is about (vertex spacing / R)^2 / 8, under 0.002 degrees for the 29 km of level 0), not per
  *   pixel, and without trigonometry.
  */
+import { BEHIND_DEG, DEPTH_RANGE_M, NEAR_BLEND_M } from './ground'
 import { R_M } from './tileset'
 
 export const GRID_VERTICES = 65
@@ -30,6 +31,16 @@ out vec2 vUv;
 out vec2 vMap;
 out float vHeight;
 out vec3 vSunScene;          // the Sun's direction in the scene at this point (not normalised)
+// Ground view (ground.ts): the tiles seen by an observer on the surface, on the horizon view's angular screen.
+uniform float uGround;       // 1: ground view; 0: the map's own camera
+uniform vec3 uObs;           // observer: map x, y (m) and eye height above the sphere (m)
+uniform vec3 uObsEast;       // observer's local east, north (unit, sphere axes) and map scale in uObsScale.x
+uniform vec3 uObsNorth;
+uniform vec4 uObsMap;        // east (xy) and north (zw) unit vectors on the map
+uniform float uObsScale;     // map distance = scale x ground distance at the observer
+uniform vec4 uView;          // yaw, pitch (deg), degrees per pixel, unused
+uniform vec4 uScreen;        // centre x, centre y, width, height of the horizon view (CSS px)
+out float vBehind;
 const float R = ${R_M.toFixed(1)};
 void main() {
   ivec2 texel = ivec2(round(uv * 256.0));
@@ -56,6 +67,30 @@ void main() {
   vSunScene = dot(uSun, east) * vec3(cs.x, 0.0, cs.y)
             + dot(uSun, north) * vec3(cs.y, 0.0, -cs.x)
             + dot(uSun, up) * vec3(0.0, 1.0, 0.0);
+  vBehind = 0.0;
+  if (uGround > 0.5) {
+    // twin of ground.ts groundDirection + groundScreen: keep the two in step
+    float hv = h - skirt * uSkirtKm * 1000.0;              // true height (no exaggeration); skirts hang below
+    vec2 d = map - uObs.xy;
+    vec2 nearEN = vec2(dot(d, uObsMap.xy), dot(d, uObsMap.zw)) / (uObsScale * R);
+    float w = smoothstep(${NEAR_BLEND_M[0].toFixed(1)}, ${NEAR_BLEND_M[1].toFixed(1)}, length(nearEN) * R);
+    vec2 en = mix(nearEN, vec2(dot(up, uObsEast), dot(up, uObsNorth)), w);   // sin(theta) x (east, north)
+    float sinT = min(1.0, length(en));
+    float theta = asin(sinT);
+    float half_ = sin(theta * 0.5);
+    float rs = R + hv;
+    float vertical = hv - uObs.z - rs * 2.0 * half_ * half_;
+    float horizontal = rs * sinT;
+    float az = degrees(atan(en.x, en.y));
+    float el = degrees(atan(vertical, max(horizontal, 1e-3)));
+    float dAz = mod(az - uView.x + 540.0, 360.0) - 180.0;
+    float dist = max(length(vec2(vertical, horizontal)), ${DEPTH_RANGE_M[0].toFixed(1)});
+    float depth = clamp(log(dist / ${DEPTH_RANGE_M[0].toFixed(1)}) / log(${(DEPTH_RANGE_M[1] / DEPTH_RANGE_M[0]).toFixed(1)}), 0.0, 1.0);
+    vec2 px = vec2(uScreen.x + dAz / uView.z, uScreen.y - (el - uView.y) / uView.z);
+    vBehind = abs(dAz) > ${BEHIND_DEG.toFixed(1)} ? 1.0 : 0.0;
+    gl_Position = vec4(px.x / uScreen.z * 2.0 - 1.0, 1.0 - px.y / uScreen.w * 2.0, depth * 2.0 - 1.0, 1.0);
+    return;
+  }
   gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
 }
 `
@@ -82,6 +117,8 @@ uniform sampler2D uArea;     // mission mode: r = code (0 outside, 1 fails stati
 uniform vec4 uAreaXf;        // x left, y top, width, height of the search raster (m)
 uniform float uHasArea;
 uniform vec3 uRegion;        // x, y (m) and radius (m) of the search region ring
+uniform float uGround;       // 1: ground view (physical light, no map decorations)
+in float vBehind;
 in vec2 vUv;
 in vec2 vMap;
 in float vHeight;
@@ -115,6 +152,8 @@ void main() {
 #ifdef DISC_EDGE
   if (rMap > uDiscR) discard;
 #endif
+  // ground view: a triangle with a vertex behind the observer would wrap around the screen
+  if (vBehind > 0.0) discard;
   float du = 1.0 / 256.0;
   float hx = (hBil(vUv + vec2(du, 0.0)) - hBil(vUv - vec2(du, 0.0))) / (2.0 * uCellM);
   float hy = (hBil(vUv - vec2(0.0, du)) - hBil(vUv + vec2(0.0, du))) / (2.0 * uCellM);
@@ -128,6 +167,13 @@ void main() {
     visible = texture(uShadow, suv).r;
   }
   float sunLight = visible * lambert;
+  if (uGround > 0.5) {
+    // The landscape painter's exposure (horizon/terrain2d.ts): a face square to the Sun at 0.9, display gamma 2, a
+    // faint cool floor so shadow is not the sky's black. Airless: no ambient light, no haze.
+    float v = 0.9 * sqrt(sunLight);
+    fragColor = vec4(max(vec3(v, v * 0.9875, v * 0.9644), vec3(0.0283, 0.0292, 0.03)), 1.0);
+    return;
+  }
   float relief = 0.30 + 0.70 * max(0.0, dot(nrm, normalize(vec3(-0.55, 0.75, -0.40))));
 
   vec3 base = vec3(0.66, 0.66, 0.64);

@@ -78,6 +78,8 @@ asks for this list; keep it current when something is added.
   Radiometer Experiment. JGR Planets 122, doi:10.1002/2017JE005387 (arXiv:1711.00977). Table A1 (albedo 0.12,
   emissivity 0.95 after Keihm 1984, heat flow 0.018 W/m2 after Langseth et al. 1976, c_p(T) polynomial) and the
   global thermal inertia 55 J m-2 K-1 s-1/2 at 273 K: default lunar regolith of `/thermal` and `/power` level 4.
+- NASA Earth Fact Sheet (NSSDCA, D. R. Williams): Bond albedo of the Earth 0.306, for the Earthshine term of the
+  horizon view's landscape (`web/src/horizon/terrain2d.ts`). https://nssdc.gsfc.nasa.gov/planetary/factsheet/earthfact.html
 - Incropera, F. P., DeWitt, D. P., Bergman, T. L., Lavine, A. S. Fundamentals of Heat and Mass Transfer, Table A.4
   (air at 300 K, c_p = 1.007 kJ/kg K): habitat air heat capacity, `/power` level 4.
 - U.S. Standard Atmosphere, 1976 (NOAA/NASA/USAF): molar mass of dry air 28.9644 g/mol. CODATA 2018: gas constant

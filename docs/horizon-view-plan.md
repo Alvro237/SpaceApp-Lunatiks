@@ -1,6 +1,7 @@
 # Horizon tab: from silhouette to landscape (implementation plan)
 
-Proposal, 2026-11-14 (MECH, for SW-1's area with Víctor's consent). Nothing here is built yet.
+Proposal, 2026-11-14 (MECH, for SW-1's area with Víctor's consent). **Built on `feat/mech-power` the same day**;
+"As built" at the end says where the code is and where it departs from this plan.
 
 **Goal.** The first-person Horizon view (`web/src/horizon/`) draws the real skyline from the site's mask, but fills
 it with a flat grey gradient: a diagram, not a place. Make it read as a lunar landscape while every pixel stays
@@ -206,3 +207,42 @@ Layer A alone is a shippable improvement in one working day; Layer B is a second
 
 Rocks and boulders (no dataset), Earthshine photometry beyond a presentation floor, a star field (the sky is
 black in daylight exposure; at night a faint star field could be added later from a catalogue), lens flares.
+
+## As built (2026-11-14, `feat/mech-power`)
+
+Layer A
+- API: `logic/horizon.py` `ridge_planes` / `horizon_planes`; `services.point_horizon_planes` (same cached rays as the
+  point skyline); `planes` and `skyline_distance_km` on `GET /points/horizon` and `GET /sites/{id}/horizon`
+  (`routers/horizon.py` `planes_fields`). Tests: `api/tests/test_horizon_planes.py` (11).
+- Web: `web/src/horizon/terrain2d.ts` (painter, light, grain, `planesFromApi`), `draw.ts` (style switch),
+  `HorizonView.tsx` (Landscape / Diagram, data path), `api/hooks.ts` `useHorizonPlanes`. Tests:
+  `horizon/terrain2d.test.ts` (13), including "nothing above the skyline".
+- Departures: the layers are painted per pixel into a buffer (not canvas polygons), so edges are antialiased and
+  the grain is in world coordinates; the buffer shrinks to keep a frame near 20 ms. Crests seen over fewer than
+  three azimuth samples are dropped and crest ends merge into the layer behind over six samples. Earthshine uses the
+  Earth's Bond albedo 0.306 (NASA Earth Fact Sheet) x angular radius squared x lit fraction, under a display floor.
+  The typed client was not regenerated (`npm run gen:api` renames the MECH `Transition` schema and breaks
+  `api/types.ts`); the new fields are typed by hand in `api/types.ts`.
+
+Layer B
+- `web/src/terrain/ground.ts`: availability (`terrainHorizonAvailable`: 240 m cells or finer, static or live
+  levels), the observer's frame, the direction of a terrain point (the API's skyline formula, rearranged for
+  32-bit floats) and the tile-selection camera. `shaders.ts`: the same steps in the vertex shader (ground branch)
+  and physical light in the fragment shader. `engine.ts`: `setGround`, `groundHeightAt`, `groundCamera`.
+  `state/ground.ts`: hand-over between `HorizonView` and the engine's frame loop in `TerrainView.tsx`.
+  Tests: `terrain/ground.test.ts` (14).
+- Departures from B2-B4:
+  - **No perspective camera and no `d^2 / 2R` term.** The horizon view is an angular (equirectangular) screen, so a
+    perspective picture under it would only match at the centre. Each vertex is instead turned into its true
+    direction on the sphere and placed with the horizon view's own projection: exact curvature, and pixel
+    agreement with the mask, the discs and the scales.
+  - **No separate `GroundView.tsx` canvas.** The existing terrain canvas under the horizon view draws the ground
+    view (same engine, tiles and shadow pass); the horizon canvas is clear below the skyline and black above it.
+  - **The Sun and the Earth stay on the 2D canvas** (drawn inside the sky region), not as billboards.
+  - Levels finer than 25 m cells are not requested (megabytes of live tiles for a few pixels of grazing ground).
+  - The painted foreground stays within 120 m of the observer and fades out by 300 m. From a 2 m eye that is
+    everything more than about 1 degree below the horizon, so the 3D tiles show in the band near the horizon and
+    in the relief above it: hills, crater walls, ridges.
+- B5 (WAC albedo) not done. B6: the geometry twins are unit-tested; the GLSL was checked on screen at IM-2 (tiles
+  from Moon Trek's 30 m DEM); no Playwright screenshot test was added.
+- Only over the polar map (the globe has no tiles) and on screens wider than 760 px.

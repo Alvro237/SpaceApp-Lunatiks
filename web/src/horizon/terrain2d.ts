@@ -357,7 +357,17 @@ export interface LandscapeScene {
   earth: LightBody
   /** Observer's height above the ground, m. */
   heightM?: number
+  /**
+   * Over the 3D ground view (Layer B): how much of the painted landscape stays. 1 (or undefined): all of it; 0: only
+   * the ground at the observer's feet, opaque up to NEAR_FULL_M and gone by NEAR_END_M, where the tiles' cells are
+   * far larger than a pixel; between, a cross-fade (the tiles arriving).
+   */
+  fullness?: number
 }
+
+/** The painted foreground covers the 3D tiles up to here, then fades out, metres from the observer (plan, risks). */
+export const NEAR_FULL_M = 120
+export const NEAR_END_M = 300
 
 const TAN_FACE = Math.tan(FACE_SLOPE_DEG * DEG)
 const TAN_BASE = Math.tan(BASE_SLOPE_DEG * DEG)
@@ -372,6 +382,7 @@ export function renderLandscape(buf: Uint8ClampedArray, w: number, h: number, sc
   const { camera: c, planes } = scene
   const shape = scene.shape ?? ((e: number) => e)
   const hCam = scene.heightM ?? GROUND_HEIGHT_M
+  const fullness = Math.min(1, Math.max(0, scene.fullness ?? 1))
   const n = planes ? planes.el.length : 1
   const earthLit = earthPhase(scene.sun, scene.earth).lit
   const stackEl = new Float64Array(n)
@@ -530,6 +541,16 @@ export function renderLandscape(buf: Uint8ClampedArray, w: number, h: number, sc
       }
       colorAt(j, x, y)
       let alpha = 255
+      if (fullness < 1) {
+        let near = 0
+        if (j === 0) {
+          const denom = tanE0[x] - rowTan
+          const z = denom > 1e-6 ? Math.min(hCam / denom, zc[0][x]) : zc[0][x]
+          const t = z <= NEAR_FULL_M ? 0 : z >= NEAR_END_M ? 1 : (z - NEAR_FULL_M) / (NEAR_END_M - NEAR_FULL_M)
+          near = 1 - t * t * (3 - 2 * t)
+        }
+        alpha = 255 * (near + (1 - near) * fullness)
+      }
       if (cov < 1) {
         if (j < n - 1) {
           const r1 = r
@@ -539,7 +560,7 @@ export function renderLandscape(buf: Uint8ClampedArray, w: number, h: number, sc
           r = r1 * cov + r * (1 - cov)
           g = g1 * cov + g * (1 - cov)
           b = b1 * cov + b * (1 - cov)
-        } else alpha = Math.round(cov * 255)
+        } else alpha = Math.round(cov * alpha)
       }
       buf[o] = r * 255
       buf[o + 1] = g * 255

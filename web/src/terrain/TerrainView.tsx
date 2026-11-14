@@ -6,6 +6,7 @@
  */
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ToolPortal } from '../ui/ToolSlot'
+import { useGround } from '../state/ground'
 import { useHorizonTransition } from '../state/horizon'
 import { useQuery } from '@tanstack/react-query'
 import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useRef, useState } from 'react'
@@ -77,7 +78,9 @@ function MapView({ tileset }: { tileset: Tileset }) {
   // paused (no frames drawn) while the horizon view or Block Moon covers the map; it keeps its camera and tiles
   const underHorizon = useHorizonTransition((s) => s.phase === 'horizon')
   const underBlocks = useApp((s) => s.blocks)
-  const covered = underHorizon || underBlocks
+  // ...except where the horizon view shows this terrain from the ground through itself (state/ground)
+  const groundView = useGround((s) => s.request !== null)
+  const covered = (underHorizon && !groundView) || underBlocks
 
   useEffect(() => rig.setTilt(view === '3d' ? TILT_3D : 0), [rig, view])
 
@@ -184,7 +187,7 @@ function MapView({ tileset }: { tileset: Tileset }) {
             markerStyle={markerStyle}
             exaggeration={exaggeration}
             onStats={setStats}
-            craters={showCraters}
+            craters={showCraters && !groundView}
             onCraterStatus={setCraterError}
           />
         </Canvas>
@@ -419,7 +422,39 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
     })
   }, [rig, camera, engine, exaggeration, tileset])
 
+  // leaving the ground view: back to the map's projection and detail at once, whatever frame comes next
+  useEffect(
+    () =>
+      useGround.subscribe((g) => {
+        if (g.request) return
+        engine.setGround(null)
+        markersSet.group.visible = true
+      }),
+    [engine, markersSet],
+  )
+
   useFrame((_, dt) => {
+    // Ground view: the horizon view is open over this canvas and shows the terrain through itself. The tiles are
+    // drawn as its observer sees them (terrain/ground.ts); the map's own camera rests.
+    const ground = useGround.getState()
+    if (ground.request && useHorizonTransition.getState().phase === 'horizon') {
+      const { tMs, mastM, playing } = useApp.getState()
+      if (eph?.table.covers(tMs)) {
+        const p = eph.table.positions(tMs)
+        const d = Math.hypot(p[0], p[1], p[2])
+        engine.setSun([p[0] / d, p[1] / d, p[2] / d], THREE.MathUtils.radToDeg(Math.asin(SUN_R_KM / d)), mastM)
+      }
+      engine.renderShadows(gl, playing)
+      const [x, y] = polarXY(ground.request.lat, ground.request.lon)
+      const viewportPx = engine.setGround({ x, y, screen: ground.request.screen })
+      if (viewportPx !== null) {
+        markersSet.group.visible = false
+        engine.update(engine.groundCamera, viewportPx, [x / 1000, -y / 1000])
+        ground.setReady(engine.stats.drawn > 0 && engine.stats.inFlight === 0)
+        return
+      }
+    }
+
     const insets = useInsets.getState()
     rig.fitHome(size.width, size.height, insets)
     rig.step(dt, reduced)

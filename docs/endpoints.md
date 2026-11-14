@@ -60,6 +60,10 @@ Numbers given as defaults below are placeholders for the owner to set with a cit
 **Files:** `routers/horizon.py`, `schemas/horizon.py`, `tests/test_horizon.py`.
 `GET /api/v1/sites/{site_id}/horizon?mast_m=&include_zone=` returns the 720 azimuth values, `kind`, the mast
 actually used, and optionally the zone neighbours (`db/horizons.py: zone`).
+Added by MECH (2026-11-14, with SW-1's consent; `docs/horizon-view-plan.md`): `planes` (up to three layers of the
+landscape per azimuth: the visible crests near to far, the skyline last, with distance and elevation) and
+`skyline_distance_km`, on this endpoint and on `GET /points/horizon`; null where no LOLA grid covers the place. The
+skyline fields are unchanged. `logic/horizon.py: ridge_planes`, `tests/test_horizon_planes.py`.
 
 ## SW-1 · Mission mode: area search
 

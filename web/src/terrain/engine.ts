@@ -8,6 +8,7 @@ import { LruCache } from './cache'
 import { type LiveConfig, type LiveSource, descendantRanges, liveConfigFromEnv, trekTileUrl, withLiveLevels } from './live/config'
 import { LIVE_LAYERS, layerCellGeometry, liveLayerMaxZ, liveLayerSource } from './live/layers'
 import { lutBytes, type ColormapId } from './colormaps'
+import { GROUND_MIN_CELL_M, type GroundScreen, observerFrame, selectionCamera } from './ground'
 import { TileLoader } from './loader'
 import { type LodOptions, byDistanceTo, renderable, selectTiles } from './lod'
 import { GRID_VERTICES, TERRAIN_FRAG, TERRAIN_VERT } from './shaders'
@@ -25,6 +26,8 @@ export const SHADOW_SIZE = 2048
  * Sun is still the full-size texture is computed again, in strips (shadowSchedule.ts says when each pass runs).
  */
 export const SHADOW_FAST_SIZE = 1024
+/** Eye height of the ground view above the ground, m (the fixed 2 m of every MECH result). */
+export const GROUND_EYE_M = 2
 
 export type LayerMode = { kind: 'none' } | { kind: 'elevation' } | { kind: 'data'; id: string; colormap: ColormapId; levels: number }
 
@@ -152,7 +155,20 @@ export class TerrainEngine {
     uAreaXf: { value: new THREE.Vector4(0, 0, 1, 1) },
     uHasArea: { value: 0 },
     uRegion: { value: new THREE.Vector3(0, 0, 0) },
+    // ground view (ground.ts): observer, its local frame and the horizon view's screen
+    uGround: { value: 0 },
+    uObs: { value: new THREE.Vector3() },
+    uObsEast: { value: new THREE.Vector3() },
+    uObsNorth: { value: new THREE.Vector3() },
+    uObsMap: { value: new THREE.Vector4() },
+    uObsScale: { value: 1 },
+    uView: { value: new THREE.Vector4() },
+    uScreen: { value: new THREE.Vector4(0, 0, 1, 1) },
   }
+  /** Ground view: the camera that only chooses tiles, and the map's level-of-detail options to go back to. */
+  readonly groundCamera = new THREE.PerspectiveCamera()
+  private groundOn = false
+  private mapLod: LodOptions | null = null
   private areaTexture: THREE.DataTexture | null = null
 
   constructor(tileset: Tileset, baseUrl: string, floatLinear: boolean, live: LiveConfig | null = liveConfigFromEnv(import.meta.env)) {
@@ -254,9 +270,74 @@ export class TerrainEngine {
 
   // ------------------------------------------------------------------------------------------- settings
 
+  /** Ground height (m) at a map point from the finest loaded tile that contains it, else from the overview. */
+  groundHeightAt(x: number, y: number): number | null {
+    const [x0, , x1, y1] = this.tileset.extentM
+    const size = x1 - x0
+    for (let z = this.tileset.levels.length - 1; z >= 0; z--) {
+      const n = 2 ** z
+      const tx = Math.floor(((x - x0) / size) * n)
+      const ty = Math.floor(((y1 - y) / size) * n)
+      const tile = this.tiles.get(`${z}/${tx}/${ty}`)
+      const data = tile?.heights.image.data as Float32Array | undefined
+      if (!data) continue
+      const s = this.tileset.tileSamples
+      const fx = (((x - x0) / size) * n - tx) * (s - 1)
+      const fy = (((y1 - y) / size) * n - ty) * (s - 1)
+      const c = Math.min(Math.floor(fx), s - 2)
+      const r = Math.min(Math.floor(fy), s - 2)
+      const u = fx - c
+      const v = fy - r
+      const i = r * s + c
+      const h = data[i] * (1 - u) * (1 - v) + data[i + 1] * u * (1 - v) + data[i + s] * (1 - u) * v + data[i + s + 1] * u * v
+      if (Number.isFinite(h)) return h
+    }
+    return this.heightAt(x, y)
+  }
+
+  /**
+   * Ground view on or off (ground.ts). On: the tiles are drawn as an observer standing at (x, y) sees them, on the
+   * horizon view's angular screen `s`, with true heights and physical light; the caller then calls `update` with
+   * `groundCamera`. Returns the viewport height (px) to give `update`, or null when off or outside the terrain.
+   */
+  setGround(view: { x: number; y: number; screen: GroundScreen } | null): number | null {
+    if (!view) {
+      if (this.groundOn) {
+        this.groundOn = false
+        this.shared.uGround.value = 0
+        if (this.mapLod) this.lod = this.mapLod
+        this.mapLod = null
+      }
+      return null
+    }
+    const ground = this.groundHeightAt(view.x, view.y)
+    if (ground === null) return this.setGround(null)
+    if (!this.groundOn) {
+      this.groundOn = true
+      this.mapLod = this.lod
+      // grazing views show each cell much thinner than it is wide: a looser error, and no levels finer than 25 m
+      let maxZ = 0
+      for (const l of this.tileset.levels) if (l.cellM >= GROUND_MIN_CELL_M) maxZ = l.z
+      this.lod = { splitPx: 4, mergePx: 3, maxZ }
+    }
+    const f = observerFrame(view.x, view.y)
+    const obs = { x: view.x, y: view.y, eyeM: ground + GROUND_EYE_M }
+    const u = this.shared
+    u.uGround.value = 1
+    u.uObs.value.set(obs.x, obs.y, obs.eyeM)
+    u.uObsEast.value.set(...f.east)
+    u.uObsNorth.value.set(...f.north)
+    u.uObsMap.value.set(f.eastMap[0], f.eastMap[1], f.northMap[0], f.northMap[1])
+    u.uObsScale.value = f.scale
+    u.uView.value.set(view.screen.yaw, view.screen.pitch, view.screen.degPerPx, 0)
+    u.uScreen.value.set(view.screen.cx, view.screen.cy, view.screen.width, view.screen.height)
+    return selectionCamera(this.groundCamera, obs, f, view.screen, (ground / 1000) * this.exaggeration)
+  }
+
   /** Adaptive quality (plan): a coarser screen-space error threshold when the frame rate drops below 45. */
   reduceQuality(): void {
-    this.lod = { splitPx: 3, mergePx: 2.25 }
+    if (this.groundOn) this.mapLod = { splitPx: 3, mergePx: 2.25 }
+    else this.lod = { splitPx: 3, mergePx: 2.25 }
   }
 
   setExaggeration(x: number): void {

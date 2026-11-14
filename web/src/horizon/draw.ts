@@ -31,6 +31,12 @@ export interface Scene {
   planes?: LandscapePlanes | null
   /** Applied to the layers' elevations (the arrival descent pulls them to the smooth Moon's horizon). */
   planeShape?: (el: number) => number
+  /**
+   * The 3D ground view is drawn under this canvas (Layer B): the canvas is transparent below the skyline, black
+   * above it (so the tiles never show above the skyline the metrics use), and keeps `fullness` of the painted
+   * landscape (1 while the tiles load, 0 once they are there: only the ground at the observer's feet).
+   */
+  ground?: { fullness: number }
 }
 
 const SUN = '#ffb547'
@@ -41,6 +47,21 @@ const MIN_DISC_PX = 2.5
 
 export function drawHorizon(ctx: CanvasRenderingContext2D, W: number, H: number, c: Camera, s: Scene): void {
   const landscape = s.style !== 'diagram'
+  const ground = landscape ? s.ground : undefined
+  ctx.clearRect(0, 0, W, H)
+  if (ground) {
+    // everything of the sky is drawn inside the region above the skyline; below it the canvas stays clear
+    ctx.save()
+    ctx.beginPath()
+    ctx.moveTo(0, 0)
+    ctx.lineTo(W, 0)
+    for (let x = W + 2; x >= -2; x -= 2) {
+      const az = wrap360(c.yaw + (x - c.cx) * c.degPerPx)
+      ctx.lineTo(x, project(c, az, s.horizonAt(az)).y)
+    }
+    ctx.closePath()
+    ctx.clip()
+  }
   // sky: black. Diagram: a hint of depth towards the horizon; landscape: pure black (airless: no blue, no haze, no
   // glow on the ground line)
   const zeroY = project(c, c.yaw, 0).y
@@ -55,8 +76,17 @@ export function drawHorizon(ctx: CanvasRenderingContext2D, W: number, H: number,
   drawTrack(ctx, W, c, s.earthTrack, EARTH)
   drawSun(ctx, c, s.sun, landscape)
   drawEarth(ctx, c, s.earth, s.sun)
+  if (ground) ctx.restore()
   if (landscape) {
-    paintLandscape(ctx, W, H, { camera: c, skyline: s.horizonAt, planes: s.planes ?? null, shape: s.planeShape, sun: s.sun, earth: s.earth })
+    paintLandscape(ctx, W, H, {
+      camera: c,
+      skyline: s.horizonAt,
+      planes: s.planes ?? null,
+      shape: s.planeShape,
+      sun: s.sun,
+      earth: s.earth,
+      fullness: ground ? ground.fullness : 1,
+    })
   } else drawTerrain(ctx, W, H, c, s)
   if (s.showLabels !== false) drawLabels(ctx, W, c, s)
   drawCompass(ctx, W, H, c, s)
