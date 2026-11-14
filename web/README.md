@@ -54,6 +54,7 @@ the dev proxy elsewhere; in production set `VITE_API_URL` to the API's public UR
 | `src/compare` | Live comparison of up to four places, and the site × month table |
 | `src/pages` | Data & methods, Learn (Lunar Quest hub and the ideas behind it) |
 | `src/learn` | Lunar Quest: challenges that set up a real scene in the navigator and check the answer with the browser engine |
+| `src/blocks` | Block Moon (switch in the top bar): the same place and time as a world of cubes built from the LOLA heights (whole Moon, or the ground around the place with the Sun and Earth as cubes at their real azimuth and stretched elevation), with three simple panels for learners |
 | `src/ui` | Design tokens (`theme.css`: monochrome plus Sun amber and Earth blue), brand mark |
 | `e2e` | Playwright tests |
 

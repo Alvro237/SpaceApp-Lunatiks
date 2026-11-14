@@ -18,15 +18,15 @@ import { GlobeView } from '../globe/GlobeView'
 import { TerrainView } from '../terrain/TerrainView'
 import { useClock } from '../time/useClock'
 import { QuestPanel } from '../learn/QuestPanel'
+import { BlockPanels } from '../blocks/BlockPanels'
+import { BlockWorld } from '../blocks/BlockWorld'
 
 const narrow = () => typeof window !== 'undefined' && window.innerWidth < 760
 
 export function NavigatorPage() {
   const { restoredFromCorruptLink } = useUrlSync()
   useClock()
-  const mode = useApp((s) => s.mode)
-  const compareMode = useApp((s) => s.compareMode)
-  const scale = useApp((s) => s.scale)
+  const blocks = useApp((s) => s.blocks)
   const root = useRef<HTMLDivElement>(null)
   useMeasureInsets(root)
 
@@ -34,26 +34,45 @@ export function NavigatorPage() {
     <NowProvider>
       <div className="navigator" ref={root}>
         <h1 className="sr-only">Lunar Landing Site Navigator</h1>
-        {scale === 'globe' ? <GlobeView /> : <TerrainView />}
-        {restoredFromCorruptLink && (
-          <p className="toast" role="alert">
-            The shared link could not be read; the default scenario is shown.
-          </p>
+        {blocks ? (
+          <>
+            <BlockWorld />
+            <BlockPanels />
+          </>
+        ) : (
+          <Planner restoredFromCorruptLink={restoredFromCorruptLink} />
         )}
-        <Float side="left" title={mode === 'study' ? 'Where and when' : 'Mission filters'} defaultOpen={!narrow()}>
-          {mode === 'study' ? <SitePicker /> : <MissionPanel />}
-          <WhenPanel />
-        </Float>
-        <Float side="right" title="Place" defaultOpen>
-          <PlacePanel />
-        </Float>
-        <QuestPanel />
-        <div className="float float-bottom">
-          {compareMode && <CompareLive />}
-          <Timeline />
-        </div>
       </div>
     </NowProvider>
+  )
+}
+
+/** The planner's view: the map or globe with the floating panels (everything but Block Moon). */
+function Planner({ restoredFromCorruptLink }: { restoredFromCorruptLink: boolean }) {
+  const mode = useApp((s) => s.mode)
+  const compareMode = useApp((s) => s.compareMode)
+  const scale = useApp((s) => s.scale)
+  return (
+    <>
+      {scale === 'globe' ? <GlobeView /> : <TerrainView />}
+      {restoredFromCorruptLink && (
+        <p className="toast" role="alert">
+          The shared link could not be read; the default scenario is shown.
+        </p>
+      )}
+      <Float side="left" title={mode === 'study' ? 'Where and when' : 'Mission filters'} defaultOpen={!narrow()}>
+        {mode === 'study' ? <SitePicker /> : <MissionPanel />}
+        <WhenPanel />
+      </Float>
+      <Float side="right" title="Place" defaultOpen>
+        <PlacePanel />
+      </Float>
+      <QuestPanel />
+      <div className="float float-bottom">
+        {compareMode && <CompareLive />}
+        <Timeline />
+      </div>
+    </>
   )
 }
 

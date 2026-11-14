@@ -24,7 +24,7 @@ export const MAP_DISC_LAT = -60
 const ENTER_MAP_DIST = MOON_R_KM * 1.18
 const RELIEF_EXAGGERATION = 4
 
-interface GlobeMeta {
+export interface GlobeMeta {
   file: string
   width: number
   height: number
@@ -32,7 +32,7 @@ interface GlobeMeta {
   max: number
 }
 
-async function loadGlobe(): Promise<{ meta: GlobeMeta; heights: Float32Array }> {
+export async function loadGlobe(): Promise<{ meta: GlobeMeta; heights: Float32Array }> {
   const meta = (await (await fetch(`${DATA_BASE}globe/globe.json`)).json()) as GlobeMeta
   const loader = new TileLoader(1)
   try {

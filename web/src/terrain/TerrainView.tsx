@@ -21,9 +21,9 @@ import { type Exaggeration, LayersControl, LegendChip } from './Legend'
 import { terrainRegistry } from './registry'
 import { type Tileset, inExtent, polarLatLon, polarXY, scaleFactor } from './tileset'
 
-const TILES_BASE = `${import.meta.env.BASE_URL}tiles/`
+export const TILES_BASE = `${import.meta.env.BASE_URL}tiles/`
 
-async function loadTileset(): Promise<Tileset> {
+export async function loadTileset(): Promise<Tileset> {
   const res = await fetch(`${TILES_BASE}tileset.json`)
   if (!res.ok) throw new Error(`tileset.json: HTTP ${res.status}`)
   return (await res.json()) as Tileset
