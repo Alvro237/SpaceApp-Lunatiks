@@ -12,7 +12,9 @@
  *   GPU's hidden-surface removal, so in tilted views every hidden layer of terrain was shaded too.
  * - FLOAT_LINEAR (where float textures filter linearly): the slope comes from 4 hardware-filtered reads of the
  *   height texture instead of 16 texel fetches.
- * - The Sun's direction in the scene is worked out per vertex (it changes smoothly over a tile), not per pixel.
+ * - The Sun's direction in the scene is worked out per vertex (it changes smoothly over a tile: the error of the
+ *   linear interpolation is about (vertex spacing / R)^2 / 8, under 0.002 degrees for the 29 km of level 0), not per
+ *   pixel, and without trigonometry.
  */
 import { R_M } from './tileset'
 
@@ -29,7 +31,6 @@ out vec2 vMap;
 out float vHeight;
 out vec3 vSunScene;          // the Sun's direction in the scene at this point (not normalised)
 const float R = ${R_M.toFixed(1)};
-const float PI = 3.141592653589793;
 void main() {
   ivec2 texel = ivec2(round(uv * 256.0));
   float h = texelFetch(uHeight, texel, 0).r;
@@ -38,15 +39,22 @@ void main() {
   vUv = uv;
   vMap = map;
   vHeight = h;
-  // local east/north/up of the sphere at this point, drawn on the polar map
-  float colat = 2.0 * atan(length(map) / (2.0 * R));
-  float lat = colat - 0.5 * PI;
-  float lon = atan(map.x, map.y);
-  vec3 up = vec3(cos(lat) * cos(lon), cos(lat) * sin(lon), sin(lat));
-  vec3 east = vec3(-sin(lon), cos(lon), 0.0);
-  vec3 north = vec3(-sin(lat) * cos(lon), -sin(lat) * sin(lon), cos(lat));
-  vSunScene = dot(uSun, east) * vec3(cos(lon), 0.0, sin(lon))
-            + dot(uSun, north) * vec3(sin(lon), 0.0, -cos(lon))
+  // Local east/north/up of the sphere at this point, drawn on the polar map, without trigonometry: the south polar
+  // stereographic radius r gives colatitude 2 atan(r / 2R), so with t = r / 2R, cos(lat) = 2t / (1 + t^2) and
+  // sin(lat) = -(1 - t^2) / (1 + t^2); longitude atan(x, y) gives cos(lon) = y / r, sin(lon) = x / r. On the pole
+  // itself (a vertex of every level) the longitude is undefined (atan(0, 0) is undefined in GLSL) and any value gives
+  // the same result, so 0 is used.
+  float r = length(map);
+  float t = r / (2.0 * R);
+  float k = 1.0 / (1.0 + t * t);
+  float cosLat = 2.0 * t * k;
+  float sinLat = -(1.0 - t * t) * k;
+  vec2 cs = r > 0.0 ? vec2(map.y, map.x) / r : vec2(1.0, 0.0);   // cos(lon), sin(lon)
+  vec3 up = vec3(cosLat * cs.x, cosLat * cs.y, sinLat);
+  vec3 east = vec3(-cs.y, cs.x, 0.0);
+  vec3 north = vec3(-sinLat * cs.x, -sinLat * cs.y, cosLat);
+  vSunScene = dot(uSun, east) * vec3(cs.x, 0.0, cs.y)
+            + dot(uSun, north) * vec3(cs.y, 0.0, -cs.x)
             + dot(uSun, up) * vec3(0.0, 1.0, 0.0);
   gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
 }
