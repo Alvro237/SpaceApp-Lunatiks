@@ -144,12 +144,18 @@ export const CHANDRAYAAN3 = 'chandrayaan-3'
 export const IM2 = 'im-2'
 export const MALAPERT = 'mons-malapert'
 export const SHACKLETON = 'shackleton'
-export const FAUSTINI = 'faustini'
+export const NOBILE = 'nobile'
 
 /** Eagle's touchdown, from data/sites.json (NASA Apollo Lunar Surface Journal). */
 export const APOLLO11_LANDING_MS = Date.parse('1969-07-20T20:17:39Z')
 /** Athena's landing day (sites.json gives the date only): noon UTC stands for "that day". */
 export const IM2_LANDING_DAY_MS = Date.parse('2025-03-06T12:00:00Z')
+/**
+ * A moment when the Earth is up over Nobile crater and sets about five days later (engine, LOLA horizon, 2 m mast:
+ * Earth 8.2° high at the start, in view 2027-02-10T22Z to 2027-02-16T22Z, Sun up too). Craters such as Faustini,
+ * Shackleton or Cabeus never see the Earth at all, so the chapter needs a place and a date where it comes and goes.
+ */
+export const NOBILE_EARTH_UP_MS = Date.parse('2027-02-12T00:00:00Z')
 
 export const CHAPTERS: Chapter[] = [
   {
@@ -290,11 +296,11 @@ export const CHAPTERS: Chapter[] = [
     id: 'call-home',
     tag: 'Every mission',
     title: 'Phone home',
-    where: 'Faustini crater, near the South Pole',
-    when: 'Today',
-    story: ['Every lander needs to talk to Earth.', 'Radio only works if the Earth is above the hills.', 'Here the Earth wobbles a little in the sky, so hills can hide it.'],
+    where: 'Nobile crater, near the South Pole',
+    when: '12 February 2027',
+    story: ['Every lander needs to talk to Earth.', 'Radio only works if the Earth is above the hills.', 'The Earth wobbles a little in the sky, so hills can hide it.'],
     source: { label: 'NASA SVS, Moon libration', url: 'https://svs.gsfc.nasa.gov/5588' },
-    scene: { site: FAUSTINI, view: 'ground', speed: '1d' },
+    scene: { site: NOBILE, atMs: NOBILE_EARTH_UP_MS, view: 'ground', speed: '1d' },
     hint: 'The Earth is the blue ball. Then press play, or click a dark block in the Earth row.',
     lesson: 'No Earth in the sky means no call home.',
     steps: (c) => {

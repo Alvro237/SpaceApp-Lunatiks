@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CHAPTERS, EMPTY_MEMORY, daysOf, dur, MALAPERT, SHACKLETON, type StoryCtx, chapterDone, firstDay, questionReady, stepsOf } from './story'
+import { CHAPTERS, EMPTY_MEMORY, daysOf, dur, MALAPERT, NOBILE, NOBILE_EARTH_UP_MS, SHACKLETON, type StoryCtx, chapterDone, firstDay, questionReady, stepsOf } from './story'
 
 const base: StoryCtx = {
   view: 'moon',
@@ -116,6 +116,15 @@ describe('mission log', () => {
     expect(c.found(ctx)?.stats.map((s) => s.value)).toEqual(['25 days', '5 days'])
     const never = { ...base, metrics: { ...base.metrics!, commsPct: 100 } }
     expect(c.steps(never)[1].text).toContain('never hides')
+  })
+
+  it('Calling home opens at a fixed moment when the Earth is up, inside the Sun and Earth tables (2025–2035)', () => {
+    // a crater that never sees the Earth (Faustini, Shackleton) on "today" left the task impossible
+    const { scene } = ch('call-home')
+    expect(scene.site).toBe(NOBILE)
+    expect(scene.atMs).toBe(NOBILE_EARTH_UP_MS)
+    expect(NOBILE_EARTH_UP_MS).toBeGreaterThanOrEqual(Date.UTC(2025, 0, 1))
+    expect(NOBILE_EARTH_UP_MS).toBeLessThan(Date.UTC(2035, 0, 1))
   })
 
   it('Plan a landing: a new place, Sun and Earth up, standing there; a typed point warns about the smooth horizon', () => {
