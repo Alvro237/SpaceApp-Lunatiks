@@ -5,6 +5,7 @@
  */
 import { type ReactNode, useId, useLayoutEffect, useRef, useState } from 'react'
 import { CompareLive } from '../compare/CompareLive'
+import { SkyDial } from '../charts/SkyDial'
 import { Timeline } from '../charts/Timeline'
 import { MissionPanel } from '../panels/MissionPanel'
 import { PlacePanel } from '../panels/PlacePanel'
@@ -40,6 +41,7 @@ export function NavigatorPage() {
             The shared link could not be read; the default scenario is shown.
           </p>
         )}
+        <SkyDial />
         <Float side="left" title={mode === 'study' ? 'Where and when' : 'Mission filters'} defaultOpen={!narrow()}>
           {mode === 'study' ? <SitePicker /> : <MissionPanel />}
           <WhenPanel />

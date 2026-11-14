@@ -17,6 +17,7 @@ import { CameraRig, FOV_DEG, TILT_3D } from './cameraRig'
 import { Craters } from './Craters'
 import { type LayerMode, TerrainEngine } from './engine'
 import { type Exaggeration, LayersControl, LegendChip } from './Legend'
+import { IconCube, IconFit, IconGlobe, IconMinus, IconPlus } from '../ui/icons'
 import { terrainRegistry } from './registry'
 import { type Tileset, inExtent, polarLatLon, polarXY } from './tileset'
 
@@ -221,20 +222,22 @@ function MapView({ tileset }: { tileset: Tileset }) {
         </p>
       </div>
       <div className="map-controls" role="group" aria-label="Map view">
-        <button type="button" onClick={() => zoom(0.6)} aria-label="Zoom in">
-          +
-        </button>
-        <button type="button" onClick={() => zoom(1 / 0.6)} aria-label="Zoom out">
-          −
-        </button>
-        <button type="button" onClick={() => set({ scale: 'globe' })} title="The whole Moon">
-          Globe
-        </button>
-        <button type="button" aria-pressed={view === '3d'} onClick={toggleView} title="Tilt (T)">
-          3D
-        </button>
+        <div className="tool-group">
+          <button type="button" onClick={() => zoom(0.6)} aria-label="Zoom in" title="Zoom in (+)">
+            <IconPlus />
+          </button>
+          <button type="button" onClick={() => zoom(1 / 0.6)} aria-label="Zoom out" title="Zoom out (−)">
+            <IconMinus />
+          </button>
+        </div>
         <button type="button" onClick={() => rig.reset()} aria-label="Whole pole" title="Whole pole (R)">
-          ◎
+          <IconFit />
+        </button>
+        <button type="button" aria-pressed={view === '3d'} onClick={toggleView} aria-label="3D tilt" title="3D tilt (T)">
+          <IconCube />
+        </button>
+        <button type="button" onClick={() => set({ scale: 'globe' })} aria-label="Globe" title="The whole Moon">
+          <IconGlobe />
         </button>
         <LayersControl tileset={tileset} exaggeration={exaggeration} onExaggeration={setExaggeration} craterError={showCraters ? craterError : null} />
       </div>

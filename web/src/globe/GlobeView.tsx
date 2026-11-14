@@ -4,6 +4,7 @@
  * Catalogue sites are buttons over the globe; the panels hold the same information as text.
  */
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { IconMinus, IconPlus, IconPole } from '../ui/icons'
 import { useQuery } from '@tanstack/react-query'
 import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
@@ -201,14 +202,16 @@ export function GlobeView() {
         </p>
       </div>
       <div className="map-controls" role="group" aria-label="Globe view">
-        <button type="button" onClick={() => orbit.zoom(0.6)} aria-label="Zoom in">
-          +
-        </button>
-        <button type="button" onClick={() => orbit.zoom(1 / 0.6)} aria-label="Zoom out">
-          −
-        </button>
-        <button type="button" onClick={() => enterMap()} title="Detailed south-polar map">
-          South pole map
+        <div className="tool-group">
+          <button type="button" onClick={() => orbit.zoom(0.6)} aria-label="Zoom in" title="Zoom in (+)">
+            <IconPlus />
+          </button>
+          <button type="button" onClick={() => orbit.zoom(1 / 0.6)} aria-label="Zoom out" title="Zoom out (−)">
+            <IconMinus />
+          </button>
+        </div>
+        <button type="button" onClick={() => enterMap()} aria-label="South pole map" title="Detailed south-polar map">
+          <IconPole />
         </button>
       </div>
       <p className="globe-caption">Global LOLA topography (relief ×{RELIEF_EXAGGERATION}) · lit by the Sun at the chosen time</p>

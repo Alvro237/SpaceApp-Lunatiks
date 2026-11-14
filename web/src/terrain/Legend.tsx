@@ -3,6 +3,7 @@
  * the value range, units and source of the active colour layer. Values are printed, never colour alone.
  */
 import { useEffect, useId, useRef, useState } from 'react'
+import { IconLayers } from '../ui/icons'
 import { type LayerId, useApp } from '../state/store'
 import { ApiStatus } from '../ui/ApiStatus'
 import { type ColormapId, gradientCss } from './colormaps'
@@ -55,8 +56,8 @@ export function LayersControl({ tileset, exaggeration, onExaggeration, craterErr
 
   return (
     <div className="layers" ref={ref}>
-      <button type="button" aria-expanded={open} aria-controls={`${id}-menu`} onClick={() => setOpen(!open)} title="Map layers">
-        Layers
+      <button type="button" aria-expanded={open} aria-controls={`${id}-menu`} onClick={() => setOpen(!open)} aria-label="Map layers" title="Map layers">
+        <IconLayers />
       </button>
       {open && (
         <div id={`${id}-menu`} className="layers-menu" role="group" aria-label="Map layers">

@@ -197,6 +197,44 @@ export interface PowerResponse {
   longest_dark_energy_wh: number | null
 }
 
+/** POST /api/v1/radiation (MECH, branch feat/mech-power): galactic cosmic rays from LRO CRaTER. */
+export interface RadiationRequest {
+  site_id?: string
+  lat?: number
+  lon?: number
+  start: string
+  duration_h: number
+  step_min?: number
+  mast_m?: number
+  quality_factor?: number
+}
+
+export interface DoseRange {
+  low: number
+  mean: number
+  high: number
+}
+
+export interface RadiationResponse {
+  site_id: string | null
+  lat: number
+  lon: number
+  horizon_kind: string
+  start: string
+  duration_h: number
+  basis: string
+  assumptions: string[]
+  sky_solid_angle_sr: number | null
+  sky_source: string
+  shielding_factor: number | null
+  mission_gcr_dose_mgy_si: DoseRange | null
+  mission_effective_dose_msv: DoseRange | null
+  career_limit_msv: number
+  fraction_of_career_limit: number | null
+  risk: { index: number; share_of_career_limit: number; index_with_worst_storm: number | null; worst_storm_msv: number | null; scale: string } | null
+  dataset: { name: string; url: string; first: string; last: string }
+}
+
 /** GET /api/v1/craters (AERO-1, requested by the frontend plan) */
 export interface Crater {
   lat: number

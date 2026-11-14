@@ -15,6 +15,8 @@ import type {
   Health,
   PowerRequest,
   PowerResponse,
+  RadiationRequest,
+  RadiationResponse,
   SiteDetail,
   SiteList,
   SiteSeries,
@@ -112,6 +114,7 @@ export const api = {
   searchCandidates: (body: CandidateSearchRequest) =>
     request<CandidateSearchResponse>('POST', '/api/v1/candidates/search', body),
   power: (body: PowerRequest) => request<PowerResponse>('POST', '/api/v1/power', body),
+  radiation: (body: RadiationRequest, signal?: AbortSignal) => request<RadiationResponse>('POST', '/api/v1/radiation', body, signal),
   craters: (bbox: [number, number, number, number], minDiamKm: number, signal?: AbortSignal) =>
     request<CraterList>('GET', `/api/v1/craters?${q({ bbox: bbox.join(','), min_diam_km: minDiamKm })}`, undefined, signal),
 }

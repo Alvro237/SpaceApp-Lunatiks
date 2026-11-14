@@ -46,6 +46,7 @@ export function SitePicker() {
 
   return (
     <div className="panel-section">
+      <h3 className="ios-header">Where</h3>
       {!fromApi && <ApiStatus error={error} what="Site catalogue" />}
       <label htmlFor={`${id}-q`} className="sr-only">
         Search sites
@@ -68,6 +69,11 @@ export function SitePicker() {
                           {fmtLat(s.lat)}, {fmtLon(s.lon)}
                           {!s.terrain_available && ' · no terrain'}
                         </span>
+                        {active && (
+                          <span className="site-check" aria-hidden="true">
+                            ✓
+                          </span>
+                        )}
                       </button>
                     </li>
                   )

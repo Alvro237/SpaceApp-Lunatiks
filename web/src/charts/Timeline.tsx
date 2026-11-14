@@ -2,9 +2,13 @@
  * Timeline of the analysis window: when the place is sunlit and when the Earth is in view, as time ranges
  * and as a fraction of the window (the two forms every time answer takes, CLAUDE.md), with playback controls.
  * Source: GET /sites/{id}/series when deployed and paused, otherwise the browser engine.
+ * When the Power section has computed a battery balance for this same scenario, the battery charge is drawn as
+ * a line on the same time axis, under the strip, with the playback cursor through both.
  */
-import { useId, useMemo } from 'react'
+import { type MouseEvent, useId, useMemo } from 'react'
 import { useApiSeries } from '../api/hooks'
+import type { PowerResponse } from '../api/types'
+import { useCurrentPowerResult } from '../state/power'
 import { useApp } from '../state/store'
 import { SPEEDS, type SpeedId, formatUtc, isoMinute } from '../time/clock'
 import { MS_PER_DAY, MS_PER_HOUR } from '../time/engine'
@@ -41,6 +45,8 @@ export function Timeline() {
   const params = useParams()
   const tMs = useThrottledTime()
   const { series: local } = useNow()
+  const powerResult = useCurrentPowerResult()
+  const battery = powerResult?.battery_soc ? powerResult : null
   const stepMin = Math.max(10, Math.ceil((durationH * 60) / 2000 / 10) * 10)
   const apiParams = useMemo(
     () => ({ start: isoMinute(startMs), duration_h: durationH, step_min: stepMin, mast_m: mastM, panel: params.panel, comms_min_fraction: params.commsMinFraction }),
@@ -89,6 +95,11 @@ export function Timeline() {
   }, [startMs, durationH])
 
   const slider = Math.min(Math.max(tMs, startMs), endMs)
+  const seek = (e: MouseEvent<SVGSVGElement>) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    const fx = ((e.clientX - r.left) / r.width) * (W + 76) - 70
+    if (fx >= 0 && fx <= W) setTime(startMs + (fx / W) * (endMs - startMs))
+  }
 
   return (
     <section className="timeline" aria-labelledby={`${id}-h`}>
@@ -145,11 +156,7 @@ export function Timeline() {
             viewBox={`-70 0 ${W + 76} ${H}`}
             role="img"
             aria-label={`Sunlit ${data.sunlightPct.toFixed(1)}% and Earth in view ${data.commsPct.toFixed(1)}% of the window, longest dark ${data.longestDarkH.toFixed(1)} h, longest without Earth ${data.longestBlackoutH.toFixed(1)} h.`}
-            onClick={(e) => {
-              const r = (e.currentTarget as SVGSVGElement).getBoundingClientRect()
-              const fx = ((e.clientX - r.left) / r.width) * (W + 76) - 70
-              if (fx >= 0 && fx <= W) setTime(startMs + (fx / W) * (endMs - startMs))
-            }}
+            onClick={seek}
           >
             <defs>
               <pattern id={`${id}-hatch`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
@@ -181,6 +188,7 @@ export function Timeline() {
             ))}
             {tMs >= startMs && tMs <= endMs && <line className="cursor" x1={x(tMs)} x2={x(tMs)} y1={-2} y2={ROW * 2 + 6} />}
           </svg>
+          {battery && <BatteryChart r={battery} startMs={startMs} endMs={endMs} tMs={tMs} x={x} onSeek={seek} />}
           <dl className="metrics">
             <div>
               <dt>Sunlit</dt>
@@ -198,6 +206,12 @@ export function Timeline() {
               <dt>Longest without Earth</dt>
               <dd>{data.longestBlackoutH.toFixed(1)} h</dd>
             </div>
+            {battery && (
+              <div className="metrics-battery">
+                <dt>Battery now</dt>
+                <dd>{socAt(battery, tMs)}</dd>
+              </div>
+            )}
             <div className="metrics-source">
               <dt className="sr-only">Source</dt>
               <dd>
@@ -214,8 +228,113 @@ export function Timeline() {
               ...data.comms.map(([a, b]) => ['Earth in view', formatUtc(a), formatUtc(b), ((b - a) / MS_PER_HOUR).toFixed(1)]),
             ]}
           />
+          {battery && <BatteryTable r={battery} />}
         </>
       )}
     </section>
   )
+}
+
+const BH = 64
+const socPct = (v: number) => `${(v * 100).toFixed(0)} %`
+
+/** Battery charge at the instant nearest to tMs (the API's own samples, no interpolation). */
+function socAt(r: PowerResponse, tMs: number): string {
+  const soc = r.battery_soc
+  if (!soc || soc.length === 0) return '—'
+  const t0 = Date.parse(r.t[0])
+  const step = r.step_min * 60_000
+  const i = Math.min(soc.length - 1, Math.max(0, Math.round((tMs - t0) / step)))
+  return socPct(soc[i])
+}
+
+/**
+ * Battery state of charge from POST /api/v1/power (level 3), on the timeline's time axis. Empty ranges from the
+ * API are marked with a hatch and a word, never colour alone; the table below holds the same series as text.
+ */
+function BatteryChart({
+  r,
+  startMs,
+  endMs,
+  tMs,
+  x,
+  onSeek,
+}: {
+  r: PowerResponse
+  startMs: number
+  endMs: number
+  tMs: number
+  x: (t: number) => number
+  onSeek: (e: MouseEvent<SVGSVGElement>) => void
+}) {
+  const id = useId()
+  const pts = useMemo(() => {
+    const soc = r.battery_soc ?? []
+    const out: string[] = []
+    r.t.forEach((iso, i) => {
+      const t = Date.parse(iso)
+      if (t < startMs || t > endMs || soc[i] === undefined) return
+      out.push(`${x(t).toFixed(1)},${(BH - soc[i] * BH).toFixed(1)}`)
+    })
+    return out
+  }, [r.t, r.battery_soc, startMs, endMs, x])
+  if (pts.length < 2) return null
+  const area = `M${pts[0].split(',')[0]},${BH} L${pts.join(' L')} L${pts[pts.length - 1].split(',')[0]},${BH} Z`
+  const depleted = (r.depleted_ranges ?? []).map((q) => [Date.parse(q.start), Date.parse(q.end)] as const)
+  const minY = r.min_soc === null ? null : BH - r.min_soc * BH
+  const label = `Battery charge over the window: lowest ${r.min_soc === null ? 'unknown' : socPct(r.min_soc)}, at the end ${
+    r.final_soc === null ? 'unknown' : socPct(r.final_soc)
+  }. ${r.survives ? 'The load is served for the whole window.' : `The battery runs out${r.first_depletion_at ? ` on ${formatUtc(Date.parse(r.first_depletion_at))}` : ''}.`}`
+
+  return (
+    <svg className="battery-chart" viewBox={`-70 -6 ${W + 76} ${BH + 14}`} role="img" aria-label={label} onClick={onSeek}>
+      <defs>
+        <pattern id={`${id}-dep`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+          <line x1="0" y1="0" x2="0" y2="6" className="dep-line" />
+        </pattern>
+      </defs>
+      <text x={-8} y={BH / 2 - 4} textAnchor="end" className="row-label">
+        Battery
+      </text>
+      <text x={-8} y={BH / 2 + 10} textAnchor="end" className="axis-label">
+        charge
+      </text>
+      <rect x={0} y={0} width={W} height={BH} className="row-bg" />
+      {[0, 0.5, 1].map((v) => (
+        <g key={v} className="bgrid">
+          <line x1={0} x2={W} y1={BH - v * BH} y2={BH - v * BH} />
+          <text x={W + 4} y={BH - v * BH + 4} className="axis-label">
+            {v * 100}%
+          </text>
+        </g>
+      ))}
+      {depleted.map(([a, b], i) => (
+        <rect key={i} x={x(a)} y={0} width={Math.max(2, x(b) - x(a))} height={BH} fill={`url(#${id}-dep)`} className="dep-range" />
+      ))}
+      <path d={area} className="battery-area" />
+      <polyline points={pts.join(' ')} className="battery-line" />
+      {minY !== null && (
+        <line x1={0} x2={W} y1={minY} y2={minY} className="battery-min">
+          <title>Lowest charge {socPct(r.min_soc ?? 0)}</title>
+        </line>
+      )}
+      {depleted.length > 0 && (
+        <text x={x(depleted[0][0]) + 4} y={12} className="dep-text">
+          empty
+        </text>
+      )}
+      {tMs >= startMs && tMs <= endMs && <line className="cursor" x1={x(tMs)} x2={x(tMs)} y1={-4} y2={BH + 2} />}
+    </svg>
+  )
+}
+
+/** The battery series as text: at most ~48 rows, evenly spaced, plus the lowest point. */
+function BatteryTable({ r }: { r: PowerResponse }) {
+  const soc = r.battery_soc ?? []
+  const every = Math.max(1, Math.ceil(soc.length / 48))
+  const rows: string[][] = []
+  for (let i = 0; i < soc.length; i += every) {
+    rows.push([formatUtc(Date.parse(r.t[i])), socPct(soc[i]), r.power_w ? `${r.power_w[i].toFixed(1)} W` : '—', r.net_power_w ? `${r.net_power_w[i].toFixed(1)} W` : '—'])
+  }
+  return <DataTable summary="Battery table" caption="Battery charge, array power and net power over the window (UTC)" head={['Time', 'Charge', 'Array', 'Net']} rows={rows} />
 }
