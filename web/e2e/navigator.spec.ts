@@ -4,9 +4,33 @@ import { expect, test } from '@playwright/test'
 const WCAG = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']
 
 async function mapStats(page: import('@playwright/test').Page) {
+  await page.getByRole('button', { name: 'South pole map' }).click()
   await expect(page.locator('.map-stats')).toContainText('tiles drawn', { timeout: 20_000 })
   return page.locator('.map-stats').textContent()
 }
+
+test('the globe turns with the mouse and a click on the polar cap opens the map there', async ({ page }) => {
+  const errors: string[] = []
+  page.on('console', (m) => m.type() === 'error' && /shader|WebGL|THREE/i.test(m.text()) && errors.push(m.text()))
+  await page.goto('./')
+  const globe = page.getByRole('application', { name: 'The Moon' })
+  await expect(globe).toBeVisible()
+  await page.waitForTimeout(5000)
+  await page.screenshot({ path: 'test-results/globe.png' })
+  const box = (await globe.boundingBox())!
+  await page.mouse.move(box.x + 700, box.y + 450)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 760, box.y + 430, { steps: 5 })
+  await page.mouse.up()
+  await page.mouse.move(box.x + 760, box.y + 430)
+  await page.mouse.down()
+  await page.mouse.move(box.x + 700, box.y + 450, { steps: 5 })
+  await page.mouse.up()
+  await page.waitForTimeout(800)
+  await page.mouse.click(720, 580) // inside the 60° S outline in the first view
+  await expect(page.getByRole('application', { name: 'South polar terrain map' })).toBeVisible({ timeout: 15_000 })
+  expect(errors).toEqual([])
+})
 
 test('the terrain renders with WebGL and the Sun and Earth panel is filled', async ({ page }) => {
   const errors: string[] = []
@@ -73,8 +97,9 @@ test('colour layers show their legend with values', async ({ page }) => {
 for (const scheme of ['dark', 'light'] as const) {
   test(`axe in a real browser, ${scheme} scheme, including colour contrast`, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme })
-    for (const path of ['./', './#/data', './#/learn']) {
-      await page.goto(path)
+    for (const path of ['./', 'map', './#/data', './#/learn']) {
+      if (path === 'map') await page.getByRole('button', { name: 'South pole map' }).click()
+      else await page.goto(path)
       await page.waitForTimeout(2500)
       const r = await new AxeBuilder({ page }).withTags(WCAG).analyze()
       expect(r.violations.map((v) => `${path} ${v.id}: ${v.nodes.slice(0, 3).map((n) => n.target.join(' ')).join(', ')}`)).toEqual([])

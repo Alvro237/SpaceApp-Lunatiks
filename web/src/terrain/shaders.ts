@@ -104,8 +104,8 @@ void main() {
     }
   }
   float light;
-  // Shadowed ground keeps 12 % of the relief shading so its shape stays readable (stated in the legend).
-  if (uLighting > 0.5) light = coloured ? 0.32 + 0.68 * sunLight : 0.12 * relief + 0.88 * sunLight;
+  // Shadowed ground keeps a third of the relief shading so its shape stays readable.
+  if (uLighting > 0.5) light = coloured ? 0.32 + 0.68 * sunLight : 0.34 * relief + 0.66 * sunLight;
   else light = coloured ? 0.55 + 0.45 * relief : relief;
   vec3 colour = base * light;
 

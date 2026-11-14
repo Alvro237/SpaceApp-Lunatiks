@@ -44,6 +44,7 @@ export function encodeScene(s: Scene): string {
     JSON.stringify({
       v: VERSION,
       m: s.mode,
+      sc: s.scale,
       w: s.view,
       p: packSel(s.selection),
       t: s.tMs,
@@ -83,6 +84,7 @@ export function decodeScene(param: string | null, fallback: Scene = defaultScene
     ok: true,
     scene: {
       mode: raw.m === 'mission' ? 'mission' : 'study',
+      scale: raw.sc === 'map' ? 'map' : 'globe',
       view: raw.w === '3d' ? '3d' : '2d',
       selection: sel,
       tMs: raw.t,

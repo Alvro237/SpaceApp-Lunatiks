@@ -11,6 +11,8 @@ export type Selection = { kind: 'site'; id: string } | { kind: 'point'; lat: num
 
 export type Mode = 'study' | 'mission'
 export type ViewMode = '2d' | '3d'
+/** The whole Moon as a globe, or the polar DEM map. */
+export type Scale = 'globe' | 'map'
 export type LayerId = 'none' | 'elevation' | 'slope' | 'sun_illumination' | 'earth_visibility' | 'permanent_shadow'
 export type Lighting = 'sun' | 'relief'
 
@@ -20,6 +22,7 @@ export const MAX_COMPARE = 4
 
 export interface Scene {
   mode: Mode
+  scale: Scale
   view: ViewMode
   selection: Selection
   /** Active instant, Unix ms (UTC). */
@@ -41,6 +44,9 @@ export interface Scene {
 export interface AppState extends Scene {
   /** While on, every place the user picks is also added to the comparison. */
   compareMode: boolean
+  /** Where the map should open when entered from the globe (a navigation target, not a selection). */
+  mapEntry: { lat: number; lon: number; seq: number } | null
+  enterMap: (lat?: number, lon?: number) => void
   playing: boolean
   speed: SpeedId
   /** Map viewport request: bumped when the user picks a place so the camera flies there. */
@@ -63,6 +69,7 @@ const nowHour = () => Math.floor(Date.now() / MS_PER_HOUR) * MS_PER_HOUR
 export function defaultScene(now = nowHour()): Scene {
   return {
     mode: 'study',
+    scale: 'globe',
     view: '2d',
     selection: { kind: 'site', id: 'im-2' },
     tMs: now,
@@ -89,6 +96,12 @@ export const useApp = create<AppState>()((set, get) => ({
   speed: '6h',
   focusSeq: 0,
   compareMode: false,
+  mapEntry: null,
+  enterMap: (lat, lon) =>
+    set((s) => ({
+      scale: 'map',
+      mapEntry: lat === undefined || lon === undefined ? null : { lat, lon, seq: (s.mapEntry?.seq ?? 0) + 1 },
+    })),
   set: (patch) => set(patch),
   select: (selection) => {
     set((s) => ({ selection, focusSeq: s.focusSeq + 1 }))
@@ -120,6 +133,6 @@ export const useApp = create<AppState>()((set, get) => ({
 
 /** The part of the state that defines a shareable scenario. */
 export function sceneOf(s: AppState): Scene {
-  const { mode, view, selection, tMs, startMs, durationH, mastM, panel, commsMinFraction, layer, lighting, craters, compare } = s
-  return { mode, view, selection, tMs, startMs, durationH, mastM, panel, commsMinFraction, layer, lighting, craters, compare }
+  const { mode, scale, view, selection, tMs, startMs, durationH, mastM, panel, commsMinFraction, layer, lighting, craters, compare } = s
+  return { mode, scale, view, selection, tMs, startMs, durationH, mastM, panel, commsMinFraction, layer, lighting, craters, compare }
 }

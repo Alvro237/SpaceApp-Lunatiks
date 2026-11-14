@@ -31,6 +31,13 @@ export class CameraRig {
 
   private readonly discKm: number
   private fitted = false
+  /** A fly-to requested before the first fit (entering from the globe); applied after it. */
+  private pending: Partial<View> | null = null
+
+  /** Distance of the whole-pole view. */
+  get homeDist(): number {
+    return this.home.dist
+  }
 
   constructor(ts: Tileset) {
     const half = (ts.extentM[2] - ts.extentM[0]) / 2000
@@ -51,7 +58,8 @@ export class CameraRig {
     if (!this.fitted) {
       this.fitted = true
       Object.assign(this.now, this.home)
-      Object.assign(this.goal, this.home)
+      Object.assign(this.goal, this.home, this.pending ?? {})
+      this.pending = null
     }
   }
 
@@ -72,7 +80,7 @@ export class CameraRig {
   }
 
   zoom(factor: number): void {
-    this.goal.dist = THREE.MathUtils.clamp(this.goal.dist * factor, 2, 3000)
+    this.goal.dist = THREE.MathUtils.clamp(this.goal.dist * factor, 2, this.home.dist * 2.2)
   }
 
   rotate(dHeading: number, dTilt = 0, immediate = false): void {
@@ -97,6 +105,7 @@ export class CameraRig {
     this.goal.tx = x / 1000
     this.goal.tz = -y / 1000
     this.goal.dist = Math.min(this.goal.dist, maxDistKm)
+    if (!this.fitted) this.pending = { tx: this.goal.tx, tz: this.goal.tz, dist: maxDistKm }
   }
 
   setPicker(fn: (cx: number, cy: number) => [number, number] | null): void {

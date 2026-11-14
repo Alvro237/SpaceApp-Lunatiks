@@ -196,7 +196,8 @@ details.section > summary { font-weight: 700; color: var(--text); padding: 4px 0
 .site-marker.is-selected .site-dot:empty::after { width: 14px; height: 14px; background: #fff; border-color: #00b8e6; }
 .site-marker.is-compared .site-dot { background: #ffd166; border: 2px solid #001018; }
 .site-marker.is-compared.is-selected .site-dot { outline: 2px solid #fff; }
-.site-label { background: rgba(0, 0, 0, 0.78); color: #fff; padding: 1px 6px; border-radius: 4px; font-size: 0.78rem; white-space: nowrap; }
+.site-marker { width: 24px; height: 24px; }
+.site-label { position: absolute; left: 30px; top: 2px; pointer-events: none; background: rgba(0, 0, 0, 0.78); color: #fff; padding: 1px 6px; border-radius: 4px; font-size: 0.78rem; white-space: nowrap; }
 .site-marker[data-labels='off'] .site-label { display: none; }
 .site-marker:hover .site-label, .site-marker:focus-visible .site-label { display: inline; }
 .map-controls { position: absolute; z-index: 21; top: calc(var(--inset-top) + 10px); right: calc(var(--inset-right) + 10px); display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
@@ -216,6 +217,12 @@ details.section > summary { font-weight: 700; color: var(--text); padding: 4px 0
 }
 .legend-chip figcaption { font-size: 0.78rem; margin-bottom: 4px; }
 .map-stats { position: absolute; z-index: 21; left: 50%; transform: translateX(-50%); top: calc(var(--inset-top) + 6px); margin: 0; font-size: 0.7rem; color: #e8ecf3; background: rgba(0, 0, 0, 0.6); padding: 1px 6px; border-radius: 4px; pointer-events: none; }
+
+.globe-view { background: radial-gradient(circle at 50% 50%, #0b0f18 0%, #000 70%); }
+.globe-caption {
+  position: absolute; z-index: 21; margin: 0; left: calc(var(--inset-left) + 10px); bottom: calc(var(--inset-bottom) + 10px);
+  font-size: 0.75rem; color: #c9d1de; background: rgba(0, 0, 0, 0.55); padding: 2px 8px; border-radius: 6px;
+}
 
 /* Legend scale */
 .scale-bar { height: 10px; border-radius: 3px; border: 1px solid var(--border); }

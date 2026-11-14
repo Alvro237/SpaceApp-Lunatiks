@@ -20,6 +20,8 @@ import { type Exaggeration, LayersControl, LegendChip } from './Legend'
 import { terrainRegistry } from './registry'
 import { type Tileset, inExtent, polarLatLon, polarXY } from './tileset'
 
+/** 24 px targets need about 34 px between centres so that no corner enters a neighbour's 24 px circle (WCAG 2.5.8). */
+const MIN_MARKER_GAP_PX = 34
 const TILES_BASE = `${import.meta.env.BASE_URL}tiles/`
 
 async function loadTileset(): Promise<Tileset> {
@@ -97,6 +99,12 @@ function MapView({ tileset }: { tileset: Tileset }) {
 
   useEffect(() => rig.setTilt(view === '3d' ? TILT_3D : 0), [rig, view])
 
+  // Zooming out past the whole pole goes back to the globe.
+  const zoom = (factor: number) => {
+    rig.zoom(factor)
+    if (factor > 1 && rig.goal.dist > rig.homeDist * 1.6) set({ scale: 'globe' })
+  }
+
   const toggleView = () => set({ view: view === '3d' ? '2d' : '3d' })
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -108,9 +116,9 @@ function MapView({ tileset }: { tileset: Tileset }) {
       ArrowRight: () => rig.pan(-step, 0, h),
       ArrowUp: () => rig.pan(0, step, h),
       ArrowDown: () => rig.pan(0, -step, h),
-      '+': () => rig.zoom(0.7),
-      '=': () => rig.zoom(0.7),
-      '-': () => rig.zoom(1 / 0.7),
+      '+': () => zoom(0.7),
+      '=': () => zoom(0.7),
+      '-': () => zoom(1 / 0.7),
       t: toggleView,
       T: toggleView,
       q: () => rig.rotate(-Math.PI / 12),
@@ -149,7 +157,7 @@ function MapView({ tileset }: { tileset: Tileset }) {
     const ll = rig.pick((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height)
     if (ll) select({ kind: 'point', lat: Math.round(ll[0] * 1e4) / 1e4, lon: Math.round(ll[1] * 1e4) / 1e4 })
   }
-  const onWheel = (e: WheelEvent<HTMLDivElement>) => rig.zoom(Math.exp(e.deltaY * 0.0012))
+  const onWheel = (e: WheelEvent<HTMLDivElement>) => zoom(Math.exp(e.deltaY * 0.0012))
 
   return (
     <>
@@ -195,7 +203,7 @@ function MapView({ tileset }: { tileset: Tileset }) {
                 aria-pressed={current}
                 aria-label={n >= 0 ? `${m.name}, compared as number ${n + 1}` : m.name}
                 onClick={() => select(m.sel)}
-                style={{ visibility: 'hidden' }}
+                style={{ display: 'none' }}
               >
                 <span className="site-dot" aria-hidden="true">
                   {n >= 0 ? n + 1 : ''}
@@ -213,11 +221,14 @@ function MapView({ tileset }: { tileset: Tileset }) {
         </p>
       </div>
       <div className="map-controls" role="group" aria-label="Map view">
-        <button type="button" onClick={() => rig.zoom(0.6)} aria-label="Zoom in">
+        <button type="button" onClick={() => zoom(0.6)} aria-label="Zoom in">
           +
         </button>
-        <button type="button" onClick={() => rig.zoom(1 / 0.6)} aria-label="Zoom out">
+        <button type="button" onClick={() => zoom(1 / 0.6)} aria-label="Zoom out">
           −
+        </button>
+        <button type="button" onClick={() => set({ scale: 'globe' })} title="The whole Moon">
+          Globe
         </button>
         <button type="button" aria-pressed={view === '3d'} onClick={toggleView} title="Tilt (T)">
           3D
@@ -309,6 +320,19 @@ function Driver({ tileset, rig, markers, markerEls, exaggeration, onStats, crate
     return useApp.subscribe(fly)
   }, [markers, rig, tileset])
 
+  // Open where the user clicked on the globe (a navigation target; the selection does not change).
+  useEffect(() => {
+    let seq = -1
+    const go = () => {
+      const e = useApp.getState().mapEntry
+      if (!e || e.seq === seq) return
+      seq = e.seq
+      if (inExtent(tileset, e.lat, e.lon)) rig.flyTo(e.lat, e.lon, 450)
+    }
+    go()
+    return useApp.subscribe(go)
+  }, [rig, tileset])
+
   // Screen point → lat/lon: intersect the plane at the terrain height under the hit, refined twice.
   useEffect(() => {
     rig.setPicker((cx, cy) => {
@@ -355,7 +379,7 @@ function Driver({ tileset, rig, markers, markerEls, exaggeration, onStats, crate
     }
     engine.setHighlight(at?.[0] ?? 0, at?.[1] ?? 0, at ? Math.max(1200, rig.now.dist * 14) : 0)
 
-    // Marker buttons over the canvas. Markers closer than 26 px to one already placed are hidden (the selected and
+    // Marker buttons over the canvas. Markers closer than 34 px to one already placed are hidden (the selected and
     // compared ones are placed first): no overlapping targets, and the list still reaches every site.
     const showLabels = rig.now.dist < 450
     const placed: [number, number][] = []
@@ -368,10 +392,10 @@ function Driver({ tileset, rig, markers, markerEls, exaggeration, onStats, crate
       const sx = ((v.x + 1) / 2) * size.width
       const sy = ((1 - v.y) / 2) * size.height
       const onScreen = v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05
-      const crowded = placed.some(([px, py]) => Math.hypot(px - sx, py - sy) < 26)
+      const crowded = placed.some(([px, py]) => Math.hypot(px - sx, py - sy) < MIN_MARKER_GAP_PX)
       const visible = onScreen && !crowded
       if (visible) placed.push([sx, sy])
-      el.style.visibility = visible ? 'visible' : 'hidden'
+      el.style.display = visible ? '' : 'none'
       el.style.transform = `translate(${sx}px, ${sy}px)`
       el.dataset.labels = showLabels || priority(el) > 0 ? 'on' : 'off'
     }

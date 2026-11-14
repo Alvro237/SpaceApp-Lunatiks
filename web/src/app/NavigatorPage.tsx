@@ -14,6 +14,7 @@ import { WhenPanel } from '../panels/WhenPanel'
 import { useInsets } from '../state/layout'
 import { useApp } from '../state/store'
 import { useUrlSync } from '../state/useUrlSync'
+import { GlobeView } from '../globe/GlobeView'
 import { TerrainView } from '../terrain/TerrainView'
 import { useClock } from '../time/useClock'
 
@@ -24,6 +25,7 @@ export function NavigatorPage() {
   useClock()
   const mode = useApp((s) => s.mode)
   const compareMode = useApp((s) => s.compareMode)
+  const scale = useApp((s) => s.scale)
   const root = useRef<HTMLDivElement>(null)
   useMeasureInsets(root)
 
@@ -31,7 +33,7 @@ export function NavigatorPage() {
     <NowProvider>
       <div className="navigator" ref={root}>
         <h1 className="sr-only">Lunar Landing Site Navigator</h1>
-        <TerrainView />
+        {scale === 'globe' ? <GlobeView /> : <TerrainView />}
         {restoredFromCorruptLink && (
           <p className="toast" role="alert">
             The shared link could not be read; the default scenario is shown.

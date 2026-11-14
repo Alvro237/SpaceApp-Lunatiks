@@ -16,6 +16,7 @@ import { defaultScene, useApp } from '../state/store'
 import { colorAt, luminance, textOn } from '../terrain/colormaps'
 
 vi.mock('../terrain/TerrainView', () => ({ TerrainView: () => <div role="img" aria-label="Map (test stub)" /> }))
+vi.mock('../globe/GlobeView', () => ({ GlobeView: () => <div role="img" aria-label="Globe (test stub)" /> }))
 
 const ROOT = resolve(__dirname, '../../..')
 const sitesDoc = JSON.parse(readFileSync(resolve(ROOT, 'data/sites.json'), 'utf8')) as {
@@ -102,6 +103,14 @@ describe('navigator', () => {
     expect(screen.getByRole('img', { name: /Sunlit .*% and Earth in view/ })).toBeInTheDocument()
     expect(screen.getByRole('img', { name: /360° horizon with the Sun and the Earth/ })).toBeInTheDocument()
     await noAxeViolations(container)
+  })
+
+  it('opens on the globe; the map replaces it when entered', async () => {
+    renderAt('/')
+    expect(await screen.findByRole('img', { name: 'Globe (test stub)' })).toBeInTheDocument()
+    useApp.getState().enterMap(-85, 30)
+    expect(await screen.findByRole('img', { name: 'Map (test stub)' })).toBeInTheDocument()
+    expect(useApp.getState().mapEntry).toMatchObject({ lat: -85, lon: 30 })
   })
 
   it('selects another site from the list with the keyboard', async () => {
