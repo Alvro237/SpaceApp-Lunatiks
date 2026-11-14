@@ -5,15 +5,48 @@ import { describe, expect, it } from 'vitest'
 import type { Tileset } from '../tileset'
 import { children, keyOf, parseKey } from '../tileset'
 import { BLOCK_BYTES, MemoryBlockStore, bytesToFree, pickVictims } from './blockStore'
-import { DEM_10M, DEM_20M, LIVE_LEVELS, LIVE_RANGE_PAD_M, insideSource, liveConfigFromEnv, withLiveLevels } from './config'
+import {
+  DEM_10M,
+  DEM_20M,
+  LIVE_LEVELS,
+  LIVE_RANGE_PAD_M,
+  type LiveSource,
+  TREK_100M,
+  TREK_30M,
+  TREK_5M,
+  insideSource,
+  liveConfigFromEnv,
+  trekTileUrl,
+  withLiveLevels,
+} from './config'
 import { CachedRangeClient, parseContentRange, parseRange } from './rangeClient'
 import { type DemGrid, type TileGeometry, sampleTile, windowFor } from './sample'
+import { decodeTrekTile, readTrekTile } from './trek'
 
 const H = 983_040
 
+/** Like the real build: z0-z3 everywhere, z4-z7 as the four children of every tile meeting the 80 m DEM square. */
 function staticTileset(): Tileset {
   const tiles: Record<string, [number, number]> = {}
-  for (let x = 0; x < 128; x++) for (let y = 0; y < 128; y++) tiles[`7/${x}/${y}`] = [0, 100]
+  const meets = (z: number, x: number, y: number) => {
+    const size = (2 * H) / 2 ** z
+    const x0 = -H + x * size
+    const y1 = H - y * size
+    return x0 < 304_000 && x0 + size > -304_000 && y1 > -304_000 && y1 - size < 304_000
+  }
+  for (let z = 0; z <= 3; z++) for (let x = 0; x < 2 ** z; x++) for (let y = 0; y < 2 ** z; y++) tiles[`${z}/${x}/${y}`] = [0, 100]
+  let parents = Object.keys(tiles).filter((k) => k.startsWith('3/')).map(parseKey)
+  for (let z = 4; z <= 7; z++) {
+    const next = []
+    for (const p of parents) {
+      if (!meets(p.z, p.x, p.y)) continue
+      for (const c of children(p)) {
+        tiles[keyOf(c)] = [0, 100]
+        next.push(c)
+      }
+    }
+    parents = next
+  }
   return {
     format: 1,
     kind: 'preview',
@@ -47,37 +80,48 @@ function rangeServer(bytes: Uint8Array, opts: { truncateFirst?: boolean; ignoreR
 }
 
 describe('live levels: which tiles exist', () => {
-  it('adds z8 from the 20 m DEM and z9-z10 from the 10 m DEM, four children per parent', () => {
+  it('adds live tiles wherever the static ones stop, finest source first, four children per parent', () => {
     const ts = staticTileset()
+    expect(Object.keys(ts.height.tiles).filter((k) => k.startsWith('4/'))).toHaveLength(64)
     const { tileset, live } = withLiveLevels(ts, { proxyBase: '/pgda/', levels: LIVE_LEVELS })
-    expect(tileset.levels.map((l) => l.cellM)).toEqual([7680, 3840, 1920, 960, 480, 240, 120, 60, 30, 15, 7.5])
-    const count = (z: number) => [...live.keys()].filter((k) => k.startsWith(`${z}/`)).length
-    // hand count: z7 parents inside +-(304 000 - 40) m: indices 45..82 per axis (38), so 38^2 x 4 = 5776 tiles;
-    // z8 parents inside +-(216 400 - 20) m: indices 100..155 (56), so 56^2 x 4 = 12 544; z10 = 4 x 12 544
-    expect(count(8)).toBe(5776)
-    expect(count(9)).toBe(12_544)
-    expect(count(10)).toBe(50_176)
+    expect(tileset.levels.map((l) => l.cellM)).toEqual([7680, 3840, 1920, 960, 480, 240, 120, 60, 30, 15, 7.5, 3.75])
+    const count = (z: number, src?: LiveSource) =>
+      [...live].filter(([k, s]) => k.startsWith(`${z}/`) && (!src || s === src)).length
+    // hand counts: z4 = the 48 z3 tiles without static children x 4 (Moon Trek 100 m covers the whole map);
+    // z9 = z8 parents inside +-(216 400 - 20) m, indices 100..155 (56 per axis), x 4 = 12 544, and z10 = 4 x z9;
+    // z11 = z10 parents inside +-(75 840 - 10) m, indices 473..550 (78 per axis), x 4 = 24 336
+    expect(count(4, TREK_100M)).toBe(192)
+    expect(count(9, DEM_10M)).toBe(12_544)
+    expect(count(10, DEM_10M)).toBe(50_176)
+    expect(count(11, TREK_5M)).toBe(24_336)
+    // z8 inside the 20 m square comes from PGDA (38^2 static z7 parents x 4, as before), the ring from Trek 30 m
+    expect(count(8, DEM_20M)).toBe(5776)
+    expect(count(8, TREK_30M)).toBeGreaterThan(0)
+    expect(count(7)).toBe(count(7, TREK_30M))
+    // brute force: every listed tile has its three siblings, lies inside its source, and no live tile is static
+    const bad: string[] = []
     for (const [k, src] of live) {
       const t = parseKey(k)
-      expect(insideSource(ts, t, src)).toBe(true)
-      expect(src).toBe(t.z === 8 ? DEM_20M : DEM_10M)
-    }
-    // every live tile's siblings exist too (the quadtree refines only into complete sets of four)
-    for (const k of live.keys()) {
-      const t = parseKey(k)
       const p = { z: t.z - 1, x: t.x >> 1, y: t.y >> 1 }
-      for (const c of children(p)) expect(keyOf(c) in tileset.height.tiles).toBe(true)
+      if (k in ts.height.tiles || !insideSource(ts, p, src) || !children(p).every((c) => keyOf(c) in tileset.height.tiles)) bad.push(k)
     }
+    expect(bad).toEqual([])
     expect(tileset.height.tiles['8/90/90']).toEqual([-LIVE_RANGE_PAD_M, 100 + LIVE_RANGE_PAD_M])
     // the input is not modified
     expect(ts.levels).toHaveLength(8)
-    expect(Object.keys(ts.height.tiles)).toHaveLength(128 * 128)
+  }, 30_000)
+
+  it('keeps Moon Trek without a proxy and drops the PGDA sources', () => {
+    const cfg = liveConfigFromEnv({ DEV: false })!
+    expect(cfg.proxyBase).toBeNull()
+    const { live } = withLiveLevels(staticTileset(), cfg)
+    expect([...live.values()].every((s) => s.kind === 'trek')).toBe(true)
+    expect([...live.keys()].some((k) => k.startsWith('9/'))).toBe(false) // z9-z10 need the PGDA 10 m DEM
   })
 
   it('is off without a proxy in production and on in development', () => {
     const ts = staticTileset()
     expect(withLiveLevels(ts, null).tileset).toBe(ts)
-    expect(liveConfigFromEnv({ DEV: false })).toBeNull()
     expect(liveConfigFromEnv({ DEV: true })?.proxyBase).toBe('/pgda/')
     expect(liveConfigFromEnv({ DEV: true, VITE_PGDA_PROXY: 'off' })).toBeNull()
     expect(liveConfigFromEnv({ DEV: false, VITE_PGDA_PROXY: 'https://p.example.workers.dev' })?.proxyBase).toBe('https://p.example.workers.dev/')
@@ -228,5 +272,49 @@ describe('live levels: a real Cloud Optimized GeoTIFF through geotiff.js', () =>
     expect(s.noData).toBe(0)
     expect(s.heights[0]).toBeCloseTo(1000 + 0.5 * 165.5 - 0.25 * 165.5, 3)
     expect(store.blocks.size).toBeGreaterThan(0)
+  })
+})
+
+describe('live levels: Moon Trek ImageServer tiles', () => {
+  // fixture: a real exportImage answer of LRO_LOLA_DEM_SPole875_5mp_v04, 17 x 17 samples of 5 m centred 2 m from
+  // the catalogue's Shackleton point (x 7690, y -6402.7 m), fetched 2026-11-14
+  const g: TileGeometry = { i0: 198_138, j0: 197_881, extentX0: -H, extentY1: H, cellM: 5, samples: 17 }
+  const bytes = () => new Uint8Array(readFileSync(new URL('./__fixtures__/trek_shackleton_17.tif', import.meta.url))).buffer
+
+  it('builds the exportImage box so pixel centres fall on the vertices', () => {
+    const ts = staticTileset()
+    const { tileset } = withLiveLevels(ts, { proxyBase: null, levels: LIVE_LEVELS })
+    const url = trekTileUrl(TREK_5M, tileset, { z: 11, x: 1024, y: 1024 })
+    // tile 11/1024/1024 spans x 0..960 m, y -960..0 m; cell 3.75 m, so the box is widened by 1.875 m
+    expect(url).toContain('LRO_LOLA_DEM_SPole875_5mp_v04/ImageServer/exportImage?bbox=-1.875,-961.875,961.875,1.875&size=257,257')
+    expect(url).toContain('pixelType=F32')
+  })
+
+  it('decodes a real tile: heights in metres matching the catalogue at Shackleton', async () => {
+    const t = await decodeTrekTile(bytes(), g)
+    expect(t.heights).toHaveLength(17 * 17)
+    // vertex (8, 8) sits at x 7690, y -6405 m; the catalogue gives -2788.7 m 2.3 m away; the 5 m DEM differs from
+    // the catalogue by at most 0.86 m at the sites it covers
+    expect(Math.abs(t.heights[8 * 17 + 8] - -2788.7)).toBeLessThan(3)
+    expect(t.min).toBeLessThanOrEqual(t.max)
+  })
+
+  it('refuses a tile whose georeference does not match', async () => {
+    await expect(decodeTrekTile(bytes(), { ...g, i0: g.i0 + 1 })).rejects.toThrow(/georeference/)
+    await expect(decodeTrekTile(bytes(), { ...g, samples: 257 })).rejects.toThrow(/expected 257/)
+  })
+
+  it('caches the answer and retries a failed request', async () => {
+    let calls = 0
+    const fetchFn = async () => {
+      calls++
+      return calls === 1 ? new Response('busy', { status: 503 }) : new Response(bytes(), { status: 200 })
+    }
+    const store = new MemoryBlockStore()
+    await readTrekTile('https://trek.example/t', g, store, fetchFn)
+    expect(calls).toBe(2)
+    await readTrekTile('https://trek.example/t', g, store, fetchFn)
+    expect(calls).toBe(2)
+    expect(store.blocks.has('trek|https://trek.example/t')).toBe(true)
   })
 })

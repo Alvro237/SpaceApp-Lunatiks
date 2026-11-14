@@ -5,7 +5,7 @@
  */
 import * as THREE from 'three'
 import { LruCache } from './cache'
-import { type LiveConfig, type LiveSource, liveConfigFromEnv, withLiveLevels } from './live/config'
+import { type LiveConfig, type LiveSource, liveConfigFromEnv, trekTileUrl, withLiveLevels } from './live/config'
 import { lutBytes, type ColormapId } from './colormaps'
 import { TileLoader } from './loader'
 import { type LodOptions, byDistanceTo, renderable, selectTiles } from './lod'
@@ -345,10 +345,11 @@ export class TerrainEngine {
     const source = this.live.get(k)
     const req = source
       ? {
-          url: this.liveBase + source.file,
+          url: source.kind === 'trek' ? trekTileUrl(source, this.tileset, t) : this.liveBase + source.file,
           kind: 'live' as const,
           live: {
             file: source.file,
+            source: source.kind,
             geometry: {
               i0: t.x * this.tileset.tileCells,
               j0: t.y * this.tileset.tileCells,

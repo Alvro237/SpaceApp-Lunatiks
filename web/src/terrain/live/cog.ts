@@ -6,11 +6,14 @@ import { type BlockedSourceOptions, type GeoTIFFImage, type RemoteSourceOptions,
 import { BLOCK_BYTES, type BlockStore, IdbBlockStore, MemoryBlockStore } from './blockStore'
 import { CachedRangeClient } from './rangeClient'
 import { type DemGrid, type TileGeometry, sampleTile, windowFor } from './sample'
+import { readTrekTile } from './trek'
 
 export interface LiveTileRequest {
-  /** Proxy URL of the file and its PGDA path (the cache key). */
+  /** cog: proxy URL of the file; trek: the tile's exportImage URL. */
   url: string
+  /** cog: the PGDA path (the cache key); trek: the service name. */
   file: string
+  source: 'cog' | 'trek'
   geometry: TileGeometry
 }
 
@@ -41,6 +44,10 @@ async function openDem(url: string, file: string): Promise<OpenDem> {
 }
 
 export async function readLiveTile(req: LiveTileRequest): Promise<{ heights: Float32Array; min: number; max: number; samples: number }> {
+  if (req.source === 'trek') {
+    const t = await readTrekTile(req.url, req.geometry, await store())
+    return { ...t, samples: req.geometry.samples }
+  }
   let dem = dems.get(req.url)
   if (!dem) {
     dem = openDem(req.url, req.file)
