@@ -26,6 +26,7 @@ ASSUMPTIONS = [
     "Eclipses: power x (1 - fraction of the solar disc covered by the Earth), uniform solar disc, independent of the horizon cut.",
     "Values are constant over each step (left Riemann sum); accuracy is of the order of one step.",
     "Battery: no ageing, no temperature or voltage/current limits; losses only through the given efficiencies.",
+    "Panels, antenna and habitat 2 m above the ground (fixed, team decision: most panels sit on structures).",
 ]
 COLONY_ASSUMPTIONS = [
     "Level 4 habitat: two nodes, interior (air + structure) held at t_set_k, massless skin radiating to space and "

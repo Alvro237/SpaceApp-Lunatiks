@@ -1,7 +1,9 @@
 /**
- * Radio link levels (AERO-2, POST /api/v1/link). Level 1, the Earth's disc above the local horizon, is in the
- * engine and shown here. Levels 2 (ground-station visibility) and 3 (link budget) need the AERO-2 model and
- * its cited parameters; until it is merged the panel says so instead of estimating.
+ * Radio link levels (AERO-2, POST /api/v1/link; team decision 2026-11-14). Level 1 is geometric contact: the
+ * site sees the Earth AND a selected ground antenna sees the Moon. Level 2 is the link budget. The engine gives
+ * the site half of level 1 (the Earth's disc above the local horizon), shown here; ground stations and the link
+ * budget need the AERO-2 model and its cited parameters, so until it is merged the panel says so instead of
+ * estimating.
  */
 import { formatDuration } from '../time/clock'
 import { useNow } from './useNow'
@@ -37,7 +39,10 @@ export function LinkPanel() {
       ) : (
         <p className="muted">Loading…</p>
       )}
-      <p className="muted small">Ground stations and link budget: pending the AERO-2 model.</p>
+      <p className="muted small">
+        Line of sight to the Earth only. Ground-station visibility (level 1) and the link budget (level 2) are
+        pending the AERO-2 model.
+      </p>
     </div>
   )
 }

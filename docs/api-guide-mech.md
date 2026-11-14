@@ -14,9 +14,11 @@ cd api
 
 - **Place**: `site_id` from `GET /api/v1/sites`, **or** `lat` + `lon` (degrees, MOON_ME, east-positive,
   -180..180). Not both.
-- **Window**: `start` (ISO 8601 UTC, e.g. `2027-10-05T00:00:00Z`), `duration_h`, `step_min` (default 60),
-  `mast_m` (default 2; terrain masks exist for 0, 2, 5 and 10 m, `mast_m_used` says which one was used).
+- **Window**: `start` (ISO 8601 UTC, e.g. `2027-10-05T00:00:00Z`), `duration_h`, `step_min` (default 60).
   At most 20 000 samples per request (`duration_h * 60 / step_min + 1`), else 422.
+- **Height above the ground: fixed at 2 m** for panels, antenna and habitat in every MECH endpoint (team decision
+  2026-11-14: most panels sit on structures). It is not an input: a `mast_m` sent is ignored, and `mast_m_used`
+  in the response reports 2. Do not show a mast control for these results.
 - **Times** come back as ISO 8601 UTC strings. `t[]` is the sample grid; every other array has the same length.
 - **Ranges** are lists of `{start, end}` (ISO UTC).
 - **`horizon_kind`** is in every response: `terrain` (LOLA horizon mask, 13 south-polar catalogue sites) or
@@ -191,7 +193,7 @@ The numbers above are examples, not recommended limits. Full list: `GET /api/v1/
 ## POST /api/v1/sweep
 
 `places` (1-25, each `site_id` or `lat`/`lon`), `first_landing`, `landings` (up to 2000), `landing_step_h`
-(default 24), `stay_h`, `step_min` (must divide `landing_step_h` and `stay_h`), `panel`, `mast_m`,
+(default 24), `stay_h`, `step_min` (must divide `landing_step_h` and `stay_h`), `panel`,
 `comms_min_fraction`, and optionally the `/power` panel fields (adds `mean_array_w`) and battery fields (adds
 `battery_survived`, `battery_min_soc`, `unserved_energy_wh`). Response: `landings[]` (ISO UTC) and, per place,
 one array per metric with one value per landing, plus `gcr_dose_mgy_si` for one stay. Good for a heatmap

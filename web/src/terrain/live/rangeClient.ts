@@ -115,8 +115,9 @@ export class CachedRangeClient extends BaseClient {
         }
       })
     }
-    // runs of consecutive missing blocks, one request each
-    const fresh: [string, ArrayBuffer][] = []
+    // runs of consecutive missing blocks, one request each, all at once (one after another, a read that the cache
+    // had cut into several runs paid one round trip per run)
+    const runs: [number, number][] = []
     let i = 0
     while (i < ids.length) {
       if (blocks.has(ids[i])) {
@@ -125,19 +126,25 @@ export class CachedRangeClient extends BaseClient {
       }
       let j = i
       while (j + 1 < ids.length && !blocks.has(ids[j + 1])) j++
-      const { data, total } = await this.fetchRange(ids[i] * B, (ids[j] + 1) * B - 1, signal)
+      runs.push([ids[i], ids[j]])
+      i = j + 1
+    }
+    const fetched = await Promise.all(runs.map(([r0, r1]) => this.fetchRange(r0 * B, (r1 + 1) * B - 1, signal)))
+    const fresh: [string, ArrayBuffer][] = []
+    for (let r = 0; r < runs.length; r++) {
+      const [r0, r1] = runs[r]
+      const { data, total } = fetched[r]
       if (this.total === undefined) {
         this.total = total
         await this.store?.putMeta(`${this.cacheKey}#size`, total)
       }
-      for (let id = ids[i]; id <= ids[j]; id++) {
-        const off = (id - ids[i]) * B
+      for (let id = r0; id <= r1; id++) {
+        const off = (id - r0) * B
         if (off >= data.byteLength) break
         const block = data.slice(off, Math.min(off + B, data.byteLength))
         blocks.set(id, block)
         fresh.push([this.blockKey(id), block.buffer])
       }
-      i = j + 1
     }
     if (fresh.length) await this.store?.putMany(fresh)
     const total = this.total!

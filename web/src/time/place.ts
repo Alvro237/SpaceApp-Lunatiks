@@ -45,7 +45,7 @@ export function placeModel(masks: HorizonMasks, sel: Selection, mastM: number, n
   }
   if (traced && traced.kind === 'terrain') {
     const model = makeModel(sel.lat, sel.lon, traced.groundM, new Horizon(traced.values, 'terrain'), mastM)
-    return { model, name: pointName(sel.lat, sel.lon), mastUsedM: mastM, horizonSource: 'traced', demCellM: traced.cellM ?? undefined }
+    return { model, name: names?.get(`p:${sel.lat},${sel.lon}`) ?? pointName(sel.lat, sel.lon), mastUsedM: mastM, horizonSource: 'traced', demCellM: traced.cellM ?? undefined }
   }
   // Ground height from the LOLA tiles when the map has loaded them (as the API's model_for_point), else 0 m.
   const [x, y] = polarXY(sel.lat, sel.lon)

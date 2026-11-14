@@ -13,6 +13,7 @@ import * as THREE from 'three'
 import { type MarkerStyle, useApp } from '../state/store'
 import { type AreaRaster, useAreas } from '../state/areas'
 import { MarkerSet } from '../map/markerSet'
+import { usePlaceStyles } from '../state/placeStyle'
 import { type MapSite, useMapSites } from '../map/useMapSites'
 import { useInsets } from '../state/layout'
 import { SUN_R_KM } from '../time/engine'
@@ -68,6 +69,7 @@ function MapView({ tileset }: { tileset: Tileset }) {
   const [exaggeration, setExaggeration] = useState<Exaggeration>(2)
   const showCraters = useApp((s) => s.craters)
   const select = useApp((s) => s.select)
+  const openMenu = usePlaceStyles((s) => s.openMenu)
   const view = useApp((s) => s.view)
   const set = useApp((s) => s.set)
   const mode = useApp((s) => s.mode)
@@ -112,7 +114,8 @@ function MapView({ tileset }: { tileset: Tileset }) {
     }
   }
 
-  // Pointer: drag to pan, shift- or right-drag to rotate and tilt, wheel to zoom, click to pick a point.
+  // Pointer: drag to pan, shift- or right-drag to rotate and tilt, wheel to zoom, click to pick a point,
+  // right click (without dragging) on a place for its menu (rename, pointer colour, remove).
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('button, select, input, a')) return
     drag.current = { x: e.clientX, y: e.clientY, moved: false, rotate: e.button === 2 || e.shiftKey }
@@ -132,8 +135,14 @@ function MapView({ tileset }: { tileset: Tileset }) {
   const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
     const d = drag.current
     drag.current = null
-    if (!d || d.moved || d.rotate) return
+    if (!d) return
     const rect = e.currentTarget.getBoundingClientRect()
+    if (e.button === 2 && !d.moved) {
+      const hit = rig.markerAt(e.clientX - rect.left, e.clientY - rect.top) as MapSite | null
+      if (hit) openMenu({ sel: hit.sel, name: hit.name, x: e.clientX, y: e.clientY, returnTo: e.currentTarget })
+      return
+    }
+    if (d.moved || d.rotate) return
     // a place drawn on the map wins; otherwise (study mode) the terrain point under the pointer
     const site = rig.markerAt(e.clientX - rect.left, e.clientY - rect.top) as MapSite | null
     // mission mode: a click places the centre of the area search (on a site or anywhere on the terrain)
@@ -183,7 +192,7 @@ function MapView({ tileset }: { tileset: Tileset }) {
           Arrow keys move, plus and minus zoom, T tilts to 3D, Q and E rotate, R shows the whole pole, Space plays.
           {mode === 'study' && ' Activate a point on the terrain to analyse it.'}
           {mode === 'mission' && ' Activate a point on the terrain to centre the area search there; the areas found are listed in the Mission filters panel.'}{' '}
-          Sites are listed, with the same information, in the panels.
+          Right click a place for its options: rename, pointer colour, remove. Sites are listed, with the same information, in the panels.
         </p>
       </div>
       <ToolPortal>
@@ -234,6 +243,8 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
   const perf = useRef({ frames: 0, time: 0, degraded: false })
   const masks = useMasks().data
   const [markersSet] = useState(() => new MarkerSet())
+  /** The camera where the current motion ends (the rig's goal): what the engine loads ahead for. */
+  const [goalCam] = useState(() => new THREE.PerspectiveCamera())
   const [heightsReady, setHeightsReady] = useState(false)
 
   useEffect(() => {
@@ -423,7 +434,10 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
       engine.setSun([p[0] / d, p[1] / d, p[2] / d], THREE.MathUtils.radToDeg(Math.asin(SUN_R_KM / d)), mastM)
     }
     engine.renderShadows(gl, playing)
-    engine.update(cam, size.height, [rig.now.tx, rig.now.tz])
+    goalCam.fov = cam.fov
+    goalCam.aspect = cam.aspect
+    rig.apply(goalCam, ((engine.heightAt(rig.goal.tx * 1000, -rig.goal.tz * 1000) ?? 0) / 1000) * exaggeration, size.width, size.height, insets, rig.goal)
+    engine.update(cam, size.height, [rig.now.tx, rig.now.tz], goalCam, !rig.settled)
 
     markersSet.update(cam, size.width, size.height, true)
 

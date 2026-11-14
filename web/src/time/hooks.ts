@@ -4,6 +4,7 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
+import { usePlaceStyles } from '../state/placeStyle'
 import { type Selection, useApp } from '../state/store'
 import { usePointHorizon, useSites } from '../api/hooks'
 import { type ModelInfo, placeModel } from './place'
@@ -43,9 +44,15 @@ export function useSiteModel(sel: Selection, mastM: number): ModelInfo | null {
 }
 
 /** Display names from the API catalogue (the static copy has the same ones). */
+/** Place names: the catalogue's, with the viewer's renames on top (sites by id, points by "p:lat,lon"). */
 export function useSiteNames(): Map<string, string> {
   const sites = useSites().data
-  return useMemo(() => new Map(sites?.sites.map((s) => [s.id, s.name]) ?? []), [sites])
+  const styles = usePlaceStyles((s) => s.styles)
+  return useMemo(() => {
+    const m = new Map(sites?.sites.map((s) => [s.id, s.name]) ?? [])
+    for (const [key, st] of Object.entries(styles)) if (st.name) m.set(key, st.name)
+    return m
+  }, [sites, styles])
 }
 
 /** The active instant, re-read at most every `ms` while playing (panels update ~10 times per second). */

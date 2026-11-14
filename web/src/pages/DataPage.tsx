@@ -97,8 +97,8 @@ export function DataPage() {
             <tr>
               <th scope="row">Slope</th>
               <td>
-                LOLA LDSM_60S_240MPP_ADJ, PGDA product 90 (960 m cells; zoomed in, 240 m and, within about 300 km of the pole, LDSM_80S_80MPP_ADJ at
-                120 m, read on demand{import.meta.env.DEV || import.meta.env.VITE_PGDA_PROXY ? '' : ', not enabled in this build'})
+                LOLA LDSM_60S_240MPP_ADJ, PGDA product 90 (960 m cells; zoomed in, 240 m and, within about 300 km of the pole,
+                LDSM_80S_80MPP_ADJ and, within about 216 km, LDSM_83S_10MPP_ADJ down to 7.5 m cells, read on demand{import.meta.env.DEV || import.meta.env.VITE_PGDA_PROXY ? '' : ', not enabled in this build'})
               </td>
               <td>Slope layer, slope hard filter</td>
             </tr>

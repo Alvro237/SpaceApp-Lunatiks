@@ -160,6 +160,18 @@ export class CameraRig {
     return this.picker?.(cx, cy) ?? null
   }
 
+  /** Whether the camera has (nearly) reached its goal: no zoom, pan, tilt or turn under way. */
+  get settled(): boolean {
+    const n = this.now
+    const g = this.goal
+    return (
+      Math.abs(Math.log(g.dist / n.dist)) < 0.02 &&
+      Math.hypot(g.tx - n.tx, g.tz - n.tz) < 0.02 * n.dist &&
+      Math.abs(g.tilt - n.tilt) < 0.01 &&
+      Math.abs(g.heading - n.heading) < 0.01
+    )
+  }
+
   /** Ease toward the goal; returns nothing, mutates `now`. */
   step(dt: number, reducedMotion: boolean): void {
     const k = reducedMotion ? 1 : 1 - Math.exp(-dt * 7)
@@ -175,12 +187,13 @@ export class CameraRig {
   /**
    * Place a perspective camera looking at the target, which sits at height `targetY` (scene km). The target is
    * drawn at the centre of the free area (a view offset of the projection), not at the centre of the window.
+   * `view` is the current view by default; the goal places the camera where the motion will end.
    */
-  apply(cam: THREE.PerspectiveCamera, targetY: number, viewW: number, viewH: number, insets: Insets): void {
+  apply(cam: THREE.PerspectiveCamera, targetY: number, viewW: number, viewH: number, insets: Insets, view: View = this.now): void {
     const cx = insets.left + (viewW - insets.left - insets.right) / 2
     const cy = insets.top + (viewH - insets.top - insets.bottom) / 2
     cam.setViewOffset(viewW, viewH, viewW / 2 - cx, viewH / 2 - cy, viewW, viewH)
-    const n = this.now
+    const n = view
     const f = forward(n.heading)
     cam.position.set(n.tx, targetY, n.tz).addScaledVector(f, -n.dist * Math.sin(n.tilt))
     cam.position.y += n.dist * Math.cos(n.tilt)

@@ -1,10 +1,13 @@
 /**
  * The whole Moon, from global LOLA topography, lit by the Sun at the chosen instant. Drag turns it, the wheel
- * brings it closer; a click on the south-polar cap (or zooming in over it) enters the detailed polar map there.
+ * brings it closer toward the place under the pointer; zooming in over the south-polar cap hands over to the
+ * detailed polar map there (finer tiles, top-down, with its 3D tilt). A click on the surface marks that point
+ * (study mode, as on the map) and turns the Moon toward it; a click on a place selects it.
  * Catalogue sites are buttons over the globe; the panels hold the same information as text.
  */
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ToolPortal } from '../ui/ToolSlot'
+import { usePlaceStyles } from '../state/placeStyle'
 import { IconMinus, IconPin, IconPlus, IconPole } from '../ui/icons'
 import { useGlobe } from '../state/globe'
 import { useHorizonTransition } from '../state/horizon'
@@ -25,8 +28,12 @@ import { GLOBE_FRAG, GLOBE_VERT } from './shaders'
 const FOV = 35
 /** The polar map covers the disc south of this latitude (the LOLA polar grids). */
 export const MAP_DISC_LAT = -60
-/** Zooming in closer than this over the polar cap enters the map. */
-const ENTER_MAP_DIST = MOON_R_KM * 1.18
+/**
+ * Zooming in closer than this over the polar cap enters the map: about 1 400 km above the surface, where the view
+ * spans roughly the polar cap (the map's disc to 60 S is about 1 800 km across) and the map's 20 m to 240 m tiles
+ * beat the globe's. The map then flies on down to 450 km over the place (TerrainView).
+ */
+const ENTER_MAP_DIST = MOON_R_KM * 1.8
 /** Slope exaggeration of the shading where 118 m detail heights are loaded (the shipped 7.6 km grid uses 3). */
 const DETAIL_SHADE_EXAGGERATION = 1.5
 
@@ -61,6 +68,8 @@ export function GlobeView() {
   const sites = useMapSites()
   const markerStyle = useApp((s) => s.markerStyle)
   const select = useApp((s) => s.select)
+  const mode = useApp((s) => s.mode)
+  const openMenu = usePlaceStyles((s) => s.openMenu)
   const enterMap = useApp((s) => s.enterMap)
   const [orbit] = useState(() => new OrbitRig(START))
   const [surface, setSurface] = useState<GlobeSurface>('relief')
@@ -160,14 +169,31 @@ export function GlobeView() {
     if (!d || d.moved) return
     const rect = e.currentTarget.getBoundingClientRect()
     const site = orbit.markerAt(e.clientX - rect.left, e.clientY - rect.top) as MapSite | null
+    // right click on a place opens its menu (rename, pointer colour, remove)
+    if (e.button === 2) {
+      if (site) openMenu({ sel: site.sel, name: site.name, x: e.clientX, y: e.clientY, returnTo: e.currentTarget })
+      return
+    }
     if (site) {
       select(site.sel)
       return goTo(site.lat, site.lon)
     }
+    // the surface under the pointer: mark it as the chosen point (study mode, like the map) and turn toward it
     const ll = pickRef.current?.((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height)
-    if (ll) goTo(ll[0], ll[1])
+    if (!ll) return
+    if (mode === 'study') select({ kind: 'point', lat: Math.round(ll[0] * 1e4) / 1e4, lon: Math.round(ll[1] * 1e4) / 1e4 })
+    else orbit.turnTo(ll[0], ll[1])
   }
-  const onWheel = (e: WheelEvent<HTMLDivElement>) => orbit.zoom(Math.exp(e.deltaY * 0.0012))
+  // zooming in goes toward the place under the pointer, so zooming over the pole reaches the polar map there
+  const onWheel = (e: WheelEvent<HTMLDivElement>) => {
+    const factor = Math.exp(e.deltaY * 0.0012)
+    const rect = e.currentTarget.getBoundingClientRect()
+    const ll = factor < 1 ? pickRef.current?.((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height) : null
+    if (!ll) return orbit.zoom(factor)
+    orbit.zoomToward(factor, ll[0], ll[1])
+    // close enough over the polar cap: fly down to the place under the pointer and hand over to the map there
+    if (!orbit.isDiving && orbit.goal.dist < ENTER_MAP_DIST && ll[0] <= MAP_DISC_LAT && useHorizonTransition.getState().phase === 'map') goTo(ll[0], ll[1])
+  }
 
   return (
     <>
@@ -180,6 +206,7 @@ export function GlobeView() {
         aria-describedby="globe-help"
         onKeyDown={onKeyDown}
         onPointerDown={onPointerDown}
+        onContextMenu={(e) => e.preventDefault()}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onWheel={onWheel}
@@ -204,7 +231,8 @@ export function GlobeView() {
           </p>
         )}
         <p id="globe-help" className="sr-only">
-          Arrow keys turn the Moon, plus and minus zoom, Enter opens the detailed south-polar map. Sites are listed, with the same information, in the panels.
+          Arrow keys turn the Moon, plus and minus zoom, Enter opens the detailed south-polar map; zooming in over
+          the south pole opens it too. A click on the surface marks that point. Right click a place for its options: rename, pointer colour, remove. Sites are listed, with the same information, in the panels.
         </p>
       </div>
       <ToolPortal>

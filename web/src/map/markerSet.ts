@@ -53,10 +53,10 @@ export class MarkerSet {
       if (!anchor) continue
       const iconArt =
         style === 'pin'
-          ? pinArt({ selected: site.current, number: site.compared, muted: site.pass === false })
+          ? pinArt({ selected: site.current, number: site.compared, muted: site.pass === false, colour: site.colour })
           : style === 'cross'
-            ? crossArt({ selected: site.current, number: site.compared, pass: site.pass })
-            : dotArt(site.current ? RING_COLOURS.selected : site.pass ? RING_COLOURS.pass : RING_COLOURS.neutral)
+            ? crossArt({ selected: site.current, number: site.compared, pass: site.pass, colour: site.colour })
+            : dotArt(site.colour ?? (site.current ? RING_COLOURS.selected : site.pass ? RING_COLOURS.pass : RING_COLOURS.neutral))
       const icon = sprite(iconArt, 20)
       icon.position.copy(anchor)
       const text = site.compared !== null ? `${site.compared} · ${site.name}` : site.name

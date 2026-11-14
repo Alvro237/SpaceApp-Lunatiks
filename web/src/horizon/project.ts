@@ -42,6 +42,19 @@ export function unproject(c: Camera, x: number, y: number): { az: number; el: nu
   return { az: wrap360(c.yaw + (x - c.cx) * c.degPerPx), el: c.pitch - (y - c.cy) * c.degPerPx }
 }
 
+/** Share of the horizontal field kept between the skyline and the centre when following a low body. */
+export const SKYLINE_MARGIN = 0.12
+
+/**
+ * Pitch (degrees) that keeps a followed body in view without losing the sky: the body's elevation, raised when the
+ * body is below or just above the skyline at its azimuth so that the skyline sits SKYLINE_MARGIN × fov below the
+ * centre. Then the sky above it, with the window's Sun and Earth tracks, fills the view instead of the ground (a body
+ * below the skyline is drawn behind the terrain, as it is seen).
+ */
+export function followPitch(bodyEl: number, skylineEl: number, fov: number): number {
+  return Math.min(60, Math.max(bodyEl, skylineEl + SKYLINE_MARGIN * fov))
+}
+
 const unit = (az: number, el: number): [number, number, number] => [Math.cos(el * DEG) * Math.sin(az * DEG), Math.cos(el * DEG) * Math.cos(az * DEG), Math.sin(el * DEG)]
 
 /** Angular separation of two directions, degrees. */

@@ -19,6 +19,7 @@ from .grids import GridRepository
 from .horizons import HorizonRepository
 from .radiation import RadiationRepository
 from .sites import SiteRepository
+from .stations import StationRepository
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,7 @@ class DataStore:
     provenance: dict
     validation: dict
     radiation: RadiationRepository | None = None   # LRO CRaTER daily dose (MECH)
+    stations: StationRepository | None = None      # ground stations and the Moon in the Earth-fixed frame (AERO-2)
 
 
 def _json(path: Path) -> dict:
@@ -45,7 +47,8 @@ def load_store(data_dir: Path) -> DataStore:
     return DataStore(data_dir=data_dir, sites=sites, ephemeris=ephemeris, ephemeris_index=index,
                      horizons=HorizonRepository(data_dir, sites), grids=GridRepository(data_dir),
                      craters=CraterRepository(data_dir), provenance=_json(data_dir / "provenance.json"),
-                     validation=_json(data_dir / "validation.json"), radiation=RadiationRepository(data_dir))
+                     validation=_json(data_dir / "validation.json"), radiation=RadiationRepository(data_dir),
+                     stations=StationRepository(data_dir) if (data_dir / "ground_stations.json").exists() else None)
 
 
 @lru_cache(maxsize=1)

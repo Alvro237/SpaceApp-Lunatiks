@@ -5,8 +5,8 @@
  */
 import * as THREE from 'three'
 import { LruCache } from './cache'
-import { type LiveConfig, type LiveSource, liveConfigFromEnv, trekTileUrl, withLiveLevels } from './live/config'
-import { layerCellGeometry, liveLayerMaxZ, liveLayerSource } from './live/layers'
+import { type LiveConfig, type LiveSource, descendantRanges, liveConfigFromEnv, trekTileUrl, withLiveLevels } from './live/config'
+import { LIVE_LAYERS, layerCellGeometry, liveLayerMaxZ, liveLayerSource } from './live/layers'
 import { lutBytes, type ColormapId } from './colormaps'
 import { TileLoader } from './loader'
 import { type LodOptions, byDistanceTo, renderable, selectTiles } from './lod'
@@ -96,6 +96,11 @@ export class TerrainEngine {
   }
   /** Live tiles: "z/x/y" → source DEM (empty when the live levels are off). */
   readonly live: Map<string, LiveSource>
+  /**
+   * Live tiles not loaded yet whose height range is an estimate: key → level of the loaded ancestor it came from
+   * (−1: the padded guess of withLiveLevels). A finer loaded ancestor replaces it (live/config.ts, descendantRanges).
+   */
+  private readonly estimatedFrom = new Map<string, number>()
   private readonly liveBase: string
   lod: LodOptions = { splitPx: 2, mergePx: 1.5 }
 
@@ -107,6 +112,9 @@ export class TerrainEngine {
   private readonly luts = new Map<ColormapId, THREE.DataTexture>()
   private readonly empty = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1)
   private previouslySplit = new Set<string>()
+  private goalPreviouslySplit = new Set<string>()
+  /** The camera is still moving toward its goal: live layer tiles from PGDA wait (bindLayer). */
+  private moving = false
   /** Live layer tiles queued or in flight, and those the drawn tiles wanted last frame (the others are cancelled). */
   private readonly liveLayerKeys = new Set<string>()
   private wantedLayerKeys = new Set<string>()
@@ -152,6 +160,7 @@ export class TerrainEngine {
     const withLive = withLiveLevels(tileset, live)
     this.tileset = withLive.tileset
     this.live = withLive.live
+    for (const k of this.live.keys()) this.estimatedFrom.set(k, -1)
     this.liveBase = live?.proxyBase ?? ''
     this.base = baseUrl
     this.tiles = new LruCache<GpuTile>(GPU_TILE_CAPACITY, (t) => {
@@ -212,6 +221,16 @@ export class TerrainEngine {
     const [x0, , x1] = this.tileset.extentM
     this.shadowMaterial.uniforms.uExtent.value.w = (x1 - x0) / (res.width - 1)
     this.shadowSchedule.changed(performance.now())
+    // open the live DEMs now, so the first zoom past the static levels does not wait for it
+    for (const s of new Set([...this.live.values()].filter((s) => s.kind === 'cog').map((s) => s.file))) this.warm(s)
+  }
+
+  /** Open a PGDA GeoTIFF in its worker ahead of the first tile (live/cog.ts, `warm`); failures are left to the tiles. */
+  private warm(file: string): void {
+    const k = `warm:${file}`
+    if (!this.liveBase || this.loader.known(k)) return
+    const geometry = { i0: 0, j0: 0, extentX0: 0, extentY1: 0, cellM: 1, samples: 0 }
+    this.loader.request(k, { url: this.liveBase + file, kind: 'live', live: { file, source: 'cog', geometry, warm: true } }).catch(() => {})
   }
 
   /** Height (m) from the overview at a map point, bilinear; null outside the tileset or before it loads. */
@@ -256,6 +275,7 @@ export class TerrainEngine {
       this.shared.uLayerMode.value = 0
       return
     }
+    if (layer.kind === 'data') for (const s of LIVE_LAYERS[layer.id] ?? []) this.warm(s.file)
     const cmap: ColormapId = layer.kind === 'elevation' ? 'cividis' : layer.colormap
     if (!this.luts.has(cmap)) this.luts.set(cmap, lutTexture(cmap))
     this.shared.uLut.value = this.luts.get(cmap)!
@@ -341,13 +361,13 @@ export class TerrainEngine {
 
   // ------------------------------------------------------------------------------------------- per frame
 
-  update(camera: THREE.PerspectiveCamera, viewportHeightPx: number, targetKm: [number, number]): void {
+  private select(camera: THREE.PerspectiveCamera, viewportHeightPx: number, previouslySplit: ReadonlySet<string>) {
     camera.updateMatrixWorld()
     const frustum = new THREE.Frustum().setFromProjectionMatrix(
       new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
     )
     const box = new THREE.Box3()
-    const sel = selectTiles(
+    return selectTiles(
       this.tileset,
       {
         pos: [camera.position.x, camera.position.y, camera.position.z],
@@ -357,24 +377,60 @@ export class TerrainEngine {
       },
       {
         ...this.lod,
-        previouslySplit: this.previouslySplit,
+        previouslySplit,
         visible: (min, max) => frustum.intersectsBox(box.set(new THREE.Vector3(...min), new THREE.Vector3(...max))),
       },
     )
+  }
+
+  /**
+   * Choose, request and show the tiles for this frame. `goal` is the camera where the current motion ends (the
+   * camera rig's goal) and `moving` says whether it is still on its way. Tiles read from PGDA (seconds and megabytes
+   * each) are asked for only for the goal's view, and live layer tiles only once the camera has stopped, so a zoom
+   * does not spend the bandwidth on the levels it passes through: a request in flight cannot be called back, because
+   * the blocks it reads are shared with other tiles. Static and Moon Trek tiles are asked for as they are seen.
+   */
+  update(
+    camera: THREE.PerspectiveCamera,
+    viewportHeightPx: number,
+    targetKm: [number, number],
+    goal: THREE.PerspectiveCamera | null = null,
+    moving = false,
+  ): void {
+    this.moving = moving
+    const sel = this.select(camera, viewportHeightPx, this.previouslySplit)
     this.previouslySplit = sel.split
+    const goalSel = goal ? this.select(goal, viewportHeightPx, this.goalPreviouslySplit) : sel
+    if (goal) this.goalPreviouslySplit = goalSel.split
+    // the PGDA tiles the goal's view wants, and their parents (the stand-ins asked for below)
+    const goalKeys = new Set<string>()
+    for (const t of goalSel.tiles) {
+      goalKeys.add(keyOf(t))
+      const p = parent(t)
+      if (p) goalKeys.add(keyOf(p))
+    }
     const draw = renderable(sel.tiles, (k) => this.tiles.has(k))
     const drawKeys = new Set(draw.map(keyOf))
 
-    // request what is wanted and not loaded, plus the ancestors that stand in while it loads
+    // request what is wanted and not loaded, plus the ancestors that stand in while it loads: the parent always, and
+    // farther ancestors only when they are one small request each (our static tiles, Moon Trek). A PGDA ancestor two
+    // or more levels up reads another, coarser file over a far larger area than the view: measured 2026-11-14 at
+    // Shackleton, the z8 stand-ins took 10 MB and 10 s from the 20 m DEM before the z10 tiles of the view (5 MB,
+    // the 10 m DEM) could start, and were replaced at once. Until the parent loads, the nearest loaded ancestor stays.
     const wanted = new Map<string, TileKey>()
-    for (const t of sel.tiles) {
-      let cur: TileKey | null = t
-      while (cur) {
-        const k = keyOf(cur)
-        if (!this.tiles.has(k)) wanted.set(k, cur)
-        cur = parent(cur)
+    const want = (tiles: TileKey[], fromGoal: boolean) => {
+      for (const t of tiles) {
+        let cur: TileKey | null = t
+        while (cur) {
+          const k = keyOf(cur)
+          const cog = this.live.get(k)?.kind === 'cog'
+          if (!this.tiles.has(k) && (cur.z >= t.z - 1 || !cog) && (!cog || fromGoal || goalKeys.has(k))) wanted.set(k, cur)
+          cur = parent(cur)
+        }
       }
     }
+    want(sel.tiles, goalSel === sel)
+    if (goalSel !== sel) want(goalSel.tiles, true)
     const order = byDistanceTo(this.tileset, targetKm, [...wanted.values()])
     const rank = new Map(order.map((t, i) => [keyOf(t), i]))
     // overview first, then height tiles nearest the centre; static layer tiles of the layer shown keep their place,
@@ -383,7 +439,7 @@ export class TerrainEngine {
     this.nextWantedLayerKeys = new Set()
     const layerPrefix = this.layer.kind === 'data' ? `L:${this.layer.id}|` : null
     this.loader.prioritise((k) => {
-      if (k === 'overview') return -1
+      if (k === 'overview' || k.startsWith('warm:')) return -1
       if (!k.startsWith('L:')) return rank.get(k) ?? null
       if (!layerPrefix || !k.startsWith(layerPrefix)) return null
       if (this.liveLayerKeys.has(k) && !this.wantedLayerKeys.has(k)) return null
@@ -454,14 +510,27 @@ export class TerrainEngine {
         if (source) {
           // the measured range replaces the estimate used for culling before the tile loaded
           if (res.min !== undefined && res.max !== undefined) this.tileset.height.tiles[k] = [res.min, res.max]
+          this.estimatedFrom.delete(k)
           this.stats.live.loaded++
         }
+        this.refineDescendants(t, res.heights!, res.width)
         this.tiles.set(k, this.makeTile(t, tex))
       })
       .catch((e: Error) => {
         // cancelled or failed: the parent stays on screen
         if (source && e.message !== 'cancelled') this.stats.live.failed++
       })
+  }
+
+  /** Tighten the estimated ranges of the live tiles below a loaded tile from its samples (descendantRanges). */
+  private refineDescendants(t: TileKey, heights: Float32Array, samples: number): void {
+    if (this.estimatedFrom.size === 0) return
+    for (const [k, range] of descendantRanges(t, heights, samples, this.tileset.levels[t.z].cellM)) {
+      const from = this.estimatedFrom.get(k)
+      if (from === undefined || from >= t.z) continue
+      this.tileset.height.tiles[k] = range
+      this.estimatedFrom.set(k, t.z)
+    }
   }
 
   private makeTile(t: TileKey, heights: THREE.DataTexture): GpuTile {
@@ -519,7 +588,7 @@ export class TerrainEngine {
       lk = `L:${id}|${keyOf(src)}`
       tex = this.layerTextures.get(lk)
       if (tex) break
-      if (src === finest || src.z <= staticMax) this.requestLayer(id, src, lk)
+      if (src.z <= staticMax || (src === finest && !this.moving)) this.requestLayer(id, src, lk)
       if (src.z > staticMax) this.nextWantedLayerKeys.add(lk)
       src = parent(src)
     }
