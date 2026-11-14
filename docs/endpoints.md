@@ -151,7 +151,7 @@ one) as tests with the source of each date in `docs/references.md`.
 
 ## AERO-2 · Hard filters: communication hours and maximum blackout
 
-**Status:** to do. **File:** `logic/constraints/comms.py`.
+**Status:** in review (branch `feat/aero2-comms-filters`; level 1, line of sight only). **File:** `logic/constraints/comms.py`.
 
 - `comms_hours`: threshold `{ "min_hours": float }` or `{ "min_fraction": float }` over the mission window, from
   `ctx.series.comms(ctx.params)`. Fill `fraction` and `ranges`.
