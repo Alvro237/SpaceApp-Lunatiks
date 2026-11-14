@@ -5,6 +5,7 @@
  */
 import * as THREE from 'three'
 import { LruCache } from './cache'
+import { type LiveConfig, type LiveSource, liveConfigFromEnv, trekTileUrl, withLiveLevels } from './live/config'
 import { lutBytes, type ColormapId } from './colormaps'
 import { TileLoader } from './loader'
 import { type LodOptions, byDistanceTo, renderable, selectTiles } from './lod'
@@ -76,7 +77,19 @@ function lutTexture(id: ColormapId): THREE.DataTexture {
 export class TerrainEngine {
   readonly tileset: Tileset
   readonly group = new THREE.Group()
-  readonly stats = { drawn: 0, cached: 0, inFlight: 0, shadowPasses: 0, wanted: [] as string[], drawnKeys: [] as string[] }
+  readonly stats = {
+    drawn: 0,
+    cached: 0,
+    inFlight: 0,
+    shadowPasses: 0,
+    wanted: [] as string[],
+    drawnKeys: [] as string[],
+    /** Live tiles (z8+, read from the remote DEMs): loaded and failed this session. */
+    live: { loaded: 0, failed: 0 },
+  }
+  /** Live tiles: "z/x/y" → source DEM (empty when the live levels are off). */
+  readonly live: Map<string, LiveSource>
+  private readonly liveBase: string
   lod: LodOptions = { splitPx: 2, mergePx: 1.5 }
 
   private readonly base: string
@@ -116,8 +129,12 @@ export class TerrainEngine {
     uDiscR: { value: 1e12 },
   }
 
-  constructor(tileset: Tileset, baseUrl: string, floatLinear: boolean) {
-    this.tileset = tileset
+  constructor(tileset: Tileset, baseUrl: string, floatLinear: boolean, live: LiveConfig | null = liveConfigFromEnv(import.meta.env)) {
+    // the live levels extend a copy of the tileset (the caller's object is shared with other views)
+    const withLive = withLiveLevels(tileset, live)
+    this.tileset = withLive.tileset
+    this.live = withLive.live
+    this.liveBase = live?.proxyBase ?? ''
     this.base = baseUrl
     this.tiles = new LruCache<GpuTile>(GPU_TILE_CAPACITY, (t) => {
       t.heights.dispose()
@@ -325,16 +342,41 @@ export class TerrainEngine {
     if (this.tiles.has(k) || this.loader.known(k)) return
     const range = this.tileset.height.tiles[k]
     if (!range) return
+    const source = this.live.get(k)
+    const req = source
+      ? {
+          url: source.kind === 'trek' ? trekTileUrl(source, this.tileset, t) : this.liveBase + source.file,
+          kind: 'live' as const,
+          live: {
+            file: source.file,
+            source: source.kind,
+            geometry: {
+              i0: t.x * this.tileset.tileCells,
+              j0: t.y * this.tileset.tileCells,
+              extentX0: this.tileset.extentM[0],
+              extentY1: this.tileset.extentM[3],
+              cellM: this.tileset.levels[t.z].cellM,
+              samples: this.tileset.tileSamples,
+            },
+          },
+        }
+      : { url: this.base + tileUrl(this.tileset.height.path, t), kind: 'height' as const, min: range[0], max: range[1] }
     this.loader
-      .request(k, { url: this.base + tileUrl(this.tileset.height.path, t), kind: 'height', min: range[0], max: range[1] })
+      .request(k, req)
       .then((res) => {
         const tex = new THREE.DataTexture(res.heights!, res.width, res.height, THREE.RedFormat, THREE.FloatType)
         tex.minFilter = tex.magFilter = THREE.NearestFilter
         tex.needsUpdate = true
+        if (source) {
+          // the measured range replaces the estimate used for culling before the tile loaded
+          if (res.min !== undefined && res.max !== undefined) this.tileset.height.tiles[k] = [res.min, res.max]
+          this.stats.live.loaded++
+        }
         this.tiles.set(k, this.makeTile(t, tex))
       })
-      .catch(() => {
-        /* cancelled or failed: the parent stays on screen */
+      .catch((e: Error) => {
+        // cancelled or failed: the parent stays on screen
+        if (source && e.message !== 'cancelled') this.stats.live.failed++
       })
   }
 

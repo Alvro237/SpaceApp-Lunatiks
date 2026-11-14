@@ -88,6 +88,13 @@ export class OrbitRig {
     this.goal.dist = dist
   }
 
+  /** Set by the scene: CSS pixel → the place drawn there, or null. */
+  markerAt: (px: number, py: number) => unknown = () => null
+
+  setMarkerPicker(fn: (px: number, py: number) => unknown): void {
+    this.markerAt = fn
+  }
+
   constructor(start: Orbit, nowMs = performance.now()) {
     this.now = { ...start }
     this.goal = { ...start }

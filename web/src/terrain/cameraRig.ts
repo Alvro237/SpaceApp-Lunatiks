@@ -108,6 +108,13 @@ export class CameraRig {
     if (!this.fitted) this.pending = { tx: this.goal.tx, tz: this.goal.tz, dist: maxDistKm }
   }
 
+  /** Set by the scene: CSS pixel → the place drawn there, or null. */
+  markerAt: (px: number, py: number) => unknown = () => null
+
+  setMarkerPicker(fn: (px: number, py: number) => unknown): void {
+    this.markerAt = fn
+  }
+
   setPicker(fn: (cx: number, cy: number) => [number, number] | null): void {
     this.picker = fn
   }

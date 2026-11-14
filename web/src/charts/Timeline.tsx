@@ -61,7 +61,7 @@ export function Timeline() {
   const inside = powerResult?.interior_k ? powerResult : null
   const stepMin = Math.max(10, Math.ceil((durationH * 60) / 2000 / 10) * 10)
   const apiParams = useMemo(
-    () => ({ start: isoMinute(startMs), duration_h: durationH, step_min: stepMin, mast_m: mastM, panel: params.panel, comms_min_fraction: params.commsMinFraction }),
+    () => ({ start: isoMinute(startMs), duration_h: durationH, step_min: stepMin, mast_m: mastM, comms_min_fraction: params.commsMinFraction }),
     [startMs, durationH, stepMin, mastM, params],
   )
   const api = useApiSeries(selection, apiParams, !playing)

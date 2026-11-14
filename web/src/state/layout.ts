@@ -18,8 +18,3 @@ export const useInsets = create<Insets & { setInsets: (i: Insets) => void }>()((
   bottom: 0,
   setInsets: (i) => set(i),
 }))
-
-/** True when a marker at viewport-relative (x, y) would sit under the map toolbar (14 px margin around it). */
-export function underToolbar(x: number, y: number, bar: DOMRect | null): boolean {
-  return !!bar && x > bar.left - 14 && x < bar.right + 14 && y > bar.top - 14 && y < bar.bottom + 14
-}

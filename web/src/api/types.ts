@@ -31,57 +31,28 @@ export interface ConstraintsMeta {
 
 export type DatasetsMeta = Record<string, unknown>
 
-// --------------------------------------------------------------------------- pending (docs/endpoints.md)
+// --------------------------------------------------------------------------- SW-1 (generated, branch seryitron-branchito)
+// Contract: docs/sw1-output-format.md. Angles are `az`/`el` inside `sun`/`earth`, `eclipse` is a word, and there
+// is no power here: power belongs to POST /api/v1/power (MECH) only.
 export type HorizonKind = 'terrain' | 'smooth_sphere'
+export type BodyState = S['BodyState']
+export type Transition = S['Transition']
+export type EclipseState = S['StateResponse']['eclipse']
+export type TerrainReference = S['TerrainReference']
+/** GET /sites/{id}/state, or /points/state (same shape plus `terrain_reference`). */
+export type SiteState = S['StateResponse'] & { terrain_reference?: TerrainReference | null }
+/** GET /sites/{id}/series, or /points/series (same shape plus `terrain_reference`). */
+export type SiteSeries = S['SeriesResponse'] & { terrain_reference?: TerrainReference | null }
+/** GET /sites/{id}/horizon */
+export type SiteHorizon = S['HorizonResponse']
 
-export interface BodyState {
-  az_deg: number
-  el_deg: number
-  visible_fraction: number
-  angular_radius_deg: number
-  distance_km: number
-}
-
-export interface Transition {
-  kind: 'set' | 'rise'
-  at: string
-  in_hours: number
-}
-
-/** GET /api/v1/sites/{id}/state (SW-1) */
-export interface SiteState {
-  t: string
-  sun: BodyState
-  earth: BodyState
-  eclipse: number
-  irradiance_w_m2: number
-  power_w_m2: number
-  next_sun_transition: Transition | null
-  next_earth_transition: Transition | null
-  horizon_kind: HorizonKind
-  mast_used_m?: number
-}
-
+/** Any time range; SW-1 ranges also carry duration_h and the two window flags. */
 export interface TimeRange {
   start: string
   end: string
 }
 
-/** GET /api/v1/sites/{id}/series (SW-1) */
-export interface SiteSeries {
-  t: string[]
-  sun_az: number[]
-  sun_el: number[]
-  sun_fraction: number[]
-  earth_az: number[]
-  earth_el: number[]
-  earth_fraction: number[]
-  power_w_m2: number[]
-  metrics: Record<string, number | boolean>
-  sunlit_ranges: TimeRange[]
-  comms_ranges: TimeRange[]
-  horizon_kind: HorizonKind
-}
+// --------------------------------------------------------------------------- pending (docs/endpoints.md)
 
 export interface ConstraintResult {
   id: string

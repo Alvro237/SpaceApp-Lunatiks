@@ -66,7 +66,9 @@ export class TileLoader {
       const job = this.queue.shift()!
       const id = ++this.seq
       this.pending.set(id, job)
-      this.workers[this.next++ % this.workers.length].postMessage({ ...job.req, id } satisfies DecodeRequest)
+      // live tiles all go to the first worker, so they share its open DEM files and in-memory block cache
+      const w = job.req.kind === 'live' ? this.workers[0] : this.workers[this.next++ % this.workers.length]
+      w.postMessage({ ...job.req, id } satisfies DecodeRequest)
     }
   }
 
