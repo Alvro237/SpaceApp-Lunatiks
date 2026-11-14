@@ -7,7 +7,7 @@ tiles only add levels. Nothing here is new physics: it resamples and packs NASA 
 
 Run from web/ (writes web/public/tiles, git-ignored):
 
-    uv run --project ../api python scripts/build_preview_tiles.py
+    uv run --project ../pipeline python scripts/build_preview_tiles.py
 
 Normalisation (the plan's steps, as far as the 960 m grids need them):
 1. Check every grid declares the same south polar stereographic projection on the 1737.4 km sphere.
@@ -32,6 +32,8 @@ from pathlib import Path
 
 import numpy as np
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "data"
 OUT = ROOT / "web" / "public" / "tiles"
@@ -45,6 +47,7 @@ DISC_LAT = -60.0                # the map is drawn as the disc south of this lat
 NODATA = -32768
 
 HEIGHT_GRID = "lola_elevation_60s"
+DEM80 = ROOT / "data" / "raw" / "dem_full" / "LDEM_80S_80MPP_ADJ.TIF"   # optional, 189 MB from PGDA
 LAYERS = {
     # layer id: (grid id, display name, colour map) -- colour maps are colour-blind safe (see the plan)
     "slope": ("lola_slope_60s", "Slope", "magma"),
@@ -197,6 +200,17 @@ def main() -> int:
     rgb, olo, ohi = pack_height(top)
     write_png(OUT / "overview.png", rgb, 2)
 
+    # Finer levels from the LOLA 80 m DEM around the pole, when it has been downloaded (fine_levels.py).
+    fine = None
+    if DEM80.exists():
+        from fine_levels import SOURCE_URL, add_fine_levels
+        fine = add_fine_levels(DEM80, top, HALF_EXTENT_M, TILE, R_M, tiles_index, OUT, pack_height, write_png)
+        fine["sourceUrl"] = SOURCE_URL
+        print(f"80 m DEM: added {sum(fine['written'].values())} tiles {fine['written']}, coverage radius {fine['coverRadiusM'] / 1000:.0f} km")
+    else:
+        print(f"no {DEM80.relative_to(ROOT)}: preview levels only (download it to add the 480-60 m levels)")
+    max_z = max(int(k.split("/")[0]) for k in tiles_index)
+
     layers_out = {}
     for layer_id, (grid_id, name, cmap) in LAYERS.items():
         meta, src = load_grid(index, grid_id)
@@ -235,7 +249,10 @@ def main() -> int:
         u, v = fx - c, fy - r
         tile_h = (top[r, c] * (1 - u) * (1 - v) + top[r, c + 1] * u * (1 - v)
                   + top[r + 1, c] * (1 - u) * v + top[r + 1, c + 1] * u * v)
-        checks.append({"site": s["id"], "catalogueGroundM": terrain["groundHeightM"],
+        level = "960 m"
+        if fine is not None and (h80 := fine["heightAt"](x, y)) is not None:
+            tile_h, level = h80, "80 m DEM"
+        checks.append({"site": s["id"], "catalogueGroundM": terrain["groundHeightM"], "finestLevel": level,
                        "tileM": round(float(tile_h), 1), "differenceM": round(float(tile_h) - terrain["groundHeightM"], 1)})
     edge_errors = 0
     for z, vert in enumerate(vert_levels):           # decoded neighbours must share identical edges
@@ -249,8 +266,8 @@ def main() -> int:
     doc = {
         "format": 1,
         "kind": "preview",
-        "note": ("Preview tileset from the 960 m screening grids in data/grids. The full tileset from the 240 m, "
-                 "80 m and 20 m LOLA DEMs is built by pipeline/lunarnav/terrain_tiles.py and adds finer levels."),
+        "note": ("Levels 0-3 from the 960 m screening grids in data/grids; levels 4-7 (480 to 60 m cells) from the "
+                 "LOLA 80 m DEM south of about 80 S when it was available to the build."),
         "projection": {"name": "south polar stereographic", "sphereRadiusM": R_M, "frame": "MOON_ME",
                        "formula": "x = r sin(lon), y = r cos(lon), r = 2R tan((90 + lat) / 2)"},
         "extentM": [-HALF_EXTENT_M, -HALF_EXTENT_M, HALF_EXTENT_M, HALF_EXTENT_M],
@@ -258,14 +275,19 @@ def main() -> int:
         "discRadiusM": round(2.0 * R_M * math.tan(math.radians(90.0 + DISC_LAT) / 2.0), 1),
         "tileCells": TILE,
         "tileSamples": TILE + 1,
-        "levels": [{"z": z, "tiles": 2 ** z, "cellM": 2 * HALF_EXTENT_M / (TILE * 2 ** z)} for z in range(LEVELS)],
+        "levels": [{"z": z, "tiles": 2 ** z, "cellM": 2 * HALF_EXTENT_M / (TILE * 2 ** z)} for z in range(max_z + 1)],
         "height": {
             "path": "height/{z}/{x}/{y}.png",
             "encoding": "RGB PNG, 16-bit value in red (high byte) and green (low byte); height = min + value / 65535 x (max - min), metres above the 1737.4 km sphere",
             "tiles": tiles_index,
             "sources": [{"id": HEIGHT_GRID, "description": height_meta["description"], "source": height_meta["source"],
                          "cellM": height_meta["pixelM"], "sourcePixelM": height_meta.get("sourcePixelM"),
-                         "builtUtc": height_meta.get("builtUtc")}],
+                         "builtUtc": height_meta.get("builtUtc"), "levels": list(range(LEVELS))}]
+            + ([{"id": "LDEM_80S_80MPP_ADJ", "description": "LOLA DEM south of about 80 S, 80 m pixels",
+                 "source": {"agency": "NASA GSFC PGDA (LRO / LOLA)", "url": fine["sourceUrl"],
+                            "product": "https://pgda.gsfc.nasa.gov/products/90"},
+                 "cellM": fine["pixelM"], "levels": sorted(fine["written"]), "coverRadiusM": fine["coverRadiusM"],
+                 "tilesPerLevel": {str(k): v for k, v in fine["written"].items()}}] if fine else []),
         },
         "overview": {"path": "overview.png", "samples": n + 1, "min": round(olo, 2), "max": round(ohi, 2),
                      "encoding": "same as height tiles; the finest level as one image, for the shadow pass"},
@@ -275,8 +297,9 @@ def main() -> int:
             "maxAbsSiteDifferenceM": max((abs(c["differenceM"]) for c in checks), default=None),
             "sharedEdgeMismatches": edge_errors,
             "maxQuantisationM": round(quantisation_m, 3),
-            "note": ("Catalogue groundHeightM comes from the finest DEM at each site (down to 10 m); the preview "
-                     "tiles are 960 m cell means, so differences of tens to hundreds of metres are expected on slopes."),
+            "note": ("Catalogue groundHeightM comes from the finest DEM at each site (down to 10 m). Sites inside the "
+                     "80 m DEM are checked against it; elsewhere against the 960 m cell means, where tens of metres "
+                     "of difference are expected on slopes."),
         },
         "builtUtc": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "builtBy": "web/scripts/build_preview_tiles.py",
