@@ -1,0 +1,132 @@
+{
+ "source": "NASA GSFC, F. Espenak, lunar eclipse decade tables: https://eclipse.gsfc.nasa.gov/LEdecade/LEdecade2021.html and https://eclipse.gsfc.nasa.gov/LEdecade/LEdecade2031.html",
+ "time_scale": "TD (Terrestrial Dynamical Time) of greatest eclipse; TD - UTC is about 69 s in 2025-2035",
+ "fetched_utc": "2026-11-14",
+ "events": [
+  {
+   "greatest_td": "2025-03-14T06:59:56",
+   "type": "total",
+   "umbral_magnitude": 1.178
+  },
+  {
+   "greatest_td": "2025-09-07T18:12:58",
+   "type": "total",
+   "umbral_magnitude": 1.362
+  },
+  {
+   "greatest_td": "2026-03-03T11:34:52",
+   "type": "total",
+   "umbral_magnitude": 1.151
+  },
+  {
+   "greatest_td": "2026-08-28T04:14:04",
+   "type": "partial",
+   "umbral_magnitude": 0.93
+  },
+  {
+   "greatest_td": "2027-02-20T23:14:06",
+   "type": "penumbral",
+   "umbral_magnitude": -0.057
+  },
+  {
+   "greatest_td": "2027-07-18T16:04:09",
+   "type": "penumbral",
+   "umbral_magnitude": -1.068
+  },
+  {
+   "greatest_td": "2027-08-17T07:14:59",
+   "type": "penumbral",
+   "umbral_magnitude": -0.525
+  },
+  {
+   "greatest_td": "2028-01-12T04:14:13",
+   "type": "partial",
+   "umbral_magnitude": 0.066
+  },
+  {
+   "greatest_td": "2028-07-06T18:20:57",
+   "type": "partial",
+   "umbral_magnitude": 0.389
+  },
+  {
+   "greatest_td": "2028-12-31T16:53:15",
+   "type": "total",
+   "umbral_magnitude": 1.246
+  },
+  {
+   "greatest_td": "2029-06-26T03:23:22",
+   "type": "total",
+   "umbral_magnitude": 1.844
+  },
+  {
+   "greatest_td": "2029-12-20T22:43:12",
+   "type": "total",
+   "umbral_magnitude": 1.117
+  },
+  {
+   "greatest_td": "2030-06-15T18:34:34",
+   "type": "partial",
+   "umbral_magnitude": 0.502
+  },
+  {
+   "greatest_td": "2030-12-09T22:28:51",
+   "type": "penumbral",
+   "umbral_magnitude": -0.163
+  },
+  {
+   "greatest_td": "2031-05-07T03:52:02",
+   "type": "penumbral",
+   "umbral_magnitude": -0.09
+  },
+  {
+   "greatest_td": "2031-06-05T11:45:17",
+   "type": "penumbral",
+   "umbral_magnitude": -0.82
+  },
+  {
+   "greatest_td": "2031-10-30T07:46:45",
+   "type": "penumbral",
+   "umbral_magnitude": -0.32
+  },
+  {
+   "greatest_td": "2032-04-25T15:14:51",
+   "type": "total",
+   "umbral_magnitude": 1.191
+  },
+  {
+   "greatest_td": "2032-10-18T19:03:40",
+   "type": "total",
+   "umbral_magnitude": 1.103
+  },
+  {
+   "greatest_td": "2033-04-14T19:13:51",
+   "type": "total",
+   "umbral_magnitude": 1.094
+  },
+  {
+   "greatest_td": "2033-10-08T10:56:23",
+   "type": "total",
+   "umbral_magnitude": 1.35
+  },
+  {
+   "greatest_td": "2034-04-03T19:06:59",
+   "type": "penumbral",
+   "umbral_magnitude": -0.227
+  },
+  {
+   "greatest_td": "2034-09-28T02:47:37",
+   "type": "partial",
+   "umbral_magnitude": 0.014
+  },
+  {
+   "greatest_td": "2035-02-22T09:06:12",
+   "type": "penumbral",
+   "umbral_magnitude": -0.053
+  },
+  {
+   "greatest_td": "2035-08-19T01:12:15",
+   "type": "partial",
+   "umbral_magnitude": 0.104
+  }
+ ]
+}

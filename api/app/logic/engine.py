@@ -21,7 +21,7 @@ from .ephemeris import EphemerisTable
 from .geometry import (SiteFrame, angular_radius_deg, body_direction, separation_deg, site_frame,
                        solar_irradiance_w_m2)
 from .horizon import HorizonProfile
-from .visibility import disc_visible_fraction
+from .visibility import disc_overlap_fraction, disc_visible_fraction
 
 PanelModel = Literal["tracking", "vertical", "horizontal"]
 Body = Literal["sun", "earth"]
@@ -73,7 +73,8 @@ class Series:
     earth_radius_deg: np.ndarray
     eclipse: np.ndarray           # 0 none, 1 partial, 2 total: the Earth covering the Sun
     irradiance_w_m2: np.ndarray   # normal to the rays, before horizon and panel factors
-    power_w_m2: np.ndarray        # irradiance x visible fraction x panel cosine factor
+    power_w_m2: np.ndarray        # irradiance x visible fraction x panel cosine factor (no eclipse: see below)
+    sun_eclipsed_fraction: np.ndarray  # 0..1 of the solar disc hidden behind the Earth (lunar eclipse)
 
     def sunlit(self) -> np.ndarray:
         return self.sun_frac > 0.0
@@ -115,11 +116,16 @@ def evaluate(eph: EphemerisTable, model: SiteModel, t_ms, params: AnalysisParams
     sep = separation_deg(sun.unit, earth.unit)
     eclipse = np.where(sep < er - sr, 2, np.where(sep < er + sr, 1, 0)).astype(np.uint8)
     irradiance = solar_irradiance_w_m2(sun.dist_km)
+    # power_w_m2 keeps the horizon and panel factors only. The eclipse is the power model's to apply, once:
+    # MECH's power, thermal and battery code multiply by (1 - obscuration) themselves (feat/mech-power,
+    # logic/eclipse.py), so folding it in here would count every eclipse twice. sun_eclipsed_fraction is the
+    # same overlap geometry, reported for light and comms answers.
+    sun_eclipsed = disc_overlap_fraction(sep, sr, er)
     power = irradiance * sun_frac * panel_factor(params.panel, sun.el)
     return Series(t_ms=t, sun_el=sun.el, sun_az=sun.az, sun_frac=sun_frac, sun_dist_km=sun.dist_km,
                   sun_radius_deg=sr, earth_el=earth.el, earth_az=earth.az, earth_frac=earth_frac,
                   earth_dist_km=earth.dist_km, earth_radius_deg=er, eclipse=eclipse,
-                  irradiance_w_m2=irradiance, power_w_m2=power)
+                  irradiance_w_m2=irradiance, power_w_m2=power, sun_eclipsed_fraction=sun_eclipsed)
 
 
 # ---------------------------------------------------------------------------- time summaries
@@ -219,3 +225,57 @@ def next_transition(eph: EphemerisTable, model: SiteModel, from_ms: float, body:
         else:
             hi = mid
     return Transition(kind="set" if vis[0] else "rise", at_ms=hi, in_ms=hi - from_ms)
+
+
+# ---------------------------------------------------------------------------- ranges with refined edges
+
+Flag = Literal["sun", "earth", "eclipse"]
+
+
+def _flag(series: Series, which: Flag, params: AnalysisParams) -> np.ndarray:
+    if which == "eclipse":
+        return series.eclipse > 0
+    return _visible(series, which, params)
+
+
+@dataclass(frozen=True)
+class RefinedRange:
+    start_ms: float              # first instant in the state (or the window start)
+    end_ms: float                # first instant out of it again (or the window end)
+    starts_before_window: bool   # true at the first sample: the state may have begun earlier
+    ends_after_window: bool      # true at the last sample: the state may go on after the window
+
+
+def refined_ranges(eph: EphemerisTable, model: SiteModel, series: Series, which: Flag,
+                   params: AnalysisParams = DEFAULT_PARAMS, tol_ms: float = 1000.0) -> list[RefinedRange]:
+    """Ranges where the Sun is visible ("sun"), the Earth is visible for comms ("earth") or an eclipse is on
+    ("eclipse"), with every inner edge bisected between its two samples to ``tol_ms`` (default 1 s), the same
+    rule as ``next_transition``: an edge is the first instant in the new state. All edges are refined together,
+    one vectorised ``evaluate`` per bisection step. Events shorter than the grid step can be missed entirely;
+    that is the grid's resolution, not the edges'."""
+    t = series.t_ms
+    f = _flag(series, which, params)
+    if not f.any():
+        return []
+    d = np.diff(np.concatenate(([0], f.astype(np.int8), [0])))
+    first, last = np.flatnonzero(d == 1), np.flatnonzero(d == -1) - 1
+    n = t.size
+    # Edges to refine: rises at first[i] > 0 (between first-1 and first), sets at last[i] < n-1 (last, last+1).
+    rise_i = first[first > 0]
+    set_i = last[last < n - 1]
+    lo = np.concatenate((t[rise_i - 1], t[set_i]))
+    hi = np.concatenate((t[rise_i], t[set_i + 1]))
+    target = np.concatenate((np.ones(rise_i.size, bool), np.zeros(set_i.size, bool)))   # state at `hi`
+    while lo.size and np.max(hi - lo) > tol_ms:
+        mid = (lo + hi) / 2.0
+        at_mid = _flag(evaluate(eph, model, mid, params), which, params)
+        moved = at_mid == target            # mid already in the new state: the edge is at or before mid
+        hi = np.where(moved, mid, hi)
+        lo = np.where(moved, lo, mid)
+    rise_at = dict(zip(rise_i.tolist(), hi[:rise_i.size].tolist()))
+    set_at = dict(zip(set_i.tolist(), hi[rise_i.size:].tolist()))
+    out = []
+    for a, b in zip(first.tolist(), last.tolist()):
+        out.append(RefinedRange(start_ms=rise_at.get(a, float(t[0])), end_ms=set_at.get(b, float(t[-1])),
+                                starts_before_window=a == 0, ends_after_window=b == n - 1))
+    return out
