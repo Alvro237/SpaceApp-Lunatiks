@@ -899,6 +899,11 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
   to { opacity: 1; }
 }
 
+/* ---------------------------------------------------------------- planner asleep under Block Moon */
+/* hidden but laid out (no canvas resize, nothing to rebuild on the way back); its portal tools step aside too */
+.map-layer.is-dormant > * { visibility: hidden; }
+.navigator.is-blocks .toolslot .map-controls:not(.block-controls) { display: none; }
+
 @media (forced-colors: active) {
   .switch[aria-checked='true'] { outline: 2px solid Highlight; }
 }

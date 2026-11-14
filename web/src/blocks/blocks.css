@@ -1,0 +1,199 @@
+/*
+ * Block Moon. The world is made of cubes; the panels are the navigator's own (theme.css and panels.css tokens:
+ * dark glass, 12-16 px corners, Space Grotesk text and Plex Mono numbers), so the two modes read as one product.
+ * Only the day blocks and the switch keep a square, "block" shape. Sun = amber, Earth = blue and dashed, as
+ * everywhere else; each state also changes text or shape, never colour alone. The mode is always over a night
+ * sky, so text colours here are fixed light-on-dark like the map toolbar's.
+ */
+
+/* ---------------------------------------------------------------- view tools in the shared tool strip */
+.block-controls { flex-wrap: wrap; }
+.blk-seg {
+  display: inline-flex;
+  height: 42px;
+  padding: 3px;
+  gap: 2px;
+  border-radius: 12px;
+  background: rgba(14, 16, 21, 0.86);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(236, 234, 228, 0.22);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+.toolstrip .map-controls .blk-seg button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: auto;
+  height: 34px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+  color: #eceae4;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.toolstrip .map-controls .blk-seg button:hover:not([aria-checked='true']) { background: rgba(236, 234, 228, 0.1); }
+.toolstrip .map-controls .blk-seg button[aria-checked='true'] { background: #eceae4; color: #0b0c0e; font-weight: 700; }
+.block-about { margin: 0 0 8px; font-size: 0.85rem; line-height: 1.45; }
+.block-about:last-child { margin-bottom: 0; color: var(--muted); }
+
+/* ---------------------------------------------------------------- the sky now (right) */
+.float-right.blk-sky { width: 320px; }
+.float-right.blk-sky.is-closed { width: auto; }
+.blk-sky-mini { font-family: var(--mono); font-size: 0.78rem; white-space: nowrap; }
+.blk-mini-sun { color: var(--sun); }
+.blk-mini-earth { color: var(--earth); }
+.blk-place { margin: 0 0 10px; display: grid; gap: 2px; }
+.blk-place-name { font-size: 1.15rem; font-weight: 700; line-height: 1.2; }
+.blk-time { font-family: var(--mono); font-size: 0.78rem; color: var(--muted); }
+.blk-answers { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.blk-answer {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  border-top: 3px solid;
+  padding: 10px 12px;
+}
+.blk-answer p { margin: 0; }
+.blk-answer-sun { border-top-color: var(--sun); }
+.blk-answer-earth { border-top-color: var(--earth); border-top-style: dashed; }
+.blk-q { font-size: 0.8rem; font-weight: 600; color: var(--muted); }
+.blk-a { font-size: 1.9rem; font-weight: 700; line-height: 1.15; margin: 2px 0 !important; }
+.blk-answer-sun .blk-a { color: var(--sun); }
+.blk-answer-earth .blk-a { color: var(--earth); }
+.blk-when { font-size: 0.82rem; color: var(--muted); }
+.blk-when strong { color: var(--text); font-family: var(--mono); font-weight: 600; }
+.blk-note { margin: 10px 0 0; padding: 8px 10px; background: var(--warn-bg); border: 1px solid var(--sun); border-radius: 10px; font-size: 0.84rem; line-height: 1.4; }
+.blk-real { margin-top: 12px; font-size: 0.85rem; }
+.blk-real summary { cursor: pointer; font-weight: 600; min-height: 32px; display: flex; align-items: center; }
+.blk-why { margin: 6px 0 0; font-size: 0.9rem; line-height: 1.45; }
+.blk-real dl { margin: 8px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-family: var(--mono); font-size: 0.78rem; }
+.blk-real dt { font-weight: 600; }
+.blk-real dd { margin: 0; color: var(--muted); }
+
+/* ---------------------------------------------------------------- day by day (bottom) */
+.blk-bottom.float-bottom { right: calc(var(--inset-right) + 10px); }
+.blk-days-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.blk-days-title { margin: 0; font-size: 0.95rem; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.blk-days-sum { font-family: var(--mono); font-size: 0.76rem; font-weight: 500; color: var(--muted); }
+.blk-days .tl-icons { display: flex; gap: 6px; }
+.blk-days .tl-btn {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 40px; height: 40px; padding: 0 10px;
+  border-radius: 999px; color: #eceae4; background: rgba(14, 16, 21, 0.72); border: 1px solid rgba(236, 234, 228, 0.35);
+}
+.blk-days .tl-btn:hover:not(:disabled) { border-color: #eceae4; }
+.blk-days .tl-btn[aria-pressed='true'] { background: #eceae4; color: #0b0c0e; }
+.blk-days .blk-speed { gap: 4px; }
+.blk-days .blk-speed span { font-family: var(--mono); font-size: 0.74rem; font-weight: 600; }
+.blk-days .blk-play-main { background: #eceae4; color: #0b0c0e; border-color: #eceae4; }
+.blk-rows { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.blk-row { display: flex; align-items: center; gap: 8px; }
+.blk-row-name { width: 44px; flex: none; font-weight: 600; font-size: 0.8rem; }
+.blk-sun-t { color: var(--sun); }
+.blk-earth-t { color: var(--earth); }
+.blk-cells { display: flex; gap: 3px; flex: 1; min-width: 0; }
+.blk-cell {
+  flex: 1 1 0; min-width: 5px; height: 16px; min-height: 16px; padding: 0; border-radius: 3px; border: 0;
+  box-shadow: inset -2px -2px 0 rgba(0, 0, 0, 0.3), inset 2px 2px 0 rgba(255, 255, 255, 0.14);
+}
+.blk-cell:hover { filter: brightness(1.2); }
+.blk-cell.is-off { background: rgba(255, 255, 255, 0.1); }
+.blk-cell.is-none { background: transparent; outline: 1px dashed #4a4d54; }
+.blk-cell.is-sun { background: #ffb547; }
+.blk-cell.is-sun-part { background: repeating-linear-gradient(135deg, #ffb547 0 3px, #5a4620 3px 6px); }
+.blk-cell.is-earth { background: #6cb2ff; }
+.blk-cell.is-earth-part { background: repeating-linear-gradient(135deg, #6cb2ff 0 3px, #1d3557 3px 6px); }
+.blk-cell.is-today { outline: 2px solid #ffd166; outline-offset: 2px; position: relative; z-index: 1; }
+.blk-dates { font-size: 0.72rem; color: var(--muted); justify-content: space-between; font-family: var(--mono); }
+.blk-dates > span:nth-child(2) { flex: 1; }
+.blk-legend { margin: 6px 0 0; font-size: 0.76rem; color: var(--muted); }
+
+/* ---------------------------------------------------------------- mission log (left, under the top bars) */
+/* not a .float: the panels' inset measuring must not count it, or it would push itself aside */
+.blk-story {
+  position: absolute;
+  z-index: 20;
+  left: 10px;
+  top: calc(var(--inset-top) + 62px);
+  width: min(360px, calc(100vw - var(--inset-right) - 40px));
+  max-height: calc(100vh - var(--inset-top) - var(--inset-bottom) - 80px);
+  overflow-y: auto;
+  padding: 14px;
+  background: var(--glass);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+  color: var(--text);
+}
+.blk-story.is-closed { width: auto; max-width: 380px; padding: 8px 8px 8px 12px; }
+.blk-story-top { display: flex; align-items: flex-start; gap: 10px; }
+.blk-story-head { flex: 1; min-width: 0; }
+.blk-story-mini { margin: 0; font-size: 0.9rem; flex: 1; display: flex; gap: 6px; align-items: baseline; flex-wrap: wrap; }
+.blk-kicker { margin: 0; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; }
+.blk-title { margin: 2px 0 0; font-size: 1.2rem; line-height: 1.2; }
+.blk-meta { margin: 4px 0 0; font-family: var(--mono); font-size: 0.74rem; color: var(--muted); }
+.blk-chapters { display: flex; gap: 4px; margin: 10px 0 2px; flex-wrap: wrap; }
+.blk-chapter {
+  min-width: 30px; min-height: 30px; padding: 0 6px; border-radius: 8px; font-family: var(--mono); font-size: 0.8rem; font-weight: 600;
+  background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+}
+.blk-chapter.is-done { background: rgba(126, 226, 168, 0.16); border-color: var(--pass); color: var(--pass); }
+.blk-chapter[aria-current='step'] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.blk-fact { margin: 12px 0 0; font-size: 0.92rem; line-height: 1.5; }
+.blk-source { display: inline-block; margin-top: 4px; font-size: 0.76rem; color: var(--muted); }
+.blk-task-h { margin: 14px 0 6px; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; }
+.blk-tasks { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.blk-tasks li { display: flex; gap: 8px; align-items: flex-start; font-size: 0.9rem; line-height: 1.4; }
+.blk-tasks li.is-done { color: var(--muted); }
+.blk-tasks li.is-done > span:last-child { text-decoration: line-through; text-decoration-color: var(--pass); }
+.blk-check {
+  flex: none; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; margin-top: 1px;
+  border: 1.5px solid var(--muted); border-radius: 6px; color: #0b0c0e; font-weight: 700; font-size: 0.78rem;
+}
+.blk-tasks li.is-done .blk-check { background: var(--pass); border-color: var(--pass); }
+.blk-question { margin: 12px 0 0; font-weight: 600; font-size: 0.92rem; }
+.blk-choices { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+.blk-choices button { flex: 1 1 140px; min-height: 42px; border-radius: 10px; font-weight: 600; }
+.blk-choices button:hover { border-color: var(--accent); }
+.blk-found { margin-top: 12px; padding: 10px 12px; background: var(--surface-2); border: 1px solid var(--border); border-left: 3px solid var(--pass); border-radius: 10px; }
+.blk-found-h { margin: 0 0 4px; color: var(--pass); font-weight: 700; font-size: 0.85rem; }
+.blk-found p { margin: 0; font-size: 0.9rem; line-height: 1.5; }
+.blk-found p + p { margin-top: 6px; }
+.blk-found ul { margin: 4px 0 0; padding-left: 18px; font-size: 0.86rem; line-height: 1.45; }
+.blk-lesson { margin: 10px 0 0; padding: 8px 10px; border: 1px dashed var(--pass); border-radius: 10px; font-size: 0.88rem; line-height: 1.45; }
+.blk-story-actions { margin-top: 12px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.blk-big { min-height: 42px; padding: 6px 16px; border-radius: 999px; font-weight: 700; background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.blk-big:hover:not(:disabled) { filter: brightness(0.92); }
+.blk-link { background: none; border: 0; color: var(--text); text-decoration: underline; min-height: 32px; padding: 0; margin-top: 6px; }
+.blk-hint-text { margin: 4px 0 0; padding: 8px 10px; background: var(--warn-bg); border: 1px solid var(--sun); border-radius: 10px; font-size: 0.86rem; }
+.blk-badge { flex: none; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); }
+.blk-intro { margin: 8px 0 0; font-size: 0.92rem; line-height: 1.5; }
+.blk-intro-list { margin: 8px 0 0; padding-left: 18px; font-size: 0.86rem; line-height: 1.5; color: var(--muted); }
+
+/* ---------------------------------------------------------------- the switch in the top bar */
+.block-toggle {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 3px 12px 3px 4px; border-radius: 999px;
+}
+.block-toggle .track { position: relative; width: 46px; height: 28px; border-radius: 999px; background: var(--border); flex: none; }
+.block-toggle .knob {
+  position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--muted);
+  transition: left 0.2s, border-radius 0.2s;
+}
+.block-toggle[aria-checked='true'] { border-color: #ffb547; background: #24211a; color: #eceae4; font-weight: 700; }
+.block-toggle[aria-checked='true'] .track { background: #5a4620; }
+.block-toggle[aria-checked='true'] .knob {
+  left: 21px; border-radius: 4px; background: #ffb547;
+  box-shadow: inset -3px -3px 0 rgba(0, 0, 0, 0.25), inset 3px 3px 0 rgba(255, 255, 255, 0.3);
+}
+@media (prefers-reduced-motion: reduce) { .block-toggle .knob { transition: none; } }
+
+@media (max-width: 760px) {
+  .blk-cell { min-width: 3px; }
+  .blk-story, .blk-story.is-closed { position: static; width: auto; max-width: none; max-height: none; margin: 8px; }
+  .float-right.blk-sky { width: auto; }
+}

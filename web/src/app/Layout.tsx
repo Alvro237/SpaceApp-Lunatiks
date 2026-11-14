@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useApp } from '../state/store'
+import { BlockToggle } from '../blocks/BlockToggle'
 import { BrandMark } from '../ui/BrandMark'
 
 const TITLES: Record<string, string> = { '/': 'Navigator', '/data': 'Data & methods', '/learn': 'Learn' }
@@ -11,6 +12,7 @@ export function Layout() {
   const set = useApp((s) => s.set)
   const compareMode = useApp((s) => s.compareMode)
   const setCompareMode = useApp((s) => s.setCompareMode)
+  const blocks = useApp((s) => s.blocks)
   const onMap = pathname === '/'
   const main = useRef<HTMLElement>(null)
   const first = useRef(true)
@@ -23,7 +25,7 @@ export function Layout() {
   }, [pathname])
 
   return (
-    <div className={`app${onMap ? ' on-map' : ''}`}>
+    <div className={`app${onMap ? ' on-map' : ''}${onMap && blocks ? ' blocks-on' : ''}`}>
       <a className="skip" href="#main" onClick={(e) => (e.preventDefault(), main.current?.focus())}>
         Skip to content
       </a>
@@ -34,22 +36,27 @@ export function Layout() {
           </span>
           <span>
             <span className="brand-name">Lunar Landing Site Navigator</span>
-            <span className="tagline">Sun and Earth over the real lunar horizon</span>
+            <span className="tagline">{onMap && blocks ? 'Block Moon · explore with simple answers' : 'Sun and Earth over the real lunar horizon'}</span>
           </span>
         </div>
         {onMap && (
           <div className="bar-tools">
-            <div className="mode-switch" role="radiogroup" aria-label="Mode">
-              <button type="button" role="radio" aria-checked={mode === 'study'} onClick={() => set({ mode: 'study' })}>
-                Study
-              </button>
-              <button type="button" role="radio" aria-checked={mode === 'mission'} onClick={() => set({ mode: 'mission' })}>
-                Mission
-              </button>
-            </div>
-            <button type="button" className="compare-toggle" aria-pressed={compareMode} onClick={() => setCompareMode(!compareMode)}>
-              Compare
-            </button>
+            {!blocks && (
+              <>
+                <div className="mode-switch" role="radiogroup" aria-label="Mode">
+                  <button type="button" role="radio" aria-checked={mode === 'study'} onClick={() => set({ mode: 'study' })}>
+                    Study
+                  </button>
+                  <button type="button" role="radio" aria-checked={mode === 'mission'} onClick={() => set({ mode: 'mission' })}>
+                    Mission
+                  </button>
+                </div>
+                <button type="button" className="compare-toggle" aria-pressed={compareMode} onClick={() => setCompareMode(!compareMode)}>
+                  Compare
+                </button>
+              </>
+            )}
+            <BlockToggle />
           </div>
         )}
         <nav aria-label="Main">

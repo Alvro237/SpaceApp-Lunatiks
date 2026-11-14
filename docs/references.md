@@ -63,6 +63,24 @@ asks for this list; keep it current when something is added.
 - U.S. Standard Atmosphere, 1976 (NOAA/NASA/USAF): molar mass of dry air 28.9644 g/mol. CODATA 2018: gas constant
   R = 8.314462618 J/mol K and Stefan-Boltzmann constant.
 
+Mission facts told in Block Moon's mission log (`web/src/blocks/story.ts`); every number in its answers comes from
+the engine, these only support the short historical texts:
+
+- NASA SP-4214, *Where No Man Has Gone Before*, ch. 6 "Mission and science planning": sun elevation at landing as
+  the main driver of Apollo launch times, landings near the sunrise terminator.
+  https://www.nasa.gov/wp-content/uploads/static/history/SP-4214/ch6-2.html
+- ISRO, Chandrayaan-3 mission page (landing on 23 August 2023 near 69.37 S, 32.32 E).
+  https://www.isro.gov.in/Chandrayaan3_Details.html; rover and lander put to sleep on 2 and 4 September 2023 and no
+  signal after the next sunrise (ISRO statement of 22 September 2023, reported by The Wire:
+  https://thewire.in/space/isro-attempts-to-revive-communication-with-vikram-lander-pragyan-rover)
+- Spaceflight Now (7 March 2025), "Intuitive Machines' IM-2 Moon mission ends with lander on its side": Athena on
+  its side in a crater on Mons Mouton; Sun direction, panel orientation and cold meant no recharge.
+  https://spaceflightnow.com/2025/03/07/intuitive-machines-im-2-mission-ends-with-lander-on-its-side-on-the-moon/
+- NASA, LCROSS mission (impact in Cabeus crater, 9 October 2009, water in the ejecta plume).
+  https://science.nasa.gov/mission/lcross/ ; Colaprete, A., et al. (2010). Detection of water in the LCROSS ejecta
+  plume. Science 330, 463-468. doi:10.1126/science.1186986
+- NASA Scientific Visualization Studio, Moon Phase and Libration 2026 (south up). https://svs.gsfc.nasa.gov/5588
+
 ## Software (all open source)
 
 API: FastAPI, Starlette, Uvicorn, Pydantic, NumPy, pytest, httpx.
