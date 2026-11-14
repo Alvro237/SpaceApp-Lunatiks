@@ -7,6 +7,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ToolPortal } from '../ui/ToolSlot'
 import { IconMinus, IconPin, IconPlus, IconPole } from '../ui/icons'
 import { useGlobe } from '../state/globe'
+import { usePanels } from '../state/panels'
 import { useQuery } from '@tanstack/react-query'
 import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
@@ -58,6 +59,9 @@ export function GlobeView() {
   const enterMap = useApp((s) => s.enterMap)
   const [orbit] = useState(() => new OrbitRig(START))
   const anchored = useGlobe((s) => s.anchored)
+  // In the horizon view the globe is hidden and paused: it must not start turning there, nor right after.
+  const covered = usePanels((s) => s.section === 'horizon')
+  useEffect(() => orbit.touch(), [covered, orbit])
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null)
   const pickRef = useRef<((cx: number, cy: number) => [number, number] | null) | null>(null)
 
@@ -147,7 +151,7 @@ export function GlobeView() {
         onWheel={onWheel}
       >
         {globe.data ? (
-          <Canvas camera={{ fov: FOV, near: 10, far: 50_000, position: [0, 0, 6000] }} dpr={[1, 2]} flat linear gl={{ antialias: true }} aria-hidden="true">
+          <Canvas camera={{ fov: FOV, near: 10, far: 50_000, position: [0, 0, 6000] }} dpr={[1, 2]} flat linear gl={{ antialias: true }} aria-hidden="true" frameloop={covered ? 'never' : 'always'}>
             <GlobeScene
               data={globe.data}
               orbit={orbit}

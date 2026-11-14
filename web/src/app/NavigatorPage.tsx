@@ -21,6 +21,7 @@ import { usePanels } from '../state/panels'
 import { useApp } from '../state/store'
 import { useUrlSync } from '../state/useUrlSync'
 import { GlobeView } from '../globe/GlobeView'
+import { HorizonView } from '../horizon/HorizonView'
 import { TerrainView } from '../terrain/TerrainView'
 import { useClock } from '../time/useClock'
 import { QuestPanel } from '../learn/QuestPanel'
@@ -41,9 +42,13 @@ export function NavigatorPage() {
   return (
     <NowProvider>
       <ToolSlotContext.Provider value={slot}>
-        <div className="navigator" ref={root}>
+        <div className={`navigator${section === 'horizon' ? ' is-horizon' : ''}`} ref={root}>
           <h1 className="sr-only">Lunar Landing Site Navigator</h1>
-          {scale === 'globe' ? <GlobeView /> : <TerrainView />}
+          {/* the map stays mounted (and keeps its camera) under the horizon view, paused and out of the tab order */}
+          <div className="map-layer" inert={section === 'horizon' ? true : undefined} aria-hidden={section === 'horizon' ? true : undefined}>
+            {scale === 'globe' ? <GlobeView /> : <TerrainView />}
+          </div>
+          {section === 'horizon' && <HorizonView />}
           {restoredFromCorruptLink && (
             <p className="toast" role="alert">
               The shared link could not be read; the default scenario is shown.
@@ -72,7 +77,7 @@ export function NavigatorPage() {
               <div className="toolslot" ref={setSlot} />
             </div>
           </div>
-          <Float side="right" title="Place" wide={section !== null}>
+          <Float side="right" title="Place" wide={section !== null && section !== 'horizon'}>
             <PlacePanel />
           </Float>
           <QuestPanel />

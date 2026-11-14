@@ -892,6 +892,46 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
 .opt-actions .fine { margin: 0; }
 .radiation-panel { margin-top: 2px; }
 
+/* ---------------------------------------------------------------- first-person horizon view */
+.map-layer { display: contents; }
+.horizon-view {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: #000;
+  cursor: grab;
+  touch-action: none;
+  outline: none;
+}
+.horizon-view:active { cursor: grabbing; }
+.horizon-view:focus-visible { box-shadow: inset 0 0 0 3px var(--focus); }
+.horizon-view canvas { display: block; }
+/* the map's own tools and the sky dial step aside while the view is open */
+.navigator.is-horizon .toolslot .map-controls,
+.navigator.is-horizon .sky-dial,
+.navigator.is-horizon .globe-caption,
+.navigator.is-horizon .legend-chip { display: none; }
+.horizon-tools { display: flex; gap: 8px; }
+.horizon-tools .tool-group { display: flex; flex-direction: row; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); }
+.horizon-tools .tool-group .tool-btn { box-shadow: none; }
+.horizon-tools .tool-group .tool-btn:first-child { border-radius: 12px 0 0 12px; border-right-color: rgba(236, 234, 228, 0.12); }
+.horizon-tools .tool-group .tool-btn:last-child { border-radius: 0 12px 12px 0; border-left: 0; }
+@media (max-width: 760px) {
+  .horizon-view { position: relative; height: 58vh; }
+  .navigator.is-horizon .map-layer > * { display: none; }
+}
+
+/* the narrow Horizon panel */
+.horizon-panel { display: grid; gap: 10px; }
+.horizon-panel .setting { margin: 0; }
+.hz-readout { margin: 0; display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); }
+.hz-readout div { display: grid; grid-template-columns: 58px 1fr; gap: 8px; align-items: baseline; }
+.hz-readout dt { font-size: 0.78rem; font-weight: 600; color: var(--muted); }
+.hz-readout dd { margin: 0; font-family: var(--mono); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.hz-sun dt { color: var(--sun); }
+.hz-earth dt { color: var(--earth); }
+.hz-state { color: var(--muted); font-family: var(--font); font-size: 0.78rem; }
+
 @media (forced-colors: active) {
   .switch[aria-checked='true'] { outline: 2px solid Highlight; }
 }

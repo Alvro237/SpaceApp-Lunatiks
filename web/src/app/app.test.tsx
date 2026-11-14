@@ -108,9 +108,18 @@ describe('navigator', () => {
     // the sections are square buttons; each opens in place with a way back
     const user = userEvent.setup()
     await user.click(within(screen.getByRole('group', { name: 'Sections' })).getByRole('button', { name: /Horizon/ }))
-    expect(screen.getByRole('heading', { level: 3, name: /Horizon/ })).toHaveFocus()
-    expect(screen.getByRole('img', { name: /360° horizon with the Sun and the Earth/ })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'All sections' }))
+    // Horizon opens the first-person view on the place: it takes the focus and the keyboard; the panel steers it
+    const hv = screen.getByRole('application', { name: /Horizon view from IM-2/ })
+    expect(hv).toHaveFocus()
+    const camera = screen.getByRole('radiogroup', { name: 'Camera' })
+    expect(within(camera).getByRole('radio', { name: /Sun/ })).toBeChecked()
+    await user.keyboard('{ArrowRight}')
+    expect(within(camera).getByRole('radio', { name: /Free/ })).toBeChecked()
+    await user.keyboard('e')
+    expect(within(camera).getByRole('radio', { name: /Earth/ })).toBeChecked()
+    expect(hv).toHaveAccessibleName(/facing .* Earth at azimuth .*in view/)
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('application', { name: /Horizon view/ })).not.toBeInTheDocument()
     await user.click(within(screen.getByRole('group', { name: 'Sections' })).getByRole('button', { name: /Power/ }))
     // the engine parameters live in the section they change
     expect(screen.getByRole('radiogroup', { name: 'Panel' })).toBeInTheDocument()

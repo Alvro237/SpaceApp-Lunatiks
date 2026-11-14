@@ -6,6 +6,7 @@
  */
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ToolPortal } from '../ui/ToolSlot'
+import { usePanels } from '../state/panels'
 import { useQuery } from '@tanstack/react-query'
 import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
@@ -69,6 +70,8 @@ function MapView({ tileset }: { tileset: Tileset }) {
   const view = useApp((s) => s.view)
   const set = useApp((s) => s.set)
   const mode = useApp((s) => s.mode)
+  // paused while the horizon view covers the map
+  const covered = usePanels((s) => s.section === 'horizon')
 
   useEffect(() => rig.setTilt(view === '3d' ? TILT_3D : 0), [rig, view])
 
@@ -152,7 +155,7 @@ function MapView({ tileset }: { tileset: Tileset }) {
         onWheel={onWheel}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <Canvas camera={{ fov: FOV_DEG, near: 1, far: 10_000, position: [0, 1500, 0] }} dpr={[1, 2]} flat linear gl={{ antialias: true }} aria-hidden="true">
+        <Canvas camera={{ fov: FOV_DEG, near: 1, far: 10_000, position: [0, 1500, 0] }} dpr={[1, 2]} flat linear gl={{ antialias: true }} aria-hidden="true" frameloop={covered ? 'never' : 'always'}>
           <Driver
             tileset={tileset}
             rig={rig}
