@@ -35,10 +35,10 @@ Numbers given as defaults below are placeholders for the owner to set with a cit
 
 **Status:** done in branch `seryitron-branchito`, validated (output format: `docs/sw1-output-format.md`). **Files:** `routers/state.py`, `schemas/state.py`, `tests/test_state.py`.
 
-- `GET /api/v1/sites/{site_id}/state?t=&mast_m=&panel=&comms_min_fraction=`
-- Response: Sun and Earth `az`, `el`, `visible_fraction`, `angular_radius_deg`, `distance_km`; `eclipse`;
-  `irradiance_w_m2`, `power_w_m2`; `next_sun_transition` and `next_earth_transition` (`kind`, `at`, `in_hours`);
-  `horizon_kind`.
+- `GET /api/v1/sites/{site_id}/state?t=&mast_m=&comms_min_fraction=` (`mast_m` absent or null = 0 m)
+- Response: Sun and Earth `az`, `el`, `horizon_el`, `visible_fraction`, `visible`, `angular_radius_deg`,
+  `distance_km`; `eclipse`, `sun_eclipsed_fraction`; `next_sun_transition` and `next_earth_transition` (`kind`,
+  `at`, `in_hours`); `horizon_kind`. No irradiance or power: those belong to MECH's `/power` (owner's decision).
 - Logic: `services.model_for_site` + `engine.evaluate` at one instant + `engine.next_transition`. No new physics.
 - Done when: the values for a fixture case in `tests/fixtures/horizons_reference.json` match within 0.01 degrees
   through the HTTP layer, and a date outside the tables returns 400.

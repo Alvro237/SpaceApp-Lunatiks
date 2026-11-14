@@ -70,7 +70,6 @@ def test_total_lunar_eclipses_black_out_the_sun(event):
     """At greatest eclipse of a total lunar eclipse the whole Moon is in the umbra: no sunlight anywhere."""
     r = client.get(f"/api/v1/sites/{SITE}/state", params={"t": _utc(event["greatest_td"])}).json()
     assert r["eclipse"] == "total" and r["sun_eclipsed_fraction"] == 1.0
-    assert r["power_w_m2"] == 0.0
     assert r["sun"]["visible_fraction"] == 1.0                   # the horizon is not what hides it
 
 
@@ -94,12 +93,21 @@ def test_every_engine_eclipse_is_in_the_nasa_catalogue():
         assert any(a - 3_600_000 <= g <= b + 3_600_000 for g in greatest), services.iso_utc(a)
 
 
-def test_partial_phase_dims_the_power_smoothly():
-    """2029-06-26 at the site: full power before, falling through the partial phase, zero in totality."""
+def test_eclipse_phases_through_the_endpoint():
+    """2029-06-26 at the site: none, partial (share between 0 and 1), total."""
     p = [client.get(f"/api/v1/sites/{SITE}/state", params={"t": f"2029-06-26T{h}Z"}).json()
          for h in ("01:00:00", "02:00:00", "03:22:00")]
-    assert p[0]["eclipse"] == "none" and p[1]["eclipse"] == "partial" and p[2]["eclipse"] == "total"
-    assert 0.0 < p[1]["sun_eclipsed_fraction"] < 1.0
-    expected = p[1]["irradiance_w_m2"] * (1 - p[1]["sun_eclipsed_fraction"]) * math.cos(math.radians(p[1]["sun"]["el"]))
-    assert p[1]["power_w_m2"] == pytest.approx(expected)
-    assert p[0]["power_w_m2"] > p[1]["power_w_m2"] > p[2]["power_w_m2"] == 0.0
+    assert [x["eclipse"] for x in p] == ["none", "partial", "total"]
+    assert [x["sun_eclipsed_fraction"] for x in p][0] == 0.0 and 0.0 < p[1]["sun_eclipsed_fraction"] < 1.0
+
+
+def test_engine_power_goes_dark_in_an_eclipse():
+    """The engine's power series (what the MECH power endpoint builds on) drops through the partial phase and
+    is zero in totality: power = irradiance x horizon fraction x (1 - eclipsed) x panel factor."""
+    store = get_store()
+    model = services.model_for_site(store, store.sites.get(SITE), 0.0)
+    t = [services.to_ms(datetime(2029, 6, 26, h, m, tzinfo=timezone.utc)) for h, m in ((1, 0), (2, 0), (3, 22))]
+    s = evaluate(store.ephemeris, model, t)
+    expected = s.irradiance_w_m2 * s.sun_frac * (1 - s.sun_eclipsed_fraction) * np.cos(np.radians(s.sun_el))
+    assert s.power_w_m2 == pytest.approx(expected)
+    assert s.power_w_m2[0] > s.power_w_m2[1] > s.power_w_m2[2] == 0.0

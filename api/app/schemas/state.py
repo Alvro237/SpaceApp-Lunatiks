@@ -3,6 +3,9 @@
 Shared by ``GET /api/v1/sites/{site_id}/state`` and, later, ``GET /api/v1/points/state``.
 JSON field names are snake_case; angles in degrees; times ISO 8601 UTC with a trailing Z.
 Output format documented for integration in ``docs/sw1-output-format.md``.
+
+Light and comms geometry only: irradiance and array power are the MECH power endpoint's (``/api/v1/power``),
+so this contract carries no power number that could disagree with it.
 """
 from __future__ import annotations
 
@@ -10,7 +13,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-PanelModel = Literal["tracking", "vertical", "horizontal"]
 EclipseState = Literal["none", "partial", "total"]
 HorizonKind = Literal["terrain", "smooth_sphere"]
 
@@ -45,7 +47,6 @@ class StateResponse(BaseModel):
     mast_used_m: float = Field(description="Mast height of the horizon actually used, metres: the nearest "
                                            "stored terrain mask (0, 2, 5, 10 m) or the requested one on a "
                                            "smooth sphere")
-    panel: PanelModel = Field(description="Solar array model used for power_w_m2")
     comms_min_fraction: float = Field(description="Share of the Earth's disc required for comms, 0..1")
     horizon_kind: HorizonKind = Field(description="'terrain': LOLA ray-traced mask; 'smooth_sphere': geometric "
                                                   "dip only (real terrain can only shorten light and comms)")
@@ -55,10 +56,6 @@ class StateResponse(BaseModel):
                                               "seen from the Earth)")
     sun_eclipsed_fraction: float = Field(description="Fraction of the solar disc hidden behind the Earth, 0..1 "
                                                      "(1 during a total eclipse, 0 when eclipse is 'none')")
-    irradiance_w_m2: float = Field(description="Solar irradiance normal to the rays at the actual Sun "
-                                               "distance, W/m2, before horizon and panel factors")
-    power_w_m2: float = Field(description="irradiance_w_m2 x sun.visible_fraction x (1 - sun_eclipsed_fraction) "
-                                          "x panel cosine factor, W/m2 of array (before efficiency)")
     next_sun_transition: Transition | None = Field(
         description="Next sunset (kind 'set') or sunrise ('rise'); null if none within the search span")
     next_earth_transition: Transition | None = Field(

@@ -24,7 +24,7 @@ def test_happy_path_matches_the_contract():
     assert r.status_code == 200
     body = StateResponse.model_validate(r.json())
     assert body.site_id == "im-2" and body.horizon_kind == "terrain" and body.t == T
-    assert body.panel == "vertical" and body.comms_min_fraction == 0.5 and body.mast_used_m == 0.0
+    assert body.comms_min_fraction == 0.5 and body.mast_used_m == 0.0
     assert v.state_invariants(r.json()) == []
 
 
@@ -47,11 +47,11 @@ def test_mast_snaps_to_the_nearest_terrain_mask():
     assert get(mast_m=8.0).json()["mast_used_m"] == 10.0
 
 
-def test_panel_models_change_only_the_power():
-    a, b, c = (get(panel=p).json() for p in ("tracking", "vertical", "horizontal"))
-    assert a["sun"] == b["sun"] == c["sun"]
-    assert a["power_w_m2"] == pytest.approx(a["irradiance_w_m2"] * a["sun"]["visible_fraction"])
-    assert a["power_w_m2"] >= b["power_w_m2"] >= c["power_w_m2"]   # Sun low over the pole
+def test_no_power_numbers_in_state():
+    """Power is the MECH endpoint's (/api/v1/power): state must not publish a second, possibly different figure."""
+    r = get().json()
+    assert not {"panel", "irradiance_w_m2", "power_w_m2"} & set(r)
+    assert get(panel="tracking").json() == r          # an old client's panel parameter is simply ignored
 
 
 def test_unknown_site_is_404():
@@ -59,7 +59,6 @@ def test_unknown_site_is_404():
 
 
 @pytest.mark.parametrize("params", [{"t": "not-a-date"}, {"mast_m": -1}, {"mast_m": 21}, {"mast_m": "abc"},
-                                    {"panel": "diagonal"},
                                     {"comms_min_fraction": 1.5}])
 def test_invalid_input_is_422(params):
     assert get(**params).status_code == 422
@@ -85,7 +84,7 @@ def test_matches_jpl_horizons_through_http():
     assert worst < v.HORIZONS_TOL_DEG, f"worst {worst:.6f} deg"
 
 
-def test_invariants_on_every_site_date_and_panel():
+def test_invariants_on_every_site_and_date():
     assert v.sweep_invariants(client) == []
 
 
@@ -107,7 +106,8 @@ def test_the_validator_catches_wrong_numbers():
     """Guard against a validator that always passes."""
     good = get().json()
     for path, value in ((("power_w_m2",), 999.0), (("sun", "angular_radius_deg"), 0.5), (("eclipse",), "total"),
-                        (("irradiance_w_m2",), 1300.0), (("earth", "visible"), False)):
+                        (("sun", "visible_fraction"), 1.5), (("sun_eclipsed_fraction",), 0.3),
+                        (("earth", "visible"), False)):
         bad = copy.deepcopy(good)
         target = bad
         for key in path[:-1]:

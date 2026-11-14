@@ -4,11 +4,11 @@ Three layers of checks, all through the HTTP layer so they test exactly what the
 
 1. **External reference**: Sun and Earth az/el against JPL Horizons (tests/fixtures/horizons_reference.json)
    for the catalogue site whose coordinates match a fixture case (IM-1), tolerance 0.01 degrees.
-2. **Physical invariants** on every response: ranges, disc sizes, irradiance from the Sun distance, power from
-   irradiance x fraction x panel factor, visible fraction consistent with el - horizon_el, consistent flags.
+2. **Physical invariants** on every response: ranges, distances, disc sizes from distance, visible fraction
+   consistent with el - horizon_el, eclipse state consistent with the eclipsed share, consistent flags.
 3. **Self-consistency of events**: a reported sunset/Earthset really flips the state one minute either side.
 4. **Eclipses** against NASA's lunar eclipse catalogue (tests/fixtures/nasa_lunar_eclipses_2025_2035.json):
-   at greatest eclipse of every total lunar eclipse the Sun is fully hidden and the power is zero.
+   at greatest eclipse of every total lunar eclipse the Sun is fully hidden behind the Earth.
 
 Pytest uses the functions below (tests/test_state.py). The same checks print a report from the command line:
 
@@ -25,7 +25,6 @@ FIXTURE = Path(__file__).parent / "fixtures" / "horizons_reference.json"
 ECLIPSES = Path(__file__).parent / "fixtures" / "nasa_lunar_eclipses_2025_2035.json"
 HORIZONS_TOL_DEG = 0.01
 AU_KM = 149_597_870.7
-SOLAR_CONSTANT = 1361.0
 SUN_R_KM, EARTH_R_KM = 695_700.0, 6_378.137
 # Catalogue sites with exactly the coordinates of a Horizons fixture case (the fixture is at 0 km height;
 # the site's ground height shifts the Earth by at most ~0.0004 degrees, well inside the tolerance).
@@ -37,14 +36,6 @@ def sky_error_deg(az1, el1, az2, el2) -> float:
     a1, e1, a2, e2 = map(math.radians, (az1, el1, az2, el2))
     c = math.sin(e1) * math.sin(e2) + math.cos(e1) * math.cos(e2) * math.cos(a1 - a2)
     return math.degrees(math.acos(max(-1.0, min(1.0, c))))
-
-
-def _panel_factor(panel: str, el: float) -> float:
-    if panel == "tracking":
-        return 1.0
-    if panel == "vertical":
-        return math.cos(math.radians(el))
-    return max(0.0, math.sin(math.radians(el)))
 
 
 def state_invariants(r: dict) -> list[str]:
@@ -77,15 +68,12 @@ def state_invariants(r: dict) -> list[str]:
     need(sun["visible"] == (sun["visible_fraction"] > 0.0), "sun.visible disagrees with visible_fraction > 0")
     need(earth["visible"] == (earth["visible_fraction"] >= r["comms_min_fraction"]),
          "earth.visible disagrees with comms_min_fraction")
-    irr = SOLAR_CONSTANT * (AU_KM / sun["distance_km"]) ** 2
-    need(abs(r["irradiance_w_m2"] - irr) < 0.01, f"irradiance {r['irradiance_w_m2']} vs 1361/r_AU^2 = {irr}")
     ecl = r["sun_eclipsed_fraction"]
     need(0.0 <= ecl <= 1.0, "sun_eclipsed_fraction outside 0..1")
     need((r["eclipse"] == "none") == (ecl == 0.0), f"eclipse {r['eclipse']} vs eclipsed fraction {ecl}")
     need((r["eclipse"] == "total") == (ecl == 1.0), f"eclipse {r['eclipse']} vs eclipsed fraction {ecl}")
-    power = r["irradiance_w_m2"] * sun["visible_fraction"] * (1.0 - ecl) * _panel_factor(r["panel"], sun["el"])
-    need(abs(r["power_w_m2"] - power) < 1e-6,
-         f"power {r['power_w_m2']} vs irradiance x fraction x (1 - eclipsed) x panel {power}")
+    for gone in ("panel", "irradiance_w_m2", "power_w_m2"):
+        need(gone not in r, f"{gone} belongs to the power endpoint, not to state")
     need(r["horizon_kind"] in ("terrain", "smooth_sphere"), "horizon_kind missing")
     for key, body in (("next_sun_transition", "sun"), ("next_earth_transition", "earth")):
         tr = r[key]
@@ -147,13 +135,13 @@ SWEEP_TIMES = ["2026-11-20T12:00:00Z", "2027-03-01T00:00:00Z", "2028-06-15T06:30
 
 
 def sweep_invariants(client) -> list[str]:
-    """state_invariants on every catalogue site x SWEEP_TIMES x the three panel models."""
+    """state_invariants on every catalogue site x SWEEP_TIMES x two comms thresholds."""
     bad = []
     for site in client.get("/api/v1/sites").json()["sites"]:
         for t in SWEEP_TIMES:
-            for panel in ("tracking", "vertical", "horizontal"):
-                r = client.get(f"/api/v1/sites/{site['id']}/state", params={"t": t, "panel": panel})
-                bad += [f"{site['id']} {t} {panel}: {m}" for m in state_invariants(r.json())]
+            for comms in (0.5, 1.0):
+                r = client.get(f"/api/v1/sites/{site['id']}/state", params={"t": t, "comms_min_fraction": comms})
+                bad += [f"{site['id']} {t} comms {comms}: {m}" for m in state_invariants(r.json())]
     return bad
 
 
@@ -172,7 +160,7 @@ def main() -> int:
           f"{worst['error_deg']:.6f} deg ({worst['body']} {worst['utc']}), tolerance {HORIZONS_TOL_DEG}")
     bad = sweep_invariants(client)
     ok &= not bad
-    print(f"[{'PASS' if not bad else 'FAIL'}] physical invariants on every site x {len(SWEEP_TIMES)} dates x 3 panels"
+    print(f"[{'PASS' if not bad else 'FAIL'}] physical invariants on every site x {len(SWEEP_TIMES)} dates x 2 comms thresholds"
           + "".join(f"\n    {m}" for m in bad[:20]))
     bad = []
     for site_id in ("im-2", "shackleton", "apollo-11"):
@@ -186,10 +174,10 @@ def main() -> int:
     for e in totals:
         t = datetime.fromisoformat(e["greatest_td"]).replace(tzinfo=timezone.utc) - timedelta(seconds=69)  # TD->UTC
         r = client.get("/api/v1/sites/apollo-11/state", params={"t": _iso(t)}).json()
-        if not (r["eclipse"] == "total" and r["power_w_m2"] == 0.0):
-            bad.append(f"{e['greatest_td']}: eclipse={r['eclipse']} power={r['power_w_m2']:.1f}")
+        if not (r["eclipse"] == "total" and r["sun_eclipsed_fraction"] == 1.0):
+            bad.append(f"{e['greatest_td']}: eclipse={r['eclipse']} eclipsed={r['sun_eclipsed_fraction']:.4f}")
     ok &= not bad
-    print(f"[{'PASS' if not bad else 'FAIL'}] {len(totals)} NASA total lunar eclipses 2025-2035: Sun hidden, power 0"
+    print(f"[{'PASS' if not bad else 'FAIL'}] {len(totals)} NASA total lunar eclipses 2025-2035: Sun fully hidden"
           + "".join(f"\n    {m}" for m in bad))
     return 0 if ok else 1
 
