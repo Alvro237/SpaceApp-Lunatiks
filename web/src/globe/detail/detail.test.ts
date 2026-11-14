@@ -6,6 +6,7 @@ import { MIN_DIST, MOON_R_KM } from '../orbit'
 import {
   MAX_LEVEL,
   MAX_VIEW_TILES,
+  COARSE_STEP,
   MIN_HEIGHT_LEVEL,
   allTiles,
   cellM,
@@ -19,16 +20,19 @@ import {
   tilesAround,
   trekTileUrl,
   wantedTiles,
+  demSource,
 } from './grid'
-import { decodeDemTile, decodePhotoTile, readGeoTile } from './trekGeo'
+import { decodeDemTile, greyFromRgba, readGeoTile } from './trekGeo'
 
 const fixture = (name: string) => {
   const b = readFileSync(new URL(`./__fixtures__/${name}`, import.meta.url))
   return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer
 }
 
-/** Tile of the fixtures: 22.5-28.125 E, 0-5.625 N (Mare Tranquillitatis), fetched from Moon Trek on 2026-11-14. */
+/** Tiles of the fixtures, fetched 2026-11-14: 22.5-28.125 E, 0-5.625 N (Mare Tranquillitatis, global DEM) and
+ * 22.5-28.125 E, 67.5-73.125 S (south polar DEM). */
 const T = { z: 4, x: 36, y: 15 }
+const P = { z: 4, x: 36, y: 28 }
 
 describe('detail grid', () => {
   it('builds the exact Moon Trek request the fixtures were fetched with', () => {
@@ -38,8 +42,23 @@ describe('detail grid', () => {
         '?bbox=22.5,-0.02197265625,28.125,5.625&size=256,257&format=tiff&pixelType=F32&compression=LZ77' +
         '&interpolation=RSP_BilinearInterpolation&f=image',
     )
-    expect(trekTileUrl('photo', T)).toContain('LRO_WAC_Mosaic_Global_303ppd_v02/ImageServer/exportImage?bbox=22.5,-0.02197265625,')
-    expect(trekTileUrl('photo', T)).toContain('&format=png&')
+  })
+
+  it('reads tiles poleward of 45 degrees from the polar DEMs (half-metres) and the others from the global DEM', () => {
+    expect(demSource(T)).toEqual({ service: 'LRO_LOLA_DEM_Global_256ppd_v06', scale: 1 })
+    expect(demSource(P)).toEqual({ service: 'LRO_LOLA_DEM_SPole45_100mp_v04_EQ', scale: 0.5 })
+    expect(demSource({ z: 2, x: 0, y: 0 })).toEqual({ service: 'LRO_LOLA_DEM_NPole45_100mp_v04_EQ', scale: 0.5 })
+    // a tile reaching across 45 S stays on the global DEM
+    expect(demSource({ z: 2, x: 0, y: 5 }).service).toBe('LRO_LOLA_DEM_Global_256ppd_v06')
+    expect(trekTileUrl('dem', P)).toContain('/LRO_LOLA_DEM_SPole45_100mp_v04_EQ/ImageServer/exportImage?bbox=22.5,-73.14697265625,28.125,-67.5&')
+  })
+
+  it('maps a tile to the WMTS photo tile of the same box (matrix z + 1, row y, column x)', () => {
+    // WMTS matrix 5 has 64 x 32 tiles of 5.625 degrees from 180 W, 90 N: column 36 starts at 22.5 E, row 15 at 5.625 N
+    expect(trekTileUrl('photo', T)).toBe(
+      'https://trek.nasa.gov/tiles/Moon/EQ/LRO_WAC_Mosaic_Global_303ppd_v02/1.0.0/default/default028mm/5/15/36.jpg',
+    )
+    expect(extraRows('photo', T)).toBe(0)
   })
 
   it('never crosses 180 degrees or the poles, and asks for no extra row on the south-pole tiles', () => {
@@ -52,8 +71,8 @@ describe('detail grid', () => {
         expect(b.lat0).toBeGreaterThanOrEqual(-90)
         expect(b.lat0 + b.size).toBeLessThanOrEqual(90)
       }
-      expect(extraRows({ z, x: 0, y: rows(z) - 1 })).toBe(0)
-      expect(extraRows({ z, x: 0, y: 0 })).toBe(1)
+      expect(extraRows('dem', { z, x: 0, y: rows(z) - 1 })).toBe(0)
+      expect(extraRows('dem', { z, x: 0, y: 0 })).toBe(1)
     }
     expect(allTiles(1)).toHaveLength(32)
   })
@@ -89,6 +108,11 @@ describe('detail grid', () => {
     expect(close.tiles.length).toBeGreaterThan(4)
     expect(close.tiles.length).toBeLessThanOrEqual(MAX_VIEW_TILES)
     expect(close.tiles[0]).toEqual(tileAt(MAX_LEVEL, 2.8, 25))
+    // a few coarse tiles first, covering the tile under the centre
+    expect(close.coarse.length).toBeGreaterThan(0)
+    expect(close.coarse.length).toBeLessThanOrEqual(12)
+    expect(close.coarse.every((t) => t.z === MAX_LEVEL - COARSE_STEP)).toBe(true)
+    expect(close.coarse[0]).toEqual(tileAt(MAX_LEVEL - COARSE_STEP, 2.8, 25))
     const whole = wantedTiles({ lat: -48, lon: 10, distKm: MOON_R_KM * 3.4, fovDeg: 35, widthPx: 1600, heightPx: 900 }, MIN_HEIGHT_LEVEL)
     expect(whole.tiles.length).toBeLessThanOrEqual(MAX_VIEW_TILES)
     if (whole.level >= 0) expect(whole.level).toBeGreaterThanOrEqual(MIN_HEIGHT_LEVEL)
@@ -113,29 +137,22 @@ describe('Moon Trek global tiles', () => {
     expect(Math.abs(sum / h.length - -2019.27)).toBeLessThan(2)
   })
 
+  it('scales the polar DEM from half-metres to metres, matching LDEM_16 over the same box', async () => {
+    const h = await decodeDemTile(fixture('dem_4_36_28.tif'), tileBox(P), 1, demSource(P).scale)
+    expect(h[0]).toBeCloseTo(1316.25, 1)
+    let sum = 0
+    for (const v of h) sum += v
+    // LDEM_16: mean of the 90 x 90 pixels of this box is 725.31 m (unscaled, the tile's mean would be 1424.86)
+    expect(Math.abs(sum / h.length - 725.31)).toBeLessThan(15)
+  })
+
   it('refuses a DEM tile whose size or georeference is not the tile asked for', async () => {
     await expect(decodeDemTile(fixture('dem_4_36_15.tif'), tileBox(T), 0)).rejects.toThrow(/256 x 257/)
     await expect(decodeDemTile(fixture('dem_4_36_15.tif'), tileBox({ ...T, x: 37 }), 1)).rejects.toThrow(/georeference/)
   })
 
-  it('decodes the photo tile and drops the extra row', async () => {
-    const p = await decodePhotoTile(fixture('photo_4_36_15.png'), tileBox(T), 1)
-    expect(p).toHaveLength(256 * 256)
-    expect(p[0]).toBe(47)
-    await expect(decodePhotoTile(fixture('photo_4_36_15.png'), tileBox(T), 0)).rejects.toThrow(/expected 256 x 256/)
-  })
-
-  it('fills the column of zeros Moon Trek returns on the photo tile from -180 degrees', async () => {
-    // tile 180-135 W, 0-45 N, fetched 2026-11-14: column 0 is all zeros as served
-    const box = tileBox({ z: 1, x: 0, y: 1 })
-    expect(box).toEqual({ lon0: -180, lat0: 0, size: 45 })
-    const p = await decodePhotoTile(fixture('photo_1_0_1.png'), box, 1)
-    let zeros = 0
-    for (let r = 0; r < 256; r++) {
-      if (p[r * 256] === 0) zeros++
-      expect(p[r * 256]).toBe(p[r * 256 + 1])
-    }
-    expect(zeros).toBeLessThan(256)
+  it('keeps one grey byte per pixel of the decoded photo', () => {
+    expect([...greyFromRgba(new Uint8Array([10, 10, 10, 255, 200, 200, 200, 255]))]).toEqual([10, 200])
   })
 
   it('caches a checked answer and does not cache a bad one', async () => {
@@ -150,8 +167,17 @@ describe('Moon Trek global tiles', () => {
     await readGeoTile(req, store, ok)
     await readGeoTile(req, store, ok)
     expect(calls).toBe(1)
-    const bad = async () => new Response(fixture('photo_4_36_15.png'))
+    const bad = async () => new Response(new Uint8Array([1, 2, 3]))
     await expect(readGeoTile({ ...req, url: `${url}&x` }, store, bad, 2)).rejects.toThrow()
     expect((await store.getMany([`trek|${url}&x`]))[0]).toBeUndefined()
+  })
+
+  it('gives up on an answer that does not come within the time limit', async () => {
+    const hang = (_u: string, init?: RequestInit) =>
+      new Promise<Response>((_, reject) => init?.signal?.addEventListener('abort', () => reject(new Error('aborted'))))
+    const req = { url: `${trekTileUrl('dem', T)}&hang`, kind: 'dem' as const, box: tileBox(T), extraRows: 1 }
+    const t0 = Date.now()
+    await expect(readGeoTile(req, new MemoryBlockStore(), hang, 2, 50)).rejects.toThrow()
+    expect(Date.now() - t0).toBeLessThan(2000)
   })
 })

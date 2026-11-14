@@ -9,9 +9,23 @@
  * longitude lon0 + (i + 0.5)·c and latitude lat1 − (j + 0.5)·c, c = S / 256. Boxes never cross ±180° or ±90°, which
  * the Moon Trek ImageServer does not answer for (a request crossing 180° timed out, measured 2026-11-14).
  *
- * Moon Trek fills the last row of every exportImage answer with zeros (as in the polar levels, terrain/live/config.ts),
- * so each request asks for one extra row below the tile, dropped by the client, except for the tiles that touch
+ * Heights come from the ImageServer's exportImage (float32 GeoTIFF, cut on request), from one of three LOLA DEMs by
+ * where the tile is (demSource; measured 2026-11-14):
+ * - between 45° S and 45° N, the global 256 px/deg v06 DEM (about 1.3 s for fine tiles, 2-5 s for 11-22° tiles).
+ *   The global 128 px/deg v04 DEM is faster but its gaps between LOLA tracks show as north-south bands near the
+ *   equator, so it is not used;
+ * - south of 45° S and north of 45° N, the 100 m polar DEMs in geographic form (`..._100mp_v04_EQ`): about 1.3 s at
+ *   every level, and dense there, where the global DEM answers large polar tiles in 5-60 s or HTTP 500. They return
+ *   the stored value, half-metres (DN × 0.5 = metres: 5.6-22.5° tile means then within 15 m of LDEM_16).
+ * All are metres above the 1737.4 km sphere. Moon Trek
+ * fills the last row of every exportImage answer with zeros (as in the polar levels, terrain/live/config.ts), so
+ * each DEM request asks for one extra row below the tile, dropped by the client, except for the tiles that touch
  * the south pole, where the box would leave the globe.
+ *
+ * The photo comes from Moon Trek's WMTS cache of the same mosaic: pre-cut 256 px JPEG tiles (about 0.85 s each,
+ * measured 2026-11-14) on the same grid, WMTS matrix z + 1, row y, column x (top-left corner 180° W 90° N,
+ * 2^(n+1) × 2^n tiles at matrix n). Unlike exportImage they have no rows or columns of zeros (checked at ±180° and at
+ * the pole).
  */
 import { MOON_R_KM } from '../orbit'
 
@@ -24,12 +38,19 @@ export const MIN_HEIGHT_LEVEL = 2
 export const PHOTO_BASE_LEVEL = 1
 /** At most this many tiles of the current level are asked for at once. */
 export const MAX_VIEW_TILES = 48
+/** The coarse tiles asked for first are this many levels above the view's level. */
+export const COARSE_STEP = 2
 
 export const TREK_SERVICES = 'https://trek.nasa.gov/moon/trekarcgis/rest/services/'
-/** LOLA global DEM, 256 pixels per degree (118 m), float32 metres above the 1737.4 km sphere. */
+/** LOLA global DEM, 256 px/deg (118 m), metres above the 1737.4 km sphere. */
 export const DEM_SERVICE = 'LRO_LOLA_DEM_Global_256ppd_v06'
-/** LROC WAC global mosaic, 303 pixels per degree (100 m), 8-bit reflectance as photographed. */
-export const PHOTO_SERVICE = 'LRO_WAC_Mosaic_Global_303ppd_v02'
+/** LOLA polar DEMs, 100 m, poleward of 45°, in geographic form; values are half-metres. */
+export const DEM_SOUTH = 'LRO_LOLA_DEM_SPole45_100mp_v04_EQ'
+export const DEM_NORTH = 'LRO_LOLA_DEM_NPole45_100mp_v04_EQ'
+/** Latitude poleward of which a tile (wholly) is read from a polar DEM, degrees. */
+export const POLAR_DEM_LAT = 45
+/** LROC WAC global mosaic, 303 pixels per degree (100 m), 8-bit reflectance as photographed: WMTS tiles. */
+export const PHOTO_WMTS = 'https://trek.nasa.gov/tiles/Moon/EQ/LRO_WAC_Mosaic_Global_303ppd_v02/1.0.0/default/default028mm/'
 
 export type DetailKind = 'dem' | 'photo'
 
@@ -61,20 +82,30 @@ export function tileBox(t: DetailTile): TileBox {
   return { lon0: -180 + t.x * s, lat0: 90 - (t.y + 1) * s, size: s }
 }
 
-/** Extra rows asked for below a tile: 1, or 0 for the tiles on the south pole. */
-export const extraRows = (t: DetailTile): number => (t.y === rows(t.z) - 1 ? 0 : 1)
+/** Extra rows below a tile in the answer: 1 for DEM tiles (0 on the south pole), 0 for photo tiles. */
+export const extraRows = (kind: DetailKind, t: DetailTile): number => (kind === 'photo' || t.y === rows(t.z) - 1 ? 0 : 1)
 
-/** Moon Trek exportImage URL for a tile: 256 cells wide, 256 + extraRows tall, bilinear on the server. */
+/** The DEM a tile is read from, and the factor from its values to metres. */
+export function demSource(t: DetailTile): { service: string; scale: number } {
+  const b = tileBox(t)
+  if (b.lat0 + b.size <= -POLAR_DEM_LAT) return { service: DEM_SOUTH, scale: 0.5 }
+  if (b.lat0 >= POLAR_DEM_LAT) return { service: DEM_NORTH, scale: 0.5 }
+  return { service: DEM_SERVICE, scale: 1 }
+}
+
+/**
+ * URL of a tile. DEM: exportImage, 256 cells wide and 256 + extraRows tall, bilinear on the server. Photo: the WMTS
+ * tile of the same box.
+ */
 export function trekTileUrl(kind: DetailKind, t: DetailTile): string {
+  if (kind === 'photo') return `${PHOTO_WMTS}${t.z + 1}/${t.y}/${t.x}.jpg`
   const b = tileBox(t)
   const c = b.size / TILE_CELLS
-  const extra = extraRows(t)
+  const extra = extraRows(kind, t)
   const bbox = [b.lon0, b.lat0 - extra * c, b.lon0 + b.size, b.lat0 + b.size].join(',')
-  const format = kind === 'dem' ? 'tiff&pixelType=F32&compression=LZ77' : 'png'
-  const service = kind === 'dem' ? DEM_SERVICE : PHOTO_SERVICE
   return (
-    `${TREK_SERVICES}${service}/ImageServer/exportImage?bbox=${bbox}&size=${TILE_CELLS},${TILE_CELLS + extra}` +
-    `&format=${format}&interpolation=RSP_BilinearInterpolation&f=image`
+    `${TREK_SERVICES}${demSource(t).service}/ImageServer/exportImage?bbox=${bbox}&size=${TILE_CELLS},${TILE_CELLS + extra}` +
+    '&format=tiff&pixelType=F32&compression=LZ77&interpolation=RSP_BilinearInterpolation&f=image'
   )
 }
 
@@ -144,9 +175,12 @@ export function tilesAround(z: number, lat: number, lon: number, latHalf: number
  * view (the camera always looks at the Moon's centre with north up, so the view is a box in latitude and
  * longitude around the centre, plus half a tile of margin for the panels' offset). If that takes more than
  * MAX_VIEW_TILES tiles, the next coarser level is tried. Levels below `minLevel` are not wanted at all: the
- * shipped globe is already as fine there. Returns the level used (−1 when none) and the tiles, nearest first.
+ * shipped globe is already as fine there.
+ *
+ * Returns the level used (−1 when none), `coarse`: the few tiles COARSE_STEP levels up (not below minLevel) over
+ * the same box, to ask for first so the whole view sharpens quickly, then `tiles`: the view's level, nearest first.
  */
-export function wantedTiles(v: View, minLevel: number): { level: number; tiles: DetailTile[] } {
+export function wantedTiles(v: View, minLevel: number): { level: number; coarse: DetailTile[]; tiles: DetailTile[] } {
   const halfV = v.fovDeg / 2
   const halfH = (Math.atan(Math.tan((halfV * Math.PI) / 180) * (v.widthPx / v.heightPx)) * 180) / Math.PI
   const latHalf = groundAngle(v.distKm, halfV)
@@ -156,9 +190,12 @@ export function wantedTiles(v: View, minLevel: number): { level: number; tiles: 
     const s = tileSize(z)
     const lonHalf = Math.min(180, (across + s / 2) / cosLat)
     const tiles = tilesAround(z, v.lat, v.lon, latHalf + s / 2, lonHalf)
-    if (tiles.length <= MAX_VIEW_TILES) return { level: z, tiles }
+    if (tiles.length > MAX_VIEW_TILES) continue
+    const zc = Math.max(minLevel, z - COARSE_STEP)
+    const coarse = zc < z ? tilesAround(zc, v.lat, v.lon, latHalf, Math.min(180, across / cosLat)) : []
+    return { level: z, coarse, tiles }
   }
-  return { level: -1, tiles: [] }
+  return { level: -1, coarse: [], tiles: [] }
 }
 
 /** Every tile of a level (the photo base). */

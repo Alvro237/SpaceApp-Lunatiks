@@ -6,30 +6,35 @@
  *   no no-data, and no row of exact zeros among the kept rows (the Moon Trek fault the extra row works around;
  *   real terrain is never 0.0 m across a whole row). On the south-pole tiles, which have no extra row, a last row
  *   of exact zeros is replaced by the row above it (one row of cells at the pole).
- * - 'photo': 8-bit grey PNG of the LROC WAC mosaic. Checked: size and channels. The extra row is dropped. On the
- *   tiles that touch ±180°, Moon Trek answers the edge column with zeros (measured 2026-11-14: column 0 of the
- *   tile from −180°, column 255 of the tile to 180°; the DEM does not do this); such a column is replaced by the
- *   column next to it.
+ * - 'photo': 256 × 256 JPEG of the LROC WAC mosaic from Moon Trek's WMTS cache, decoded by the browser
+ *   (createImageBitmap) and reduced to one grey byte per cell. Checked: size.
+ *
+ * Every request has a time limit (FETCH_TIMEOUT_MS): a Moon Trek request that hangs would otherwise hold one of the
+ * loader's six connections for good.
  */
 import { fromArrayBuffer } from 'geotiff'
 import { type BlockStore, IdbBlockStore, MemoryBlockStore } from '../../terrain/live/blockStore'
-import { decodePng } from '../../terrain/png'
 import { type DetailKind, TILE_CELLS, type TileBox } from './grid'
 
-type FetchFn = (url: string) => Promise<Response>
+type FetchFn = (url: string, init?: RequestInit) => Promise<Response>
+
+/** Longest wait for one answer, ms (a DEM tile usually takes 1-2 s, a photo tile under 1 s). */
+export const FETCH_TIMEOUT_MS = 15_000
 
 export interface GeoTileRequest {
   url: string
   kind: DetailKind
   box: TileBox
   extraRows: number
+  /** DEM: factor from the served values to metres (grid.ts, demSource). */
+  scale?: number
 }
 
 export type GeoTile = { kind: 'dem'; heights: Float32Array } | { kind: 'photo'; bytes: Uint8Array }
 
 const N = TILE_CELLS
 
-export async function decodeDemTile(buf: ArrayBuffer, box: TileBox, extraRows: number): Promise<Float32Array> {
+export async function decodeDemTile(buf: ArrayBuffer, box: TileBox, extraRows: number, scale = 1): Promise<Float32Array> {
   const tiff = await fromArrayBuffer(buf)
   const image = await tiff.getImage(0)
   if (image.getWidth() !== N || image.getHeight() !== N + extraRows) {
@@ -50,7 +55,7 @@ export async function decodeDemTile(buf: ArrayBuffer, box: TileBox, extraRows: n
   for (let i = 0; i < N * N; i++) {
     const v = raster[i]
     if (Number.isNaN(v) || v === noDataValue || v < -1e30 || v > 1e30) noData++
-    else heights[i] = v
+    else heights[i] = v * scale
   }
   if (noData > 0) throw new Error(`${noData} Trek samples without data`)
   const zeroRow = (r: number) => {
@@ -62,19 +67,24 @@ export async function decodeDemTile(buf: ArrayBuffer, box: TileBox, extraRows: n
   return heights
 }
 
-export async function decodePhotoTile(buf: ArrayBuffer, box: TileBox, extraRows: number): Promise<Uint8Array> {
-  const png = await decodePng(buf)
-  if (png.width !== N || png.height !== N + extraRows || png.channels !== 1) {
-    throw new Error(`Trek photo tile is ${png.width} x ${png.height} x ${png.channels}, expected ${N} x ${N + extraRows} x 1`)
-  }
-  const out = png.data.slice(0, N * N)
-  const fixEdge = (col: number, from: number) => {
-    for (let r = 0; r < N; r++) if (out[r * N + col] !== 0) return
-    for (let r = 0; r < N; r++) out[r * N + col] = out[r * N + from]
-  }
-  if (box.lon0 === -180) fixEdge(0, 1)
-  if (box.lon0 + box.size === 180) fixEdge(N - 1, N - 2)
+/** One grey byte per cell from RGBA pixels (the WMTS JPEG is grey: red = green = blue). */
+export function greyFromRgba(rgba: Uint8ClampedArray | Uint8Array): Uint8Array {
+  const out = new Uint8Array(rgba.length / 4)
+  for (let i = 0; i < out.length; i++) out[i] = rgba[i * 4]
   return out
+}
+
+export async function decodePhotoTile(buf: ArrayBuffer): Promise<Uint8Array> {
+  const bitmap = await createImageBitmap(new Blob([buf], { type: 'image/jpeg' }), { colorSpaceConversion: 'none' })
+  try {
+    if (bitmap.width !== N || bitmap.height !== N) throw new Error(`Trek photo tile is ${bitmap.width} x ${bitmap.height}, expected ${N} x ${N}`)
+    const ctx = new OffscreenCanvas(N, N).getContext('2d')
+    if (!ctx) throw new Error('no 2D canvas in this worker')
+    ctx.drawImage(bitmap, 0, 0)
+    return greyFromRgba(ctx.getImageData(0, 0, N, N).data)
+  } finally {
+    bitmap.close()
+  }
 }
 
 let storePromise: Promise<BlockStore> | null = null
@@ -85,16 +95,17 @@ function store(): Promise<BlockStore> {
 
 async function decode(buf: ArrayBuffer, req: GeoTileRequest): Promise<GeoTile> {
   return req.kind === 'dem'
-    ? { kind: 'dem', heights: await decodeDemTile(buf, req.box, req.extraRows) }
-    : { kind: 'photo', bytes: await decodePhotoTile(buf, req.box, req.extraRows) }
+    ? { kind: 'dem', heights: await decodeDemTile(buf, req.box, req.extraRows, req.scale) }
+    : { kind: 'photo', bytes: await decodePhotoTile(buf) }
 }
 
-/** Fetch (or read from the cache) and decode one tile; up to `attempts` tries on a bad answer. */
+/** Fetch (or read from the cache) and decode one tile; up to `attempts` tries, each within `timeoutMs`. */
 export async function readGeoTile(
   req: GeoTileRequest,
   cache: BlockStore | null = null,
-  fetchFn: FetchFn = (u) => fetch(u),
-  attempts = 3,
+  fetchFn: FetchFn = (u, i) => fetch(u, i),
+  attempts = 2,
+  timeoutMs = FETCH_TIMEOUT_MS,
 ): Promise<GeoTile> {
   const s = cache ?? (await store())
   const key = `trek|${req.url}`
@@ -103,7 +114,7 @@ export async function readGeoTile(
   let last: unknown = null
   for (let a = 0; a < attempts; a++) {
     try {
-      const res = await fetchFn(req.url)
+      const res = await fetchFn(req.url, { signal: AbortSignal.timeout(timeoutMs) })
       if (!res.ok) throw new Error(`Moon Trek answered HTTP ${res.status}`)
       const buf = await res.arrayBuffer()
       const out = await decode(buf, req) // checks before caching
