@@ -13,6 +13,7 @@ import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { routes } from './routes'
 import { defaultScene, useApp } from '../state/store'
+import { useAreas } from '../state/areas'
 import { colorAt, luminance, textOn } from '../terrain/colormaps'
 
 vi.mock('../terrain/TerrainView', () => ({ TerrainView: () => <div role="img" aria-label="Map (test stub)" /> }))
@@ -43,6 +44,19 @@ const constraints = {
   soft_score_default_weights: { sunlight: 0.5, comms: 0.3, continuity: 0.2 },
 }
 
+/** A 4 x 4 answer of POST /api/v1/areas/search: one viable area of four cells. */
+const areaAnswer = {
+  grid: { projection: 'south polar stereographic', x_left_m: 0, y_top_m: 4000, cell_m: 960, nx: 4, ny: 4 },
+  codes_b64: btoa(String.fromCharCode(0, 1, 1, 0, 1, 3, 3, 1, 1, 3, 3, 2, 0, 1, 2, 0)),
+  score_b64: btoa(String.fromCharCode(0, 0, 0, 0, 0, 200, 210, 0, 0, 190, 220, 0, 0, 0, 0, 0)),
+  counts: { outside: 4, failed_static: 6, failed_window: 2, viable: 4, unknown: 0 },
+  funnel: [{ id: 'max_slope_deg', stage: 'static', cells_in: 12, cells_out: 6, cells_unknown: 0 }],
+  areas: [{ id: 1, cells: 4, area_km2: 3.69, centroid_lat: -84.79, centroid_lon: 29.2, best_lat: -84.79, best_lon: 29.21, best_score: 0.86, mean_score: 0.81, sites: ['IM-2 Athena'] }],
+  window: null,
+  seconds: 0.4,
+  assumptions: ['Static filters read a k x k sub-grid per cell.'],
+}
+
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 const file = (name: string) => {
   const b = readFileSync(resolve(ROOT, 'data', name))
@@ -60,6 +74,7 @@ function fakeFetch(apiUp = true) {
     if (url.endsWith('/api/v1/sites')) return json(apiSites)
     if (url.endsWith('/api/v1/meta/constraints')) return json(constraints)
     if (url.endsWith('/api/v1/meta/datasets')) return json({ frame: 'MOON_ME', correction: 'LT+S' })
+    if (url.endsWith('/api/v1/areas/search')) return json(areaAnswer)
     return json({ detail: 'Not Found' }, 404)
   })
 }
@@ -214,21 +229,35 @@ describe('navigator', () => {
     expect(useApp.getState().speed).not.toBe(before)
   })
 
-  it('mission mode: filters need a value, and a missing endpoint is reported, not faked', async () => {
+  it('mission mode: a region, filters with values, then the areas painted and listed', async () => {
     const user = userEvent.setup()
     useApp.setState({ mode: 'mission' })
+    useAreas.setState({ center: null, enabled: {}, values: {}, result: null, raster: null })
     const { container } = renderAt('/')
-    // the filters open from the tool bar at the top right
+    // the filters open from the tool bar at the top left
     await user.click(await screen.findByRole('button', { name: 'Mission filters' }))
-    const slope = await screen.findByRole('switch', { name: /Maximum slope/ })
+    await user.click(screen.getByRole('button', { name: 'Find areas' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Place the search region first')
+    await user.click(await screen.findByRole('button', { name: /^Centre on / }))
+    const slope = screen.getByRole('switch', { name: /Maximum slope/ })
     await user.click(slope)
-    await user.click(screen.getByRole('button', { name: 'Find viable sites' }))
-    expect(screen.getByRole('alert')).toHaveTextContent('Steepest slope is required')
     expect(slope).toHaveAttribute('aria-checked', 'true')
-    await user.type(screen.getByLabelText('Steepest slope'), '8')
-    await user.click(screen.getByRole('button', { name: 'Find viable sites' }))
-    expect(await screen.findByText(/Candidate search: not available yet/)).toBeInTheDocument()
-    expect(screen.getByRole('slider', { name: 'Sunlight' })).toHaveValue('0.5')
+    await user.click(screen.getByRole('button', { name: /^Find areas/ }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Maximum slope: steepest slope is required')
+    await user.type(screen.getByRole('textbox', { name: /Maximum slope.*Steepest slope/ }), '8')
+    // filters the data cannot answer are listed with the reason, not hidden
+    expect(screen.getByText(/No open boulder map covers the pole/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^Find areas/ }))
+    expect(await screen.findByText(/#1 · 3.69 km²/)).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Cells removed by each filter' })).toHaveTextContent('Maximum slope')
+    expect(useAreas.getState().raster?.codes[5]).toBe(3)
+    const body = JSON.parse(String((fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.find((c) => String(c[0]).endsWith('/areas/search'))![1].body))
+    expect(body.filters).toEqual({ max_slope_deg: 8 })
+    expect(body.region.radius_km).toBe(30)
+    // Study opens the best spot of the area in study mode
+    await user.click(screen.getByRole('button', { name: 'Study the best spot of area 1' }))
+    expect(useApp.getState().mode).toBe('study')
+    expect(useApp.getState().selection).toEqual({ kind: 'point', lat: -84.79, lon: 29.21 })
     await noAxeViolations(container)
   })
 

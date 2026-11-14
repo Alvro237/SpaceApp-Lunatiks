@@ -39,8 +39,13 @@ class GridRepository:
         """Vectorised look-up; NaN outside the grid or where there is no data."""
         if grid_id not in self.index["grids"]:
             return np.full(np.shape(lat), np.nan)
+        return self.sample_xy(grid_id, *south_polar_xy(lat, lon))
+
+    def sample_xy(self, grid_id: str, x, y) -> np.ndarray:
+        """sample_many on projected south polar stereographic x, y (metres), for callers that already have them."""
+        if grid_id not in self.index["grids"]:
+            return np.full(np.shape(x), np.nan)
         m = self.meta(grid_id)
-        x, y = south_polar_xy(lat, lon)
         col = np.floor((x - m["xLeftM"]) / m["pixelM"]).astype(np.int64)
         row = np.floor((m["yTopM"] - y) / m["pixelM"]).astype(np.int64)
         inside = (col >= 0) & (col < m["width"]) & (row >= 0) & (row < m["height"])
@@ -54,8 +59,13 @@ class GridRepository:
         grid or where one of the four cells has no data. For continuous fields such as heights (ray tracing)."""
         if grid_id not in self.index["grids"]:
             return np.full(np.shape(lat), np.nan)
+        return self.bilinear_xy(grid_id, *south_polar_xy(lat, lon))
+
+    def bilinear_xy(self, grid_id: str, x, y) -> np.ndarray:
+        """bilinear_many on projected south polar stereographic x, y (metres)."""
+        if grid_id not in self.index["grids"]:
+            return np.full(np.shape(x), np.nan)
         m = self.meta(grid_id)
-        x, y = south_polar_xy(lat, lon)
         fx = (x - m["xLeftM"]) / m["pixelM"] - 0.5
         fy = (m["yTopM"] - y) / m["pixelM"] - 0.5
         c0 = np.floor(fx).astype(np.int64)
@@ -72,6 +82,17 @@ class GridRepository:
         bottom = q[2] * (1.0 - tx) + q[3] * tx
         v = (top * (1.0 - ty) + bottom * ty) * m["scale"]
         return np.where(inside & ~nodata, v, np.nan)
+
+    def float_array(self, grid_id: str) -> np.ndarray:
+        """The grid as float32 in physical units with NaN for no data, made once and kept (for tight loops that
+        interpolate many points: NaN then propagates through the arithmetic with no masks)."""
+        key = "f32:" + grid_id
+        if key not in self._arrays:
+            raw = self._array(grid_id)
+            arr = raw.astype(np.float32) * np.float32(self.meta(grid_id)["scale"])
+            arr[raw == NODATA] = np.nan
+            self._arrays[key] = arr
+        return self._arrays[key]
 
     def cell_centres(self, grid_id: str, step: int = 1) -> tuple[np.ndarray, np.ndarray]:
         """Projected x, y (metres) of cell centres, every ``step`` cells: use with

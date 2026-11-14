@@ -61,6 +61,27 @@ Numbers given as defaults below are placeholders for the owner to set with a cit
 `GET /api/v1/sites/{site_id}/horizon?mast_m=&include_zone=` returns the 720 azimuth values, `kind`, the mast
 actually used, and optionally the zone neighbours (`db/horizons.py: zone`).
 
+## SW-1 · Mission mode: area search
+
+**Status:** done in branch `feat/sw1-mission-areas`. **Files:** `routers/areas.py`, `schemas/areas.py`,
+`area_search.py` (glue), `logic/areas.py` (raster helpers, quadtree), `db/landings.py`, `tests/test_areas.py`.
+
+- `POST /api/v1/areas/search`: which cells of a bounded disc (centre south of 60 S, radius up to 400 km, at most
+  360 000 cells of 0.24 to 7.68 km) pass every filter given. No threshold has a default: a filter is on when its
+  value is sent. Answer: the raster (`codes_b64`, `score_b64`, uint8, row 0 at the top, south polar stereographic
+  grid in `grid`), cell counts, the funnel (cells in, out and without data per filter, in run order), the 12 largest
+  connected viable areas with their best cell and the catalogue sites inside, the window sampling used and the
+  assumptions in words. The last 16 answers are kept in memory (same request, same answer, no recomputation).
+- Funnel: map filters on every cell first (side, past landings, slope, elevation, permanent shadow, crater rims,
+  crater density, long-term Sun and Earth, open sky, dose, near a PSR, hydrogen), each cell reading every grid pixel inside it
+  (k x k sub-grid, k = cell / finest pixel, at most 8; slope and shadow take the worst, the rest the mean); then the
+  landing radius (a disc dilation of the failures); then the window filters (sunlight, darkness, contact, blackout,
+  Sun height and Earth at landing, mean power, light and contact left, Sun and Earth together, robust to a delay)
+  on at most `max_window_samples` samples placed by a quadtree, each with its own ray-traced horizon.
+- Filters the data cannot answer are not in the request (roughness: the LOLA roughness file has no confirmed
+  units; rocks: no open pole-wide boulder map; link margin, temperature, battery and colony: per spot, in the power
+  endpoints; solar storm risk: no forecast). Hydrogen reads `lp_hydrogen_60s` (Lunar Prospector, 0.5 deg bins).
+
 ## SW-1 · Manual coordinates
 
 **Status:** `points/state` and `points/series` done in branch `seryitron-branchito`, validated (output format:

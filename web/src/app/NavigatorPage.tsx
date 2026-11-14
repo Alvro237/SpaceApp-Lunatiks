@@ -124,7 +124,7 @@ export function NavigatorPage() {
             </div>
             <div className="toolstrip" role="toolbar" aria-label="Map tools">
               {!blocks && mode === 'mission' && (
-                <Popover label="Mission filters" button={<IconFilter size={18} />} buttonClass="tool-btn" align="left" className="mission-pop">
+                <Popover label="Mission filters" button={<IconFilter size={18} />} buttonClass="tool-btn" align="left" className="mission-pop" persistent>
                   <h2 className="pop-title">
                     <IconFilter size={18} /> Mission filters
                   </h2>

@@ -1,7 +1,7 @@
 /** TanStack Query hooks over the API client. Catalogue and metadata are cached for the session. */
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { type SeriesParams, type StateParams, api, isMissing } from './client'
-import type { CandidateSearchRequest, PowerRequest, RadiationRequest } from './types'
+import type { AreaSearchRequest, CandidateSearchRequest, PowerRequest, RadiationRequest } from './types'
 import type { Selection } from '../state/store'
 
 const forever = { staleTime: Infinity, gcTime: Infinity }
@@ -46,6 +46,8 @@ export function useApiSeries(sel: Selection, p: SeriesParams, enabled: boolean) 
 }
 
 export const useCandidateSearch = () => useMutation({ mutationFn: (body: CandidateSearchRequest) => api.searchCandidates(body) })
+/** Mission mode: paint a region (seconds when window filters trace horizons; repeated asks come from the API's cache). */
+export const useAreaSearch = () => useMutation({ mutationFn: (body: AreaSearchRequest) => api.areaSearch(body) })
 export const usePower = () => useMutation({ mutationFn: (body: PowerRequest) => api.power(body) })
 
 export function useRadiation(body: RadiationRequest | null) {

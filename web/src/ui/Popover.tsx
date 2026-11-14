@@ -2,6 +2,7 @@
  * A button that opens a small panel under it (disclosure pattern, not a modal): aria-expanded on the button, the
  * panel labelled by it, Escape or a click outside closes it and focus returns to the button. Used by the map's top
  * bars (dates, coordinates, layers, mission filters) so the map keeps the whole screen until a tool is needed.
+ * `persistent` keeps it open on clicks outside (the mission panel, whose region is placed by clicking the map).
  */
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
 
@@ -12,6 +13,7 @@ export function Popover({
   buttonClass = '',
   align = 'left',
   pressed,
+  persistent = false,
   children,
 }: {
   /** Accessible name of the button (and of the panel). */
@@ -23,6 +25,8 @@ export function Popover({
   align?: 'left' | 'right'
   /** Marks the button as "on" while closed too (e.g. filters set). */
   pressed?: boolean
+  /** Stay open on clicks outside (closed by its button or Escape). */
+  persistent?: boolean
   children: ReactNode | ((close: () => void) => ReactNode)
 }) {
   const id = useId()
@@ -45,7 +49,7 @@ export function Popover({
       }
     }
     const onDown = (e: PointerEvent) => {
-      if (!root.current?.contains(e.target as Node)) setOpen(false)
+      if (!persistent && !root.current?.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener('keydown', onKey)
     document.addEventListener('pointerdown', onDown)
@@ -53,7 +57,7 @@ export function Popover({
       document.removeEventListener('keydown', onKey)
       document.removeEventListener('pointerdown', onDown)
     }
-  }, [open])
+  }, [open, persistent])
 
   return (
     <div className={`pop ${className}`} ref={root}>

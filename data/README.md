@@ -41,8 +41,14 @@ South polar stereographic, true scale at the pole: `x = r sin(lon)`, `y = r cos(
 | `earth_visibility_65s` | fraction of time, 0..1 | 960 m | south of 65 S | `AVGVISIB_65S_240M_201608_EARTH`, PGDA product 69 |
 | `permanent_shadow_65s` | fraction of the cell, 0..1 | 960 m | south of 65 S | `LPSR_65S_240M_201608`, PGDA product 69 |
 | `sky_visibility_65s` | steradians of open sky | 960 m | south of 65 S | `SKYV_65S_240M`, PGDA product 69 |
+| `lp_hydrogen_60s` | hydrogen, ppm by weight | 3.84 km grid of 0.5° bins (instrument footprint about 45 km) | south of 60 S | Lunar Prospector neutron spectrometer `hydrogenhd.txt` (Feldman et al. 2001), PDS Geosciences Node special products; not a peer-reviewed PDS archive |
 
 ## Caveats that matter when you use them
+
+- **Hydrogen** (`lp_hydrogen_60s`) is a regional signal: the neutron spectrometer's footprint is about 45 km, much
+  larger than the 3.84 km grid cell that stores the 0.5° bins. Values are as published, including small negative
+  numbers (noise of the derivation; minimum -17 ppm, maximum 182 ppm south of 60 S). The producer warns that the
+  abundances are not reliable where thorium and rare earth elements are high (not the case at the south pole).
 
 - **Slope grids** are the producer's overview levels (a smoothing resampling, not a plain mean). A few cells
   dipped below zero and were clipped to 0 (1 270 of 3.76 million at 60 S, 494 of 3.61 million at 80 S). They are
