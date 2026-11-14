@@ -191,6 +191,16 @@ start, end, duration) with fraction and ranges. Check: the 2025-03-14 eclipse at
 05:01-09:51 UTC at a 1-minute step (4.85 h).
 **Files:** `logic/sun.py`, `routers/sun.py`, `schemas/sun.py`, `tests/test_sun.py`.
 
+## MECH · Earth over a mission window
+
+**Status:** done on `feat/mech-power`. `POST /api/v1/earth` with the shared window request plus
+`comms_min_fraction` (default 0.5, team convention). Returns the state at start (elevation, azimuth, visible
+fraction, skyline height, distance, angular radius), series, visibility windows (fraction, hours, ranges), longest
+window and longest blackout, next Earthset or Earthrise and hours to Earthset, and the libration wander (azimuth and
+elevation span over the window). Geometry only: the link budget is a separate model. Checks: equator at 0° E always
+sees the Earth, 180° E never; Malapert 100 %, Shackleton floor 0 % in March 2027.
+**Files:** `logic/earth.py`, `routers/earth.py`, `schemas/earth.py`, `tests/test_earth.py`.
+
 ## MECH · Thermal model and maximum temperature
 
 **Status:** to do. **Files:** `logic/thermal.py`, `logic/constraints/temperature.py`.
