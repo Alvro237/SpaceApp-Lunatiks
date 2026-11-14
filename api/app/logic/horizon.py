@@ -135,6 +135,71 @@ def horizon_from_heights(dist_m: np.ndarray, heights: np.ndarray, ground_m: floa
     return out, last
 
 
+# ---------------------------------------------------------------------------- ridge planes (depth for the first-person view)
+#
+# The skyline alone is one curve; a landscape has depth. Along one ray, elevation angle against distance is a profile.
+# A "ridge" is a crest of that profile that the observer actually sees: a local maximum whose elevation is above
+# every nearer sample (nothing closer hides it), after which the terrain falls away by at least ``min_drop_deg``
+# before anything rises above the crest again. Visible crests therefore get higher and farther one after another, and
+# the last of them is the skyline. The first-person view paints them far to near as separate planes.
+
+RIDGE_PLANES = 3               # the skyline plus the two nearest crests below it
+RIDGE_MIN_DROP_DEG = 0.3       # a crest must fall this far behind itself to count (a presentation choice: about 4 px)
+
+
+def ridge_planes(dist_m: np.ndarray, elev_deg: np.ndarray, k: int = RIDGE_PLANES,
+                 min_drop_deg: float = RIDGE_MIN_DROP_DEG) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Visible crests along every ray.
+
+    dist_m (n_d,) increasing distances; elev_deg (n_az, n_d) elevation of the terrain sample at each distance, NaN
+    where there is no data. Returns (plane_el, plane_dist_m, skyline_dist_m): the first two (n_az, k), ordered near
+    to far, the last column of each the skyline (the highest sample, the first one when several tie); a row with
+    fewer than k - 1 crests is padded with NaN on the near side. skyline_dist_m (n_az,) is the skyline's distance.
+    A row without any data is all NaN."""
+    dist = np.asarray(dist_m, dtype=np.float64)
+    e = np.where(np.isnan(elev_deg), -np.inf, np.asarray(elev_deg, dtype=np.float64))
+    n_az, n_d = e.shape
+    run = np.maximum.accumulate(e, axis=1)
+    before = np.concatenate([np.full((n_az, 1), -np.inf), run[:, :-1]], axis=1)
+    new_max = e > before                                   # nothing nearer is as high: the sample is seen
+    left = np.concatenate([np.full((n_az, 1), -np.inf), e[:, :-1]], axis=1)
+    right = np.concatenate([e[:, 1:], np.full((n_az, 1), np.inf)], axis=1)   # the last sample is never a crest
+    crest = new_max & (e > left) & (e >= right) & np.isfinite(e)
+    sky = np.argmax(e, axis=1)
+    has = np.isfinite(run[:, -1])
+    plane_el = np.full((n_az, k), np.nan)
+    plane_dist = np.full((n_az, k), np.nan)
+    for r in np.flatnonzero(has):
+        cand = np.flatnonzero(crest[r])
+        cand = cand[cand != sky[r]]
+        keep: list[int] = []
+        if cand.size:
+            seen = np.flatnonzero(new_max[r])
+            nxt = seen[np.searchsorted(seen, cand, side="right")]          # the next sample that is seen
+            row = e[r]
+            for c, n in zip(cand, nxt):
+                if row[c] - row[c + 1:n].min() >= min_drop_deg:
+                    keep.append(int(c))
+                    if len(keep) == k - 1:
+                        break
+        idx = keep + [int(sky[r])]
+        plane_el[r, k - len(idx):] = e[r, idx]
+        plane_dist[r, k - len(idx):] = dist[idx]
+    sky_dist = np.where(has, dist[sky], np.nan)
+    return plane_el, plane_dist, sky_dist
+
+
+def horizon_planes(dist_m: np.ndarray, heights: np.ndarray, ground_m: float, mast_m: float, k: int = RIDGE_PLANES,
+                   min_drop_deg: float = RIDGE_MIN_DROP_DEG) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """ridge_planes() of a height field: the elevation of every sample is the one horizon_from_heights() uses, so the
+    last plane equals the skyline of the same call. heights (n_az, n_d), NaN where there is no data."""
+    theta = dist_m / R_M
+    r_s = R_M + heights
+    r_o = R_M + ground_m + mast_m
+    elev = np.degrees(np.arctan2(r_s * np.cos(theta)[None, :] - r_o, r_s * np.sin(theta)[None, :]))
+    return ridge_planes(dist_m, elev, k, min_drop_deg)
+
+
 def ray_traced_horizon(heights_at, lat_deg: float, lon_deg: float, ground_m: float, mast_m: float, cell_m: float,
                        n_az: int = RAY_AZIMUTHS, max_range_m: float = RAY_MAX_RANGE_M) -> tuple[HorizonProfile, float]:
     """Terrain skyline of any point from a height field, and the shortest terrain range over all azimuths (metres:

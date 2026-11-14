@@ -6,6 +6,24 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class HorizonPlane(BaseModel):
+    """One layer of the landscape: where a visible crest is at each azimuth of the response's ``az``."""
+    distance_km: list[float | None] = Field(description="Distance from the observer to the crest, km; null where "
+                                                        "this layer has no crest at that azimuth")
+    elevation_deg: list[float | None] = Field(description="Elevation of the crest seen from the observer, degrees; "
+                                                          "null where this layer has no crest")
+
+
+PLANES_DESCRIPTION = ("Up to three layers of the landscape, near to far, the last one being the skyline: at each "
+                      "azimuth the visible crests of the terrain along that ray (a crest is higher than everything "
+                      "nearer and falls away by at least 0.3 degrees behind itself). A layer with no crest at an "
+                      "azimuth is null there. Ray-traced over the LOLA elevation grids (240 m south of about 80 S, "
+                      "960 m to about 60 S); null where no grid covers the point. For drawing depth: the skyline "
+                      "metrics are elevation_deg")
+SKYLINE_DISTANCE_DESCRIPTION = ("Distance to the skyline sample at each azimuth, km (ray-traced over the LOLA elevation "
+                                "grids); null where no grid covers the point or the ray has no terrain data")
+
+
 class ProfileSummary(BaseModel):
     max_deg: float = Field(description="Highest skyline elevation, degrees")
     max_az_deg: float = Field(description="Azimuth of the highest skyline point, degrees clockwise from north")
@@ -45,5 +63,7 @@ class HorizonResponse(ProfileSummary):
     az: list[float] = Field(description="Azimuths, degrees clockwise from north, 0 to 360 - az_step_deg")
     elevation_deg: list[float] = Field(description="Skyline elevation at each azimuth, degrees. Between "
                                                    "azimuths interpolate linearly, wrapping at 360")
+    planes: list[HorizonPlane] | None = Field(None, description=PLANES_DESCRIPTION)
+    skyline_distance_km: list[float | None] | None = Field(None, description=SKYLINE_DISTANCE_DESCRIPTION)
     zone_available: bool = Field(description="True when neighbour masks exist for this site")
     zone: Zone | None = Field(description="Neighbour masks; null unless include_zone=true and zone_available")

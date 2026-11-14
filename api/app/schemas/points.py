@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from .horizon import ProfileSummary
+from .horizon import PLANES_DESCRIPTION, SKYLINE_DISTANCE_DESCRIPTION, HorizonPlane, ProfileSummary
 from .state import SeriesResponse, StateResponse
 
 
@@ -61,3 +61,5 @@ class PointHorizonResponse(ProfileSummary):
     az_step_deg: float = Field(description="Azimuth spacing, degrees")
     az: list[float] = Field(description="Azimuths, degrees clockwise from north, 0 to 360 - az_step_deg")
     elevation_deg: list[float] = Field(description="Skyline elevation at each azimuth, degrees")
+    planes: list[HorizonPlane] | None = Field(None, description=PLANES_DESCRIPTION)
+    skyline_distance_km: list[float | None] | None = Field(None, description=SKYLINE_DISTANCE_DESCRIPTION)
