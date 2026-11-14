@@ -250,6 +250,16 @@ threshold `{array, battery, load: {day_w, night_w}}`), same model as `/power` le
 **Files:** `logic/scoring.py` (`overall_verdict`, band arguments), `routers/verdict.py`, `schemas/verdict.py`,
 `logic/constraints/power.py`, `tests/test_verdict.py`.
 
+## MECH · Validation report
+
+**Status:** done on `feat/mech-power`. `GET /api/v1/validation`: the pipeline's validation (`data/validation.json`:
+ephemeris vs JPL Horizons and the Apollo tables, terrain vs LROC) plus 8 MECH model checks run live on the real
+datasets, each with reference, source, computed value, tolerance and pass/fail: Blue Ghost eclipse 2025-03-14
+(NASA GSFC), disc-overlap analytic case, near/far-side Earth visibility, thermal radiative equilibrium, dark
+equipment balance, energy conservation of the battery model, sweep vs single window, radiation flat-ground
+shielding and CRaTER record. First call about 0.6 s, then cached.
+**Files:** `app/validation_checks.py`, `routers/validation.py`, `tests/test_validation.py`.
+
 ## MECH · Demo video and form texts
 
 **Status:** to do. `docs/demo-script.md` and `docs/submission.md` were written for an earlier prototype; update

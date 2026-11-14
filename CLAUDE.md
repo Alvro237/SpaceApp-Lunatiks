@@ -156,6 +156,7 @@ work: merged, tested, called on a running server. Not before.
 | Hard filter | `max_temperature` | `logic/constraints/temperature.py` | MECH | Surface or equipment temperature vs `max_k`, discrete or continuous |
 | Hard filter | `battery_survives` | `logic/constraints/power.py` | MECH | Battery carries the load all mission (same model as `/power` level 3) |
 | Endpoint | `POST /api/v1/verdict` | `routers/verdict.py`, `logic/scoring.py` | MECH | RF-11: hard filters then soft score; unfeasible / unknown / favourable / marginal / poor |
+| Endpoint | `GET /api/v1/validation` | `routers/validation.py`, `app/validation_checks.py` | MECH | Pipeline validation + 8 live model checks with reference, source, tolerance |
 
 Also in place and verified: the engine in `app/logic` (ephemeris, geometry, horizon, disc-visible fraction,
 series, metrics, time ranges, next sunset/Earthset; reproduces JPL Horizons to better than 0.01 degrees) and the
