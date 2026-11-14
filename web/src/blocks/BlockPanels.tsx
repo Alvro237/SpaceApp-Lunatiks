@@ -1,129 +1,19 @@
 /**
- * Block Moon's panels: places on the left, the sky now on the right, the next days along the bottom, and Pip's
- * story over the map. Every answer comes from the same engine and data as the planner's panels; "Show the real
- * numbers" opens them.
+ * Block Moon's panels, laid out like the navigator's: the place search and the date sit in the shared top bars
+ * (NavigatorPage), the sky now on the right, the days along the bottom, and the mission log over the map on the
+ * left. Every answer comes from the same engine and data as the planner's panels; "Why? And the real numbers"
+ * opens them.
  */
-import { type ReactNode, useId, useState } from 'react'
+import { useId, useState } from 'react'
 import { useNow } from '../panels/useNow'
-import { sameSelection, useApp } from '../state/store'
+import { useApp } from '../state/store'
 import { MS_PER_DAY, MS_PER_HOUR, hasComms, isSunlit } from '../time/engine'
-import { formatUtc } from '../time/clock'
-import { useMasks, useParams } from '../time/hooks'
-import type { StaticSite } from '../time/staticData'
+import { SPEEDS, formatUtc } from '../time/clock'
+import { useParams } from '../time/hooks'
+import { IconBack, IconChevron, IconPause, IconPlay, IconSpeed } from '../ui/icons'
 import { StoryCard } from './StoryCard'
 import { dayBlocks, simpleDuration } from './voxels'
 import './blocks.css'
-
-type Kind = 'mountain' | 'lander' | 'crater' | 'point'
-
-function kindOf(s: StaticSite): Kind {
-  if (/^mons /i.test(s.name)) return 'mountain'
-  if (s.group === 'Recent landers') return 'lander'
-  return 'crater'
-}
-
-const ICONS: Record<Kind, string> = {
-  mountain: 'M3 2h2v1H3zM2 3h4v1H2zM1 4h6v3H1z',
-  crater: 'M0 2h2v5H0zM6 2h2v5H6zM2 5h4v2H2z',
-  lander: 'M2 2h4v3H2zM1 5h1v2H1zM6 5h1v2H6z',
-  point: 'M3 1h2v1H3zM2 2h4v2H2zM3 4h2v1H3zM3.5 5h1v2h-1z',
-}
-
-function PixelIcon({ kind }: { kind: Kind }) {
-  const color = kind === 'lander' ? '#ffb547' : kind === 'point' ? '#7ee2a8' : '#b2b3b7'
-  return (
-    <svg width="24" height="24" viewBox="0 0 8 8" aria-hidden="true" shapeRendering="crispEdges">
-      <rect width="8" height="8" fill="#0b0c0e" />
-      <path d={ICONS[kind]} fill={color} />
-    </svg>
-  )
-}
-
-/** Short names for the tiles ("Shackleton" rather than "Shackleton crater"); the full name stays in the label. */
-const shortName = (name: string) =>
-  name
-    .replace(/ \(intended site\)$/, '')
-    .replace(/ crater$/, '')
-    .replace(/ \(Shiv Shakti\)$/, '')
-
-const fmtLat = (v: number) => `${Math.abs(v).toFixed(2)}° ${v < 0 ? 'S' : 'N'}`
-const fmtLon = (v: number) => `${Math.abs(v).toFixed(2)}° ${v < 0 ? 'W' : 'E'}`
-
-/** A Block Moon panel that folds to its title bar, so the world stays visible. */
-function Fold({ side, title, summary, defaultOpen, children }: { side: 'left' | 'right'; title: string; summary?: ReactNode; defaultOpen: boolean; children: ReactNode }) {
-  const [open, setOpen] = useState(defaultOpen)
-  const id = useId()
-  return (
-    <section className={`float float-${side} blk-panel blk-fold${open ? '' : ' is-closed'}`} aria-labelledby={`${id}-h`}>
-      <div className="blk-fold-head">
-        <h2 id={`${id}-h`} className="blk-h">
-          {title}
-        </h2>
-        {!open && summary}
-        <button type="button" className="blk-icon" aria-expanded={open} aria-controls={`${id}-b`} aria-label={`${open ? 'Hide' : 'Show'} ${title}`} onClick={() => setOpen(!open)}>
-          {open ? '−' : '+'}
-        </button>
-      </div>
-      <div id={`${id}-b`} hidden={!open} className="blk-fold-body">
-        {children}
-      </div>
-    </section>
-  )
-}
-
-function Places() {
-  const masks = useMasks().data
-  const selection = useApp((s) => s.selection)
-  const select = useApp((s) => s.select)
-  const sites = masks?.doc.sites.filter((s) => s.lat <= -60) ?? []
-  const groups: { title: string; items: StaticSite[] }[] = [
-    { title: 'Landers', items: sites.filter((s) => kindOf(s) === 'lander') },
-    { title: 'Mountains and craters', items: sites.filter((s) => kindOf(s) !== 'lander') },
-  ]
-  const chosen = selection.kind === 'site' ? sites.find((s) => s.id === selection.id)?.name : `${fmtLat(selection.lat)}, ${fmtLon(selection.lon)}`
-  return (
-    <Fold side="left" title="Places" defaultOpen={false} summary={chosen && <span className="blk-fold-sum">{shortName(chosen)}</span>}>
-      <p className="blk-sub">Near the Moon’s south pole, or anywhere you click.</p>
-      {groups.map((g) => (
-        <div key={g.title} className="blk-group">
-          <h3>{g.title}</h3>
-          <div className="blk-tiles">
-            {g.items.map((s) => {
-              const on = sameSelection(selection, { kind: 'site', id: s.id })
-              return (
-                <button
-                  key={s.id}
-                  type="button"
-                  className="blk-tile"
-                  aria-pressed={on}
-                  aria-label={s.name}
-                  title={s.name}
-                  onClick={() => select({ kind: 'site', id: s.id })}
-                >
-                  <PixelIcon kind={kindOf(s)} />
-                  <span>{shortName(s.name)}</span>
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      ))}
-      <div className="blk-group">
-        <h3>Your own spot</h3>
-        {selection.kind === 'point' ? (
-          <div className="blk-tile blk-tile-wide" aria-current="true">
-            <PixelIcon kind="point" />
-            <span>
-              {fmtLat(selection.lat)}, {fmtLon(selection.lon)}
-            </span>
-          </div>
-        ) : (
-          <p className="blk-hint">Choose “Whole Moon” and click anywhere on it.</p>
-        )}
-      </div>
-    </Fold>
-  )
-}
 
 function sunWhy(el: number, fraction: number, terrain: boolean): string {
   if (fraction >= 1) return terrain ? 'The whole Sun is above the hills.' : 'The whole Sun is above the horizon.'
@@ -138,86 +28,103 @@ function earthWhy(el: number, contact: boolean, terrain: boolean): string {
   return 'Earth is below the horizon: no direct radio call until it comes back.'
 }
 
+/** The sky now, on the right: two plain answers (is the Sun up, can we see Earth) and when they change. */
 function Sky() {
   const { view, info, outOfRange } = useNow()
   const params = useParams()
+  const [open, setOpen] = useState(true)
+  const id = useId()
   const deg = (v: number) => `${v.toFixed(2)}°`
   const terrain = view?.horizonKind === 'terrain'
+  const sunUp = view ? (view.sun.fraction >= 1 ? 'Yes' : view.sun.fraction > 0 ? 'Partly' : 'No') : '–'
+  const earthUp = view ? (view.earth.fraction >= params.commsMinFraction ? 'Yes' : 'No') : '–'
   return (
-    <section className="float float-right blk-panel blk-sky" aria-labelledby="blk-sky">
-      <h2 id="blk-sky" className="blk-h">
-        The sky now
-      </h2>
-      {info && (
-        <p className="blk-sub">
-          {info.name}
-          {view && <span className="blk-time"> · {formatUtc(view.tMs)}</span>}
-        </p>
-      )}
-      {outOfRange && (
-        <p className="error" role="alert">
-          This date is outside the Sun and Earth tables (2025–2035).
-        </p>
-      )}
-      {view && (
-        <>
-          <div className="blk-answers" aria-live="polite">
-            <div className="blk-answer blk-sun">
-              <p className="blk-q">Is the Sun up?</p>
-              <p className="blk-a">{view.sun.fraction >= 1 ? 'YES' : view.sun.fraction > 0 ? 'PARTLY' : 'NO'}</p>
-              {view.nextSun && (
-                <p className="blk-when">
-                  {view.nextSun.kind === 'rise' ? 'Back in' : 'Sets in'} <strong>{simpleDuration(view.nextSun.inMs)}</strong>
-                </p>
-              )}
+    <section className={`float float-right blk-sky${open ? '' : ' is-closed'}`} aria-labelledby={`${id}-h`}>
+      <div className="float-head">
+        <h2 id={`${id}-h`}>The sky now</h2>
+        {!open && view && (
+          <span className="blk-sky-mini" aria-hidden="true">
+            <span className="blk-mini-sun">Sun {sunUp}</span> · <span className="blk-mini-earth">Earth {earthUp}</span>
+          </span>
+        )}
+        <button
+          type="button"
+          className="icon"
+          aria-expanded={open}
+          aria-controls={`${id}-b`}
+          aria-label={`${open ? 'Hide' : 'Show'} the sky now`}
+          onClick={() => setOpen(!open)}
+        >
+          {open ? '›' : '‹'}
+        </button>
+      </div>
+      <div id={`${id}-b`} className="float-body" hidden={!open}>
+        {info && (
+          <p className="blk-place">
+            <span className="blk-place-name">{info.name}</span>
+            {view && <span className="blk-time">{formatUtc(view.tMs)}</span>}
+          </p>
+        )}
+        {outOfRange && (
+          <p className="error" role="alert">
+            This date is outside the Sun and Earth tables (2025–2035, and 1969–1972 for Apollo).
+          </p>
+        )}
+        {view && (
+          <>
+            <div className="blk-answers" aria-live="polite">
+              <div className="blk-answer blk-answer-sun">
+                <p className="blk-q">Is the Sun up?</p>
+                <p className="blk-a">{sunUp}</p>
+                {view.nextSun && (
+                  <p className="blk-when">
+                    {view.nextSun.kind === 'rise' ? 'Rises in' : 'Sets in'} <strong>{simpleDuration(view.nextSun.inMs)}</strong>
+                  </p>
+                )}
+              </div>
+              <div className="blk-answer blk-answer-earth">
+                <p className="blk-q">Can we see Earth?</p>
+                <p className="blk-a">{earthUp}</p>
+                {view.nextEarth && (
+                  <p className="blk-when">
+                    {view.nextEarth.kind === 'rise' ? 'Rises in' : 'Sets in'} <strong>{simpleDuration(view.nextEarth.inMs)}</strong>
+                  </p>
+                )}
+              </div>
             </div>
-            <div className="blk-answer blk-earth">
-              <p className="blk-q">Can we see Earth?</p>
-              <p className="blk-a">{view.earth.fraction >= params.commsMinFraction ? 'YES' : 'NO'}</p>
-              {view.nextEarth && (
-                <p className="blk-when">
-                  {view.nextEarth.kind === 'rise' ? 'Back in' : 'Sets in'} <strong>{simpleDuration(view.nextEarth.inMs)}</strong>
-                </p>
-              )}
-            </div>
-          </div>
-          {!terrain && (
-            <p className="blk-note">
-              Nobody has measured the skyline here, so these answers pretend the Moon is smooth. Real hills could change them.
-            </p>
-          )}
-          <details className="blk-real">
-            <summary>Why? And the real numbers</summary>
-            <p className="blk-why">{sunWhy(view.sun.el, view.sun.fraction, terrain)}</p>
-            <p className="blk-why">{earthWhy(view.earth.el, view.earth.fraction >= params.commsMinFraction, terrain)}</p>
-            <p className="blk-legend-sky">
-              <span className="blk-dot blk-dot-sun" aria-hidden="true" /> Gold ball: the Sun
-              <span className="blk-dot blk-dot-earth" aria-hidden="true" /> Blue ball: the Earth
-            </p>
-            <dl>
-              <dt>Sun</dt>
-              <dd>
-                elevation {deg(view.sun.el)}, azimuth {view.sun.az.toFixed(1)}°, {Math.round(view.sun.fraction * 100)} % of the disc visible
-              </dd>
-              <dt>Earth</dt>
-              <dd>
-                elevation {deg(view.earth.el)}, azimuth {view.earth.az.toFixed(1)}°, {Math.round(view.earth.fraction * 100)} % of the disc visible
-              </dd>
-              <dt>Horizon</dt>
-              <dd>
-                {terrain ? `LOLA terrain horizon, ${view.mastUsedM} m mast` : `smooth sphere (no terrain mask here), ${view.mastUsedM} m mast`} ·{' '}
-                {view.source === 'api' ? 'API' : 'browser engine'}
-              </dd>
-            </dl>
-          </details>
-        </>
-      )}
+            {!terrain && (
+              <p className="blk-note">Nobody has measured the skyline here, so these answers treat the Moon as smooth. Real hills could change them.</p>
+            )}
+            <details className="blk-real">
+              <summary>Why? And the real numbers</summary>
+              <p className="blk-why">{sunWhy(view.sun.el, view.sun.fraction, terrain)}</p>
+              <p className="blk-why">{earthWhy(view.earth.el, view.earth.fraction >= params.commsMinFraction, terrain)}</p>
+              <dl>
+                <dt>Sun</dt>
+                <dd>
+                  elevation {deg(view.sun.el)}, azimuth {view.sun.az.toFixed(1)}°, {Math.round(view.sun.fraction * 100)} % of the disc visible
+                </dd>
+                <dt>Earth</dt>
+                <dd>
+                  elevation {deg(view.earth.el)}, azimuth {view.earth.az.toFixed(1)}°, {Math.round(view.earth.fraction * 100)} % of the disc visible
+                </dd>
+                <dt>Horizon</dt>
+                <dd>
+                  {terrain ? `LOLA terrain horizon, ${view.mastUsedM} m mast` : `smooth sphere (no terrain mask here), ${view.mastUsedM} m mast`} ·{' '}
+                  {view.source === 'api' ? 'API' : 'browser engine'}
+                </dd>
+              </dl>
+            </details>
+          </>
+        )}
+      </div>
     </section>
   )
 }
 
 const fmtDay = (ms: number) => new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
 
+/** The days of the window along the bottom: one block per day for the Sun and one for the Earth. */
 function NextDays() {
   const { series } = useNow()
   const params = useParams()
@@ -225,7 +132,10 @@ function NextDays() {
   const durationH = useApp((s) => s.durationH)
   const tMs = useApp((s) => s.tMs)
   const playing = useApp((s) => s.playing)
-  const { setPlaying, setTime } = useApp.getState()
+  const speed = useApp((s) => s.speed)
+  const { setPlaying, setSpeed, setTime } = useApp.getState()
+  const speedAt = SPEEDS.findIndex((s) => s.id === speed)
+  const id = useId()
   const days = Math.min(60, Math.max(1, Math.ceil(durationH / 24)))
   const blocks = series ? dayBlocks(series.t, series.samples.map(isSunlit), series.samples.map((s) => hasComms(s, params)), startMs, days) : []
   const today = Math.floor((tMs - startMs) / MS_PER_DAY)
@@ -237,20 +147,40 @@ function NextDays() {
 
   return (
     <div className="float float-bottom blk-bottom">
-      <section className="blk-panel" aria-labelledby="blk-days">
+      <section className="blk-days" aria-labelledby={`${id}-h`}>
         <div className="blk-days-head">
-          <h2 id="blk-days" className="blk-h">
-            The next {days} days
+          <h2 id={`${id}-h`} className="blk-days-title">
+            Day by day
+            <span className="blk-days-sum">
+              Sun on {sunDays} of {days} days · Earth on {earthDays}
+            </span>
           </h2>
-          <div className="blk-play">
-            <button type="button" onClick={() => setTime(tMs - MS_PER_DAY)} aria-label="One day back">
-              ◂ Day
+          <div className="tl-icons" role="group" aria-label="Playback">
+            <button type="button" className="tl-btn" onClick={() => setTime(tMs - MS_PER_DAY)} aria-label="One day back" title="One day back">
+              <IconBack size={18} />
             </button>
-            <button type="button" className="blk-play-main" aria-pressed={playing} onClick={() => setPlaying(!playing)}>
-              {playing ? 'Pause' : 'Play the days'}
+            <button
+              type="button"
+              className="tl-btn blk-play-main"
+              aria-pressed={playing}
+              aria-label={playing ? 'Pause' : 'Play the days'}
+              title={playing ? 'Pause' : 'Play the days'}
+              onClick={() => setPlaying(!playing)}
+            >
+              {playing ? <IconPause size={18} /> : <IconPlay size={18} />}
             </button>
-            <button type="button" onClick={() => setTime(tMs + MS_PER_DAY)} aria-label="One day forward">
-              Day ▸
+            <button type="button" className="tl-btn" onClick={() => setTime(tMs + MS_PER_DAY)} aria-label="One day forward" title="One day forward">
+              <IconChevron size={18} />
+            </button>
+            <button
+              type="button"
+              className="tl-btn blk-speed"
+              aria-label={`Speed: ${SPEEDS[speedAt].label}. Change`}
+              title={`Speed: ${SPEEDS[speedAt].label}`}
+              onClick={() => setSpeed(SPEEDS[(speedAt + 1) % SPEEDS.length].id)}
+            >
+              <IconSpeed size={18} />
+              <span>{speed}/s</span>
             </button>
           </div>
         </div>
@@ -266,6 +196,7 @@ function NextDays() {
                       type="button"
                       className={`blk-cell ${fill(b[row], row === 'sun' ? 'is-sun' : 'is-earth')}${d === today ? ' is-today' : ''}`}
                       aria-label={label(b, d)}
+                      title={label(b, d)}
                       aria-current={d === today ? 'date' : undefined}
                       onClick={() => setTime(b.startMs + 12 * MS_PER_HOUR)}
                     />
@@ -280,9 +211,7 @@ function NextDays() {
             </div>
           </div>
         )}
-        <p className="blk-legend">
-          1 block = 1 day (striped: part of the day). Sun on {sunDays} of {days} days, Earth on {earthDays}.
-        </p>
+        <p className="blk-legend">One block is one day: full when the Sun (or Earth) is up all day, striped for part of the day, dark when not at all.</p>
       </section>
     </div>
   )
@@ -291,7 +220,6 @@ function NextDays() {
 export function BlockPanels() {
   return (
     <>
-      <Places />
       <Sky />
       <StoryCard />
       <NextDays />
