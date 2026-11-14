@@ -63,7 +63,7 @@ the dev proxy elsewhere; in production set `VITE_API_URL` to the API's public UR
 WCAG 2.2 AA target (`docs/accessibility.md`): everything on the map is also text in the panels; site markers
 are buttons; keyboard map control (arrows, + and −, T to tilt, Q and E to rotate, R to reset, Space to play);
 verdicts carry a symbol and a word; reduced motion makes playback jump in 6-hour steps. The LOD refines a tile
-above 2 px of screen error and merges it below 1.5 px, loads at most 6 tiles at a time, keeps up to 300 tiles in
+above 2 px of screen error and merges it below 1.5 px, loads at most 6 tiles at a time from each server (8 from the PGDA proxy), keeps up to 300 tiles in
 GPU memory and lowers its quality below 45 fps.
 
 Code written with Claude (Anthropic) assistance under the team's direction; declared in the app's Data & methods
