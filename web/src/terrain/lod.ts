@@ -89,15 +89,21 @@ export function selectTiles(ts: Tileset, cam: LodCamera, opts: LodOptions = DEFA
  */
 export function renderable(wanted: TileKey[], isLoaded: (k: string) => boolean): TileKey[] {
   const wantedKeys = new Set(wanted.map(keyOf))
-  const deepest = Math.max(0, ...wanted.map((t) => t.z))
-  const hasWantedBelow = (t: TileKey): boolean => {
-    if (t.z >= deepest) return false
-    return children(t).some((c) => wantedKeys.has(keyOf(c)) || hasWantedBelow(c))
+  // Every strict ancestor of a wanted tile, so "is a wanted tile below t?" is one lookup. (Searching each subtree
+  // instead visited up to 4^(deepest level - z) tiles per branch and frame: about a second per frame at the
+  // deepest live levels, which froze the map when zoomed in near the pole.)
+  const ancestors = new Set<string>()
+  for (const t of wanted) {
+    for (let z = t.z - 1; z >= 0; z--) {
+      const k = keyOf({ z, x: t.x >> (t.z - z), y: t.y >> (t.z - z) })
+      if (ancestors.has(k)) break
+      ancestors.add(k)
+    }
   }
   const resolve = (t: TileKey): TileKey[] | null => {
     const k = keyOf(t)
     if (wantedKeys.has(k)) return isLoaded(k) ? [t] : null
-    if (!hasWantedBelow(t)) return []
+    if (!ancestors.has(k)) return []
     const parts = children(t).map(resolve)
     if (parts.every((p) => p !== null)) return parts.flat() as TileKey[]
     return isLoaded(k) ? [t] : null
