@@ -224,3 +224,20 @@ export const IconFilter = (p: P) => (
     <path d="M3 5h18l-7 8v6l-4 2v-8L3 5Z" />
   </Svg>
 )
+export const IconMountain = (p: P) => (
+  <Svg {...p}>
+    <path d="m3 20 7-12 4 6 2-3 5 9H3Z" />
+  </Svg>
+)
+export const IconCrater = (p: P) => (
+  <Svg {...p}>
+    <ellipse cx="12" cy="13" rx="9" ry="6" />
+    <path d="M6 12.5a6 3.5 0 0 1 12 0" />
+  </Svg>
+)
+export const IconRock = (p: P) => (
+  <Svg {...p}>
+    <path d="m4 17 3-7 5-3 6 3 2 7H4Z" />
+    <path d="m9 10 2 3 4-1" />
+  </Svg>
+)

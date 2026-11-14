@@ -2,7 +2,7 @@
  * The planner's screen: the map fills the window and only small tools float over it.
  *   - Top left: where and when. In study mode a site search (catalogue and missions) with a coordinates button;
  *     in both modes the date pill (start and duration).
- *   - Top right: the tool bar (Adobe-style options bar): mission filters in mission mode, then the active map
+ *   - Next to them, the tool bar (Adobe-style options bar): mission filters in mission mode, then the active map
  *     view's own tools (zoom, view, layers), which it puts there through ToolPortal.
  *   - Right: the chosen place and its sections (the engine parameters live in the section they change).
  *   - Bottom: the bare timeline.
@@ -50,23 +50,27 @@ export function NavigatorPage() {
             </p>
           )}
           <SkyDial />
-          <div className="where-when" role="group" aria-label={mode === 'study' ? 'Where and when' : 'When'}>
-            {mode === 'study' && (
-              <>
-                <SiteSearch />
-                <CoordsButton />
-              </>
-            )}
-            <DatePill />
-          </div>
-          <div className="toolstrip" role="toolbar" aria-label="Map tools">
-            {mode === 'mission' && (
-              <Popover label="Mission filters" button={<IconFilter size={18} />} buttonClass="tool-btn" align="right" className="mission-pop">
-                <h2 className="pop-title">Mission filters</h2>
-                <MissionPanel />
-              </Popover>
-            )}
-            <div className="toolslot" ref={setSlot} />
+          <div className="top-left">
+            <div className="where-when" role="group" aria-label={mode === 'study' ? 'Where and when' : 'When'}>
+              {mode === 'study' && (
+                <>
+                  <SiteSearch />
+                  <CoordsButton />
+                </>
+              )}
+              <DatePill />
+            </div>
+            <div className="toolstrip" role="toolbar" aria-label="Map tools">
+              {mode === 'mission' && (
+                <Popover label="Mission filters" button={<IconFilter size={18} />} buttonClass="tool-btn" align="left" className="mission-pop">
+                  <h2 className="pop-title">
+                    <IconFilter size={18} /> Mission filters
+                  </h2>
+                  <MissionPanel />
+                </Popover>
+              )}
+              <div className="toolslot" ref={setSlot} />
+            </div>
           </div>
           <Float side="right" title="Place" wide={section !== null}>
             <PlacePanel />

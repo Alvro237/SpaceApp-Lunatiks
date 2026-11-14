@@ -709,6 +709,98 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
   .toolstrip { top: 58px; right: 8px; flex-wrap: wrap; justify-content: flex-end; }
 }
 
+/* ---------------------------------------------------------------- everything on the map's top left */
+.top-left {
+  position: absolute;
+  z-index: 24;
+  top: calc(var(--inset-top) + 10px);
+  left: 10px;
+  right: calc(var(--inset-right) + 20px);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  pointer-events: none;
+}
+.top-left > * { pointer-events: auto; }
+.top-left .where-when,
+.top-left .toolstrip { position: static; max-width: none; }
+.toolstrip .layers-menu { left: 0; right: auto; }
+@media (min-width: 761px) {
+  .float-right { top: calc(var(--inset-top) + 10px); max-height: calc(100vh - var(--inset-top) - var(--inset-bottom) - 24px); }
+  .sky-dial { top: calc(var(--inset-top) + 62px); }
+}
+@media (max-width: 760px) {
+  .top-left { top: 8px; left: 8px; right: 8px; }
+}
+
+/* ---------------------------------------------------------------- mission filters flyout */
+.mission-pop .pop-panel { width: min(400px, calc(100vw - 24px)); padding: 14px; }
+.pop-title { display: flex; align-items: center; gap: 8px; }
+.mission-form .ios-header:first-child { margin-top: 2px; }
+.ios-header { display: flex; align-items: center; gap: 6px; }
+.count-pill {
+  margin-left: 2px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--on-accent);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+.header-link { margin-left: auto; font-size: 0.78rem; text-transform: none; letter-spacing: 0; }
+.ios-icon-purple { background: #c9b8ff; }
+.ios-icon-green { background: #7ee2a8; }
+.filter-row + .filter-row { border-top: 1px solid var(--border); }
+.filter-row .ios-row + .ios-row::before { display: none; }
+.filter-row.is-on { background: color-mix(in srgb, var(--surface) 60%, transparent); }
+.filter-fields { padding: 2px 12px 10px 48px; display: grid; gap: 2px; }
+.filter-fields .pfield { margin-bottom: 6px; }
+.pfield-label { font-weight: 600; font-size: 0.85rem; }
+.tip-doc { display: block; margin-top: 4px; white-space: pre-wrap; font-family: var(--mono); font-size: 0.72rem; }
+.pad { padding: 10px 12px; margin: 0; }
+
+/* iOS-style switch (role="switch"): the word is in the label, the state is the knob position and aria-checked */
+.switch {
+  position: relative;
+  flex: none;
+  width: 46px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 999px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  margin-left: auto;
+  transition: background 0.15s ease;
+}
+.switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--muted);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.switch[aria-checked='true'] { background: var(--pass); border-color: var(--pass); }
+.switch[aria-checked='true'] .switch-knob { transform: translateX(18px); background: #ffffff; }
+.ios-row .tip-btn + .switch { margin-left: auto; }
+.search-go { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 44px; margin-top: 12px; border-radius: 12px; }
+.result-chips { display: flex; gap: 8px; margin: 0 0 8px; }
+.chip-stat { padding: 2px 10px; border-radius: 999px; border: 1px solid; font-weight: 600; font-size: 0.85rem; }
+.chip-stat.pass { color: var(--pass); }
+.chip-stat.fail { color: var(--fail); }
+@media (prefers-reduced-motion: reduce) {
+  .switch, .switch-knob { transition: none; }
+}
+@media (forced-colors: active) {
+  .switch[aria-checked='true'] { outline: 2px solid Highlight; }
+}
+
 @media (forced-colors: active) {
   .seg-item.is-on,
   .choice.is-on,
