@@ -206,6 +206,9 @@ Roles (the names are in `docs/endpoints.md`):
 - "Sunlit" means any part of the solar disc above the horizon; "comms" means at least `comms_min_fraction`
   (default 0.5) of the Earth's disc above it. Both are parameters, not constants.
 - Every response that depends on a horizon says which kind it used: `terrain` or `smooth_sphere`.
+- **A smooth-sphere result is never a bound.** Do not prune, rank or pass/fail candidates assuming terrain can only
+  make things worse. To screen an area use the terrain-aware PGDA grids (`sun_illumination_65s`,
+  `earth_visibility_65s`), then run the engine on terrain masks; report `horizon_kind` either way.
 - Errors: 404 for an unknown id, 422 for invalid input (FastAPI default), 400 with a clear message when the date
   is outside the ephemeris tables.
 
@@ -231,8 +234,12 @@ Units, encodings and caveats: `data/README.md`. Method: `docs/data-and-computati
 - **Radiation**: no dose dataset. `sky_visibility_65s` (solid angle of open sky) can scale an open-sky dose rate,
   which needs a cited source.
 - **Terrain horizons** exist for 13 catalogue sites south of 60 S. Everywhere else, including manual coordinates,
-  the horizon is a smooth sphere: real terrain can only shorten light and communication. Computing a new terrain
-  mask takes minutes per point (the pipeline reads NASA rasters remotely).
+  the horizon is a smooth sphere at the observer's own height. That is an estimate, **not a bound in either
+  direction**: real terrain shortens light and communication in craters and on slopes, and lengthens them on peaks
+  and ridges, where the skyline drops below the horizontal (2027, 2 m mast: Mons Malapert gets 2 743 h and IM-2
+  691 h of Earth contact that the smooth sphere misses, while the Shackleton floor is sunlit 0 % of the year
+  against 57 % on the smooth sphere).
+  Computing a new terrain mask takes minutes per point (the pipeline reads NASA rasters remotely).
 - **Screening grids are coarse** (320 m to 960 m cells). The slope cells are smoothed values, and the illumination
   cells are means that hide small, well-lit ridges. They screen areas; they do not certify a landing ellipse.
 - **Ephemeris tables** cover 2025-2035 (and 1969-1972 for Apollo validation).

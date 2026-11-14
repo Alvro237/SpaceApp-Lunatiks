@@ -41,7 +41,8 @@ def model_for_site(store: DataStore, site: Site, mast_m: float) -> SiteModel:
 
 def model_for_point(store: DataStore, lat: float, lon: float, mast_m: float) -> SiteModel:
     """Manual coordinates: ground height from the LOLA grid when covered, smooth-sphere horizon.
-    Say so in the response (``horizon.kind``): real terrain can only shorten light and comms."""
+    Say so in the response (``horizon.kind``): a smooth sphere is an estimate, not a bound. Real terrain shortens
+    light and comms in craters and lengthens them on peaks, where the skyline drops below the horizontal."""
     ground = store.grids.sample("lola_elevation_60s", lat, lon) or 0.0
     return make_model(lat, lon, ground, store.horizons.for_point(mast_m), mast_m)
 
