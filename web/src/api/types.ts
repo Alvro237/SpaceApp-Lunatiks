@@ -109,6 +109,8 @@ export interface PowerRequest {
   mast_m: number
   panel: 'tracking' | 'vertical' | 'horizontal'
   level: 1 | 2 | 3 | 4
+  /** manual coordinates: trace the skyline over LOLA terrain (default on the API: smooth sphere) */
+  horizon?: 'terrain' | 'smooth_sphere'
   // level 2
   panel_area_m2?: number
   cell_efficiency?: number
@@ -255,6 +257,7 @@ export interface RadiationRequest {
   step_min?: number
   mast_m?: number
   quality_factor?: number
+  horizon?: 'terrain' | 'smooth_sphere'
 }
 
 export interface DoseRange {
@@ -292,4 +295,25 @@ export interface Crater {
 export interface CraterList {
   count: number
   craters: Crater[]
+}
+
+/** GET /api/v1/points/horizon: skyline of any point, ray-traced over the LOLA elevation grids where they cover it. */
+export interface PointHorizon {
+  lat: number
+  lon: number
+  ground_m: number
+  ground_source: 'lola_grid' | 'reference_sphere'
+  mast_m: number
+  horizon_kind: HorizonKind
+  near_grid: string | null
+  near_cell_m: number | null
+  terrain_range_km: number | null
+  method: string
+  validation: string
+  az_step_deg: number
+  az: number[]
+  elevation_deg: number[]
+  max_deg: number
+  min_deg: number
+  mean_deg: number
 }

@@ -49,6 +49,30 @@ class GridRepository:
         raw[inside] = arr[row[inside], col[inside]]
         return np.where(raw == NODATA, np.nan, raw * m["scale"])
 
+    def bilinear_many(self, grid_id: str, lat, lon) -> np.ndarray:
+        """Bilinear interpolation between the four nearest cell centres (any array shape, degrees); NaN outside the
+        grid or where one of the four cells has no data. For continuous fields such as heights (ray tracing)."""
+        if grid_id not in self.index["grids"]:
+            return np.full(np.shape(lat), np.nan)
+        m = self.meta(grid_id)
+        x, y = south_polar_xy(lat, lon)
+        fx = (x - m["xLeftM"]) / m["pixelM"] - 0.5
+        fy = (m["yTopM"] - y) / m["pixelM"] - 0.5
+        c0 = np.floor(fx).astype(np.int64)
+        r0 = np.floor(fy).astype(np.int64)
+        tx = fx - c0
+        ty = fy - r0
+        inside = (c0 >= 0) & (c0 + 1 < m["width"]) & (r0 >= 0) & (r0 + 1 < m["height"])
+        arr = self._array(grid_id)
+        c = np.where(inside, c0, 0)
+        r = np.where(inside, r0, 0)
+        q = [arr[r, c], arr[r, c + 1], arr[r + 1, c], arr[r + 1, c + 1]]
+        nodata = (q[0] == NODATA) | (q[1] == NODATA) | (q[2] == NODATA) | (q[3] == NODATA)
+        top = q[0] * (1.0 - tx) + q[1] * tx
+        bottom = q[2] * (1.0 - tx) + q[3] * tx
+        v = (top * (1.0 - ty) + bottom * ty) * m["scale"]
+        return np.where(inside & ~nodata, v, np.nan)
+
     def cell_centres(self, grid_id: str, step: int = 1) -> tuple[np.ndarray, np.ndarray]:
         """Projected x, y (metres) of cell centres, every ``step`` cells: use with
         ``logic.projection.south_polar_latlon`` to sweep an area for candidate points."""

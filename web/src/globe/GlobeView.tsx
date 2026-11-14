@@ -7,6 +7,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ToolPortal } from '../ui/ToolSlot'
 import { IconMinus, IconPin, IconPlus, IconPole } from '../ui/icons'
 import { useGlobe } from '../state/globe'
+import { useHorizonTransition } from '../state/horizon'
 import { useQuery } from '@tanstack/react-query'
 import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
@@ -17,7 +18,7 @@ import { type MapSite, useMapSites } from '../map/useMapSites'
 import { TileLoader } from '../terrain/loader'
 import { useEphemeris, useMasks } from '../time/hooks'
 import { DATA_BASE } from '../time/staticData'
-import { MOON_R_KM, type Orbit, OrbitRig, latLonToScene, raySphere, sceneToLatLon } from './orbit'
+import { MIN_DIST, MOON_R_KM, type Orbit, OrbitRig, latLonToScene, raySphere, sceneToLatLon } from './orbit'
 import { GLOBE_FRAG, GLOBE_VERT } from './shaders'
 
 const FOV = 35
@@ -59,6 +60,32 @@ export function GlobeView() {
   const enterMap = useApp((s) => s.enterMap)
   const [orbit] = useState(() => new OrbitRig(START))
   const anchored = useGlobe((s) => s.anchored)
+  // In the horizon view the globe is hidden and paused: it must not start turning there, nor right after.
+  const covered = useHorizonTransition((s) => s.phase === 'horizon')
+  useEffect(() => orbit.touch(), [covered, orbit])
+
+  // Opening the horizon view: turn to the place and come down over it; back to the previous view when it closes.
+  useEffect(() => {
+    let before: Orbit | null = null
+    let phase = useHorizonTransition.getState().phase
+    return useHorizonTransition.subscribe((t) => {
+      if (t.phase === phase) return
+      phase = t.phase
+      if (phase === 'diving') {
+        const sel = useApp.getState().selection
+        const site = sel.kind === 'site' ? masks?.site(sel.id) : null
+        const ll = sel.kind === 'point' ? [sel.lat, sel.lon] : site ? [site.lat, site.lon] : null
+        if (!ll) return
+        before = { ...orbit.goal }
+        orbit.turnTo(ll[0], ll[1])
+        orbit.goal.dist = MIN_DIST
+      } else if ((phase === 'returning' || phase === 'map') && before) {
+        orbit.touch()
+        Object.assign(orbit.goal, before)
+        before = null
+      }
+    })
+  }, [masks, orbit])
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null)
   const pickRef = useRef<((cx: number, cy: number) => [number, number] | null) | null>(null)
 
@@ -154,7 +181,7 @@ export function GlobeView() {
         onWheel={onWheel}
       >
         {globe.data ? (
-          <Canvas camera={{ fov: FOV, near: 10, far: 50_000, position: [0, 0, 6000] }} dpr={[1, 2]} flat linear gl={{ antialias: true }} aria-hidden="true">
+          <Canvas camera={{ fov: FOV, near: 10, far: 50_000, position: [0, 0, 6000] }} dpr={[1, 2]} flat linear gl={{ antialias: true }} aria-hidden="true" frameloop={covered ? 'never' : 'always'}>
             <GlobeScene
               data={globe.data}
               orbit={orbit}
@@ -343,14 +370,17 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, onEnter }: Scene
     }
 
     // enter the polar map once the flight down has arrived, or when zoomed in over the cap
-    const target = orbit.arrived()
-    if (target) {
-      onEnter(target[0], target[1])
-      return
-    }
-    if (!orbit.isDiving && orbit.goal.dist < ENTER_MAP_DIST && n.lat <= MAP_DISC_LAT + 2) {
-      onEnter(Math.min(n.lat, MAP_DISC_LAT - 1), n.lon)
-      return
+    // (not while the horizon view opens or closes: then the camera comes down over the place on purpose)
+    if (useHorizonTransition.getState().phase === 'map') {
+      const target = orbit.arrived()
+      if (target) {
+        onEnter(target[0], target[1])
+        return
+      }
+      if (!orbit.isDiving && orbit.goal.dist < ENTER_MAP_DIST && n.lat <= MAP_DISC_LAT + 2) {
+        onEnter(Math.min(n.lat, MAP_DISC_LAT - 1), n.lon)
+        return
+      }
     }
 
     // places on the visible hemisphere only (a point is hidden when the sphere is between it and the camera)

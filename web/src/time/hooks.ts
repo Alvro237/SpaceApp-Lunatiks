@@ -5,7 +5,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { type Selection, useApp } from '../state/store'
-import { useSites } from '../api/hooks'
+import { usePointHorizon, useSites } from '../api/hooks'
 import { type ModelInfo, placeModel } from './place'
 import {
   type AnalysisParams,
@@ -34,7 +34,12 @@ export type { ModelInfo } from './place'
 export function useSiteModel(sel: Selection, mastM: number): ModelInfo | null {
   const masks = useMasks().data
   const names = useSiteNames()
-  return useMemo(() => (masks ? placeModel(masks, sel, mastM, names) : null), [masks, sel, mastM, names])
+  const ph = usePointHorizon(sel, mastM).data
+  const traced = useMemo(
+    () => (ph ? { kind: ph.horizon_kind, values: ph.elevation_deg, groundM: ph.ground_m, cellM: ph.near_cell_m } : null),
+    [ph],
+  )
+  return useMemo(() => (masks ? placeModel(masks, sel, mastM, names, traced) : null), [masks, sel, mastM, names, traced])
 }
 
 /** Display names from the API catalogue (the static copy has the same ones). */

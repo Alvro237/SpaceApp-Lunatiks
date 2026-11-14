@@ -45,7 +45,7 @@ def sweep(req: SweepRequest, store: DataStore = Depends(get_store)) -> SweepResp
                 raise HTTPException(status_code=404, detail=f"Unknown site id {pl.site_id!r}; see GET /api/v1/sites")
             model, name = services.model_for_site(store, site, req.mast_m), site.name
         else:
-            model, name = services.model_for_point(store, pl.lat, pl.lon, req.mast_m), None
+            model, name = services.model_for_point(store, pl.lat, pl.lon, req.mast_m, horizon=getattr(req, "horizon", "smooth_sphere")), None
         s = services.evaluate_window(store, model, start_ms, span_h, req.step_min, params)
         lit, link = s.sunlit(), s.comms(params)
         occ = obscuration(s)

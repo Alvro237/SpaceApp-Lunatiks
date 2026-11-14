@@ -8,11 +8,11 @@
  *   SectionDrawer: the side panel that shows the open section, with the place's name, the horizon it is computed
  *   over, and a close button. Escape closes it and focus goes back to its button.
  *
- * The Sun and Earth over the horizon stay on screen in the sky dial; their numbers (elevation, azimuth, time to the
- * next set or rise) are in the Horizon section.
+ * The Sun and Earth over the horizon stay on screen in the sky dial. Horizon also opens the first-person horizon
+ * view over the map (NavigatorPage); its panel steers that view and adds the Sun and Earth cards with the time to
+ * the next set or rise.
  */
 import { type ReactNode, useEffect, useId, useRef } from 'react'
-import { HorizonChart } from '../charts/HorizonChart'
 import { type SectionId, usePanels } from '../state/panels'
 import { useApp } from '../state/store'
 import { formatUtc } from '../time/clock'
@@ -20,7 +20,8 @@ import { SourceTag } from '../ui/ApiStatus'
 import { IconAntenna, IconBolt, IconClose, IconHorizon, IconMulti } from '../ui/icons'
 import { fmtLat, fmtLon } from './format'
 import { LinkPanel } from './LinkPanel'
-import { ContactSetting, HeightSetting } from './Settings'
+import { HorizonPanel } from './HorizonPanel'
+import { ContactSetting } from './Settings'
 import { NowCards } from './NowPanel'
 import { PowerPanel } from './PowerPanel'
 import { useNow } from './useNow'
@@ -93,10 +94,11 @@ export function SectionDrawer({ titleId }: { titleId: string }) {
   const heading = useRef<HTMLHeadingElement>(null)
   const active = SECTIONS.find((s) => s.id === section)
 
-  // Focus the heading when a section opens; give it back to the section's button when the drawer closes.
+  // Focus the heading when a section opens (the horizon view takes the focus itself: it is driven by the keyboard);
+  // give it back to the section's button when the drawer closes.
   useEffect(() => {
     if (!section) return
-    heading.current?.focus()
+    if (section !== 'horizon') heading.current?.focus()
     return () => {
       requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`.place-tools [data-section='${section}']`)?.focus())
     }
@@ -140,7 +142,11 @@ export function SectionDrawer({ titleId }: { titleId: string }) {
         <p className="meta-line">
           <span>{formatUtc(view.tMs)}</span>
           <span className={`badge badge-${view.horizonKind}`}>
-            {view.horizonKind === 'terrain' ? `LOLA horizon · ${view.mastUsedM} m` : `Smooth sphere · ${view.mastUsedM} m`}
+            {info?.horizonSource === 'traced'
+              ? `Traced horizon · ${info.demCellM ?? '?'} m DEM · ${view.mastUsedM} m`
+              : view.horizonKind === 'terrain'
+                ? `LOLA horizon · ${view.mastUsedM} m`
+                : `Smooth sphere · ${view.mastUsedM} m`}
           </span>
           <SourceTag source={view.source} />
         </p>
@@ -150,8 +156,7 @@ export function SectionDrawer({ titleId }: { titleId: string }) {
         {active.id === 'horizon' && (
           <>
             {view && <NowCards view={view} />}
-            <HeightSetting />
-            {info && view ? <HorizonChart info={info} sun={view.sun} earth={view.earth} tMs={view.tMs} /> : <p className="muted">Loading…</p>}
+            <HorizonPanel />
           </>
         )}
         {active.id === 'link' && (
