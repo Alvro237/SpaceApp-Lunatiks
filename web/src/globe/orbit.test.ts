@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { IDLE_BEFORE_SPIN_MS, MOON_R_KM, OrbitRig, RELIEF_MAX, SPIN_DEG_PER_S, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon } from './orbit'
+import { IDLE_BEFORE_SPIN_MS, MOON_R_KM, OrbitRig, RELIEF_MAX, SPIN_DEG_PER_S, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon, zoomOrbitToward } from './orbit'
 
 describe('globe geometry', () => {
   it('puts the north pole up and longitude 0 toward +x', () => {
@@ -86,5 +86,27 @@ describe('idle spin', () => {
     const r = rig()
     r.step(5, true, 10 * IDLE_BEFORE_SPIN_MS)
     expect(r.goal.lon).toBe(0)
+  })
+})
+
+describe('zoom toward the pointer', () => {
+  const o = { lat: -48, lon: 10, dist: MOON_R_KM + 1000 }
+
+  it('moves the centre toward the point by the share of height the zoom removes', () => {
+    // height 1000 km -> 500 km: half the height removed, so half the way from -48 to -88 and from 10 to 30
+    const z = zoomOrbitToward(o, 0.5, -88, 30)
+    expect(z.dist).toBeCloseTo(MOON_R_KM + 500, 6)
+    expect(z.lat).toBeCloseTo(-68, 6)
+    expect(z.lon).toBeCloseTo(20, 6)
+  })
+
+  it('takes the short way round in longitude', () => {
+    expect(zoomOrbitToward({ ...o, lon: 170 }, 0.5, -48, -170).lon).toBeCloseTo(180, 6)
+  })
+
+  it('does not move the centre when zooming out', () => {
+    const z = zoomOrbitToward(o, 2, -88, 30)
+    expect([z.lat, z.lon]).toEqual([-48, 10])
+    expect(z.dist).toBeCloseTo(MOON_R_KM + 2000, 6)
   })
 })
