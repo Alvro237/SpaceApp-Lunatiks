@@ -12,20 +12,14 @@ import { TileLoader } from './loader'
 import { type LodOptions, byDistanceTo, renderable, selectTiles } from './lod'
 import { GRID_VERTICES, TERRAIN_FRAG, TERRAIN_VERT } from './shaders'
 import { SHADOW_FRAG, SHADOW_VERT } from './shadow'
+import { BANDS, ShadowSchedule } from './shadowSchedule'
 import { type TileKey, type Tileset, keyOf, parent, tileBounds, tileUrl } from './tileset'
 
 export const GPU_TILE_CAPACITY = 300
 /** Shadow texture: one texel per 960 m cell of the preview over the 60 S disc. */
 const SHADOW_SIZE = 2048
-/** During playback the shadow pass runs at most this often (the panels update at 10 Hz). */
-const SHADOW_MIN_INTERVAL_MS = 60
-/**
- * While the Sun keeps moving (time playing or the slider dragged) the shadow pass runs at this size, a quarter of the
- * work (the full pass took 11-13 ms of GPU time, measured); once the Sun has been still for SHADOW_SETTLE_MS the
- * full-size pass runs once.
- */
+/** The shadow pass while the Sun moves (a quarter of the work); shadowSchedule.ts says when each runs. */
 const SHADOW_FAST_SIZE = 1024
-const SHADOW_SETTLE_MS = 250
 
 export type LayerMode = { kind: 'none' } | { kind: 'elevation' } | { kind: 'data'; id: string; colormap: ColormapId; levels: number }
 
@@ -122,13 +116,10 @@ export class TerrainEngine {
   // shadow pass
   private readonly shadowTarget: THREE.WebGLRenderTarget
   private readonly shadowTargetFast: THREE.WebGLRenderTarget
-  /** The shadow texture shown is the fast one, to be replaced by a full pass once the Sun settles. */
-  private shadowFastShown = false
-  private lastSunChange = 0
+  private readonly shadowSchedule = new ShadowSchedule()
   private readonly shadowScene = new THREE.Scene()
   private readonly shadowCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
   private readonly shadowMaterial: THREE.ShaderMaterial
-  private shadowDirty = true
   private lastSun = new THREE.Vector3()
 
   /** Uniforms shared by every tile material (same objects, so one update reaches all tiles). */
@@ -209,7 +200,7 @@ export class TerrainEngine {
     this.shadowMaterial.uniforms.uHeight.value = tex
     const [x0, , x1] = this.tileset.extentM
     this.shadowMaterial.uniforms.uExtent.value.w = (x1 - x0) / (res.width - 1)
-    this.shadowDirty = true
+    this.shadowSchedule.changed(performance.now())
   }
 
   /** Height (m) from the overview at a map point, bilinear; null outside the tileset or before it loads. */
@@ -268,8 +259,7 @@ export class TerrainEngine {
   setSun(unit: [number, number, number], radiusDeg: number, mastM: number): void {
     const v = new THREE.Vector3(...unit)
     if (v.angleTo(this.lastSun) > 2e-5 || this.shadowMaterial.uniforms.uMast.value !== mastM) {
-      this.shadowDirty = true
-      this.lastSunChange = performance.now()
+      this.shadowSchedule.changed(performance.now())
     }
     this.lastSun.copy(v)
     this.shared.uSun.value.copy(v)
@@ -281,34 +271,27 @@ export class TerrainEngine {
     this.shared.uHighlight.value.set(x, y, radiusM)
   }
 
-  private lastShadowAt = 0
-
   /**
-   * Recompute the shadow texture if the Sun moved; call before rendering the frame. While the Sun keeps moving the
-   * pass is smaller and at most every SHADOW_MIN_INTERVAL_MS; a full pass follows once it settles.
+   * Recompute the shadow texture when the Sun moved; call before rendering the frame. A fast (1024) pass answers at
+   * once; the full (2048) pass follows in strips, one per frame, once the Sun is still (shadowSchedule.ts).
    */
   renderShadows(renderer: THREE.WebGLRenderer, playing = false): void {
     if (!this.shadowMaterial.uniforms.uHeight.value) return
-    const now = performance.now()
-    let target: THREE.WebGLRenderTarget
-    if (this.shadowDirty) {
-      const moving = playing || now - this.lastShadowAt < SHADOW_SETTLE_MS
-      if (moving && now - this.lastShadowAt < SHADOW_MIN_INTERVAL_MS) return
-      target = moving ? this.shadowTargetFast : this.shadowTarget
-    } else if (this.shadowFastShown && !playing && now - this.lastSunChange > SHADOW_SETTLE_MS) {
-      target = this.shadowTarget
-    } else {
-      return
+    const step = this.shadowSchedule.next(performance.now(), playing)
+    if (!step) return
+    const target = step.kind === 'fast' ? this.shadowTargetFast : this.shadowTarget
+    if (step.kind === 'full') {
+      const h = SHADOW_SIZE / BANDS
+      target.scissor.set(0, step.band * h, SHADOW_SIZE, h)
+      target.scissorTest = true
     }
-    this.lastShadowAt = now
-    this.shadowFastShown = target === this.shadowTargetFast
     const prev = renderer.getRenderTarget()
     renderer.setRenderTarget(target)
     renderer.render(this.shadowScene, this.shadowCamera)
     renderer.setRenderTarget(prev)
+    if (step.kind === 'full' && !step.last) return
     this.shared.uShadow.value = target.texture
     this.shared.uShadowReady.value = 1
-    this.shadowDirty = false
     this.stats.shadowPasses++
   }
 
