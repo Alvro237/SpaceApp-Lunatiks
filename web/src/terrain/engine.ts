@@ -439,13 +439,24 @@ export class TerrainEngine {
     let src: TileKey = t
     while (src.z > this.layer.levels - 1) src = parent(src)!
     const lk = `L:${this.layer.id}|${keyOf(src)}`
-    const tex = this.layerTextures.get(lk)
+    let tex = this.layerTextures.get(lk)
     if (!tex) {
-      u.uHasLayer.value = 0
       this.requestLayer(this.layer.id, src, lk)
-      return
-    }
-    this.layerTextures.touch(lk)
+      // while it loads, a coarser layer tile already in memory stands in, so the ground never turns grey
+      let up = parent(src)
+      while (up && !tex) {
+        const uk = `L:${this.layer.id}|${keyOf(up)}`
+        tex = this.layerTextures.get(uk)
+        if (tex) {
+          this.layerTextures.touch(uk)
+          src = up
+        } else up = parent(up)
+      }
+      if (!tex) {
+        u.uHasLayer.value = 0
+        return
+      }
+    } else this.layerTextures.touch(lk)
     const scale = 1 / 2 ** (t.z - src.z)
     u.uLayer.value = tex
     u.uLayerXf.value.set((t.x - src.x * 2 ** (t.z - src.z)) * scale, (t.y - src.y * 2 ** (t.z - src.z)) * scale, scale, scale)
