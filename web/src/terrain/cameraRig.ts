@@ -103,6 +103,15 @@ export class CameraRig {
     Object.assign(this.goal, { ...this.home, tilt: this.goal.tilt })
   }
 
+  /** Fly to a place at exactly this camera distance (frames a region of known size). */
+  frameAt(lat: number, lon: number, distKm: number): void {
+    const [x, y] = polarXY(lat, lon)
+    this.goal.tx = x / 1000
+    this.goal.tz = -y / 1000
+    this.goal.dist = distKm
+    if (!this.fitted) this.pending = { tx: this.goal.tx, tz: this.goal.tz, dist: distKm }
+  }
+
   flyTo(lat: number, lon: number, maxDistKm = 140): void {
     const [x, y] = polarXY(lat, lon)
     this.goal.tx = x / 1000

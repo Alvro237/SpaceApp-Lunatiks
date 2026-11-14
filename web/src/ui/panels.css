@@ -747,6 +747,49 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
 @media (prefers-reduced-motion: reduce) {
   .switch, .switch-knob { transition: none; }
 }
+/* area search: groups A-I, filters the search cannot apply, results */
+.group-letter {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+.win-tag { margin-left: 4px; padding: 0 6px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); font-size: 0.68rem; font-weight: 600; }
+.na-tag { margin-left: auto; color: var(--muted); font-size: 0.75rem; white-space: nowrap; }
+.filter-row.is-na .ios-label { color: var(--muted); }
+.na-why { margin: -4px 12px 8px 48px; }
+.method-d { margin-top: 14px; }
+.chip-stat.unknown { color: var(--muted); }
+.result-chips { flex-wrap: wrap; }
+.small-note { margin-left: auto; font-size: 0.75rem; font-weight: 500; text-transform: none; letter-spacing: 0; }
+.area-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.area-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.area-list li.is-focus { border-color: var(--accent); }
+.area-main { display: grid; gap: 1px; min-width: 0; flex: 1; font-size: 0.85rem; }
+.area-main .small-note { margin-left: 0; }
+.area-actions { display: flex; gap: 6px; flex: none; }
+.area-legend { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; font-size: 0.8rem; }
+.area-legend li { display: flex; align-items: center; gap: 8px; }
+.sw { flex: none; width: 22px; height: 14px; border-radius: 3px; border: 1px solid rgba(255, 255, 255, 0.25); }
+.sw-viable { background: #3fbf8a; outline: 2px solid #eefff4; outline-offset: -2px; }
+.sw-window { background: repeating-linear-gradient(-45deg, #e8a13e 0 2px, #6b5a44 2px 6px); }
+.sw-static { background: #4a4a48; }
+.sw-unknown { background: radial-gradient(circle, #b8bcea 1.3px, #5d5e6a 1.6px) 0 0 / 6px 6px; }
+.sw-region { background: transparent; border: 2px solid #fadb73; border-radius: 50%; width: 14px; }
+.assumptions { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }
 /* ---------------------------------------------------------------- power section: summary, result, options */
 .power2 { display: grid; gap: 16px; }
 .band { display: grid; gap: 10px; min-width: 0; }

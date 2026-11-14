@@ -78,11 +78,20 @@ uniform sampler2D uLut;      // 256 x 1 colour map
 uniform vec2 uElevRange;
 uniform vec3 uHighlight;     // x, y (m) and radius (m) of the selected place ring
 uniform float uDiscR;        // the map is the disc of this projected radius (m) around the pole
+uniform sampler2D uArea;     // mission mode: r = code (0 outside, 1 fails static, 2 fails window, 3 viable, 4 unknown), g = score
+uniform vec4 uAreaXf;        // x left, y top, width, height of the search raster (m)
+uniform float uHasArea;
+uniform vec3 uRegion;        // x, y (m) and radius (m) of the search region ring
 in vec2 vUv;
 in vec2 vMap;
 in float vHeight;
 in vec3 vSunScene;
 layout(location = 0) out highp vec4 fragColor;
+
+int areaCode(ivec2 c, ivec2 n) {
+  if (c.x < 0 || c.y < 0 || c.x >= n.x || c.y >= n.y) return 0;
+  return int(texelFetch(uArea, c, 0).r * 255.0 + 0.5);
+}
 
 // Heights between samples, bilinear. The slope below is the difference of two such reads one sample apart on either
 // side, which equals the central-difference gradients at the four samples around the fragment blended bilinearly:
@@ -141,6 +150,39 @@ void main() {
   if (uLighting > 0.5) light = coloured ? 0.32 + 0.68 * sunLight : 0.34 * relief + 0.66 * sunLight;
   else light = coloured ? 0.55 + 0.45 * relief : relief;
   vec3 colour = base * light;
+
+  // Mission mode: the area search painted cell by cell. Never colour alone: viable areas get a solid outline,
+  // cells failing a window filter diagonal hatching, unknown cells dots, cells failing a static filter are dimmed
+  // (the legend and the panel's table say the same in words).
+  if (uHasArea > 0.5) {
+    ivec2 n = textureSize(uArea, 0);
+    vec2 p = vec2((vMap.x - uAreaXf.x) / uAreaXf.z, (uAreaXf.y - vMap.y) / uAreaXf.w) * vec2(n);
+    vec2 fw = max(fwidth(p) * 1.6, vec2(1e-4));   // outline width: about 1.6 px whatever the zoom (uniform flow here)
+    ivec2 c = ivec2(floor(p));
+    int code = areaCode(c, n);
+    if (code > 0) {
+      float hatch = step(mod(gl_FragCoord.x + gl_FragCoord.y, 7.0), 1.5);
+      float dots = step(length(mod(gl_FragCoord.xy, 6.0) - 3.0), 1.2);
+      if (code == 3) {
+        float s = texelFetch(uArea, c, 0).g;
+        colour = mix(colour, mix(vec3(0.10, 0.55, 0.42), vec3(0.36, 0.92, 0.62), s), 0.62);
+        vec2 f = fract(p);
+        bool edge = (f.x < fw.x && areaCode(c - ivec2(1, 0), n) != 3) || (f.x > 1.0 - fw.x && areaCode(c + ivec2(1, 0), n) != 3)
+                 || (f.y < fw.y && areaCode(c - ivec2(0, 1), n) != 3) || (f.y > 1.0 - fw.y && areaCode(c + ivec2(0, 1), n) != 3);
+        if (edge) colour = vec3(0.93, 1.0, 0.96);
+      } else if (code == 2) {
+        colour = mix(colour * 0.8, vec3(0.93, 0.62, 0.22), 0.14 + 0.4 * hatch);
+      } else if (code == 4) {
+        colour = mix(colour * 0.8, vec3(0.72, 0.74, 0.92), 0.15 + 0.55 * dots);
+      } else {
+        colour *= 0.55;
+      }
+    }
+  }
+  if (uRegion.z > 0.0) {
+    float dReg = length(vMap - uRegion.xy);
+    if (abs(dReg - uRegion.z) < fwidth(dReg) * 1.8) colour = mix(colour, vec3(0.98, 0.86, 0.45), 0.9);
+  }
 
   // Ring around the selected place (drawn in the terrain so it follows the relief).
   float d = length(vMap - uHighlight.xy);

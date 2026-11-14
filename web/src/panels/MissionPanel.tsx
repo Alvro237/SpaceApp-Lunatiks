@@ -1,25 +1,31 @@
 /**
- * Mission mode: hard filters (pass or fail) then a soft score with weights the planner sees and can change
- * (POST /api/v1/candidates/search). A site that fails any filter is out; it does not just score lower.
+ * Mission mode: find the areas of a bounded region where every filter switched on passes, and paint them on the
+ * map (POST /api/v1/areas/search). Instead of testing points one by one, the API runs a funnel over a raster:
+ * map filters on every cell, the landing radius, then the mission-window filters on adaptive samples, each with
+ * its own ray-traced horizon. The answer comes back as cells (painted on the terrain) and as the connected areas
+ * (listed here with Show and Study), so the map is never the only way to read it.
  *
- * Laid out as grouped lists (iOS style) inside the tool bar's flyout: each registered filter is a row with an icon,
- * its name, an ⓘ with what it checks, and a switch; switching it on reveals its thresholds, each with its unit.
- * Weights are sliders with the share in %, the search options a segmented control and a switch. Every result says
- * pass, fail or unknown in words and symbols, never colour alone.
+ * Laid out as grouped lists (iOS style) in the tool bar's flyout: region first, then the filters by family
+ * (A search area … I science), each a row with an icon, its name, an ⓘ and a switch that reveals its numbers.
+ * Filters the data cannot answer are listed with the reason. No threshold is pre-filled (CLAUDE.md).
  */
 import { type FormEvent, type ReactNode, useId, useState } from 'react'
-import { isMissing } from '../api/client'
-import { useCandidateSearch, useConstraints } from '../api/hooks'
-import type { Candidate, ConstraintResult } from '../api/types'
+import { useAreaSearch } from '../api/hooks'
+import type { AreaSearchRequest, AreaSearchResponse } from '../api/types'
+import { useAreas } from '../state/areas'
 import { useApp } from '../state/store'
 import { isoMinute } from '../time/clock'
 import { ApiStatus } from '../ui/ApiStatus'
 import {
   IconAntenna,
-  IconBattery,
+  IconBolt,
+  IconCalendar,
   IconClock,
   IconCrater,
+  IconCrosshair,
+  IconHabitat,
   IconMountain,
+  IconPin,
   IconRadiation,
   IconRock,
   IconSearch,
@@ -28,108 +34,118 @@ import {
   IconThermo,
 } from '../ui/icons'
 import { Tip } from '../ui/Tip'
-import { FILTER_SPECS, type FieldSpec, type FilterIcon, buildThreshold } from './filterSpecs'
+import { FUNNEL_LABEL, MISSION_GROUPS, type MissionField, type MissionFilter, type MissionIcon, buildFilters } from './missionFilters'
+import { useCatalogue } from './useCatalogue'
 
-const verdict = (p: boolean | null) =>
-  p === true ? { s: '✓', w: 'pass', c: 'pass' } : p === false ? { s: '✗', w: 'fail', c: 'fail' } : { s: '?', w: 'unknown', c: 'unknown' }
-
-const ICONS: Record<FilterIcon, ReactNode> = {
+const ICONS: Record<MissionIcon, ReactNode> = {
+  pin: <IconPin size={16} />,
   slope: <IconMountain size={16} />,
-  sun: <IconSun size={16} />,
-  radiation: <IconRadiation size={16} />,
-  battery: <IconBattery size={16} />,
-  thermo: <IconThermo size={16} />,
-  earth: <IconAntenna size={16} />,
+  mountain: <IconMountain size={16} />,
   crater: <IconCrater size={16} />,
   rock: <IconRock size={16} />,
+  sun: <IconSun size={16} />,
+  bolt: <IconBolt size={16} />,
   clock: <IconClock size={16} />,
+  earth: <IconAntenna size={16} />,
+  thermo: <IconThermo size={16} />,
+  radiation: <IconRadiation size={16} />,
+  calendar: <IconCalendar size={16} />,
+  habitat: <IconHabitat size={16} />,
+  science: <IconCrosshair size={16} />,
 }
-const TONE: Record<FilterIcon, string> = {
+const TONE: Record<MissionIcon, string> = {
+  pin: 'gray',
   slope: 'gray',
-  sun: 'orange',
-  radiation: 'purple',
-  battery: 'green',
-  thermo: 'red',
-  earth: 'blue',
+  mountain: 'gray',
   crater: 'gray',
   rock: 'gray',
+  sun: 'orange',
+  bolt: 'yellow',
   clock: 'blue',
+  earth: 'blue',
+  thermo: 'red',
+  radiation: 'purple',
+  calendar: 'blue',
+  habitat: 'green',
+  science: 'purple',
 }
-const WEIGHT_LABEL: Record<string, { label: string; icon: ReactNode; tone: string; tip: string }> = {
-  sunlight: { label: 'Sunlight', icon: <IconSun size={16} />, tone: 'orange', tip: 'Share of the window with the Sun visible.' },
-  comms: { label: 'Earth contact', icon: <IconAntenna size={16} />, tone: 'blue', tip: 'Share of the window with the Earth in view.' },
-  continuity: { label: 'Continuity', icon: <IconClock size={16} />, tone: 'gray', tip: 'Shorter longest night and blackout score higher.' },
-}
+const CELLS = [0.24, 0.48, 0.96, 1.92] as const
+const MAX_CELLS = 360_000
+const AZ_STEPS = [0.25, 0.5, 1] as const
+
+const fmtKm2 = (v: number) => (v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v.toFixed(2))
+const coord = (lat: number, lon: number) => `${Math.abs(lat).toFixed(3)}° ${lat < 0 ? 'S' : 'N'}, ${Math.abs(lon).toFixed(3)}° ${lon < 0 ? 'W' : 'E'}`
 
 export function MissionPanel() {
   const id = useId()
-  const meta = useConstraints()
-  const search = useCandidateSearch()
-  const { startMs, durationH, mastM, panel, commsMinFraction, select } = useApp()
-  const [enabled, setEnabled] = useState<Record<string, boolean>>({})
-  const [values, setValues] = useState<Record<string, Record<string, string>>>({})
-  const [raw, setRaw] = useState<Record<string, string>>({})
-  const [weights, setWeights] = useState<Record<string, number> | null>(null)
-  const [scope, setScope] = useState<'catalogue' | 'zones'>('catalogue')
-  const [unknownPasses, setUnknownPasses] = useState(false)
+  const a = useAreas()
+  const { startMs, durationH, mastM, panel, commsMinFraction, selection, set: setApp } = useApp()
+  const { sites } = useCatalogue()
+  const search = useAreaSearch()
   const [error, setError] = useState<string | null>(null)
 
-  const filters = meta.data ? Object.entries(meta.data.hard_filters) : []
-  const w = weights ?? meta.data?.soft_score_default_weights ?? {}
-  const wSum = Object.values(w).reduce((a, b) => a + b, 0) || 1
-  const onCount = filters.filter(([fid]) => enabled[fid]).length
+  const picked =
+    selection.kind === 'point'
+      ? { lat: selection.lat, lon: selection.lon, name: coord(selection.lat, selection.lon) }
+      : (() => {
+          const s = sites.find((x) => x.id === selection.id)
+          return s ? { lat: s.lat, lon: s.lon, name: s.name } : null
+        })()
+  const cellsSide = Math.ceil((2 * a.radiusKm) / a.cellKm)
+  const tooMany = cellsSide * cellsSide > MAX_CELLS
+  const maxRadius = Math.min(400, Math.floor((Math.sqrt(MAX_CELLS) * a.cellKm) / 2))
+  const onCount = MISSION_GROUPS.flatMap((g) => g.filters).filter((f) => a.enabled[f.id] && !f.unavailable).length
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    const hard: Record<string, Record<string, unknown>> = {}
-    for (const [fid] of filters) {
-      if (!enabled[fid]) continue
-      const spec = FILTER_SPECS[fid]
-      if (spec) {
-        const t = buildThreshold(spec.fields, values[fid] ?? {})
-        if (typeof t === 'string') return setError(`${spec.title}: ${t}`)
-        hard[fid] = t
-      } else {
-        try {
-          hard[fid] = JSON.parse(raw[fid] || '{}')
-        } catch {
-          return setError(`${fid}: the threshold must be JSON`)
-        }
-      }
+    if (!a.center) return setError('Place the search region first: activate a point on the map, or use the selected place.')
+    if (a.center.lat > -60) return setError('The area search covers the south polar grids: put the centre south of 60° S.')
+    const built = buildFilters(a.enabled, a.values)
+    if (typeof built === 'string') return setError(built)
+    if (Object.keys(built.filters).length === 0) return setError('Switch on at least one filter and type its values.')
+    let landing: number | undefined
+    if (a.landingRadiusKm.trim()) {
+      landing = Number(a.landingRadiusKm.replace(',', '.'))
+      if (!Number.isFinite(landing) || landing <= 0 || landing > 20) return setError('Landing radius must be between 0 and 20 km.')
     }
-    if (Object.keys(hard).length === 0) return setError('Choose at least one hard filter.')
+    if (tooMany) return setError(`That is ${(cellsSide * cellsSide).toLocaleString('en')} cells: make the cells larger or the region smaller.`)
     setError(null)
-    search.mutate({
+    const body: AreaSearchRequest = {
+      region: { center_lat: a.center.lat, center_lon: a.center.lon, radius_km: a.radiusKm },
+      filters: built.filters,
+      cell_km: a.cellKm,
+      ...(landing != null ? { landing_radius_km: landing } : {}),
       start: isoMinute(startMs),
       duration_h: durationH,
       mast_m: mastM,
       panel,
       comms_min_fraction: commsMinFraction,
-      scope,
-      hard_filters: hard,
-      weights: w,
-      unknown_passes: unknownPasses,
+      horizon_az_step_deg: a.azStepDeg,
+      horizon_radius_km: a.horizonKm,
+      max_window_samples: a.samples,
+      unknown_passes: a.unknownPasses,
+    }
+    const center = a.center
+    const radius = a.radiusKm
+    search.mutate(body, {
+      onSuccess: (r) => {
+        a.setResult(r)
+        setApp({ scale: 'map' }) // the areas are painted on the polar map, not on the globe
+        a.look(center.lat, center.lon, Math.max(20, radius * 3.2))
+      },
     })
   }
 
-  const setValue = (fid: string, key: string, v: string) => setValues({ ...values, [fid]: { ...values[fid], [key]: v } })
-
-  const field = (fid: string, f: FieldSpec) => {
-    const fieldId = `${id}-${fid}-${f.key}`
-    const value = values[fid]?.[f.key] ?? ''
-    if (f.kind === 'select') {
+  const field = (f: MissionFilter, fd: MissionField, nameId: string) => {
+    const fieldId = `${id}-${f.id}-${fd.key}`
+    const value = a.values[f.id]?.[fd.key] ?? ''
+    if (fd.kind === 'select') {
       return (
-        <div className="pfield" key={f.key}>
-          <div className="pfield-top">
-            <span id={`${fieldId}-l`} className="pfield-label">
-              {f.label}
-            </span>
-            {f.hint && <Tip label={f.label.toLowerCase()}>{f.hint}</Tip>}
-          </div>
-          <div className="seg" role="radiogroup" aria-labelledby={`${fieldId}-l`}>
-            {f.options!.map((o) => (
+        <div className="pfield" key={fd.key}>
+          <div className="seg" role="radiogroup" aria-labelledby={nameId}>
+            {fd.options!.map((o) => (
               <label key={o.value} className={`seg-item${value === o.value ? ' is-on' : ''}`}>
-                <input type="radio" name={fieldId} checked={value === o.value} onChange={() => setValue(fid, f.key, o.value)} />
+                <input type="radio" name={fieldId} checked={value === o.value} onChange={() => a.setValue(f.id, fd.key, o.value)} />
                 <span>{o.label}</span>
               </label>
             ))}
@@ -138,24 +154,26 @@ export function MissionPanel() {
       )
     }
     return (
-      <div className="pfield" key={f.key}>
+      <div className="pfield" key={fd.key}>
         <div className="pfield-top">
-          <label htmlFor={fieldId}>
-            {f.label}
-            {f.optional && <span className="opt"> (optional)</span>}
+          <label id={`${fieldId}-l`} htmlFor={fieldId}>
+            {fd.label}
+            {fd.optional && <span className="opt"> (optional)</span>}
           </label>
-          {f.hint && (
-            <Tip label={f.label.toLowerCase()}>
-              {f.hint}
-              {f.unit ? ` Unit: ${f.unit}.` : ''}
-            </Tip>
-          )}
+          {fd.hint && <Tip label={fd.label.toLowerCase()}>{fd.hint}</Tip>}
         </div>
         <div className="unit-input">
-          <input id={fieldId} inputMode="decimal" autoComplete="off" value={value} onChange={(e) => setValue(fid, f.key, e.target.value)} />
-          {f.unit && (
+          <input
+            id={fieldId}
+            aria-labelledby={`${nameId} ${fieldId}-l`}
+            inputMode="decimal"
+            autoComplete="off"
+            value={value}
+            onChange={(e) => a.setValue(f.id, fd.key, e.target.value)}
+          />
+          {fd.unit && (
             <span className="unit" aria-hidden="true">
-              {f.unit}
+              {fd.unit}
             </span>
           )}
         </div>
@@ -165,233 +183,366 @@ export function MissionPanel() {
 
   return (
     <div className="panel-section mission">
-      {!!meta.error && <ApiStatus error={meta.error} what="Registered filters" />}
       <form onSubmit={submit} noValidate className="mission-form">
         <h3 className="ios-header">
-          Must pass{onCount > 0 && <span className="count-pill">{onCount} on</span>}
-          <Tip label="hard filters">A site that fails any filter you switch on is out. It does not just score lower.</Tip>
+          Region
+          <Tip label="the region">
+            A disc around a centre you choose: activate a point on the map, or use the selected place. Only this disc is searched, so the
+            answer comes in seconds.
+          </Tip>
         </h3>
-        <div className="ios-list filter-list">
-          {filters.map(([fid, doc]) => {
-            const spec = FILTER_SPECS[fid]
-            const on = !!enabled[fid]
-            const icon = spec?.icon ?? 'slope'
-            const labelId = `${id}-${fid}-name`
-            return (
-              <div key={fid} className={`filter-row${on ? ' is-on' : ''}`}>
-                <div className="ios-row">
-                  <span className={`ios-icon ios-icon-${TONE[icon]}`}>{ICONS[icon]}</span>
-                  <span id={labelId} className="ios-label">
-                    {spec?.title ?? fid}
-                  </span>
-                  <Tip label={(spec?.title ?? fid).toLowerCase()}>
-                    {spec?.summary ?? ''} <span className="tip-doc">{doc}</span>
-                  </Tip>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={on}
-                    aria-labelledby={labelId}
-                    className="switch"
-                    onClick={() => setEnabled({ ...enabled, [fid]: !on })}
-                  >
-                    <span className="switch-knob" aria-hidden="true" />
-                  </button>
-                </div>
-                {on && (
-                  <div className="filter-fields">
-                    {spec ? (
-                      <>
-                        {spec.fields.filter((f) => !f.key.includes('.')).map((f) => field(fid, f))}
-                        {spec.fields.some((f) => f.key.includes('.')) && (
-                          <details className="pgroup-d">
-                            <summary>
-                              <IconThermo size={16} /> Ground properties
-                            </summary>
-                            {spec.fields.filter((f) => f.key.includes('.')).map((f) => field(fid, f))}
-                          </details>
-                        )}
-                      </>
-                    ) : (
-                      <div className="pfield">
-                        <label htmlFor={`${id}-${fid}-raw`}>Threshold (JSON)</label>
-                        <textarea id={`${id}-${fid}-raw`} rows={2} value={raw[fid] ?? ''} onChange={(e) => setRaw({ ...raw, [fid]: e.target.value })} />
-                      </div>
-                    )}
-                    {spec?.help && <p className="fine">{spec.help}</p>}
-                  </div>
-                )}
+        <div className="ios-list">
+          <div className="ios-row">
+            <span className="ios-icon ios-icon-gray">
+              <IconPin size={16} />
+            </span>
+            <span className="ios-label">{a.center ? coord(a.center.lat, a.center.lon) : 'No centre yet: activate a point on the map'}</span>
+          </div>
+          {picked && (
+            <div className="ios-row">
+              <button type="button" className="link" onClick={() => a.set({ center: { lat: picked.lat, lon: picked.lon } })}>
+                Centre on {picked.name}
+              </button>
+            </div>
+          )}
+          <div className="ios-row stack">
+            <div className="ios-row-top">
+              <label htmlFor={`${id}-radius`} className="ios-label">
+                Radius
+              </label>
+              <output htmlFor={`${id}-radius`} className="ios-value">
+                {a.radiusKm} km
+              </output>
+            </div>
+            <input
+              id={`${id}-radius`}
+              className="ios-slider"
+              type="range"
+              min={5}
+              max={maxRadius}
+              step={5}
+              value={Math.min(a.radiusKm, maxRadius)}
+              onChange={(e) => a.set({ radiusKm: Number(e.target.value) })}
+              aria-valuetext={`${a.radiusKm} kilometres`}
+            />
+          </div>
+          <div className="ios-row stack">
+            <div className="ios-row-top">
+              <span id={`${id}-cell-l`} className="ios-label">
+                Cell size
+              </span>
+              <Tip label="cell size">
+                Resolution of the painted map. Each cell reads every grid pixel inside it (slope 320 m, heights 240 m south of 80° S). Now
+                about {(cellsSide * cellsSide).toLocaleString('en')} cells.
+              </Tip>
+            </div>
+            <div className="seg" role="radiogroup" aria-labelledby={`${id}-cell-l`}>
+              {CELLS.map((c) => (
+                <label key={c} className={`seg-item${a.cellKm === c ? ' is-on' : ''}`}>
+                  <input
+                    type="radio"
+                    name={`${id}-cell`}
+                    checked={a.cellKm === c}
+                    onChange={() => a.set({ cellKm: c, radiusKm: Math.min(a.radiusKm, Math.floor((Math.sqrt(MAX_CELLS) * c) / 2)) })}
+                  />
+                  <span>{c >= 1 ? `${c} km` : `${Math.round(c * 1000)} m`}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="ios-row stack">
+            <div className="pfield">
+              <div className="pfield-top">
+                <label htmlFor={`${id}-landing`}>
+                  Landing radius<span className="opt"> (optional)</span>
+                </label>
+                <Tip label="landing radius">Room for the landing ellipse: a cell stays only if no cell failing a map filter lies within this distance.</Tip>
               </div>
-            )
-          })}
-          {filters.length === 0 && !meta.error && <p className="muted pad">Loading filters…</p>}
+              <div className="unit-input">
+                <input id={`${id}-landing`} inputMode="decimal" autoComplete="off" value={a.landingRadiusKm} onChange={(e) => a.set({ landingRadiusKm: e.target.value })} />
+                <span className="unit" aria-hidden="true">
+                  km
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {Object.keys(w).length > 0 && (
-          <>
-            <h3 className="ios-header">
-              Ranking
-              <Tip label="the ranking">Among the sites that pass, a weighted mean of these scores. The weights are shown as shares of the total.</Tip>
-              {weights && (
-                <button type="button" className="link header-link" onClick={() => setWeights(null)}>
-                  Reset
-                </button>
+        {MISSION_GROUPS.map((g) => (
+          <section key={g.id} aria-labelledby={`${id}-g-${g.id}`}>
+            <h3 className="ios-header" id={`${id}-g-${g.id}`}>
+              <span className="group-letter" aria-hidden="true">
+                {g.letter}
+              </span>
+              {g.title}
+              {g.id === 'window' && (
+                <Tip label="the mission window">
+                  Filters marked “window” use the timeline’s window: {isoMinute(startMs).replace('T', ' ').slice(0, 16)} UTC for {durationH} h.
+                </Tip>
               )}
             </h3>
-            <div className="ios-list">
-              {Object.entries(w).map(([k, v]) => {
-                const wl = WEIGHT_LABEL[k] ?? { label: k, icon: <IconSliders size={16} />, tone: 'gray', tip: k }
+            <div className="ios-list filter-list">
+              {g.filters.map((f) => {
+                const on = !!a.enabled[f.id] && !f.unavailable
+                const nameId = `${id}-${f.id}-name`
                 return (
-                  <div className="ios-row stack" key={k}>
-                    <div className="ios-row-top">
-                      <span className={`ios-icon ios-icon-${wl.tone}`}>{wl.icon}</span>
-                      <label htmlFor={`${id}-w-${k}`} className="ios-label">
-                        {wl.label}
-                      </label>
-                      <Tip label={wl.label.toLowerCase()}>{wl.tip}</Tip>
-                      <output htmlFor={`${id}-w-${k}`} className="ios-value">
-                        {Math.round((v / wSum) * 100)} %
-                      </output>
+                  <div key={f.id} className={`filter-row${on ? ' is-on' : ''}${f.unavailable ? ' is-na' : ''}`}>
+                    <div className="ios-row">
+                      <span className={`ios-icon ios-icon-${f.unavailable ? 'gray' : TONE[f.icon]}`}>{ICONS[f.icon]}</span>
+                      <span id={nameId} className="ios-label">
+                        {f.title}
+                        {f.window && <span className="win-tag"> window</span>}
+                      </span>
+                      {f.unavailable ? (
+                        <span className="na-tag">Not in the search</span>
+                      ) : (
+                        <>
+                          <Tip label={f.title.toLowerCase()}>{f.tip}</Tip>
+                          <button type="button" role="switch" aria-checked={on} aria-labelledby={nameId} className="switch" onClick={() => a.toggle(f.id)}>
+                            <span className="switch-knob" aria-hidden="true" />
+                          </button>
+                        </>
+                      )}
                     </div>
-                    <input
-                      id={`${id}-w-${k}`}
-                      className="ios-slider"
-                      type="range"
-                      min={0}
-                      max={1}
-                      step={0.05}
-                      value={v}
-                      onChange={(e) => setWeights({ ...w, [k]: Number(e.target.value) })}
-                      aria-valuetext={`weight ${v.toFixed(2)}, ${Math.round((v / wSum) * 100)} percent of the score`}
-                    />
+                    {f.unavailable && <p className="fine na-why">{f.unavailable}</p>}
+                    {on && f.fields.length > 0 && <div className="filter-fields">{f.fields.map((fd) => field(f, fd, nameId))}</div>}
                   </div>
                 )
               })}
             </div>
-          </>
-        )}
+          </section>
+        ))}
 
-        <h3 className="ios-header">Search</h3>
-        <div className="ios-list">
-          <div className="ios-row stack">
-            <div className="ios-row-top">
-              <span id={`${id}-scope-l`} className="ios-label">
-                Candidates
-              </span>
-              <Tip label="candidates">Catalogue: the curated sites. With neighbours: also the screening-grid points around them.</Tip>
+        <details className="pgroup-d method-d">
+          <summary>
+            <IconSliders size={16} /> Method
+          </summary>
+          <div className="pfield">
+            <div className="pfield-top">
+              <label htmlFor={`${id}-samples`}>Horizons traced, at most</label>
+              <Tip label="horizons traced">
+                Window filters are tested on samples placed by a quadtree: coarse first, then split where neighbours disagree. More samples, finer
+                edges, longer wait (10 to 20 per second, measured).
+              </Tip>
             </div>
-            <div className="seg" role="radiogroup" aria-labelledby={`${id}-scope-l`}>
-              {(
-                [
-                  ['catalogue', 'Catalogue'],
-                  ['zones', 'With neighbours'],
-                ] as const
-              ).map(([v, label]) => (
-                <label key={v} className={`seg-item${scope === v ? ' is-on' : ''}`}>
-                  <input type="radio" name={`${id}-scope`} checked={scope === v} onChange={() => setScope(v)} />
-                  <span>{label}</span>
+            <div className="unit-input">
+              <input
+                id={`${id}-samples`}
+                inputMode="numeric"
+                autoComplete="off"
+                value={a.samples}
+                onChange={(e) => {
+                  const n = Math.round(Number(e.target.value))
+                  if (Number.isFinite(n)) a.set({ samples: Math.max(1, Math.min(2000, n)) })
+                }}
+              />
+            </div>
+          </div>
+          <div className="pfield">
+            <div className="pfield-top">
+              <span id={`${id}-az-l`} className="pfield-label">
+                Horizon azimuth step
+              </span>
+              <Tip label="azimuth step">One ray every this many degrees around each sample, over the LOLA heights.</Tip>
+            </div>
+            <div className="seg" role="radiogroup" aria-labelledby={`${id}-az-l`}>
+              {AZ_STEPS.map((s) => (
+                <label key={s} className={`seg-item${a.azStepDeg === s ? ' is-on' : ''}`}>
+                  <input type="radio" name={`${id}-az`} checked={a.azStepDeg === s} onChange={() => a.set({ azStepDeg: s })} />
+                  <span>{s}°</span>
                 </label>
               ))}
+            </div>
+          </div>
+          <div className="pfield">
+            <div className="pfield-top">
+              <label htmlFor={`${id}-reach`}>Horizon reach</label>
+              <Tip label="horizon reach">How far each ray goes; terrain beyond is ignored. 150 km covers the peaks that matter at the pole.</Tip>
+            </div>
+            <div className="unit-input">
+              <input
+                id={`${id}-reach`}
+                inputMode="numeric"
+                autoComplete="off"
+                value={a.horizonKm}
+                onChange={(e) => {
+                  const n = Math.round(Number(e.target.value))
+                  if (Number.isFinite(n)) a.set({ horizonKm: Math.max(20, Math.min(250, n)) })
+                }}
+              />
+              <span className="unit" aria-hidden="true">
+                km
+              </span>
             </div>
           </div>
           <div className="ios-row">
             <span id={`${id}-unk`} className="ios-label">
               Count “no data” as pass
             </span>
-            <Tip label="no data">Off: a filter that cannot be evaluated at a site (no dataset) puts it out. On: it lets it through.</Tip>
-            <button type="button" role="switch" aria-checked={unknownPasses} aria-labelledby={`${id}-unk`} className="switch" onClick={() => setUnknownPasses(!unknownPasses)}>
+            <Tip label="no data">Off: a cell where a filter has no data is marked unknown and left out. On: it lets the cell through.</Tip>
+            <button type="button" role="switch" aria-checked={a.unknownPasses} aria-labelledby={`${id}-unk`} className="switch" onClick={() => a.set({ unknownPasses: !a.unknownPasses })}>
               <span className="switch-knob" aria-hidden="true" />
             </button>
           </div>
-        </div>
+        </details>
 
         {error && (
           <p role="alert" className="error">
             {error}
           </p>
         )}
-        <button type="submit" className="primary search-go" disabled={search.isPending || filters.length === 0}>
+        <button type="submit" className="primary search-go" disabled={search.isPending}>
           <IconSearch size={17} />
-          {search.isPending ? 'Searching…' : 'Find viable sites'}
+          {search.isPending ? `Searching… up to ${a.samples} horizons` : onCount > 0 ? `Find areas · ${onCount} filter${onCount > 1 ? 's' : ''}` : 'Find areas'}
         </button>
       </form>
 
-      {search.error && <ApiStatus error={search.error} what="Candidate search" fallback={isMissing(search.error) ? 'Coming soon.' : undefined} />}
-      {search.data && <Results candidates={search.data.candidates} onShow={(c) => c.site_id && select({ kind: 'site', id: c.site_id })} />}
+      {search.error && <ApiStatus error={search.error} what="Area search" />}
+      {a.result && <Results r={a.result} />}
     </div>
   )
 }
 
-function Results({ candidates, onShow }: { candidates: Candidate[]; onShow: (c: Candidate) => void }) {
-  const viable = candidates.filter((c) => c.viable).length
-  const ids = [...new Set(candidates.flatMap((c) => c.results.map((r) => r.id)))]
+function Results({ r }: { r: AreaSearchResponse }) {
+  const a = useAreas()
+  const { select, set } = useApp()
+  const id = useId()
+  const cellKm2 = (r.grid.cell_m / 1000) ** 2
+  const viableKm2 = r.counts.viable * cellKm2
+  const study = (lat: number, lon: number) => {
+    select({ kind: 'point', lat: Math.round(lat * 1e4) / 1e4, lon: Math.round(lon * 1e4) / 1e4 })
+    set({ mode: 'study' })
+  }
   return (
     <div className="results" aria-live="polite">
-      <h3 className="ios-header">Results</h3>
+      <h3 className="ios-header">
+        Result
+        <span className="muted small-note">
+          {r.seconds.toFixed(1)} s{r.window ? ` · ${r.window.samples} horizons` : ''}
+        </span>
+      </h3>
       <p className="result-chips">
         <span className="chip-stat pass">
-          <span aria-hidden="true">✓</span> {viable} viable
+          <span aria-hidden="true">✓</span> ≈ {fmtKm2(viableKm2)} km² viable
         </span>
         <span className="chip-stat fail">
-          <span aria-hidden="true">✗</span> {candidates.length - viable} out
+          <span aria-hidden="true">✗</span> {(r.counts.failed_static + r.counts.failed_window).toLocaleString('en')} cells out
         </span>
+        {r.counts.unknown > 0 && (
+          <span className="chip-stat unknown">
+            <span aria-hidden="true">?</span> {r.counts.unknown.toLocaleString('en')} no data
+          </span>
+        )}
       </p>
-      <div className="table-scroll" tabIndex={0} role="region" aria-label="Candidate results">
+      <div className="ios-list">
+        <div className="ios-row">
+          <span id={`${id}-show`} className="ios-label">
+            Paint on the map
+          </span>
+          <button type="button" role="switch" aria-checked={a.show} aria-labelledby={`${id}-show`} className="switch" onClick={() => a.set({ show: !a.show })}>
+            <span className="switch-knob" aria-hidden="true" />
+          </button>
+        </div>
+      </div>
+      <AreaLegend />
+
+      <h3 className="ios-header">Areas found</h3>
+      {r.areas.length === 0 ? (
+        <p className="muted pad">No connected area passes every filter. The funnel below shows which filter removed the most.</p>
+      ) : (
+        <ol className="area-list">
+          {r.areas.map((ar, k) => (
+            <li key={ar.id} className={a.focus === ar.id ? 'is-focus' : ''}>
+              <div className="area-main">
+                <strong>
+                  #{k + 1} · {fmtKm2(ar.area_km2)} km²
+                </strong>
+                <span className="muted">
+                  score {Math.round(ar.mean_score * 100)} % (best {Math.round(ar.best_score * 100)} %)
+                </span>
+                {ar.sites.length > 0 && <span className="muted">{ar.sites.join(', ')}</span>}
+                <span className="muted small-note">best spot {coord(ar.best_lat, ar.best_lon)}</span>
+              </div>
+              <div className="area-actions">
+                <button
+                  type="button"
+                  className="small"
+                  aria-label={`Show area ${k + 1} on the map`}
+                  onClick={() => {
+                    a.set({ focus: ar.id })
+                    a.look(ar.centroid_lat, ar.centroid_lon, Math.max(8, Math.sqrt(ar.area_km2) * 4))
+                  }}
+                >
+                  Show
+                </button>
+                <button type="button" className="small" aria-label={`Study the best spot of area ${k + 1}`} onClick={() => study(ar.best_lat, ar.best_lon)}>
+                  Study
+                </button>
+              </div>
+            </li>
+          ))}
+        </ol>
+      )}
+      <p className="fine">Score: share of the window with sunlight and with Earth contact, equal weights (the long-term maps when no window filter is on).</p>
+
+      <h3 className="ios-header">Funnel</h3>
+      <div className="table-scroll" tabIndex={0} role="region" aria-label="Cells removed by each filter">
         <table>
-          <caption className="sr-only">Hard-filter results and score per candidate</caption>
+          <caption className="sr-only">Cells reaching each filter, removed by it, and without data, in the order they ran</caption>
           <thead>
             <tr>
-              <th scope="col">Site</th>
-              <th scope="col">Verdict</th>
-              {ids.map((i) => (
-                <th scope="col" key={i}>
-                  {FILTER_SPECS[i]?.title ?? i}
-                </th>
-              ))}
-              <th scope="col">Score</th>
-              <th scope="col">
-                <span className="sr-only">Show</span>
-              </th>
+              <th scope="col">Filter</th>
+              <th scope="col">In</th>
+              <th scope="col">Out</th>
+              <th scope="col">No data</th>
             </tr>
           </thead>
           <tbody>
-            {candidates.map((c, k) => {
-              const v = verdict(c.viable)
-              return (
-                <tr key={`${c.site_id ?? ''}-${k}`}>
-                  <th scope="row">{c.name ?? c.site_id ?? `${c.lat.toFixed(3)}, ${c.lon.toFixed(3)}`}</th>
-                  <td className={`verdict ${v.c}`}>
-                    <span aria-hidden="true">{v.s}</span> {c.viable ? 'viable' : 'out'}
-                  </td>
-                  {ids.map((i) => (
-                    <ResultCell key={i} r={c.results.find((r) => r.id === i)} />
-                  ))}
-                  <td>{c.viable && c.score != null ? c.score.toFixed(2) : '—'}</td>
-                  <td>
-                    {c.site_id && (
-                      <button type="button" className="small" onClick={() => onShow(c)}>
-                        Show
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              )
-            })}
+            {r.funnel.map((f) => (
+              <tr key={f.id}>
+                <th scope="row">
+                  {FUNNEL_LABEL[f.id] ?? f.id}
+                  {f.stage === 'window' && <span className="win-tag"> window</span>}
+                </th>
+                <td>{f.cells_in.toLocaleString('en')}</td>
+                <td>{f.cells_out.toLocaleString('en')}</td>
+                <td>{f.cells_unknown.toLocaleString('en')}</td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
+      <details className="pgroup-d">
+        <summary>How it was computed</summary>
+        <ul className="fine assumptions">
+          {r.assumptions.map((s) => (
+            <li key={s}>{s}</li>
+          ))}
+        </ul>
+      </details>
     </div>
   )
 }
 
-function ResultCell({ r }: { r?: ConstraintResult }) {
-  if (!r) return <td>—</td>
-  const v = verdict(r.passed)
+/** What the painted cells mean: the patterns, not only the colours. */
+export function AreaLegend() {
   return (
-    <td className={`verdict ${v.c}`} title={r.note ?? undefined}>
-      <span aria-hidden="true">{v.s}</span> {v.w}
-      {r.value != null && <span className="muted"> · {Number(r.value).toFixed(2)}</span>}
-      {r.basis === 'unavailable' && <span className="muted"> · no data</span>}
-    </td>
+    <ul className="area-legend" aria-label="Map legend of the area search">
+      <li>
+        <span className="sw sw-viable" aria-hidden="true" /> Viable, outlined (brighter: higher score)
+      </li>
+      <li>
+        <span className="sw sw-window" aria-hidden="true" /> Fails a window filter (hatched)
+      </li>
+      <li>
+        <span className="sw sw-static" aria-hidden="true" /> Fails a map filter or the landing radius (dimmed)
+      </li>
+      <li>
+        <span className="sw sw-unknown" aria-hidden="true" /> No data (dotted)
+      </li>
+      <li>
+        <span className="sw sw-region" aria-hidden="true" /> Search region (ring)
+      </li>
+    </ul>
   )
 }

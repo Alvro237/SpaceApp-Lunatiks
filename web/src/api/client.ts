@@ -7,6 +7,8 @@
  * and fall back to the browser engine where the plan allows it.
  */
 import type {
+  AreaSearchRequest,
+  AreaSearchResponse,
   CandidateSearchRequest,
   CandidateSearchResponse,
   ConstraintsMeta,
@@ -116,6 +118,8 @@ export const api = {
 
   searchCandidates: (body: CandidateSearchRequest) =>
     request<CandidateSearchResponse>('POST', '/api/v1/candidates/search', body),
+  areaSearch: (body: AreaSearchRequest, signal?: AbortSignal) =>
+    request<AreaSearchResponse>('POST', '/api/v1/areas/search', body, signal),
   power: (body: PowerRequest) => request<PowerResponse>('POST', '/api/v1/power', body),
   radiation: (body: RadiationRequest, signal?: AbortSignal) => request<RadiationResponse>('POST', '/api/v1/radiation', body, signal),
   craters: (bbox: [number, number, number, number], minDiamKm: number, signal?: AbortSignal) =>

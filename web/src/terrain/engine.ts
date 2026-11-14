@@ -147,7 +147,13 @@ export class TerrainEngine {
     uElevRange: { value: new THREE.Vector2(-9000, 7000) },
     uHighlight: { value: new THREE.Vector3(0, 0, 0) },
     uDiscR: { value: 1e12 },
+    // mission mode: the area search raster (r: code, g: score) and the ring of the search region
+    uArea: { value: null as THREE.Texture | null },
+    uAreaXf: { value: new THREE.Vector4(0, 0, 1, 1) },
+    uHasArea: { value: 0 },
+    uRegion: { value: new THREE.Vector3(0, 0, 0) },
   }
+  private areaTexture: THREE.DataTexture | null = null
 
   constructor(tileset: Tileset, baseUrl: string, floatLinear: boolean, live: LiveConfig | null = liveConfigFromEnv(import.meta.env)) {
     // the live levels extend a copy of the tileset (the caller's object is shared with other views)
@@ -290,6 +296,39 @@ export class TerrainEngine {
     this.shared.uSun.value.copy(v)
     this.shadowMaterial.uniforms.uSunR.value = radiusDeg
     this.shadowMaterial.uniforms.uMast.value = mastM
+  }
+
+  /**
+   * Paint the answer of the area search over the terrain (mission mode), or clear it. One texel per search cell,
+   * nearest filtering: the cells are the result, so they are drawn as cells, never blurred into each other.
+   */
+  setAreas(a: { xLeftM: number; yTopM: number; cellM: number; nx: number; ny: number; codes: Uint8Array; score: Uint8Array } | null): void {
+    this.areaTexture?.dispose()
+    this.areaTexture = null
+    if (!a) {
+      this.shared.uHasArea.value = 0
+      this.shared.uArea.value = null
+      return
+    }
+    const rg = new Uint8Array(a.nx * a.ny * 2)
+    for (let i = 0; i < a.nx * a.ny; i++) {
+      rg[2 * i] = a.codes[i]
+      rg[2 * i + 1] = a.score[i]
+    }
+    const tex = new THREE.DataTexture(rg, a.nx, a.ny, THREE.RGFormat, THREE.UnsignedByteType)
+    tex.minFilter = tex.magFilter = THREE.NearestFilter
+    tex.colorSpace = THREE.NoColorSpace
+    tex.unpackAlignment = 1
+    tex.needsUpdate = true
+    this.areaTexture = tex
+    this.shared.uArea.value = tex
+    this.shared.uAreaXf.value.set(a.xLeftM, a.yTopM, a.cellM * a.nx, a.cellM * a.ny)
+    this.shared.uHasArea.value = 1
+  }
+
+  /** Ring of the search region (projected centre and radius, m); radius 0 hides it. */
+  setRegion(x: number, y: number, radiusM: number): void {
+    this.shared.uRegion.value.set(x, y, radiusM)
   }
 
   setHighlight(x: number, y: number, radiusM: number): void {
@@ -601,6 +640,7 @@ export class TerrainEngine {
     this.tiles.clear()
     this.layerTextures.clear()
     this.luts.forEach((t) => t.dispose())
+    this.areaTexture?.dispose()
     this.geometry.dispose()
     this.shadowTarget.dispose()
     this.shadowTargetFast.dispose()

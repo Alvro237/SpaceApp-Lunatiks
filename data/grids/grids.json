@@ -200,6 +200,31 @@
     "serverLastModified": "Fri, 07 Jul 2023 22:04:03 GMT"
    },
    "builtUtc": "2026-11-14T16:46:36+00:00"
+  },
+  "lp_hydrogen_60s": {
+   "file": "lp_hydrogen_60s.npz",
+   "description": "Hydrogen abundance, ppm by weight, from Lunar Prospector epithermal neutrons corrected by thermal neutrons (Feldman et al. 2001), 0.5 deg bins (the instrument footprint is about 45 km), south of 60 S. A special product of the LP team, not a peer-reviewed PDS archive",
+   "unit": "ppm",
+   "scale": 0.1,
+   "width": 485,
+   "height": 485,
+   "pixelM": 3840.0,
+   "xLeftM": -931200.0,
+   "yTopM": 931200.0,
+   "sourcePixelM": 15161.67521207474,
+   "aggregation": "value of the 0.5 deg latitude/longitude bin holding each cell centre (no resampling)",
+   "min": -16.976,
+   "max": 181.72,
+   "mean": 67.0503,
+   "validFraction": 0.7852,
+   "source": {
+    "agency": "NASA PDS Geosciences Node (Lunar Prospector neutron spectrometer, LANL LP Spectrometer Team)",
+    "url": "https://pds-geosciences.wustl.edu/missions/lunarp/reduced/hydrogenhd.txt",
+    "product": "https://pds-geosciences.wustl.edu/missions/lunarp/reduced_special.html",
+    "bytes": 14256401,
+    "serverLastModified": "Wed, 13 Aug 2008 15:55:14 GMT"
+   },
+   "builtUtc": "2026-11-14T18:15:05+00:00"
   }
  },
  "projection": "south polar stereographic, true scale at the pole, R = 1737400 m, MOON_ME; x = r sin(lon), y = r cos(lon), r = 2R tan((90 + lat)/2)",

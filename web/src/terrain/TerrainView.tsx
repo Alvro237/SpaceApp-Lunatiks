@@ -11,6 +11,7 @@ import { useQuery } from '@tanstack/react-query'
 import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { type MarkerStyle, useApp } from '../state/store'
+import { type AreaRaster, useAreas } from '../state/areas'
 import { MarkerSet } from '../map/markerSet'
 import { usePlaceStyles } from '../state/placeStyle'
 import { type MapSite, useMapSites } from '../map/useMapSites'
@@ -144,6 +145,14 @@ function MapView({ tileset }: { tileset: Tileset }) {
     if (d.moved || d.rotate) return
     // a place drawn on the map wins; otherwise (study mode) the terrain point under the pointer
     const site = rig.markerAt(e.clientX - rect.left, e.clientY - rect.top) as MapSite | null
+    // mission mode: a click places the centre of the area search (on a site or anywhere on the terrain)
+    if (mode === 'mission') {
+      const ll = site ? null : rig.pick((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height)
+      const c = site ? { lat: site.lat, lon: site.lon } : ll ? { lat: ll[0], lon: ll[1] } : null
+      if (c) useAreas.getState().set({ center: { lat: Math.round(c.lat * 1e4) / 1e4, lon: Math.round(c.lon * 1e4) / 1e4 } })
+      if (site) select(site.sel)
+      return
+    }
     if (site) return select(site.sel)
     if (mode !== 'study') return
     const ll = rig.pick((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height)
@@ -181,7 +190,9 @@ function MapView({ tileset }: { tileset: Tileset }) {
         </Canvas>
         <p id="map-help" className="sr-only">
           Arrow keys move, plus and minus zoom, T tilts to 3D, Q and E rotate, R shows the whole pole, Space plays.
-          {mode === 'study' && ' Activate a point on the terrain to analyse it.'} Right click a place for its options: rename, pointer colour, remove. Sites are listed, with the same information, in the panels.
+          {mode === 'study' && ' Activate a point on the terrain to analyse it.'}
+          {mode === 'mission' && ' Activate a point on the terrain to centre the area search there; the areas found are listed in the Mission filters panel.'}{' '}
+          Right click a place for its options: rename, pointer colour, remove. Sites are listed, with the same information, in the panels.
         </p>
       </div>
       <ToolPortal>
@@ -341,6 +352,41 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
       }
     })
   }, [masks, rig, tileset])
+
+  // Mission mode: paint the area search, draw the ring of the search region, fly where the panel asks.
+  useEffect(() => {
+    let painted: AreaRaster | null | undefined
+    const apply = () => {
+      const a = useAreas.getState()
+      const mission = useApp.getState().mode === 'mission'
+      const want = mission && a.show ? a.raster : null
+      if (want !== painted) {
+        engine.setAreas(want)
+        painted = want
+      }
+      if (mission && a.center) {
+        const [x, y] = polarXY(a.center.lat, a.center.lon)
+        engine.setRegion(x, y, a.radiusKm * 1000)
+      } else engine.setRegion(0, 0, 0)
+    }
+    apply()
+    const offAreas = useAreas.subscribe(apply)
+    const offApp = useApp.subscribe(apply)
+    return () => {
+      offAreas()
+      offApp()
+      engine.setAreas(null)
+    }
+  }, [engine])
+
+  useEffect(() => {
+    let seq = useAreas.getState().goTo?.seq ?? 0
+    return useAreas.subscribe((a) => {
+      if (!a.goTo || a.goTo.seq === seq) return
+      seq = a.goTo.seq
+      if (inExtent(tileset, a.goTo.lat, a.goTo.lon)) rig.frameAt(a.goTo.lat, a.goTo.lon, a.goTo.km)
+    })
+  }, [rig, tileset])
 
   // Open where the user clicked on the globe (a navigation target; the selection does not change).
   useEffect(() => {

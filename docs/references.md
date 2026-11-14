@@ -17,6 +17,7 @@ asks for this list; keep it current when something is added.
 | LOLA Gridded Data Record `LDEM_16` v3.1 (PDS `LRO-L-LOLA-4-GDR-V1.0`), NASA PDS Geosciences Node | Global topography of the web globe (`data/globe`, 4 px/deg) | https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/cylindrical/img/ |
 | LOLA high-resolution site topography, PGDA product 78 | Background on uncertainty (not yet read by the pipeline) | https://pgda.gsfc.nasa.gov/products/78 |
 | Lunar polar illumination, PGDA product 69 (Mazarico et al.): `AVGVISIB_65S_240M_201608`, `AVGVISIB_65S_240M_201608_EARTH`, `LPSR_65S_240M_201608`, `SKYV_65S_240M` | Screening grids: long-term Sun illumination, Earth visibility, permanent shadow, sky visibility (`data/grids`); the map's live 240 m colour layers (read block by block through the PGDA proxy); method reference; independent validation of the terrain horizon masks (`api/tests/sw1_validation.py`); `terrain_reference` of the manual-coordinates endpoints | https://pgda.gsfc.nasa.gov/products/69 |
+| Lunar Prospector neutron spectrometer, half-degree hydrogen abundance `hydrogenhd.txt` (LP Spectrometer Team, LANL; PDS Geosciences Node special products, not a peer-reviewed PDS archive) | Hydrogen grid `lp_hydrogen_60s` and the hydrogen filter of the area search | https://pds-geosciences.wustl.edu/missions/lunarp/reduced_special.html |
 | NSSDCA Apollo landing site coordinates (Wagner et al. 2017) | Apollo catalogue coordinates | https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html |
 | Apollo Lunar Surface Journal, Earth and Sun altitude/azimuth tables (E. Scotti) | Historical validation, 43 events | https://www.nasa.gov/wp-content/uploads/static/history/alsj/Scotti_AltAz.txt |
 | LROC featured images: IM-1 (1360), IM-2 (1401), Blue Ghost (1400), Chandrayaan-3 (1314), SLIM (1358) | Landing coordinates and reference elevations | https://www.lroc.asu.edu/images/ |
@@ -63,6 +64,7 @@ asks for this list; keep it current when something is added.
   engine (Three.js on polar-stereographic tiles instead of a geographic globe). https://community.cesium.com/
 
 - Mazarico, E., et al. (2011). Illumination conditions of the lunar polar regions using LOLA topography. Icarus 211, 1066-1081. https://ntrs.nasa.gov/citations/20120010094
+- Feldman, W. C., et al. (2001). Evidence for water ice near the lunar poles. JGR Planets 106(E10), 23231-23251. doi:10.1029/2000JE001444 (derivation of the Lunar Prospector hydrogen map)
 - Robbins, S. J. (2018). A new global database of lunar impact craters >1-2 km: 1. Crater locations and sizes, comparisons with published databases, and global analysis. JGR Planets 124. doi:10.1029/2018JE005592
 - Barker, M. K., et al. (2021). High-resolution LOLA topography for lunar south pole sites. Planetary and Space Science.
 - Wagner, R. V., et al. (2017). Coordinates of anthropogenic features on the Moon. Icarus 283, 92-103.
