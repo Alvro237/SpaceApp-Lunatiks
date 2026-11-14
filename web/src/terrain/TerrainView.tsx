@@ -6,22 +6,21 @@
  */
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useQuery } from '@tanstack/react-query'
-import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { type Selection, sameSelection, useApp } from '../state/store'
+import { type MarkerStyle, useApp } from '../state/store'
+import { MarkerSet } from '../map/markerSet'
+import { type MapSite, useMapSites } from '../map/useMapSites'
 import { useInsets } from '../state/layout'
 import { SUN_R_KM } from '../time/engine'
-import { useEphemeris, useMasks, useSiteNames } from '../time/hooks'
-import { pointName } from '../time/place'
+import { useEphemeris, useMasks } from '../time/hooks'
 import { CameraRig, FOV_DEG, TILT_3D } from './cameraRig'
 import { Craters } from './Craters'
 import { type LayerMode, TerrainEngine } from './engine'
 import { type Exaggeration, LayersControl, LegendChip } from './Legend'
 import { terrainRegistry } from './registry'
-import { type Tileset, inExtent, polarLatLon, polarXY } from './tileset'
+import { type Tileset, inExtent, polarLatLon, polarXY, scaleFactor } from './tileset'
 
-/** 24 px targets need about 34 px between centres so that no corner enters a neighbour's 24 px circle (WCAG 2.5.8). */
-const MIN_MARKER_GAP_PX = 34
 const TILES_BASE = `${import.meta.env.BASE_URL}tiles/`
 
 async function loadTileset(): Promise<Tileset> {
@@ -31,14 +30,6 @@ async function loadTileset(): Promise<Tileset> {
 }
 
 const prefersReducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-
-interface MarkerSite {
-  key: string
-  name: string
-  x: number
-  y: number
-  sel: Selection
-}
 
 export function TerrainView() {
   const tileset = useQuery({ queryKey: ['static', 'tileset'], queryFn: loadTileset, staleTime: Infinity, retry: 1 })
@@ -64,38 +55,18 @@ export function TerrainView() {
 }
 
 function MapView({ tileset }: { tileset: Tileset }) {
-  const masks = useMasks().data
-  const names = useSiteNames()
+  const sites = useMapSites()
+  const markerStyle = useApp((s) => s.markerStyle)
   const [rig] = useState(() => new CameraRig(tileset))
-  const markerEls = useRef(new Map<string, HTMLButtonElement>())
   const drag = useRef<{ x: number; y: number; moved: boolean; rotate: boolean } | null>(null)
   const [stats, setStats] = useState('')
   const [craterError, setCraterError] = useState<unknown>(null)
   const [exaggeration, setExaggeration] = useState<Exaggeration>(2)
   const showCraters = useApp((s) => s.craters)
-  const selection = useApp((s) => s.selection)
-  const compare = useApp((s) => s.compare)
   const select = useApp((s) => s.select)
   const view = useApp((s) => s.view)
   const set = useApp((s) => s.set)
   const mode = useApp((s) => s.mode)
-
-  // Catalogue sites on the map, plus the typed or clicked points that are selected or compared.
-  const markers: MarkerSite[] = useMemo(() => {
-    if (!masks) return []
-    const out: MarkerSite[] = masks.doc.sites
-      .filter((s) => inExtent(tileset, s.lat, s.lon))
-      .map((s) => {
-        const [x, y] = polarXY(s.lat, s.lon)
-        return { key: s.id, name: names.get(s.id) ?? s.name, x, y, sel: { kind: 'site', id: s.id } }
-      })
-    for (const p of [selection, ...compare]) {
-      if (p.kind !== 'point' || !inExtent(tileset, p.lat, p.lon) || out.some((m) => sameSelection(m.sel, p))) continue
-      const [x, y] = polarXY(p.lat, p.lon)
-      out.push({ key: `p:${p.lat},${p.lon}`, name: pointName(p.lat, p.lon), x, y, sel: p })
-    }
-    return out
-  }, [masks, tileset, names, selection, compare])
 
   useEffect(() => rig.setTilt(view === '3d' ? TILT_3D : 0), [rig, view])
 
@@ -152,8 +123,12 @@ function MapView({ tileset }: { tileset: Tileset }) {
   const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
     const d = drag.current
     drag.current = null
-    if (!d || d.moved || d.rotate || mode !== 'study') return
+    if (!d || d.moved || d.rotate) return
     const rect = e.currentTarget.getBoundingClientRect()
+    // a place drawn on the map wins; otherwise (study mode) the terrain point under the pointer
+    const site = rig.markerAt(e.clientX - rect.left, e.clientY - rect.top) as MapSite | null
+    if (site) return select(site.sel)
+    if (mode !== 'study') return
     const ll = rig.pick((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height)
     if (ll) select({ kind: 'point', lat: Math.round(ll[0] * 1e4) / 1e4, lon: Math.round(ll[1] * 1e4) / 1e4 })
   }
@@ -179,45 +154,17 @@ function MapView({ tileset }: { tileset: Tileset }) {
           <Driver
             tileset={tileset}
             rig={rig}
-            markers={markers}
-            markerEls={markerEls}
+            sites={sites}
+            markerStyle={markerStyle}
             exaggeration={exaggeration}
             onStats={setStats}
             craters={showCraters}
             onCraterStatus={setCraterError}
           />
         </Canvas>
-        <div className="markers">
-          {markers.map((m) => {
-            const current = sameSelection(m.sel, selection)
-            const n = compare.findIndex((c) => sameSelection(c, m.sel))
-            return (
-              <button
-                key={m.key}
-                type="button"
-                ref={(el) => {
-                  if (el) markerEls.current.set(m.key, el)
-                  else markerEls.current.delete(m.key)
-                }}
-                className={`site-marker${current ? ' is-selected' : ''}${n >= 0 ? ' is-compared' : ''}`}
-                aria-pressed={current}
-                aria-label={n >= 0 ? `${m.name}, compared as number ${n + 1}` : m.name}
-                onClick={() => select(m.sel)}
-                style={{ display: 'none' }}
-              >
-                <span className="site-dot" aria-hidden="true">
-                  {n >= 0 ? n + 1 : ''}
-                </span>
-                <span className="site-label" aria-hidden="true">
-                  {m.name}
-                </span>
-              </button>
-            )
-          })}
-        </div>
         <p id="map-help" className="sr-only">
           Arrow keys move, plus and minus zoom, T tilts to 3D, Q and E rotate, R shows the whole pole, Space plays.
-          {mode === 'study' && ' Activate a point on the terrain to analyse it.'}
+          {mode === 'study' && ' Activate a point on the terrain to analyse it.'} Sites are listed, with the same information, in the panels.
         </p>
       </div>
       <div className="map-controls" role="group" aria-label="Map view">
@@ -244,14 +191,11 @@ function MapView({ tileset }: { tileset: Tileset }) {
   )
 }
 
-/** Selected and compared places win when markers would overlap. */
-const priority = (el?: HTMLElement) => (!el ? 0 : el.classList.contains('is-selected') ? 2 : el.classList.contains('is-compared') ? 1 : 0)
-
 interface DriverProps {
   tileset: Tileset
   rig: CameraRig
-  markers: MarkerSite[]
-  markerEls: { current: Map<string, HTMLButtonElement> }
+  sites: MapSite[]
+  markerStyle: MarkerStyle
   exaggeration: number
   onStats: (s: string) => void
   craters: boolean
@@ -259,24 +203,60 @@ interface DriverProps {
 }
 
 /** Runs inside the Canvas: camera, Sun, shadows, tile selection and marker placement, once per frame. */
-function Driver({ tileset, rig, markers, markerEls, exaggeration, onStats, craters, onCraterStatus }: DriverProps) {
+function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, craters, onCraterStatus }: DriverProps) {
   const { gl, camera, size, scene, setDpr } = useThree()
   const eph = useEphemeris().data
   const [engine] = useState(() => new TerrainEngine(tileset, TILES_BASE, gl.extensions.has('OES_texture_float_linear')))
   const [reduced] = useState(prefersReducedMotion)
   const perf = useRef({ frames: 0, time: 0, degraded: false })
+  const masks = useMasks().data
+  const [markersSet] = useState(() => new MarkerSet())
+  const [heightsReady, setHeightsReady] = useState(false)
 
   useEffect(() => {
     scene.add(engine.group)
     terrainRegistry.engine = engine
     if (import.meta.env.DEV) (window as unknown as { __terrain?: TerrainEngine }).__terrain = engine // e2e and debugging
-    engine.loadOverview().catch(() => {})
+    engine.loadOverview().then(() => setHeightsReady(true), () => {})
+    scene.add(markersSet.group)
     return () => {
+      scene.remove(markersSet.group)
+      markersSet.dispose()
       scene.remove(engine.group)
       if (terrainRegistry.engine === engine) terrainRegistry.engine = null
       engine.dispose()
     }
-  }, [engine, scene])
+  }, [engine, scene, markersSet])
+
+  // Places drawn in the scene: rebuilt when the list, the style, the relief or the heights change.
+  useEffect(() => {
+    const lift = (x: number, y: number) => (((engine.heightAt(x, y) ?? 0) + 40) / 1000) * exaggeration
+    markersSet.set(
+      sites.filter((s) => inExtent(tileset, s.lat, s.lon)),
+      markerStyle,
+      {
+        anchor: (s) => {
+          const [x, y] = polarXY(s.lat, s.lon)
+          return new THREE.Vector3(x / 1000, lift(x, y), -y / 1000)
+        },
+        ring: (s) => {
+          if (!s.diameterKm) return null
+          const [cx, cy] = polarXY(s.lat, s.lon)
+          const r = ((s.diameterKm * 1000) / 2) * scaleFactor(s.lat)
+          const n = 96
+          const out = new Float32Array((n + 1) * 3)
+          for (let i = 0; i <= n; i++) {
+            const a = (i / n) * Math.PI * 2
+            const x = cx + r * Math.cos(a)
+            const y = cy + r * Math.sin(a)
+            out.set([x / 1000, lift(x, y), -y / 1000], i * 3)
+          }
+          return out
+        },
+      },
+    )
+    rig.setMarkerPicker((px, py) => markersSet.pick(px, py, camera as THREE.PerspectiveCamera, size.width, size.height))
+  }, [markersSet, sites, markerStyle, exaggeration, heightsReady, engine, tileset, camera, size, rig])
 
   useEffect(() => engine.setExaggeration(exaggeration), [engine, exaggeration])
 
@@ -311,14 +291,14 @@ function Driver({ tileset, rig, markers, markerEls, exaggeration, onStats, crate
       let ll: [number, number] | null = null
       if (sel.kind === 'point') ll = [sel.lat, sel.lon]
       else {
-        const m = markers.find((k) => sameSelection(k.sel, sel))
-        if (m) ll = polarLatLon(m.x, m.y)
+        const site = masks?.site(sel.id)
+        if (site) ll = [site.lat, site.lon]
       }
       if (ll && inExtent(tileset, ll[0], ll[1])) rig.flyTo(ll[0], ll[1])
     }
     fly()
     return useApp.subscribe(fly)
-  }, [markers, rig, tileset])
+  }, [masks, rig, tileset])
 
   // Open where the user clicked on the globe (a navigation target; the selection does not change).
   useEffect(() => {
@@ -351,8 +331,6 @@ function Driver({ tileset, rig, markers, markerEls, exaggeration, onStats, crate
     })
   }, [rig, camera, engine, exaggeration, tileset])
 
-  const v = useMemo(() => new THREE.Vector3(), [])
-
   useFrame((_, dt) => {
     const insets = useInsets.getState()
     rig.fitHome(size.width, size.height, insets)
@@ -361,7 +339,7 @@ function Driver({ tileset, rig, markers, markerEls, exaggeration, onStats, crate
     rig.apply(cam, ((engine.heightAt(rig.now.tx * 1000, -rig.now.tz * 1000) ?? 0) / 1000) * exaggeration, size.width, size.height, insets)
 
     // The Sun at the active instant (Moon-centre vector; its parallax across the map is below 0.001°).
-    const { tMs, mastM, selection, playing } = useApp.getState()
+    const { tMs, mastM, playing } = useApp.getState()
     if (eph?.table.covers(tMs)) {
       const p = eph.table.positions(tMs)
       const d = Math.hypot(p[0], p[1], p[2])
@@ -370,35 +348,7 @@ function Driver({ tileset, rig, markers, markerEls, exaggeration, onStats, crate
     engine.renderShadows(gl, playing)
     engine.update(cam, size.height, [rig.now.tx, rig.now.tz])
 
-    // Ring around the selected place.
-    let at: [number, number] | null = null
-    if (selection.kind === 'point') at = polarXY(selection.lat, selection.lon)
-    else {
-      const m = markers.find((q) => sameSelection(q.sel, selection))
-      if (m) at = [m.x, m.y]
-    }
-    engine.setHighlight(at?.[0] ?? 0, at?.[1] ?? 0, at ? Math.max(1200, rig.now.dist * 14) : 0)
-
-    // Marker buttons over the canvas. Markers closer than 34 px to one already placed are hidden (the selected and
-    // compared ones are placed first): no overlapping targets, and the list still reaches every site.
-    const showLabels = rig.now.dist < 450
-    const placed: [number, number][] = []
-    const ordered = [...markers].sort((a, b) => priority(markerEls.current.get(b.key)) - priority(markerEls.current.get(a.key)))
-    for (const m of ordered) {
-      const el = markerEls.current.get(m.key)
-      if (!el) continue
-      const h = ((engine.heightAt(m.x, m.y) ?? 0) / 1000) * exaggeration
-      v.set(m.x / 1000, h, -m.y / 1000).project(cam)
-      const sx = ((v.x + 1) / 2) * size.width
-      const sy = ((1 - v.y) / 2) * size.height
-      const onScreen = v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05
-      const crowded = placed.some(([px, py]) => Math.hypot(px - sx, py - sy) < MIN_MARKER_GAP_PX)
-      const visible = onScreen && !crowded
-      if (visible) placed.push([sx, sy])
-      el.style.display = visible ? '' : 'none'
-      el.style.transform = `translate(${sx}px, ${sy}px)`
-      el.dataset.labels = showLabels || priority(el) > 0 ? 'on' : 'off'
-    }
+    markersSet.update(cam, size.width, size.height, true)
 
     // Adaptive quality: below 45 fps raise the error threshold and cap the pixel ratio at 1.5.
     // Not measured while the page is hidden or after a stall (the browser pauses animation frames then).
