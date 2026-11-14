@@ -2,7 +2,8 @@
 
 The plan for the five SW-1 endpoints, in the order they are built: one endpoint finished, validated and
 documented before the next starts. Output formats for integration live in `docs/sw1-output-format.md`; this file
-holds the order, the decisions and the validation plan. Branch: `seryitron-branchito`.
+holds the order, the decisions and the validation plan. Branch: `seryitron-branchito`. Discrepancies with the
+frontend and the MECH branch, to fix at merge time: `docs/sw1-integration-notes.md`.
 
 ## Order and status
 
