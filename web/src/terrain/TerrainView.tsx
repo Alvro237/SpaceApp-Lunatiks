@@ -6,7 +6,7 @@
  */
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ToolPortal } from '../ui/ToolSlot'
-import { usePanels } from '../state/panels'
+import { useHorizonTransition } from '../state/horizon'
 import { useQuery } from '@tanstack/react-query'
 import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
@@ -71,7 +71,7 @@ function MapView({ tileset }: { tileset: Tileset }) {
   const set = useApp((s) => s.set)
   const mode = useApp((s) => s.mode)
   // paused while the horizon view covers the map
-  const covered = usePanels((s) => s.section === 'horizon')
+  const covered = useHorizonTransition((s) => s.phase === 'horizon')
 
   useEffect(() => rig.setTilt(view === '3d' ? TILT_3D : 0), [rig, view])
 
@@ -307,6 +307,25 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
     }
     fly()
     return useApp.subscribe(fly)
+  }, [masks, rig, tileset])
+
+  // Opening the horizon view: fly down to the place, facing where the view opens; back again when it closes.
+  useEffect(() => {
+    let before: ReturnType<CameraRig['approach']> | null = null
+    let phase = useHorizonTransition.getState().phase
+    return useHorizonTransition.subscribe((t) => {
+      if (t.phase === phase) return
+      phase = t.phase
+      if (phase === 'diving') {
+        const sel = useApp.getState().selection
+        const site = sel.kind === 'site' ? masks?.site(sel.id) : null
+        const ll = sel.kind === 'point' ? [sel.lat, sel.lon] : site ? [site.lat, site.lon] : null
+        if (ll && inExtent(tileset, ll[0], ll[1])) before = rig.approach(ll[0], ll[1], t.yaw)
+      } else if ((phase === 'returning' || phase === 'map') && before) {
+        rig.restore(before)
+        before = null
+      }
+    })
   }, [masks, rig, tileset])
 
   // Open where the user clicked on the globe (a navigation target; the selection does not change).

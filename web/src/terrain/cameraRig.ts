@@ -10,6 +10,9 @@ import { type Tileset, polarXY } from './tileset'
 export const FOV_DEG = 40
 export const TILT_3D = THREE.MathUtils.degToRad(58)
 const MAX_TILT = THREE.MathUtils.degToRad(80)
+/** End of the flight down to a place before the horizon view: 10 km from it, 14° below the horizontal (≈ 2.4 km up). */
+export const APPROACH_DIST_KM = 10
+export const APPROACH_TILT = THREE.MathUtils.degToRad(76)
 
 export interface View {
   tx: number
@@ -106,6 +109,31 @@ export class CameraRig {
     this.goal.tz = -y / 1000
     this.goal.dist = Math.min(this.goal.dist, maxDistKm)
     if (!this.fitted) this.pending = { tx: this.goal.tx, tz: this.goal.tz, dist: maxDistKm }
+  }
+
+  /**
+   * Fly down to a place and tilt toward its horizon, facing the local azimuth `azDeg` (clockwise from north).
+   * The polar map is conformal, so a local azimuth becomes a map heading by turning it with the longitude
+   * (`mapDirection` in shadow.ts). Returns the goal before the flight, to fly back with `restore`.
+   */
+  approach(lat: number, lon: number, azDeg: number, distKm = APPROACH_DIST_KM, tilt = APPROACH_TILT): View {
+    const before = { ...this.goal }
+    const [x, y] = polarXY(lat, lon)
+    const a = THREE.MathUtils.degToRad(azDeg)
+    const l = THREE.MathUtils.degToRad(lon)
+    const e = Math.sin(a)
+    const n = Math.cos(a)
+    const mx = e * Math.cos(l) + n * Math.sin(l)
+    const my = -e * Math.sin(l) + n * Math.cos(l)
+    // forward(h) on the map is (sin h, cos h); turn the short way from the current heading
+    const h = Math.atan2(mx, my)
+    const dh = Math.atan2(Math.sin(h - this.goal.heading), Math.cos(h - this.goal.heading))
+    Object.assign(this.goal, { tx: x / 1000, tz: -y / 1000, dist: distKm, tilt, heading: this.goal.heading + dh })
+    return before
+  }
+
+  restore(v: View): void {
+    Object.assign(this.goal, v)
   }
 
   /** Set by the scene: CSS pixel → the place drawn there, or null. */

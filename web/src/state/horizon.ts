@@ -25,6 +25,31 @@ interface HorizonCam {
   zoom: (factor: number) => void
 }
 
+/**
+ * Map ⇄ horizon transition. `diving`: the map's own camera flies to the place, comes down and tilts toward the
+ * horizon, facing `yaw` (where the horizon view will open), then fades; `horizon`: the first-person view covers
+ * the map (which pauses); `returning`: the map camera flies back to where it was.
+ */
+export type HorizonPhase = 'map' | 'diving' | 'horizon' | 'returning'
+/** Length of the flight down to the place and of the flight back, ms. */
+export const DIVE_MS = 1300
+export const RETURN_MS = 700
+
+interface HorizonTransition {
+  phase: HorizonPhase
+  /** Azimuth (degrees) the horizon view opens on, so the flight down already faces it. */
+  yaw: number
+  setPhase: (p: HorizonPhase) => void
+  setYaw: (yaw: number) => void
+}
+
+export const useHorizonTransition = create<HorizonTransition>()((set) => ({
+  phase: 'map',
+  yaw: 0,
+  setPhase: (phase) => set({ phase }),
+  setYaw: (yaw) => set({ yaw }),
+}))
+
 export const useHorizonCam = create<HorizonCam>()((set) => ({
   mode: 'sun',
   yaw: 0,
