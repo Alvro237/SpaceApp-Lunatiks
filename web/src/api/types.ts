@@ -1,0 +1,174 @@
+/**
+ * API types. Endpoints already on `main` come from the client generated from /openapi.json (schema.gen.ts,
+ * `npm run gen:api`): a contract change there breaks `npm run typecheck`. Endpoints still being built in
+ * parallel are typed by hand below from docs/endpoints.md (and, for /power, from the open branch
+ * feat/mech-power); regenerate and move each one to the generated section when its pull request is merged.
+ */
+import type { components } from './schema.gen'
+
+type S = components['schemas']
+
+// --------------------------------------------------------------------------- generated (merged endpoints)
+export type SiteSummary = S['SiteSummary']
+export type SiteList = S['SiteList']
+export type SiteDetail = S['SiteDetail']
+
+export interface Health {
+  status: string
+  version: string
+  sites: number
+  ephemeris_coverage_utc: [string, string][]
+  grids: string[]
+  craters: number
+  constraints: string[]
+}
+
+export interface ConstraintsMeta {
+  /** constraint id → docstring with the threshold shape */
+  hard_filters: Record<string, string>
+  soft_score_default_weights: Record<string, number>
+}
+
+export type DatasetsMeta = Record<string, unknown>
+
+// --------------------------------------------------------------------------- pending (docs/endpoints.md)
+export type HorizonKind = 'terrain' | 'smooth_sphere'
+
+export interface BodyState {
+  az_deg: number
+  el_deg: number
+  visible_fraction: number
+  angular_radius_deg: number
+  distance_km: number
+}
+
+export interface Transition {
+  kind: 'set' | 'rise'
+  at: string
+  in_hours: number
+}
+
+/** GET /api/v1/sites/{id}/state (SW-1) */
+export interface SiteState {
+  t: string
+  sun: BodyState
+  earth: BodyState
+  eclipse: number
+  irradiance_w_m2: number
+  power_w_m2: number
+  next_sun_transition: Transition | null
+  next_earth_transition: Transition | null
+  horizon_kind: HorizonKind
+  mast_used_m?: number
+}
+
+export interface TimeRange {
+  start: string
+  end: string
+}
+
+/** GET /api/v1/sites/{id}/series (SW-1) */
+export interface SiteSeries {
+  t: string[]
+  sun_az: number[]
+  sun_el: number[]
+  sun_fraction: number[]
+  earth_az: number[]
+  earth_el: number[]
+  earth_fraction: number[]
+  power_w_m2: number[]
+  metrics: Record<string, number | boolean>
+  sunlit_ranges: TimeRange[]
+  comms_ranges: TimeRange[]
+  horizon_kind: HorizonKind
+}
+
+export interface ConstraintResult {
+  id: string
+  passed: boolean | null
+  value?: number | null
+  threshold?: Record<string, unknown>
+  margin?: number | null
+  basis: string
+  fraction?: number | null
+  ranges?: TimeRange[]
+  note?: string | null
+}
+
+/** POST /api/v1/candidates/search (SW-2) */
+export interface CandidateSearchRequest {
+  start: string
+  duration_h: number
+  mast_m: number
+  panel: string
+  comms_min_fraction: number
+  scope: 'catalogue' | 'zones'
+  hard_filters: Record<string, Record<string, unknown>>
+  weights: Record<string, number>
+  unknown_passes: boolean
+}
+
+export interface Candidate {
+  site_id: string | null
+  name?: string
+  lat: number
+  lon: number
+  viable: boolean
+  results: ConstraintResult[]
+  score?: number | null
+  parts?: Record<string, number>
+  weights?: Record<string, number>
+  horizon_kind?: HorizonKind
+}
+
+export interface CandidateSearchResponse {
+  candidates: Candidate[]
+  counts?: Record<string, number>
+  eliminated_by?: Record<string, number>
+}
+
+/** POST /api/v1/power (MECH, branch feat/mech-power) */
+export interface PowerRequest {
+  site_id?: string
+  lat?: number
+  lon?: number
+  start: string
+  duration_h: number
+  step_min: number
+  mast_m: number
+  panel: string
+  level: 1 | 2 | 3
+  array?: { area_m2: number; efficiency: number; derating: number }
+  battery?: { capacity_wh: number; initial_soc: number; min_soc: number; charge_efficiency: number; discharge_efficiency: number }
+  load?: { load_w: number; night_load_w?: number | null }
+}
+
+export interface PowerResponse {
+  horizon_kind: string
+  mast_m_used: number
+  assumptions: string[]
+  t: string[]
+  level: number
+  sun: { mean_visible_fraction: number; sunlit_fraction: number; sunlit_ranges: TimeRange[]; longest_dark_h: number }
+  array?: { mean_power_w: number; peak_power_w: number; energy_wh: number; producing_fraction: number } | null
+  balance?: {
+    survived: boolean
+    min_soc_fraction: number
+    final_soc_fraction: number
+    first_depletion_at: string | null
+    unserved_energy_wh: number
+    longest_dark_energy_wh: number
+    usable_capacity_wh: number
+  } | null
+}
+
+/** GET /api/v1/craters (AERO-1, requested by the frontend plan) */
+export interface Crater {
+  lat: number
+  lon: number
+  diam_km: number
+}
+export interface CraterList {
+  count: number
+  craters: Crater[]
+}

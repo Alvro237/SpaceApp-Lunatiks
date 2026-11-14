@@ -12,6 +12,8 @@ render it.
 - `api/` — FastAPI backend. Logic (`app/logic`, pure NumPy) is separate from data access (`app/db`).
 - `data/` — the datasets the API serves, with provenance (`data/README.md`).
 - `pipeline/` — Python package that rebuilds `data/` from NASA sources.
+- `web/` — the frontend: polar map with 3D LOLA relief and live shadows, Sun and Earth panels, mission filters
+  and comparison (`web/README.md`).
 - `docs/` — status, endpoint specifications, requirements, method, references.
 
 ## Run it

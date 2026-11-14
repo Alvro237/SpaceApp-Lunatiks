@@ -21,6 +21,7 @@ longitude, planetocentric latitude, degrees. The API reads these files only thro
 | `craters/robbins_2018.npz` | 1 296 796 craters: `lat`, `lon`, `diam_km`, sorted by latitude | NumPy npz, float32 | `lunarnav.craters` |
 | `craters/craters.json` | Source, citation, counts, completeness | JSON | `lunarnav.craters` |
 | `radiation/crater_dosimeter_daily.json` | LRO CRaTER dosimeter daily dose rate 2009-06-19 to 2013-04-30 (1405 days): as measured in orbit and corrected for lunar shielding (free-space GCR equivalent, N/A on solar-particle-event days), partial-day flag; `meta` holds source URL, SHA-256 and caveats | JSON, arrays `date`, `measured_mgy_si_per_day`, `corrected_mgy_si_per_day` (null = missing), `partial_day`; mGy in silicon per day | `lunarnav.crater_dose` |
+| `globe/lola_global_4ppd.png`, `globe/globe.json` | Global LOLA topography for the web globe: 1440 x 720, 4 px/deg, simple cylindrical (row 0 = 90 N, column 0 = longitude 0, east-positive), metres above the 1737.4 km sphere | 16-bit value in the red and green bytes of a PNG; height = min + v / 65535 x (max - min) (min, max in the sidecar) | `lunarnav.globe` |
 | `basemap_south.png`, `.json` | Hillshade of the south pole with its georeference (for maps) | PNG + JSON | `lunarnav.basemap` |
 | `provenance.json` | Source, version, size, terms and transformation of the ephemeris, DEM and catalogue inputs | JSON | `lunarnav.provenance` |
 | `validation.json` | Pipeline validation against JPL Horizons and the Apollo tables | JSON | `lunarnav.validate` |
@@ -69,6 +70,7 @@ uv run python -m lunarnav.download        # SPICE kernels
 uv run python -m lunarnav.build           # ephemeris, sites, horizons, basemap, provenance, validation
 uv run python -m lunarnav.polar_grids     # screening grids
 uv run python -m lunarnav.craters         # crater catalogue
+uv run python -m lunarnav.globe           # global LOLA topography for the web globe (downloads LDEM_16, 33 MB)
 ```
 
 The four product 69 GeoTIFFs are fetched by hand into `data/raw/illumination/` from

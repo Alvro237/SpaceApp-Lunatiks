@@ -1,0 +1,30 @@
+name: web
+
+on:
+  pull_request:
+    paths: ['web/**', 'data/**', 'api/app/**', '.github/workflows/web.yml']
+  push:
+    branches: [main]
+    paths: ['web/**', 'data/**', 'api/app/**', '.github/workflows/web.yml']
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      # uv runs the pipeline's Python to build the terrain tiles (960 m levels only: CI has no copy of the 80 m DEM)
+      - uses: astral-sh/setup-uv@v6
+      - run: npm ci
+      - run: npm run tiles
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
