@@ -15,7 +15,7 @@ import { TileLoader } from '../terrain/loader'
 import { useEphemeris, useMasks } from '../time/hooks'
 import { DATA_BASE } from '../time/staticData'
 import { GlobeDetail } from './detail/globeDetail'
-import { MOON_R_KM, type Orbit, OrbitRig, latLonToScene, raySphere, sceneToLatLon } from './orbit'
+import { MOON_R_KM, type Orbit, OrbitRig, RELIEF_MAX, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon } from './orbit'
 import { GLOBE_FRAG, GLOBE_VERT } from './shaders'
 
 const FOV = 35
@@ -23,7 +23,6 @@ const FOV = 35
 export const MAP_DISC_LAT = -60
 /** Zooming in closer than this over the polar cap enters the map. */
 const ENTER_MAP_DIST = MOON_R_KM * 1.18
-const RELIEF_EXAGGERATION = 4
 /** Slope exaggeration of the shading where 118 m detail heights are loaded (the shipped 7.6 km grid uses 3). */
 const DETAIL_SHADE_EXAGGERATION = 1.5
 
@@ -61,6 +60,8 @@ export function GlobeView() {
   const enterMap = useApp((s) => s.enterMap)
   const [orbit] = useState(() => new OrbitRig(START))
   const [surface, setSurface] = useState<GlobeSurface>('relief')
+  /** The mesh's relief exaggeration, to half a unit (for the caption and the markers' height). */
+  const [exag, setExag] = useState(RELIEF_MAX)
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null)
   const pickRef = useRef<((cx: number, cy: number) => [number, number] | null) | null>(null)
 
@@ -156,6 +157,8 @@ export function GlobeView() {
               markerStyle={markerStyle}
               pickRef={pickRef}
               surface={surface}
+              exag={exag}
+              onExag={setExag}
               onEnter={(lat, lon) => enterMap(lat, lon)}
             />
           </Canvas>
@@ -189,8 +192,8 @@ export function GlobeView() {
       </div>
       <p className="globe-caption">
         {surface === 'photo'
-          ? `LROC WAC photo mosaic, 100 m, from NASA Moon Trek (lighting as photographed; night side from the chosen time) · LOLA relief ×${RELIEF_EXAGGERATION}`
-          : `Global LOLA topography (relief ×${RELIEF_EXAGGERATION}; 118 m detail from NASA Moon Trek as you zoom) · lit by the Sun at the chosen time`}
+          ? `LROC WAC photo mosaic, 100 m, from NASA Moon Trek (lighting as photographed; night side from the chosen time) · LOLA relief ×${exag}`
+          : `Global LOLA topography (relief ×${exag}; 118 m detail from NASA Moon Trek as you zoom) · lit by the Sun at the chosen time`}
       </p>
     </>
   )
@@ -211,6 +214,10 @@ function placeCamera(cam: THREE.PerspectiveCamera, n: Orbit, w: number, h: numbe
   cam.updateProjectionMatrix()
 }
 
+function setExaggeration(m: THREE.ShaderMaterial, e: number) {
+  m.uniforms.uExag.value = e
+}
+
 /** Unit vector to the Sun, Moon Mean-Earth axes. */
 function setSun(m: THREE.ShaderMaterial, x: number, y: number, z: number) {
   ;(m.uniforms.uSun.value as THREE.Vector3).set(x, y, z)
@@ -223,6 +230,9 @@ interface SceneProps {
   markerStyle: MarkerStyle
   pickRef: { current: ((cx: number, cy: number) => [number, number] | null) | null }
   surface: GlobeSurface
+  /** Relief exaggeration to half a unit, as the caption shows it. */
+  exag: number
+  onExag: (exag: number) => void
   onEnter: (lat: number, lon: number) => void
 }
 
@@ -234,7 +244,7 @@ function globeHeight(data: SceneProps['data'], lat: number, lon: number): number
   return data.heights[row * width + col]
 }
 
-function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, onEnter }: SceneProps) {
+function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, onExag, onEnter }: SceneProps) {
   const { camera, size, scene } = useThree()
   const [markersSet] = useState(() => new MarkerSet())
   const eph = useEphemeris().data
@@ -250,7 +260,7 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, onEnter
       fragmentShader: GLOBE_FRAG,
       uniforms: {
         uHeight: { value: tex },
-        uExag: { value: RELIEF_EXAGGERATION },
+        uExag: { value: RELIEF_MAX },
         uSun: { value: new THREE.Vector3(1, 0, 0) },
         uDiscLat: { value: MAP_DISC_LAT },
         ...detail.uniforms(),
@@ -282,7 +292,7 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, onEnter
 
   // Places on the globe, just above the (exaggerated) relief; crater outlines as small circles on the sphere.
   useEffect(() => {
-    const radius = (lat: number, lon: number) => MOON_R_KM + ((globeHeight(data, lat, lon) + 300) / 1000) * RELIEF_EXAGGERATION
+    const radius = (lat: number, lon: number) => MOON_R_KM + ((globeHeight(data, lat, lon) + 300) / 1000) * exag
     markersSet.set(sites, markerStyle, {
       anchor: (s) => new THREE.Vector3(...latLonToScene(s.lat, s.lon, radius(s.lat, s.lon))),
       ring: (s) => {
@@ -308,7 +318,7 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, onEnter
       },
     })
     orbit.setMarkerPicker((px, py) => markersSet.pick(px, py, camera as THREE.PerspectiveCamera, size.width, size.height))
-  }, [markersSet, sites, markerStyle, data, camera, size, orbit])
+  }, [markersSet, sites, markerStyle, data, camera, size, orbit, exag])
 
   useEffect(() => {
     pickRef.current = (cx, cy) => {
@@ -341,7 +351,13 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, onEnter
     }
 
     // detail tiles for the part of the Moon in view
-    detail.update(dt, { lat: n.lat, lon: n.lon, distKm: n.dist, fovDeg: FOV, widthPx: size.width, heightPx: size.height }, material)
+    const e = reliefExaggeration(n.dist)
+    setExaggeration(material, e)
+    const half = Math.round(e * 2) / 2
+    if (half !== exag) onExag(half)
+    const g = orbit.goal
+    const view = { fovDeg: FOV, widthPx: size.width, heightPx: size.height }
+    detail.update(dt, { ...view, lat: n.lat, lon: n.lon, distKm: n.dist }, { ...view, lat: g.lat, lon: g.lon, distKm: g.dist }, material)
 
     // enter the polar map once the flight down has arrived, or when zoomed in over the cap
     const target = orbit.arrived()

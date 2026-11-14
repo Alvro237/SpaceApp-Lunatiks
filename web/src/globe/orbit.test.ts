@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MOON_R_KM, OrbitRig, latLonToScene, raySphere, sceneToLatLon } from './orbit'
+import { MOON_R_KM, OrbitRig, RELIEF_MAX, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon } from './orbit'
 
 describe('globe geometry', () => {
   it('puts the north pole up and longitude 0 toward +x', () => {
@@ -46,5 +46,13 @@ describe('orbit controller', () => {
     o.turnTo(0, -170)
     o.step(0.05, false)
     expect(o.now.lon).toBeGreaterThan(170)
+  })
+})
+
+describe('relief exaggeration', () => {
+  it('is x1 close in, x4 for the whole Moon, and grows with distance in between', () => {
+    expect(reliefExaggeration(MOON_R_KM + 200)).toBe(1)
+    expect(reliefExaggeration(MOON_R_KM * 3.4)).toBe(RELIEF_MAX)
+    expect(reliefExaggeration(MOON_R_KM + 1_375)).toBeCloseTo(2.5, 6)
   })
 })

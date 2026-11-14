@@ -43,6 +43,18 @@ export interface Orbit {
 export const MIN_DIST = MOON_R_KM * 1.12
 export const MAX_DIST = MOON_R_KM * 8
 
+/** Relief exaggeration of the globe's mesh: x4 when the camera is high enough to see the whole Moon. */
+export const RELIEF_MAX = 4
+/**
+ * Exaggeration at a camera distance (km from the centre): x1 (true relief) up to 250 km above the surface, x4 from
+ * 2 500 km, linear in between. Close in, the shading comes from 118 m heights while the mesh holds 21 km steps of
+ * the 7.6 km grid; exaggerated steps would make the fine shading slide over them as the camera moves.
+ */
+export function reliefExaggeration(distKm: number): number {
+  const t = (distKm - MOON_R_KM - 250) / (2_500 - 250)
+  return 1 + (RELIEF_MAX - 1) * Math.max(0, Math.min(1, t))
+}
+
 /** Drag: the surface follows the pointer (degrees per pixel shrink as the camera gets closer). */
 export function dragOrbit(o: Orbit, dxPx: number, dyPx: number, viewHeightPx: number, fovDeg: number): Orbit {
   const visibleKm = 2 * (o.dist - MOON_R_KM) * Math.tan((fovDeg * DEG) / 2)

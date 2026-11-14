@@ -4,26 +4,46 @@
  *
  * Detail tiles (detail/grid.ts) read live from Moon Trek replace the shipped 4 ppd heights in the shading wherever
  * one is loaded: in relief mode the LOLA 118 m DEM, in photo mode the LROC WAC mosaic (its own, photographed
- * lighting, dimmed on the night side of the chosen instant). The relief of the mesh itself stays the shipped grid.
+ * lighting, dimmed on the night side of the chosen instant). The relief of the mesh itself stays the shipped grid,
+ * interpolated bilinearly, its exaggeration easing from x4 (whole Moon) to x1 (closest zoom) so that the fine shading
+ * does not slide over steps of the coarse mesh.
  */
 import { CAPACITY } from './detail/slots'
 
+// bilinear between the centres of the shipped height grid's cells, longitude wrapping
+const H_AT = /* glsl */ `
+float hAt(vec2 uv) {
+  ivec2 size = textureSize(uHeight, 0);
+  vec2 f = uv * vec2(size) - 0.5;
+  ivec2 i = ivec2(floor(f));
+  vec2 t = fract(f);
+  int w = size.x;
+  ivec2 a = ivec2((i.x % w + w) % w, clamp(i.y, 0, size.y - 1));
+  ivec2 b = ivec2(((i.x + 1) % w + w) % w, a.y);
+  ivec2 c = ivec2(a.x, clamp(i.y + 1, 0, size.y - 1));
+  ivec2 d = ivec2(b.x, c.y);
+  return mix(mix(texelFetch(uHeight, a, 0).r, texelFetch(uHeight, b, 0).r, t.x),
+             mix(texelFetch(uHeight, c, 0).r, texelFetch(uHeight, d, 0).r, t.x), t.y);
+}
+`
+
 export const GLOBE_VERT = /* glsl */ `
 uniform sampler2D uHeight;  // 1440 x 720 heights, metres; row 0 = 90 N, column 0 = longitude 0, east positive
-uniform float uExag;
+uniform float uExag;        // relief exaggeration of the mesh (x4 for the whole Moon, x1 close in)
 out vec3 vMe;               // unit vector of the point, Moon Mean-Earth axes
 out float vHeight;
 const float PI = 3.141592653589793;
+${H_AT}
 void main() {
   vec3 p = normalize(position);
   vec3 me = vec3(p.x, -p.z, p.y);
   float lat = asin(clamp(me.z, -1.0, 1.0));
   float lon = atan(me.y, me.x);
-  ivec2 size = textureSize(uHeight, 0);
-  float u = fract(lon / (2.0 * PI));
   float v = (0.5 * PI - lat) / PI;
-  ivec2 texel = ivec2(clamp(vec2(u, v) * vec2(size), vec2(0.0), vec2(size) - 1.0));
-  float h = texelFetch(uHeight, texel, 0).r;
+  // The sphere's poles are 513 vertices at one point, each with its own longitude: give them all the same height
+  // (the grid's first column), or they fan out into spikes of different heights.
+  float u = abs(me.z) > 0.999999 ? 0.0 : fract(lon / (2.0 * PI));
+  float h = hAt(vec2(u, v));
   vMe = me;
   vHeight = h;
   vec3 pos = p * (1737.4 + h / 1000.0 * uExag);
@@ -50,19 +70,7 @@ const float PI = 3.141592653589793;
 const float R = 1737400.0;
 const float PHOTO_GAIN = 1.6;
 
-float hAt(vec2 uv) {
-  ivec2 size = textureSize(uHeight, 0);
-  vec2 f = uv * vec2(size) - 0.5;
-  ivec2 i = ivec2(floor(f));
-  vec2 t = fract(f);
-  int w = size.x;
-  ivec2 a = ivec2((i.x % w + w) % w, clamp(i.y, 0, size.y - 1));
-  ivec2 b = ivec2(((i.x + 1) % w + w) % w, a.y);
-  ivec2 c = ivec2(a.x, clamp(i.y + 1, 0, size.y - 1));
-  ivec2 d = ivec2(b.x, c.y);
-  return mix(mix(texelFetch(uHeight, a, 0).r, texelFetch(uHeight, b, 0).r, t.x),
-             mix(texelFetch(uHeight, c, 0).r, texelFetch(uHeight, d, 0).r, t.x), t.y);
-}
+${H_AT}
 
 // finest loaded tile that holds the point (degrees) and is not finer than the view; cell = position in cells
 int findTile(float lonDeg, float latDeg, out vec2 cell) {
@@ -115,9 +123,15 @@ void main() {
     float exag;
     if (slot >= 0) {
       // slopes from the detail heights, one cell either side
+      // (inside the tile: next to its edge the step shrinks rather than reading the clamped border, which drew
+      // lines along the tile edges)
       float c = radians(uBox[slot].z / 256.0);
-      he = (dAt(slot, cell + vec2(1.0, 0.0)) - dAt(slot, cell - vec2(1.0, 0.0))) / (2.0 * R * coslat * c);
-      hn = (dAt(slot, cell - vec2(0.0, 1.0)) - dAt(slot, cell + vec2(0.0, 1.0))) / (2.0 * R * c);
+      float xm = max(cell.x - 1.0, 0.5);
+      float xp = min(cell.x + 1.0, 255.5);
+      float ym = max(cell.y - 1.0, 0.5);
+      float yp = min(cell.y + 1.0, 255.5);
+      he = (dAt(slot, vec2(xp, cell.y)) - dAt(slot, vec2(xm, cell.y))) / (R * coslat * c * max(xp - xm, 0.5));
+      hn = (dAt(slot, vec2(cell.x, ym)) - dAt(slot, vec2(cell.x, yp))) / (R * c * max(yp - ym, 0.5));
       exag = uDetailShade;
     } else {
       // slopes in metres per metre, east and north; relief shading exaggerated x3 for legibility at 7.6 km pixels
