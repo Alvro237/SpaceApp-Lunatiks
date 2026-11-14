@@ -1,10 +1,12 @@
 /**
  * Draws the first-person horizon view on a 2D canvas, in this order so that occlusion is physical: black airless
- * sky, elevation grid, the window's Sun and Earth tracks, the Sun and the Earth (true angular size, Earth with its
- * phase), then the terrain from the horizon mask in front of them, then the scales and labels on top.
+ * sky, the real stars, elevation grid, the window's Sun and Earth tracks, the Sun and the Earth (true angular size,
+ * Earth with its phase), then the ground in front of them (the real skyline of the horizon mask; below it an
+ * illustration, scenery.ts), then the scales and labels on top.
  * Colours are fixed (light on dark): the view is a night-sky scene in both colour schemes.
  */
 import { type Camera, compass16, earthPhase, project, tickStep, wrap180, wrap360 } from './project'
+import { drawGround, drawStars } from './scenery'
 
 export interface Body {
   az: number
@@ -24,6 +26,8 @@ export interface Scene {
   free: { left: number; right: number; top: number; bottom: number }
   /** Name tags state the view from the surface: hidden while the camera is still coming down. */
   showLabels?: boolean
+  /** Azimuth and elevation of every catalogue star at this instant (stars.ts); none while the camera comes down. */
+  stars?: Float32Array | null
 }
 
 const SUN = '#ffb547'
@@ -41,12 +45,13 @@ export function drawHorizon(ctx: CanvasRenderingContext2D, W: number, H: number,
   ctx.fillStyle = sky
   ctx.fillRect(0, 0, W, H)
 
+  if (s.stars) drawStars(ctx, W, H, c, s.stars)
   drawGrid(ctx, W, H, c, s)
   drawTrack(ctx, W, c, s.sunTrack, SUN)
   drawTrack(ctx, W, c, s.earthTrack, EARTH)
   drawSun(ctx, c, s.sun)
   drawEarth(ctx, c, s.earth, s.sun)
-  drawTerrain(ctx, W, H, c, s)
+  drawGround(ctx, W, H, c, s)
   if (s.showLabels !== false) drawLabels(ctx, W, c, s)
   drawCompass(ctx, W, H, c, s)
 }
@@ -136,36 +141,6 @@ function drawEarth(ctx: CanvasRenderingContext2D, c: Camera, earth: Body, sun: B
   ctx.lineWidth = 1
   ctx.beginPath()
   ctx.arc(p.x, p.y, r, 0, Math.PI * 2)
-  ctx.stroke()
-}
-
-function drawTerrain(ctx: CanvasRenderingContext2D, W: number, H: number, c: Camera, s: Scene) {
-  const lit = s.sun.fraction > 0
-  const top = Math.min(...[0, W / 4, W / 2, (3 * W) / 4, W].map((x) => project(c, wrap360(c.yaw + (x - c.cx) * c.degPerPx), s.horizonAt(wrap360(c.yaw + (x - c.cx) * c.degPerPx))).y))
-  const g = ctx.createLinearGradient(0, Math.max(0, top), 0, H)
-  g.addColorStop(0, lit ? '#77746d' : '#4a4843')
-  g.addColorStop(1, '#141412')
-  ctx.fillStyle = g
-  ctx.beginPath()
-  ctx.moveTo(0, H)
-  const step = 2
-  for (let x = 0; x <= W + step; x += step) {
-    const az = wrap360(c.yaw + (x - c.cx) * c.degPerPx)
-    ctx.lineTo(x, project(c, az, s.horizonAt(az)).y)
-  }
-  ctx.lineTo(W, H)
-  ctx.closePath()
-  ctx.fill()
-  // the silhouette line
-  ctx.strokeStyle = '#cfccc4'
-  ctx.lineWidth = 1.2
-  ctx.beginPath()
-  for (let x = 0; x <= W + step; x += step) {
-    const az = wrap360(c.yaw + (x - c.cx) * c.degPerPx)
-    const y = project(c, az, s.horizonAt(az)).y
-    if (x === 0) ctx.moveTo(x, y)
-    else ctx.lineTo(x, y)
-  }
   ctx.stroke()
 }
 
