@@ -34,10 +34,14 @@ ctx.onmessage = async (e: MessageEvent<DecodeRequest>) => {
       // geotiff.js (about 300 kB) loads only when the first live tile is asked for
       const { readLiveTile } = await import('./live/cog')
       const t = await readLiveTile({ url, ...e.data.live! })
-      ctx.postMessage(
-        { id, ok: true, width: t.samples, height: t.samples, heights: t.heights, min: t.min, max: t.max } satisfies DecodeResponse,
-        [t.heights.buffer],
-      )
+      if (t.bytes) {
+        ctx.postMessage({ id, ok: true, width: t.samples, height: t.samples, bytes: t.bytes } satisfies DecodeResponse, [t.bytes.buffer])
+      } else {
+        ctx.postMessage(
+          { id, ok: true, width: t.samples, height: t.samples, heights: t.heights, min: t.min, max: t.max } satisfies DecodeResponse,
+          [t.heights!.buffer],
+        )
+      }
       return
     }
     if (kind === 'globe') {

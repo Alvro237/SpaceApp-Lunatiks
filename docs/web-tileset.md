@@ -225,9 +225,20 @@ photo view, the LROC WAC mosaic.
 
 ## Colour layers in the map
 
-The layer tiles (sunlight, Earth visibility, slope, permanent shadow) are 960 m cells, the resolution of the grids
-in `data/grids` (COG overviews of the 240 m PGDA products). They are drawn with bilinear filtering between cell
-centres, weighted by coverage (the value is stored as 0 where there is no data and divided by the filtered
-coverage in the shader), so zooming in shows a smooth field instead of 960 m blocks. This does not add detail: the
-data are still 960 m cells, as the legend and the data page say.
+The static layer tiles (sunlight, Earth visibility, slope, permanent shadow) are 960 m cells (levels 0-3), the
+resolution of the grids in `data/grids`. They are drawn with bilinear filtering between cell centres, weighted by
+coverage (the value is stored as 0 where there is no data and divided by the filtered coverage in the shader), so
+zooming in shows a smooth field instead of 960 m blocks.
+
+Live layer levels (`web/src/terrain/live/layers.ts`): when the map is zoomed in and the PGDA proxy is configured
+(always in development; `VITE_PGDA_PROXY` in a build), finer layer tiles are read block by block from the original
+products: levels 4-5 (480 and 240 m cells) for sunlight, Earth visibility and permanent shadow from the 240 m PGDA
+product 69 files (south of about 65° S), and for slope from `LDSM_60S_240MPP_ADJ`, with level 6 (120 m) from
+`LDSM_80S_80MPP_ADJ` within 304 km of the pole. Each cell is bilinear between the valid source pixels around its
+centre; values use the GeoTIFFs' own scale and offset tags (illumination ×4e-5; permanent shadow ×2.5e-5 + 0.5) and
+the static tiles' byte range (steeper 240 m and 80 m slopes clip at its top). While a live tile loads, the nearest
+loaded ancestor is shown; live tiles no longer in view are cancelled. Measured 2026-11-14: a 240 m sunlight tile
+near the pole has the same mean as the static 960 m tile over the same square (byte 73.9) and, reduced to 960 m,
+correlates 0.991 with it at zero shift; the first tile of a file takes about 5 s (opening the file through the
+proxy), the next about 2.5 s.
 

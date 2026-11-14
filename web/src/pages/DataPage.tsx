@@ -96,13 +96,17 @@ export function DataPage() {
             </tr>
             <tr>
               <th scope="row">Slope</th>
-              <td>LOLA LDSM_60S_240MPP_ADJ, PGDA product 90</td>
+              <td>
+                LOLA LDSM_60S_240MPP_ADJ, PGDA product 90 (960 m cells; zoomed in, 240 m and, within about 300 km of the pole, LDSM_80S_80MPP_ADJ at
+                120 m, read on demand{import.meta.env.DEV || import.meta.env.VITE_PGDA_PROXY ? '' : ', not enabled in this build'})
+              </td>
               <td>Slope layer, slope hard filter</td>
             </tr>
             <tr>
               <th scope="row">Mean sunlight, Earth visibility, permanent shadow (18.6-year means)</th>
               <td>
-                <a href="https://pgda.gsfc.nasa.gov/products/69">PGDA product 69</a> (Mazarico et al. 2011)
+                <a href="https://pgda.gsfc.nasa.gov/products/69">PGDA product 69</a> (Mazarico et al. 2011): 960 m cells; zoomed in, the 240 m originals
+                read on demand{import.meta.env.DEV || import.meta.env.VITE_PGDA_PROXY ? '' : ' (not enabled in this build)'}
               </td>
               <td>Colour layers for screening areas</td>
             </tr>

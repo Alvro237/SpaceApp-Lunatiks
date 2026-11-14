@@ -4,6 +4,7 @@
  */
 import { type BlockedSourceOptions, type GeoTIFFImage, type RemoteSourceOptions, fromCustomClient } from 'geotiff'
 import { BLOCK_BYTES, type BlockStore, IdbBlockStore, MemoryBlockStore } from './blockStore'
+import { type LayerSpec, sampleLayerCells } from './layers'
 import { CachedRangeClient } from './rangeClient'
 import { type DemGrid, type TileGeometry, sampleTile, windowFor } from './sample'
 import { readTrekTile } from './trek'
@@ -15,6 +16,8 @@ export interface LiveTileRequest {
   file: string
   source: 'cog' | 'trek'
   geometry: TileGeometry
+  /** A colour-layer tile (live/layers.ts): cells are sampled into value + coverage bytes instead of heights. */
+  layer?: Omit<LayerSpec, 'noData'>
 }
 
 interface OpenDem {
@@ -43,7 +46,9 @@ async function openDem(url: string, file: string): Promise<OpenDem> {
   return { image, client, grid: { originX: ox, originY: oy, pixelM: px, width: image.getWidth(), height: image.getHeight() } }
 }
 
-export async function readLiveTile(req: LiveTileRequest): Promise<{ heights: Float32Array; min: number; max: number; samples: number }> {
+export async function readLiveTile(
+  req: LiveTileRequest,
+): Promise<{ heights?: Float32Array; bytes?: Uint8Array; min?: number; max?: number; samples: number }> {
   if (req.source === 'trek') {
     const t = await readTrekTile(req.url, req.geometry, await store())
     return { ...t, samples: req.geometry.samples }
@@ -62,6 +67,11 @@ export async function readLiveTile(req: LiveTileRequest): Promise<{ heights: Flo
     samples: [0],
     interleave: true,
   })
+  if (req.layer) {
+    const noData = image.getGDALNoData()
+    const bytes = sampleLayerCells(rasters as unknown as ArrayLike<number>, win, grid, req.geometry, { ...req.layer, noData })
+    return { bytes, samples: req.geometry.samples }
+  }
   const s = sampleTile(rasters as unknown as ArrayLike<number>, win, grid, req.geometry)
   if (s.noData > 0) throw new Error(`${s.noData} vertices without data in ${req.file}`)
   return { heights: s.heights, min: s.min, max: s.max, samples: req.geometry.samples }

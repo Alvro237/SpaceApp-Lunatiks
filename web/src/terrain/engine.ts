@@ -6,6 +6,7 @@
 import * as THREE from 'three'
 import { LruCache } from './cache'
 import { type LiveConfig, type LiveSource, liveConfigFromEnv, trekTileUrl, withLiveLevels } from './live/config'
+import { layerCellGeometry, liveLayerMaxZ, liveLayerSource } from './live/layers'
 import { lutBytes, type ColormapId } from './colormaps'
 import { TileLoader } from './loader'
 import { type LodOptions, byDistanceTo, renderable, selectTiles } from './lod'
@@ -100,6 +101,10 @@ export class TerrainEngine {
   private readonly luts = new Map<ColormapId, THREE.DataTexture>()
   private readonly empty = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1)
   private previouslySplit = new Set<string>()
+  /** Live layer tiles asked for, and those the drawn tiles wanted last frame (the others are cancelled). */
+  private readonly liveLayerKeys = new Set<string>()
+  private wantedLayerKeys = new Set<string>()
+  private nextWantedLayerKeys = new Set<string>()
   private layer: LayerMode = { kind: 'none' }
   private overviewHeights: Float32Array | null = null
   private overviewSamples = 0
@@ -316,8 +321,16 @@ export class TerrainEngine {
     }
     const order = byDistanceTo(this.tileset, targetKm, [...wanted.values()])
     const rank = new Map(order.map((t, i) => [keyOf(t), i]))
-    // overview first, then height tiles nearest the centre; layer tiles keep their place (never cancelled)
-    this.loader.prioritise((k) => (k === 'overview' ? -1 : k.startsWith('L:') ? order.length : (rank.get(k) ?? null)))
+    // overview first, then height tiles nearest the centre; static layer tiles keep their place (never cancelled),
+    // live layer tiles no tile wanted last frame are dropped
+    this.wantedLayerKeys = this.nextWantedLayerKeys
+    this.nextWantedLayerKeys = new Set()
+    this.loader.prioritise((k) => {
+      if (k === 'overview') return -1
+      if (!k.startsWith('L:')) return rank.get(k) ?? null
+      if (this.liveLayerKeys.has(k) && !this.wantedLayerKeys.has(k)) return null
+      return order.length
+    })
     for (const t of order) this.requestTile(t)
 
     // show exactly the drawable tiles
@@ -406,20 +419,35 @@ export class TerrainEngine {
     return { key: keyOf(t), heights, mesh }
   }
 
-  /** Give the tile the layer texture of its own level, or of the deepest ancestor the layer has. */
+  /**
+   * Give the tile the layer texture of its own level, or of the deepest ancestor the layer has: static levels
+   * everywhere, live levels (live/layers.ts) where a source covers the tile and the PGDA proxy is configured. While
+   * the finest one loads, the nearest loaded ancestor is shown.
+   */
   private bindLayer(t: TileKey, tile: GpuTile): void {
     const u = tile.mesh.material.uniforms
     if (this.layer.kind !== 'data') {
       u.uHasLayer.value = 0
       return
     }
-    let src: TileKey = t
-    while (src.z > this.layer.levels - 1) src = parent(src)!
-    const lk = `L:${this.layer.id}|${keyOf(src)}`
-    const tex = this.layerTextures.get(lk)
-    if (!tex) {
+    const id = this.layer.id
+    const staticMax = this.layer.levels - 1
+    const liveMax = this.liveBase ? liveLayerMaxZ(id) : -1
+    let finest: TileKey = t
+    while (finest.z > staticMax && !(finest.z <= liveMax && liveLayerSource(id, this.tileset, finest))) finest = parent(finest)!
+    let src: TileKey | null = finest
+    let tex: THREE.DataTexture | undefined
+    let lk = ''
+    while (src) {
+      lk = `L:${id}|${keyOf(src)}`
+      tex = this.layerTextures.get(lk)
+      if (tex) break
+      if (src === finest || src.z <= staticMax) this.requestLayer(id, src, lk)
+      if (src.z > staticMax) this.nextWantedLayerKeys.add(lk)
+      src = parent(src)
+    }
+    if (!tex || !src) {
       u.uHasLayer.value = 0
-      this.requestLayer(this.layer.id, src, lk)
       return
     }
     this.layerTextures.touch(lk)
@@ -431,8 +459,23 @@ export class TerrainEngine {
 
   private requestLayer(id: string, t: TileKey, lk: string): void {
     if (this.loader.known(lk)) return
+    const meta = this.tileset.layers[id]
+    const live = this.layer.kind === 'data' && t.z > this.layer.levels - 1 ? liveLayerSource(id, this.tileset, t) : null
+    if (live) this.liveLayerKeys.add(lk)
+    const req = live
+      ? {
+          url: this.liveBase + live.file,
+          kind: 'live' as const,
+          live: {
+            file: live.file,
+            source: 'cog' as const,
+            geometry: layerCellGeometry(this.tileset, t),
+            layer: { scale: live.scale, offset: live.offset, min: meta.min, max: meta.max },
+          },
+        }
+      : { url: `${this.base}layers/${id}/${t.z}/${t.x}/${t.y}.png`, kind: 'layer' as const }
     this.loader
-      .request(lk, { url: `${this.base}layers/${id}/${t.z}/${t.x}/${t.y}.png`, kind: 'layer' })
+      .request(lk, req)
       .then((res) => {
         const tex = new THREE.DataTexture(res.bytes!, res.width, res.height, THREE.RGFormat, THREE.UnsignedByteType)
         // bilinear between cell centres (the shader divides by the filtered coverage), so 960 m cells read as a
