@@ -101,7 +101,10 @@ actually used, and optionally the zone neighbours (`db/horizons.py: zone`).
 
 ## SW-2 · Frontend client, CI, deploy
 
-**Status:** to do. Typed client generated from `/openapi.json`; a GitHub Actions workflow running both test
+**Status:** in progress on `feat/sw2-web-shell`: web app per the frontend plan (map with LOD, shadows and layers;
+panels; timeline; mission mode; comparison), client generated from `/openapi.json`, web CI. Calls `/state`,
+`/series`, `/points/*`, `/candidates/search`, `/power`, `/craters` when they are deployed; contract for the
+terrain tiles in `docs/web-tileset.md`. Deploy not set up (team decision). Typed client generated from `/openapi.json`; a GitHub Actions workflow running both test
 suites; a public host that answers `/health` with no login. Ask the team before deploying anything.
 
 ---

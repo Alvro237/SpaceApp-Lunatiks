@@ -27,6 +27,14 @@ asks for this list; keep it current when something is added.
 
 ## Papers and documents consulted
 
+- van der Walt, S., Smith, N. (2015). viridis, magma, inferno colour maps for matplotlib (perceptually uniform,
+  readable with colour-vision deficiencies); used through d3-scale-chromatic. https://bids.github.io/colormap/
+- Nuñez, J. R., Anderton, C. R., Renslow, R. S. (2018). Optimizing colormaps with consideration for color vision
+  deficiency (cividis). PLoS ONE 13(7). doi:10.1371/journal.pone.0199239
+- W3C (2023). Web Content Accessibility Guidelines (WCAG) 2.2. https://www.w3.org/TR/WCAG22/
+- Cesium community forum threads on polar tiling artefacts and LOLA height offsets, read when choosing the 3D
+  engine (Three.js on polar-stereographic tiles instead of a geographic globe). https://community.cesium.com/
+
 - Mazarico, E., et al. (2011). Illumination conditions of the lunar polar regions using LOLA topography. Icarus 211, 1066-1081. https://ntrs.nasa.gov/citations/20120010094
 - Robbins, S. J. (2018). A new global database of lunar impact craters >1-2 km: 1. Crater locations and sizes, comparisons with published databases, and global analysis. JGR Planets 124. doi:10.1029/2018JE005592
 - Barker, M. K., et al. (2021). High-resolution LOLA topography for lunar south pole sites. Planetary and Space Science.
@@ -37,6 +45,9 @@ asks for this list; keep it current when something is added.
 ## Software (all open source)
 
 API: FastAPI, Starlette, Uvicorn, Pydantic, NumPy, pytest, httpx.
+Web: Vite, React, React Router, TypeScript, Three.js, React Three Fiber, Zustand, TanStack Query,
+d3-scale-chromatic, openapi-typescript (code generation), Vitest, Testing Library, axe-core, Playwright with
+@axe-core/playwright, oxlint. Exact versions: `web/package-lock.json`.
 Pipeline: NumPy, SpiceyPy (NAIF CSPICE), rasterio (GDAL), pyproj (PROJ), requests, Pillow, pytest.
 Exact versions: `api/uv.lock` and `pipeline/uv.lock`.
 
