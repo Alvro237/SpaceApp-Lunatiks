@@ -58,5 +58,10 @@ A fifth commit on the new branch adds this file.
   antenna's own windows, and `estimated_limits`.
 - Show `estimated_limits` to the user when it is not empty: the result then depends on a value that is not an
   operator figure.
+- Level 2: send `"level": 2` and a `budget` object (`frequency_ghz`, `transmit_eirp_dbw`, `receive_gt_db_per_k`,
+  `data_rate_bps`, `required_ebn0_db`, optional `other_losses_db` and `min_margin_db`). The response then carries
+  `budget.link` (one boolean per sample), `budget.link_ranges`, `budget.best_margin_db`, and `stations[].budget` with the
+  margin, free-space loss and the highest data rate each antenna supports. No catalogue publishes EIRP or G/T for these
+  antennas, so the user must provide them; do not prefill invented values.
 - The generated types (`web/src/api/schema.gen.ts`) need regenerating from `/openapi.json` to see the new models.
 - Everything added to the API is new: no existing field was renamed or removed.

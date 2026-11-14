@@ -52,6 +52,11 @@ asks for this list; keep it current when something is added.
 
 ## Papers and documents consulted
 
+- Wertz, J. R., Everett, D. F., Puschell, J. J. (eds.), Space Mission Analysis and Design, 3rd ed. (Microcosm Press /
+  Springer): the link equation behind `logic/link.py` (Eb/N0 = EIRP - L - L_other + G/T - 10 log10 k - 10 log10 R).
+  Pratt, T., Bostian, C., Allnutt, J., Satellite Communications, 2nd ed. (Wiley): the same equation and free-space loss.
+  Textbook formulas, no dataset; the Boltzmann constant is the SI exact value 1.380649e-23 J/K.
+
 - Smith, D. E., et al. (2010). The Lunar Orbiter Laser Altimeter investigation on the Lunar Reconnaissance
   Orbiter mission. Space Science Reviews 150, 209-241. doi:10.1007/s11214-009-9512-y (LOLA global DEM)
 - van der Walt, S., Smith, N. (2015). viridis, magma, inferno colour maps for matplotlib (perceptually uniform,

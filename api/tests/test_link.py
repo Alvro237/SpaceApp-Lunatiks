@@ -9,13 +9,16 @@ from fastapi.testclient import TestClient
 
 from app import services
 from app.db.store import get_store
-from app.logic.link import StationSpec, combine_contact, station_view
+from app.logic.link import (BOLTZMANN_DBW_PER_K_HZ, LinkBudgetParams, StationSpec, combine_contact, ebn0_db,
+                            free_space_loss_db, margin_db, max_data_rate_bps, station_view)
 from app.logic.stations import moon_az_el
 from app.main import app
 
 client = TestClient(app)
 BASE = {"site_id": "mons-malapert", "start": "2027-03-01T00:00:00Z", "duration_h": 24 * 30, "step_min": 60}
 MOON_KM = 384_400.0
+BUDGET = {"frequency_ghz": 8.4, "transmit_eirp_dbw": 10.0, "receive_gt_db_per_k": 40.0, "data_rate_bps": 1e6,
+          "required_ebn0_db": 2.5}
 
 
 # ------------------------------------------------------------------------------ logic
@@ -152,7 +155,11 @@ def test_errors():
     assert post({**BASE, "site_id": "nowhere"}) == 404
     assert post({**BASE, "networks": ["nasa"]}) == 422                      # unknown network
     assert post({**BASE, "networks": []}) == 422                            # no antenna at all
-    assert post({**BASE, "level": 2}) == 422                                # link budget not available yet
+    assert post({**BASE, "level": 2}) == 422                                # level 2 needs a budget
+    assert post({**BASE, "level": 3}) == 422
+    assert post({**BASE, "budget": BUDGET}) == 422                          # a budget is not used at level 1
+    assert post({**BASE, "level": 2, "budget": {**BUDGET, "data_rate_bps": 0}}) == 422
+    assert post({**BASE, "level": 2, "budget": {k: v for k, v in BUDGET.items() if k != "transmit_eirp_dbw"}}) == 422
     assert post({**BASE, "networks": [], "custom_stations": [
         {"id": "a", "lat_deg": 0, "lon_deg": 0, "min_elevation_deg": 5},
         {"id": "a", "lat_deg": 1, "lon_deg": 1, "min_elevation_deg": 5}]}) == 422             # duplicate custom ids
@@ -160,3 +167,81 @@ def test_errors():
     assert post({**BASE, "custom_stations": [{"id": "x", "lat_deg": 0, "lon_deg": 0}]}) == 422   # limit is required
     assert post({**BASE, "start": "2040-01-01T00:00:00Z"}) == 400
     assert post({**BASE, "start": "1970-01-01T00:00:00Z"}) == 400            # Apollo-era tables: no Moon table there
+
+
+# ------------------------------------------------------------------------------ level 2: link budget (hand-worked)
+
+def test_free_space_loss_at_lunar_distance():
+    """20 log10(d_m) + 20 log10(f_Hz) - 147.55: 384 400 km at 8.4 GHz is 222.63 dB, at 2.25 GHz 211.19 dB."""
+    assert float(free_space_loss_db(384_400.0, 8.4)) == pytest.approx(222.63, abs=0.01)
+    assert float(free_space_loss_db(384_400.0, 2.25)) == pytest.approx(211.19, abs=0.01)
+    # doubling the distance costs 6.02 dB
+    assert float(free_space_loss_db(768_800.0, 8.4) - free_space_loss_db(384_400.0, 8.4)) == pytest.approx(6.0206, abs=1e-3)
+
+
+def test_ebn0_hand_worked_case():
+    """EIRP 10 dBW, G/T 40 dB/K, 8.4 GHz, 384 400 km, 1 Mbit/s, no other losses:
+    10 - 222.63 + 40 + 228.60 - 60 = -4.03 dB (k = 1.380649e-23 J/K = -228.599 dBW/K/Hz)."""
+    p = LinkBudgetParams(frequency_ghz=8.4, transmit_eirp_dbw=10.0, receive_gt_db_per_k=40.0, data_rate_bps=1e6,
+                         required_ebn0_db=2.5)
+    assert BOLTZMANN_DBW_PER_K_HZ == pytest.approx(-228.599, abs=1e-3)
+    assert float(ebn0_db(384_400.0, p)) == pytest.approx(-4.03, abs=0.01)
+    assert float(margin_db(384_400.0, p)) == pytest.approx(-6.53, abs=0.01)      # 2.5 dB required
+
+
+def test_data_rate_and_margin_trade_off_decibel_for_decibel():
+    p = LinkBudgetParams(frequency_ghz=8.4, transmit_eirp_dbw=10.0, receive_gt_db_per_k=40.0, data_rate_bps=1e6,
+                         required_ebn0_db=2.5, min_margin_db=3.0)
+    rate = float(max_data_rate_bps(384_400.0, p))
+    assert rate == pytest.approx(1e6 * 10 ** (-9.53 / 10), rel=0.01)             # margin -6.53 - 3 dB of headroom
+    # at that rate the margin equals the required minimum, exactly
+    at_max = LinkBudgetParams(**{**p.__dict__, "data_rate_bps": rate})
+    assert float(margin_db(384_400.0, at_max)) == pytest.approx(3.0, abs=1e-9)
+    # ten times the data rate costs 10 dB of margin
+    tenfold = LinkBudgetParams(**{**p.__dict__, "data_rate_bps": 1e7})
+    assert float(margin_db(384_400.0, p) - margin_db(384_400.0, tenfold)) == pytest.approx(10.0, abs=1e-9)
+
+
+# ------------------------------------------------------------------------------ level 2: endpoint
+
+def _l2(**over):
+    body = {**BASE, "site_id": None, "lat": 0.0, "lon": 0.0, "networks": ["dsn"], "level": 2, "budget": {**BUDGET, **over}}
+    r = client.post("/api/v1/link", json=body)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_level_2_link_is_inside_the_geometric_contact():
+    b = _l2()
+    assert b["level"] == 2 and b["budget"] is not None
+    link, contact = b["budget"]["link"], b["contact"]
+    assert all(c or not l for l, c in zip(link, contact))                          # link implies contact
+    assert b["budget"]["link_window_fraction"] <= b["contact_window_fraction"] + 1e-12
+    assert len(b["budget"]["best_margin_db"]) == len(b["t"])
+    assert all((m is None) == (not c) for m, c in zip(b["budget"]["best_margin_db"], contact))   # margin only in contact
+    assert any("EIRP" in a for a in b["assumptions"])
+    lvl1 = client.post("/api/v1/link", json={**BASE, "site_id": None, "lat": 0.0, "lon": 0.0, "networks": ["dsn"]}).json()
+    assert lvl1["budget"] is None and lvl1["contact"] == contact                  # level 1 geometry is unchanged
+
+
+def test_level_2_follows_the_link_equation():
+    weak, strong = _l2(transmit_eirp_dbw=-40.0), _l2(transmit_eirp_dbw=80.0)
+    assert weak["budget"]["link_hours"] == 0.0 and weak["budget"]["link"] == [False] * len(weak["t"])
+    assert strong["budget"]["link"] == strong["contact"]                          # plenty of margin: geometry decides
+    # +10 dB EIRP moves every station's margin by exactly 10 dB
+    a, c = _l2(transmit_eirp_dbw=10.0), _l2(transmit_eirp_dbw=20.0)
+    for sa, sc in zip(a["stations"], c["stations"]):
+        if sa["budget"]["margin_db_mean"] is not None:
+            assert sc["budget"]["margin_db_mean"] - sa["budget"]["margin_db_mean"] == pytest.approx(10.0, abs=1e-9)
+    # ten times the data rate costs 10 dB
+    slow, fast = _l2(data_rate_bps=1e6), _l2(data_rate_bps=1e7)
+    s0, s1 = slow["stations"][0]["budget"], fast["stations"][0]["budget"]
+    assert s0["margin_db_mean"] - s1["margin_db_mean"] == pytest.approx(10.0, abs=1e-9)
+    assert s1["max_data_rate_bps_median"] == pytest.approx(s0["max_data_rate_bps_median"])   # a property of the link, not the request
+
+
+def test_level_2_distance_changes_the_margin_by_about_one_decibel_over_a_month():
+    s = _l2()["stations"][0]["budget"]
+    spread = s["free_space_loss_db_max"] - s["free_space_loss_db_min"]
+    assert 0.0 < spread < 1.3                                                      # perigee to apogee: 20 log10(406.7/356.4) = 1.15 dB
+

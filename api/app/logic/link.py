@@ -16,7 +16,11 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .stations import limit_at, moon_az_el, sees_moon
+from .stations import geodetic_to_ecef_km, limit_at, moon_az_el, sees_moon
+
+SPEED_OF_LIGHT_M_S = 299_792_458.0
+BOLTZMANN_J_PER_K = 1.380649e-23
+BOLTZMANN_DBW_PER_K_HZ = 10.0 * np.log10(BOLTZMANN_J_PER_K)      # -228.599 dBW/(K Hz)
 
 
 @dataclass(frozen=True)
@@ -36,13 +40,17 @@ class StationView:
     el_deg: np.ndarray
     limit_deg: np.ndarray                 # the antenna's limit in the Moon's direction at each sample
     sees_moon: np.ndarray                 # bool
+    range_km: np.ndarray                  # distance from the antenna to the Moon's centre
 
 
 def station_view(spec: StationSpec, moon_ecef_km: np.ndarray) -> StationView:
     """The Moon from one antenna over the samples of ``moon_ecef_km`` (n, 3)."""
-    az, el = moon_az_el(moon_ecef_km, spec.lat_deg, spec.lon_deg, spec.height_m)
+    moon = np.atleast_2d(np.asarray(moon_ecef_km, dtype=np.float64))
+    az, el = moon_az_el(moon, spec.lat_deg, spec.lon_deg, spec.height_m)
     limit = limit_at(az, spec.limit, spec.step_deg)
-    return StationView(az_deg=az, el_deg=el, limit_deg=limit, sees_moon=sees_moon(az, el, spec.limit, spec.step_deg))
+    rng = np.linalg.norm(moon - geodetic_to_ecef_km(spec.lat_deg, spec.lon_deg, spec.height_m), axis=1)
+    return StationView(az_deg=az, el_deg=el, limit_deg=limit, sees_moon=sees_moon(az, el, spec.limit, spec.step_deg),
+                       range_km=rng)
 
 
 @dataclass(frozen=True)
@@ -64,3 +72,52 @@ def combine_contact(earth_visible: np.ndarray, station_sees_moon: dict[str, np.n
     any_station = np.logical_or.reduce(list(flags.values()))
     return Contact(earth_visible=earth, any_station=any_station, contact=earth & any_station,
                    contact_by_station={k: earth & v for k, v in flags.items()})
+
+
+# ---------------------------------------------------------------------------- level 2: link budget
+
+@dataclass(frozen=True)
+class LinkBudgetParams:
+    """Every value is an input of the user; nothing here is a catalogue figure (no source publishes them).
+
+    transmit_eirp_dbw: EIRP of the transmitting end for the chosen direction (the lunar terminal for a downlink, the
+                       antenna for an uplink), dBW.
+    receive_gt_db_per_k: G/T of the receiving end, dB/K.
+    """
+    frequency_ghz: float
+    transmit_eirp_dbw: float
+    receive_gt_db_per_k: float
+    data_rate_bps: float
+    required_ebn0_db: float
+    other_losses_db: float = 0.0
+    min_margin_db: float = 0.0
+
+
+def free_space_loss_db(range_km, frequency_ghz: float):
+    """Free-space path loss, dB: 20 log10(4 pi d f / c), d in metres and f in hertz."""
+    d_m = np.asarray(range_km, dtype=np.float64) * 1000.0
+    return 20.0 * np.log10(4.0 * np.pi * d_m * frequency_ghz * 1e9 / SPEED_OF_LIGHT_M_S)
+
+
+def ebn0_db(range_km, p: LinkBudgetParams):
+    """Received Eb/N0, dB:  EIRP - L_fs - L_other + G/T - 10 log10(k) - 10 log10(R).
+
+    The textbook link equation (Wertz and Larson, Space Mission Analysis and Design; Pratt et al., Satellite
+    Communications): the carrier-to-noise-density ratio C/N0 = EIRP - L + G/T - 10 log10(k), and Eb/N0 = C/N0 - 10 log10(R).
+    Left out: atmosphere and rain at the antenna, pointing and polarisation losses (unless the user puts them in
+    ``other_losses_db``), Doppler, solar noise, implementation loss.
+    """
+    return (p.transmit_eirp_dbw - free_space_loss_db(range_km, p.frequency_ghz) - p.other_losses_db
+            + p.receive_gt_db_per_k - BOLTZMANN_DBW_PER_K_HZ - 10.0 * np.log10(p.data_rate_bps))
+
+
+def margin_db(range_km, p: LinkBudgetParams):
+    """Eb/N0 available minus the Eb/N0 required, dB (positive = the link closes with room to spare)."""
+    return ebn0_db(range_km, p) - p.required_ebn0_db
+
+
+def max_data_rate_bps(range_km, p: LinkBudgetParams):
+    """Highest data rate that still leaves ``min_margin_db`` of margin, bits per second (the margin is 0 dB at this rate
+    when min_margin_db = 0)."""
+    spare_db = margin_db(range_km, p) - p.min_margin_db          # dB of rate headroom at the requested rate
+    return p.data_rate_bps * 10.0 ** (np.asarray(spare_db) / 10.0)
