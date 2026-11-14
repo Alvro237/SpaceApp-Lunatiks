@@ -5,16 +5,28 @@
  */
 import { fromArrayBuffer } from 'geotiff'
 import type { BlockStore } from './blockStore'
+import { TREK_EXTRA_ROWS } from './config'
 import type { TileGeometry } from './sample'
 
 type FetchFn = (url: string, init?: RequestInit) => Promise<Response>
 
-/** Heights of a Trek tile, row 0 at the top; throws when the image does not match the tile or holds no-data. */
-export async function decodeTrekTile(buf: ArrayBuffer, g: TileGeometry): Promise<{ heights: Float32Array; min: number; max: number }> {
+/**
+ * Heights of a Trek tile, row 0 at the top. The image has `extraRows` more rows than the tile (config.ts,
+ * TREK_EXTRA_ROWS), dropped here. Throws when the image does not match the tile, holds no-data, or has a row of
+ * exact zeros among the kept ones (the Moon Trek fault the extra row works around; real terrain is never 0.0 m
+ * across a whole row).
+ */
+export async function decodeTrekTile(
+  buf: ArrayBuffer,
+  g: TileGeometry,
+  extraRows = TREK_EXTRA_ROWS,
+): Promise<{ heights: Float32Array; min: number; max: number }> {
   const tiff = await fromArrayBuffer(buf)
   const image = await tiff.getImage(0)
   const n = g.samples
-  if (image.getWidth() !== n || image.getHeight() !== n) throw new Error(`Trek tile is ${image.getWidth()} x ${image.getHeight()}, expected ${n}`)
+  if (image.getWidth() !== n || image.getHeight() !== n + extraRows) {
+    throw new Error(`Trek tile is ${image.getWidth()} x ${image.getHeight()}, expected ${n} x ${n + extraRows}`)
+  }
   const [ox, oy] = image.getOrigin()
   const [px, py] = image.getResolution()
   const ex = g.extentX0 + g.i0 * g.cellM - g.cellM / 2
@@ -39,6 +51,11 @@ export async function decodeTrekTile(buf: ArrayBuffer, g: TileGeometry): Promise
     }
   }
   if (noData > 0) throw new Error(`${noData} Trek samples without data`)
+  for (let r = 0; r < n; r++) {
+    let zero = true
+    for (let c = 0; c < n && zero; c++) zero = heights[r * n + c] === 0
+    if (zero) throw new Error(`Trek tile row ${r} is all zeros`)
+  }
   return { heights, min, max }
 }
 

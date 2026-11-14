@@ -118,7 +118,10 @@ With the build of 2026-11-14 that is 105 904 possible live tiles; listing them t
   `Access-Control-Allow-Origin: *`, so the browser calls it directly, without our proxy. One `exportImage` request
   per tile returns a float32 GeoTIFF of 257 × 257 pixels whose centres are the tile's vertices (the box is widened
   by half a cell), resampled bilinearly on the server; the client checks its size, georeference and no-data before
-  using or caching it (`trek.ts`). Measured on 2026-11-14: about 1.1 s and 197 KB per 257 × 257 tile at 5 m
+  using or caching it (`trek.ts`). Moon Trek fills the last row of a 257-row `exportImage` answer with zeros
+  (measured on 2026-11-14 for the 100, 30 and 5 m DEMs at z4, z6, z7 and z11), which drew walls between rows of
+  tiles; the client asks for one extra row below the tile and drops it, and refuses any tile with a row of zeros.
+  With the extra row, vertically neighbouring tiles share bit-identical edges (measured). Measured on 2026-11-14: about 1.1 s and 197 KB per 257 × 257 tile at 5 m
   (LZ77), 112 KB at 3.75 m; two neighbouring tiles share bit-identical edges (257 of 257 values). Against the
   catalogue's `groundHeightM`: 5 m DEM within 0.86 m at the 4 sites it covers, 30 m within 4.70 m (12 sites),
   100 m within 6.56 m (13 sites; the largest at Cabeus, on a steep wall). Moon Trek also offers a Chang'e-2 DEM

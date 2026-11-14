@@ -144,16 +144,23 @@ export function withLiveLevels(ts: Tileset, cfg: LiveConfig | null): LiveTiles {
 }
 
 /**
- * Moon Trek exportImage URL for a tile: a float32 GeoTIFF of samples x samples pixels whose centres are the tile's
- * vertices (the box is the tile widened by half a cell on each side), deflate-compressed.
+ * Moon Trek exportImage URL for a tile: a float32 GeoTIFF whose pixel centres are the tile's vertices (the box is
+ * the tile widened by half a cell on each side), deflate-compressed.
+ *
+ * One extra row is asked for below the tile and dropped by the client: Moon Trek fills the last row of every
+ * exportImage answer with zeros (measured on 2026-11-14 for the 100, 30 and 5 m DEMs at several levels), which
+ * drew walls between rows of tiles. With the extra row, rows 0..256 equal the plain answer's rows 0..255 plus the
+ * real last row, and vertically neighbouring tiles share bit-identical edges (measured).
  */
+export const TREK_EXTRA_ROWS = 1
+
 export function trekTileUrl(source: LiveSource, ts: Pick<Tileset, 'extentM' | 'tileCells' | 'tileSamples' | 'levels'>, t: TileKey): string {
   const [x0, y0, x1, y1] = tileBounds(ts, t)
   const h = ts.levels[t.z].cellM / 2
   const n = ts.tileSamples
-  const bbox = [x0 - h, y0 - h, x1 + h, y1 + h].join(',')
+  const bbox = [x0 - h, y0 - h - TREK_EXTRA_ROWS * 2 * h, x1 + h, y1 + h].join(',')
   return (
-    `${TREK_IMAGE_SERVER}${source.file}/ImageServer/exportImage?bbox=${bbox}&size=${n},${n}` +
+    `${TREK_IMAGE_SERVER}${source.file}/ImageServer/exportImage?bbox=${bbox}&size=${n},${n + TREK_EXTRA_ROWS}` +
     '&format=tiff&pixelType=F32&compression=LZ77&interpolation=RSP_BilinearInterpolation&f=image'
   )
 }

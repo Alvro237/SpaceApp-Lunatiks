@@ -276,8 +276,8 @@ describe('live levels: a real Cloud Optimized GeoTIFF through geotiff.js', () =>
 })
 
 describe('live levels: Moon Trek ImageServer tiles', () => {
-  // fixture: a real exportImage answer of LRO_LOLA_DEM_SPole875_5mp_v04, 17 x 17 samples of 5 m centred 2 m from
-  // the catalogue's Shackleton point (x 7690, y -6402.7 m), fetched 2026-11-14
+  // fixture: a real exportImage answer of LRO_LOLA_DEM_SPole875_5mp_v04, 17 x 17 samples of 5 m (plus the extra row
+  // the client asks for) centred 2 m from the catalogue's Shackleton point (x 7690, y -6402.7 m), fetched 2026-11-14
   const g: TileGeometry = { i0: 198_138, j0: 197_881, extentX0: -H, extentY1: H, cellM: 5, samples: 17 }
   const bytes = () => new Uint8Array(readFileSync(new URL('./__fixtures__/trek_shackleton_17.tif', import.meta.url))).buffer
 
@@ -285,8 +285,9 @@ describe('live levels: Moon Trek ImageServer tiles', () => {
     const ts = staticTileset()
     const { tileset } = withLiveLevels(ts, { proxyBase: null, levels: LIVE_LEVELS })
     const url = trekTileUrl(TREK_5M, tileset, { z: 11, x: 1024, y: 1024 })
-    // tile 11/1024/1024 spans x 0..960 m, y -960..0 m; cell 3.75 m, so the box is widened by 1.875 m
-    expect(url).toContain('LRO_LOLA_DEM_SPole875_5mp_v04/ImageServer/exportImage?bbox=-1.875,-961.875,961.875,1.875&size=257,257')
+    // tile 11/1024/1024 spans x 0..960 m, y -960..0 m; cell 3.75 m, so the box is widened by 1.875 m, plus one extra
+    // row of 3.75 m below (Moon Trek zeroes the last row of its answers)
+    expect(url).toContain('LRO_LOLA_DEM_SPole875_5mp_v04/ImageServer/exportImage?bbox=-1.875,-965.625,961.875,1.875&size=257,258')
     expect(url).toContain('pixelType=F32')
   })
 
@@ -302,6 +303,12 @@ describe('live levels: Moon Trek ImageServer tiles', () => {
   it('refuses a tile whose georeference does not match', async () => {
     await expect(decodeTrekTile(bytes(), { ...g, i0: g.i0 + 1 })).rejects.toThrow(/georeference/)
     await expect(decodeTrekTile(bytes(), { ...g, samples: 257 })).rejects.toThrow(/expected 257/)
+  })
+
+  it('refuses a tile with a row of zeros (the fault that drew walls between tile rows)', async () => {
+    // fixture: the same answer with row 16 set to 0.0 (scripts/make_cog_fixture.py)
+    const zero = new Uint8Array(readFileSync(new URL('./__fixtures__/trek_zero_row_17.tif', import.meta.url))).buffer
+    await expect(decodeTrekTile(zero, g)).rejects.toThrow(/row 16 is all zeros/)
   })
 
   it('caches the answer and retries a failed request', async () => {

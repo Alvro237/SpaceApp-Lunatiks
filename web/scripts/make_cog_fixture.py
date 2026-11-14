@@ -25,3 +25,16 @@ with rasterio.open(OUT, "w", **profile) as ds:
     ds.write(values, 1)
 with rasterio.open(OUT) as ds:
     print(OUT.name, OUT.stat().st_size, "bytes", ds.profile["blockxsize"], ds.overviews(1), ds.tags(ns="IMAGE_STRUCTURE"))
+
+
+# Second fixture: the real Moon Trek answer trek_shackleton_17.tif (17 x 18 px, one extra row as the client asks)
+# with its row 16 set to 0.0, the fault Moon Trek shows on the last row of 257-row answers. The client must refuse it.
+TREK = OUT.parent / "trek_shackleton_17.tif"
+ZERO = OUT.parent / "trek_zero_row_17.tif"
+with rasterio.open(TREK) as src:
+    data = src.read(1)
+    prof = src.profile
+data[16, :] = 0.0
+with rasterio.open(ZERO, "w", **prof) as dst:
+    dst.write(data, 1)
+print(ZERO.name, ZERO.stat().st_size, "bytes")
