@@ -4,7 +4,7 @@
  */
 import { type BlockedSourceOptions, type GeoTIFFImage, type RemoteSourceOptions, fromCustomClient } from 'geotiff'
 import { BLOCK_BYTES, type BlockStore, IdbBlockStore, MemoryBlockStore } from './blockStore'
-import { type LayerSpec, sampleLayerCells } from './layers'
+import { type LayerSpec, layerWindowFor, sampleLayerCells } from './layers'
 import { CachedRangeClient } from './rangeClient'
 import { type DemGrid, type TileGeometry, sampleTile, windowFor } from './sample'
 import { readTrekTile } from './trek'
@@ -60,7 +60,7 @@ export async function readLiveTile(
     dem.catch(() => dems.delete(req.url)) // a failed open is retried by the next tile
   }
   const { image, grid } = await dem
-  const win = windowFor(grid, req.geometry)
+  const win = req.layer ? layerWindowFor(grid, req.geometry) : windowFor(grid, req.geometry)
   if (!win) throw new Error(`tile outside ${req.file}`)
   const rasters = await image.readRasters({
     window: [win.col0, win.row0, win.col0 + win.width, win.row0 + win.height],

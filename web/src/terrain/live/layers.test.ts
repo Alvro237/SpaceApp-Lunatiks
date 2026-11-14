@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import { type Tileset, tileBounds } from '../tileset'
-import { LIVE_LAYERS, layerCellGeometry, liveLayerMaxZ, liveLayerSource, sampleLayerCells } from './layers'
+import { LIVE_LAYERS, layerCellGeometry, layerWindowFor, liveLayerMaxZ, liveLayerSource, sampleLayerCells } from './layers'
 import { windowFor } from './sample'
 
 const H = 983_040
@@ -23,6 +23,9 @@ describe('live layer sources', () => {
     expect(liveLayerSource('slope', ts, tileAt(6, 50_000, 50_000))?.file).toBe('LOLA_20mpp/LDSM_80S_80MPP_ADJ.TIF')
     expect(liveLayerSource('slope', ts, tileAt(5, 600_000, 0))?.file).toBe('LOLA_20mpp/LDSM_60S_240MPP_ADJ.TIF')
     expect(liveLayerSource('slope', ts, tileAt(6, 600_000, 0))).toBeNull()
+    // at 480 m and 240 m cells near the pole the 240 m slope is read, not 16 or 4 times as many 80 m pixels
+    expect(liveLayerSource('slope', ts, tileAt(4, 50_000, 50_000))?.pixelM).toBe(240)
+    expect(liveLayerSource('slope', ts, tileAt(5, 50_000, 50_000))?.pixelM).toBe(240)
     expect(liveLayerMaxZ('slope')).toBe(6)
     expect(liveLayerMaxZ('sun_illumination')).toBe(5)
     expect(liveLayerMaxZ('no_such_layer')).toBe(-1)
@@ -80,5 +83,42 @@ describe('layer cell sampling', () => {
     const spec = { scale: 1, offset: 0, min: 0, max: 1, noData: -32768 }
     const out = sampleLayerCells(raster, win, src, g, spec)
     expect(out[2 * (50 * 256 + 50)]).toBe(255)
+  })
+})
+
+describe('layer cells coarser than the source pixels', () => {
+  // 480 m cells (z4) on a 240 m grid aligned with the map: each cell holds exactly 2 x 2 pixels
+  const src = { originX: -H, originY: H, pixelM: 240, width: 8192, height: 8192 }
+  const t = { z: 4, x: 8, y: 8 }
+  const g = layerCellGeometry(ts, t)
+  const win = layerWindowFor(src, g)!
+  const raster = new Float64Array(win.width * win.height)
+  for (let r = 0; r < win.height; r++) for (let c = 0; c < win.width; c++) raster[r * win.width + c] = (win.col0 + c) * 1000
+  const spec = { scale: 1e-6, offset: 0, min: 0, max: 10, noData: -32768 }
+  const cell = (out: Uint8Array, i: number, j: number) => [out[2 * (j * 256 + i)], out[2 * (j * 256 + i) + 1]]
+  const first = (8 * 256 * 480) / 240 // source column of the tile's first cell's first pixel
+
+  it('covers every pixel of every cell', () => {
+    expect(win.col0).toBeLessThanOrEqual(first)
+    expect(win.col0 + win.width).toBeGreaterThanOrEqual(first + 512)
+  })
+
+  it('averages the 2 x 2 pixels of each cell', () => {
+    const out = sampleLayerCells(raster, win, src, g, spec)
+    // cell 100 holds columns first + 200 and first + 201: mean (first + 200.5) × 1000 × 1e-6, a byte of 0..10
+    expect(cell(out, 100, 7)).toEqual([Math.round((((first + 200.5) * 1e-3) / 10) * 255), 255])
+  })
+
+  it('keeps a cell with half its pixels valid and drops one with fewer', () => {
+    const r = new Float64Array(raster)
+    const at = (row: number, col: number) => (row - win.row0) * win.width + (col - win.col0)
+    const row0 = (8 * 256 * 480) / 240
+    // cell (0, 0): one no-data pixel of four; cell (1, 0): three of four
+    r[at(row0, first)] = -32768
+    r[at(row0, first + 2)] = r[at(row0, first + 3)] = r[at(row0 + 1, first + 2)] = -32768
+    const out = sampleLayerCells(r, win, src, g, spec)
+    expect(cell(out, 0, 0)[1]).toBe(255)
+    expect(cell(out, 0, 0)[0]).toBe(Math.round(((((first + 1) * 2 + first) / 3) * 1e-3 / 10) * 255))
+    expect(cell(out, 1, 0)[1]).toBe(0)
   })
 })
