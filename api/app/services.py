@@ -15,8 +15,7 @@ import numpy as np
 from .db.sites import Site
 from .db.store import DataStore
 from .logic.constraints import ConstraintContext
-from .logic.horizon import (RAY_AZIMUTHS, RAY_MAX_RANGE_M, HorizonProfile, destination, horizon_from_heights,
-                            horizon_planes, ray_distances)
+from .logic.horizon import RAY_AZIMUTHS, RAY_MAX_RANGE_M, HorizonProfile, destination, horizon_from_heights, ray_distances
 from .logic.engine import (DEFAULT_PARAMS, AnalysisParams, Metrics, RefinedRange, Series, SiteModel, Transition,
                            compute_metrics, evaluate, make_model, next_transition, refined_ranges, time_grid)
 
@@ -127,38 +126,6 @@ def point_horizon(store: DataStore, lat: float, lon: float, mast_m: float) -> Po
     ground, grid_id, cell, dist, heights = rays
     values, last = horizon_from_heights(dist, heights.astype(np.float64), ground, mast_m)
     return PointHorizon(HorizonProfile(values, kind="terrain"), ground, cell, grid_id, float(last.min()))
-
-
-@dataclass(frozen=True)
-class HorizonPlanes:
-    """Visible crests of a point's rays (logic.horizon.ridge_planes), near to far, the skyline last."""
-    elevation_deg: np.ndarray      # (n_az, k), NaN where a plane does not exist at that azimuth
-    distance_m: np.ndarray         # (n_az, k)
-    skyline_distance_m: np.ndarray  # (n_az,)
-
-
-_PLANES_CACHE: OrderedDict = OrderedDict()
-_PLANES_CACHE_SIZE = 32
-
-
-def point_horizon_planes(store: DataStore, lat: float, lon: float, mast_m: float) -> HorizonPlanes | None:
-    """Ridge planes of any point from the same cached rays as point_horizon (finest LOLA grid with data, ground
-    height from that grid so near relief is self-consistent); None outside the grids. Cached per point and mast."""
-    lat, lon = round(float(lat), 6), round(float(lon), 6)
-    key = (id(store), lat, lon, float(mast_m))
-    if key in _PLANES_CACHE:
-        _PLANES_CACHE.move_to_end(key)
-        return _PLANES_CACHE[key]
-    rays = _point_rays(store, lat, lon)
-    planes = None
-    if rays is not None:
-        ground, _grid, _cell, dist, heights = rays
-        el, d, sky = horizon_planes(dist, heights.astype(np.float64), ground, mast_m)
-        planes = HorizonPlanes(el, d, sky)
-    _PLANES_CACHE[key] = planes
-    if len(_PLANES_CACHE) > _PLANES_CACHE_SIZE:
-        _PLANES_CACHE.popitem(last=False)
-    return planes
 
 
 def point_lookups(store: DataStore, lat: float, lon: float, site: Site | None = None) -> dict:

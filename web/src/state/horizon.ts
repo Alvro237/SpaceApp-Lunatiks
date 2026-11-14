@@ -6,8 +6,6 @@
 import { create } from 'zustand'
 
 export type CameraMode = 'free' | 'sun' | 'earth'
-/** How the ground is drawn: lit layers at known distances, or the plain diagram (grey fill and silhouette line). */
-export type HorizonStyle = 'landscape' | 'diagram'
 
 export const FOV_MIN = 4
 export const FOV_MAX = 140
@@ -21,8 +19,6 @@ interface HorizonCam {
   yaw: number
   pitch: number
   fov: number
-  style: HorizonStyle
-  setStyle: (s: HorizonStyle) => void
   setMode: (m: CameraMode) => void
   /** Free look at an absolute direction. */
   look: (yaw: number, pitch: number) => void
@@ -60,8 +56,6 @@ export const useHorizonCam = create<HorizonCam>()((set) => ({
   pitch: 4,
   // wide enough to show the skyline with the window's Sun and Earth tracks over it (+/− narrow it)
   fov: 90,
-  style: 'landscape',
-  setStyle: (style) => set({ style }),
   setMode: (mode) => set({ mode }),
   look: (yaw, pitch) => set({ mode: 'free', yaw: ((yaw % 360) + 360) % 360, pitch: clamp(pitch, PITCH_MIN, PITCH_MAX) }),
   zoom: (factor) => set((s) => ({ fov: clamp(s.fov * factor, FOV_MIN, FOV_MAX) })),

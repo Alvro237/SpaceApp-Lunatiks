@@ -35,21 +35,6 @@ export function usePointHorizon(sel: Selection, mastM: number) {
   })
 }
 
-/** Layers of the landscape (visible crests near to far, the skyline last) of the selected place; null while loading or
- * where no LOLA grid covers it. Catalogue sites and manual points are asked the same way. */
-export function useHorizonPlanes(sel: Selection, mastM: number) {
-  const point = usePointHorizon(sel, mastM)
-  const site = useQuery({
-    queryKey: ['site-horizon', sel.kind === 'site' ? sel.id : null, mastM],
-    queryFn: ({ signal }) => (sel.kind === 'site' ? api.siteHorizon(sel.id, mastM, signal) : Promise.reject(new Error('not a site'))),
-    enabled: sel.kind === 'site',
-    retry,
-    staleTime: Infinity,
-  })
-  const d = sel.kind === 'site' ? site.data : point.data
-  return d?.planes ? { planes: d.planes, skylineDistanceKm: d.skyline_distance_km ?? null, azStepDeg: d.az_step_deg } : null
-}
-
 export function useApiSeries(sel: Selection, p: SeriesParams, enabled: boolean) {
   return useQuery({
     queryKey: ['series', sel, p],

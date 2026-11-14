@@ -14,9 +14,7 @@
  * Sun and the Earth do not move (they are far away). The last frame is the exact view. Skipped with reduced motion.
  */
 import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useMemo, useRef, useState } from 'react'
-import { useHorizonPlanes } from '../api/hooks'
 import { useNow } from '../panels/useNow'
-import { useGround } from '../state/ground'
 import { useInsets } from '../state/layout'
 import { usePanels } from '../state/panels'
 import { useHorizonCam } from '../state/horizon'
@@ -24,18 +22,11 @@ import { useApp } from '../state/store'
 import { IconBack, IconMinus, IconPlus } from '../ui/icons'
 import { ToolPortal } from '../ui/ToolSlot'
 import { drawHorizon } from './draw'
-import { planesFromApi } from './terrain2d'
-import { terrainHorizonAvailable } from '../terrain/ground'
-import { terrainRegistry } from '../terrain/registry'
 import { cameraFor, compass16, wrap180 } from './project'
 import { MOON_R_KM } from '../globe/orbit'
 import { useEffectiveCamera } from './useEffectiveCamera'
 
 const state = (f: number) => (f >= 0.999 ? 'fully visible' : f > 0 ? `${Math.round(f * 100)} percent visible` : 'hidden by the horizon')
-
-/** Cross-fade from the painted landscape to the 3D ground view once its tiles are there, ms (presentation choice). */
-const GROUND_FADE_MS = 400
-const narrowScreen = () => typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 760px)').matches
 
 /** Length of the arrival descent, ms. */
 const DESCENT_MS = 1100
@@ -54,13 +45,7 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
   const cam = useEffectiveCamera()
   // read once: where the map camera was when the view opened
   const [from] = useState(() => DESCENT_FROM[useApp.getState().scale === 'globe' ? 'globe' : 'map'])
-  const { look, zoom, setMode, setStyle } = useHorizonCam.getState()
-  const style = useHorizonCam((s) => s.style)
-  const selection = useApp((s) => s.selection)
-  const mastM = useApp((s) => s.mastM)
-  // layers of the landscape from the API (visible crests near to far); until they arrive, the skyline layer alone
-  const apiPlanes = useHorizonPlanes(selection, mastM)
-  const planes = useMemo(() => planesFromApi(apiPlanes), [apiPlanes])
+  const { look, zoom, setMode } = useHorizonCam.getState()
   const wrap = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const drag = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null)
@@ -105,57 +90,6 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
   const fov = arrival < 1 ? from.fov + (cam.fov - from.fov) * e : cam.fov
   const camera = useMemo(() => cameraFor(cam.yaw, pitch, fov, freeW, cx, cy), [cam.yaw, pitch, fov, freeW, cx, cy])
 
-  // Layer B (docs/horizon-view-plan.md): where the terrain tiles are fine enough (240 m cells or finer, static or
-  // live), the engine under this view draws them from the observer's eye and this canvas lets them through below the
-  // skyline. Only over the polar map (the globe has no tiles), on wide screens (the map is hidden on narrow ones), in
-  // the landscape style and once the camera has landed.
-  const scale = useApp((s) => s.scale)
-  const lat = info?.model.lat
-  const lon = info?.model.lon
-  const groundOn =
-    style === 'landscape' &&
-    arrival >= 1 &&
-    scale !== 'globe' &&
-    lat !== undefined &&
-    lon !== undefined &&
-    !narrowScreen() &&
-    terrainHorizonAvailable(terrainRegistry.engine?.tileset, lat, lon)
-  useEffect(() => {
-    if (!groundOn || lat === undefined || lon === undefined || size.w === 0) {
-      useGround.getState().setRequest(null)
-      return
-    }
-    useGround.getState().setRequest({
-      lat,
-      lon,
-      screen: { yaw: camera.yaw, pitch: camera.pitch, degPerPx: camera.degPerPx, cx: camera.cx, cy: camera.cy, width: size.w, height: size.h },
-    })
-  }, [groundOn, lat, lon, camera, size])
-  useEffect(() => () => useGround.getState().setRequest(null), [])
-  // the painted landscape stays until the tiles of this place have all arrived once, then fades to the 3D view
-  const groundReady = useGround((s) => s.ready)
-  const [arrivedAt, setArrivedAt] = useState<{ key: string; t: number } | null>(null)
-  const placeKey = `${lat},${lon}`
-  useEffect(() => {
-    if (groundOn && groundReady && arrivedAt?.key !== placeKey) setArrivedAt({ key: placeKey, t: performance.now() })
-    if (!groundOn && arrivedAt) setArrivedAt(null)
-  }, [groundOn, groundReady, arrivedAt, placeKey])
-  const [fullness, setFullness] = useState(1)
-  useEffect(() => {
-    if (!groundOn || arrivedAt?.key !== placeKey) {
-      setFullness(1)
-      return
-    }
-    let raf = 0
-    const tick = () => {
-      const p = Math.min(1, (performance.now() - arrivedAt.t) / GROUND_FADE_MS)
-      setFullness(1 - p)
-      if (p < 1) raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [groundOn, arrivedAt, placeKey])
-
   const tracks = useMemo(() => {
     const samples = series?.samples ?? []
     return {
@@ -185,12 +119,8 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
       earthTrack: tracks.earth,
       free,
       showLabels: arrival >= 1,
-      style,
-      planes,
-      planeShape: arrival < 1 ? (el) => dip * (1 - k) + el * k : undefined,
-      ground: groundOn ? { fullness } : undefined,
     })
-  }, [camera, view, info, size, tracks, free, arrival, style, planes, groundOn, fullness, from.km])
+  }, [camera, view, info, size, tracks, free, arrival])
 
   const turn = (dYaw: number, dPitch: number) => look(cam.yaw + dYaw, cam.pitch + dPitch)
 
@@ -234,15 +164,14 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
     view && info
       ? `Horizon view from ${info.name}, facing ${compass16(cam.yaw)} (${cam.yaw.toFixed(0)}°) at ${cam.pitch.toFixed(1)}° up, field of view ${cam.fov.toFixed(0)}°. ` +
         `Sun at azimuth ${view.sun.az.toFixed(0)}°, elevation ${view.sun.el.toFixed(1)}°, ${state(view.sun.fraction)}, ${describe(view.sun.az, cam)}. ` +
-        `Earth at azimuth ${view.earth.az.toFixed(0)}°, elevation ${view.earth.el.toFixed(1)}°, ${state(view.earth.fraction)}, ${describe(view.earth.az, cam)}. ` +
-        (view.sun.fraction > 0 ? `The ground is lit from the ${compass16(view.sun.az)}.` : 'The ground is in shadow.')
+        `Earth at azimuth ${view.earth.az.toFixed(0)}°, elevation ${view.earth.el.toFixed(1)}°, ${state(view.earth.fraction)}, ${describe(view.earth.az, cam)}.`
       : 'Horizon view, loading'
 
   return (
     <>
       <div
         ref={wrap}
-        className={`horizon-view${groundOn ? ' is-ground' : ''}`}
+        className="horizon-view"
         tabIndex={0}
         role="application"
         aria-roledescription="horizon view"
@@ -271,19 +200,6 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
               <IconMinus />
             </button>
           </div>
-          <div className="tool-group" role="group" aria-label="Ground style">
-            <button type="button" className={`tool-btn${style === 'landscape' ? ' is-set' : ''}`} aria-pressed={style === 'landscape'} onClick={() => setStyle('landscape')} title="Lit ground at its real distances">
-              Landscape
-            </button>
-            <button type="button" className={`tool-btn${style === 'diagram' ? ' is-set' : ''}`} aria-pressed={style === 'diagram'} onClick={() => setStyle('diagram')} title="Plain skyline">
-              Diagram
-            </button>
-          </div>
-          {groundOn && (
-            <span className="horizon-note" role="status" title="LOLA terrain tiles seen from the ground, under the skyline the numbers use">
-              {fullness > 0 ? 'Loading 3D…' : '3D relief'}
-            </span>
-          )}
           <button type="button" className="tool-btn" onClick={() => usePanels.getState().setSection(null)} aria-label="Back to the map" title="Back to the map (Esc)">
             <IconBack size={18} /> Map
           </button>

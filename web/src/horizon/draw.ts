@@ -5,7 +5,6 @@
  * Colours are fixed (light on dark): the view is a night-sky scene in both colour schemes.
  */
 import { type Camera, compass16, earthPhase, project, tickStep, wrap180, wrap360 } from './project'
-import { type LandscapePlanes, paintLandscape } from './terrain2d'
 
 export interface Body {
   az: number
@@ -25,18 +24,6 @@ export interface Scene {
   free: { left: number; right: number; top: number; bottom: number }
   /** Name tags state the view from the surface: hidden while the camera is still coming down. */
   showLabels?: boolean
-  /** 'landscape' (default): lit layers at known distances, black sky; 'diagram': the grey fill and the silhouette line. */
-  style?: 'landscape' | 'diagram'
-  /** Visible crests near to far, the skyline last (API); without them the landscape is the skyline layer alone. */
-  planes?: LandscapePlanes | null
-  /** Applied to the layers' elevations (the arrival descent pulls them to the smooth Moon's horizon). */
-  planeShape?: (el: number) => number
-  /**
-   * The 3D ground view is drawn under this canvas (Layer B): the canvas is transparent below the skyline, black
-   * above it (so the tiles never show above the skyline the metrics use), and keeps `fullness` of the painted
-   * landscape (1 while the tiles load, 0 once they are there: only the ground at the observer's feet).
-   */
-  ground?: { fullness: number }
 }
 
 const SUN = '#ffb547'
@@ -46,48 +33,20 @@ const MUTED = '#a8a59d'
 const MIN_DISC_PX = 2.5
 
 export function drawHorizon(ctx: CanvasRenderingContext2D, W: number, H: number, c: Camera, s: Scene): void {
-  const landscape = s.style !== 'diagram'
-  const ground = landscape ? s.ground : undefined
-  ctx.clearRect(0, 0, W, H)
-  if (ground) {
-    // everything of the sky is drawn inside the region above the skyline; below it the canvas stays clear
-    ctx.save()
-    ctx.beginPath()
-    ctx.moveTo(0, 0)
-    ctx.lineTo(W, 0)
-    for (let x = W + 2; x >= -2; x -= 2) {
-      const az = wrap360(c.yaw + (x - c.cx) * c.degPerPx)
-      ctx.lineTo(x, project(c, az, s.horizonAt(az)).y)
-    }
-    ctx.closePath()
-    ctx.clip()
-  }
-  // sky: black. Diagram: a hint of depth towards the horizon; landscape: pure black (airless: no blue, no haze, no
-  // glow on the ground line)
+  // sky: black, a hint of depth towards the horizon (no atmosphere: no blue, no glow on the ground line)
   const zeroY = project(c, c.yaw, 0).y
   const sky = ctx.createLinearGradient(0, 0, 0, Math.max(1, zeroY))
   sky.addColorStop(0, '#000000')
-  sky.addColorStop(1, landscape ? '#000000' : '#0b0d12')
+  sky.addColorStop(1, '#0b0d12')
   ctx.fillStyle = sky
   ctx.fillRect(0, 0, W, H)
 
   drawGrid(ctx, W, H, c, s)
   drawTrack(ctx, W, c, s.sunTrack, SUN)
   drawTrack(ctx, W, c, s.earthTrack, EARTH)
-  drawSun(ctx, c, s.sun, landscape)
+  drawSun(ctx, c, s.sun)
   drawEarth(ctx, c, s.earth, s.sun)
-  if (ground) ctx.restore()
-  if (landscape) {
-    paintLandscape(ctx, W, H, {
-      camera: c,
-      skyline: s.horizonAt,
-      planes: s.planes ?? null,
-      shape: s.planeShape,
-      sun: s.sun,
-      earth: s.earth,
-      fullness: ground ? ground.fullness : 1,
-    })
-  } else drawTerrain(ctx, W, H, c, s)
+  drawTerrain(ctx, W, H, c, s)
   if (s.showLabels !== false) drawLabels(ctx, W, c, s)
   drawCompass(ctx, W, H, c, s)
 }
@@ -136,17 +95,15 @@ function discRadius(c: Camera, b: Body) {
   return Math.max(MIN_DISC_PX, b.radiusDeg / c.degPerPx)
 }
 
-function drawSun(ctx: CanvasRenderingContext2D, c: Camera, sun: Body, tight = false) {
+function drawSun(ctx: CanvasRenderingContext2D, c: Camera, sun: Body) {
   const p = project(c, sun.az, sun.el)
   const r = discRadius(c, sun)
-  // landscape: the glare of the optics stays within 1.5 disc radii (no atmosphere to scatter it further)
-  const reach = tight ? 1.5 : 5
-  const glow = ctx.createRadialGradient(p.x, p.y, r * 0.6, p.x, p.y, r * reach)
+  const glow = ctx.createRadialGradient(p.x, p.y, r * 0.6, p.x, p.y, r * 5)
   glow.addColorStop(0, 'rgba(255,214,140,0.55)')
   glow.addColorStop(1, 'rgba(255,181,71,0)')
   ctx.fillStyle = glow
   ctx.beginPath()
-  ctx.arc(p.x, p.y, r * reach, 0, Math.PI * 2)
+  ctx.arc(p.x, p.y, r * 5, 0, Math.PI * 2)
   ctx.fill()
   ctx.fillStyle = '#fff4d6'
   ctx.beginPath()

@@ -27,7 +27,6 @@ from ..logic.engine import AnalysisParams
 from ..schemas.points import LongTermComparison, PointHorizonResponse, PointSeriesResponse, PointStateResponse, TerrainReference
 from .params import (COMMS_QUERY, DEFAULT_MAST_M, DURATION_QUERY, STEP_QUERY, START_QUERY, T_QUERY, LatParam,
                      LonParam, MastParam, parse_instant_ms, parse_window_ms)
-from .horizon import planes_fields
 from .state import series_response, state_response
 
 router = APIRouter(prefix="/points", tags=["points"])
@@ -107,5 +106,4 @@ def point_horizon(lat: LatParam, lon: LonParam, mast_m: MastParam = DEFAULT_MAST
         horizon_kind=kind, near_grid=near, near_cell_m=cell, terrain_range_km=rng, method=METHOD,
         validation=VALIDATION, az_step_deg=p.az_step_deg, az=(np.arange(v.size) * p.az_step_deg).tolist(),
         elevation_deg=v.tolist(), max_deg=float(v[i_max]), max_az_deg=i_max * p.az_step_deg, min_deg=float(v[i_min]),
-        min_az_deg=i_min * p.az_step_deg, mean_deg=float(v.mean()),
-        **planes_fields(services.point_horizon_planes(store, lat, lon, mast_m) if ph is not None else None))
+        min_az_deg=i_min * p.az_step_deg, mean_deg=float(v.mean()))

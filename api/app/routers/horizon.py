@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from .. import services
 from ..db.store import DataStore, get_store
 from ..logic.horizon import HorizonProfile
-from ..schemas.horizon import HorizonPlane, HorizonResponse, ProfileSummary, Zone, ZonePoint
+from ..schemas.horizon import HorizonResponse, ProfileSummary, Zone, ZonePoint
 from .params import DEFAULT_MAST_M, MastParam
 
 router = APIRouter(prefix="/sites", tags=["horizon"])
@@ -25,21 +25,6 @@ ZONE_QUERY = Query(False, description="Also return the neighbours' masks (site c
 
 def _values(p: HorizonProfile) -> np.ndarray:
     return p.values + 0.0          # turns -0.0 (smooth sphere at 0 m) into 0.0 on the wire
-
-
-def _nullable(a: np.ndarray, scale: float = 1.0) -> list[float | None]:
-    """NaN to None (JSON null), optionally scaled (metres to km)."""
-    return [None if not np.isfinite(x) else float(x) * scale for x in a]
-
-
-def planes_fields(planes: services.HorizonPlanes | None) -> dict:
-    """The ``planes`` and ``skyline_distance_km`` fields of a horizon response (nulls when no grid covers the point)."""
-    if planes is None:
-        return {"planes": None, "skyline_distance_km": None}
-    return {"planes": [HorizonPlane(distance_km=_nullable(planes.distance_m[:, j], 1e-3),
-                                    elevation_deg=_nullable(planes.elevation_deg[:, j]))
-                       for j in range(planes.elevation_deg.shape[1])],
-            "skyline_distance_km": _nullable(planes.skyline_distance_m, 1e-3)}
 
 
 def _summary(p: HorizonProfile) -> dict:
@@ -69,5 +54,4 @@ def site_horizon(site_id: str, mast_m: MastParam = DEFAULT_MAST_M, include_zone:
         site_id=site.id, lat=site.lat, lon=site.lon, ground_m=site.ground_m, mast_m=mast_m,
         mast_used_m=h.mast_used_m, masts_available_m=store.horizons.masts_m if site.has_terrain else [],
         horizon_kind=p.kind, az_step_deg=p.az_step_deg, az=(np.arange(p.values.size) * p.az_step_deg).tolist(),
-        elevation_deg=_values(p).tolist(), zone_available=h.zone_available, zone=zone,
-        **planes_fields(services.point_horizon_planes(store, site.lat, site.lon, h.mast_used_m)), **_summary(p))
+        elevation_deg=_values(p).tolist(), zone_available=h.zone_available, zone=zone, **_summary(p))
