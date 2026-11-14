@@ -51,7 +51,9 @@ the dev proxy elsewhere; in production set `VITE_API_URL` to the API's public UR
 | `src/panels` | Where, when, the chosen place (Sun and Earth now, power, link), mission filters |
 | `src/charts` | Horizon chart, timeline, site × month table; every chart has a table |
 | `src/compare` | Live comparison of up to four places, and the site × month table |
-| `src/pages` | Data & methods, Learn |
+| `src/pages` | Data & methods, Learn (Lunar Quest hub and the ideas behind it) |
+| `src/learn` | Lunar Quest: challenges that set up a real scene in the navigator and check the answer with the browser engine |
+| `src/ui` | Design tokens (`theme.css`: monochrome plus Sun amber and Earth blue), brand mark |
 | `e2e` | Playwright tests |
 
 ## Accessibility and performance

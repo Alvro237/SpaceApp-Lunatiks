@@ -17,6 +17,7 @@ import { useUrlSync } from '../state/useUrlSync'
 import { GlobeView } from '../globe/GlobeView'
 import { TerrainView } from '../terrain/TerrainView'
 import { useClock } from '../time/useClock'
+import { QuestPanel } from '../learn/QuestPanel'
 
 const narrow = () => typeof window !== 'undefined' && window.innerWidth < 760
 
@@ -46,6 +47,7 @@ export function NavigatorPage() {
         <Float side="right" title="Place" defaultOpen>
           <PlacePanel />
         </Float>
+        <QuestPanel />
         <div className="float float-bottom">
           {compareMode && <CompareLive />}
           <Timeline />

@@ -1,9 +1,68 @@
-/** Short explanations for educators and the public: why light and Earth contact are hard at the south pole. */
+/**
+ * Learn: the Lunar Quest challenges (each one opens the navigator on a real scene and asks one question whose
+ * answer the engine computes), then the ideas behind them for educators and the public.
+ */
+import { useNavigate } from 'react-router-dom'
+import { QUESTS } from '../learn/quests'
+import { useQuest } from '../learn/useQuest'
+
 export function LearnPage() {
+  const navigate = useNavigate()
+  const done = useQuest((s) => s.done)
+  const start = useQuest((s) => s.start)
+  const reset = useQuest((s) => s.reset)
+  const solved = QUESTS.filter((q) => done[q.id]).length
+
+  const play = (id: string) => {
+    start(id)
+    navigate('/')
+  }
+
   return (
-    <article className="page prose">
+    <article className="page prose learn">
       <h1>Learn</h1>
-      <p className="intro">Why choosing where and when to land near the lunar south pole is a question of horizons.</p>
+      <p className="intro">
+        Five short challenges inside the real tool. Each one opens the navigator on a real place and date and asks one question; the answer is worked out
+        live from NASA's LOLA terrain and JPL ephemerides, the same numbers mission planners see.
+      </p>
+
+      <section aria-labelledby="quest-h" className="quest-hub">
+        <div className="quest-hub-head">
+          <h2 id="quest-h">Lunar Quest</h2>
+          <p className="quest-progress">
+            <span className="mono">
+              {solved}/{QUESTS.length}
+            </span>{' '}
+            solved
+            {solved > 0 && (
+              <button type="button" className="link" onClick={reset}>
+                Reset
+              </button>
+            )}
+          </p>
+        </div>
+        <div className="progress-track" role="img" aria-label={`${solved} of ${QUESTS.length} challenges solved`}>
+          <div className="progress-fill" style={{ width: `${(100 * solved) / QUESTS.length}%` }} />
+        </div>
+        <ol className="quest-grid">
+          {QUESTS.map((q, i) => (
+            <li key={q.id} className={`quest-tile${done[q.id] ? ' is-done' : ''}`}>
+              <span className="quest-num mono" aria-hidden="true">
+                {String(i + 1).padStart(2, '0')}
+              </span>
+              <h3>{q.title}</h3>
+              <p>{q.teaser}</p>
+              <p className="quest-meta">
+                <span className="tag-pill">{q.kind}</span>
+                {done[q.id] && <span className="quest-done">Solved</span>}
+              </p>
+              <button type="button" className={done[q.id] ? '' : 'primary'} onClick={() => play(q.id)} aria-label={`${done[q.id] ? 'Play again' : 'Play'}: ${q.title}`}>
+                {done[q.id] ? 'Play again' : 'Play'}
+              </button>
+            </li>
+          ))}
+        </ol>
+      </section>
 
       <h2>A Sun that skims the horizon</h2>
       <p>

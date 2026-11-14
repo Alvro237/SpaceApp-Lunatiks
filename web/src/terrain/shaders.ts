@@ -111,8 +111,8 @@ void main() {
 
   // Ring around the selected place (drawn in the terrain so it follows the relief).
   float d = length(vMap - uHighlight.xy);
-  float w = max(uHighlight.z * 0.12, uCellM * 0.6);
-  if (uHighlight.z > 0.0 && abs(d - uHighlight.z) < w) colour = mix(colour, vec3(0.0, 0.85, 1.0), 0.9);
+  float w = max(uHighlight.z * 0.05, uCellM * 0.6);
+  if (uHighlight.z > 0.0 && abs(d - uHighlight.z) < w) colour = mix(colour, vec3(0.925, 0.918, 0.894), 0.9);
 
   // a thin limb at the edge of the disc
   if (rMap > uDiscR - 2.0 * uCellM) colour = mix(colour, vec3(0.55, 0.6, 0.7), 0.6);

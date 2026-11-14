@@ -48,6 +48,7 @@ asks for this list; keep it current when something is added.
 ## Software (all open source)
 
 API: FastAPI, Starlette, Uvicorn, Pydantic, NumPy, pytest, httpx.
+Fonts (self-hosted, SIL Open Font License): Space Grotesk (Florian Karsten), IBM Plex Mono (IBM), via the Fontsource packages.
 Web: Vite, React, React Router, TypeScript, Three.js, React Three Fiber, Zustand, TanStack Query,
 d3-scale-chromatic, openapi-typescript (code generation), Vitest, Testing Library, axe-core, Playwright with
 @axe-core/playwright, oxlint. Exact versions: `web/package-lock.json`.

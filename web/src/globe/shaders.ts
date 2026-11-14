@@ -74,7 +74,7 @@ void main() {
   vec3 colour = vec3(0.72, 0.71, 0.68) * light;
   // outline of the polar map's coverage
   float latDeg = degrees(lat);
-  if (abs(latDeg - uDiscLat) < 0.18) colour = mix(colour, vec3(0.0, 0.85, 1.0), 0.85);
+  if (abs(latDeg - uDiscLat) < 0.18) colour = mix(colour, vec3(0.925, 0.918, 0.894), 0.85);
   fragColor = vec4(colour, 1.0);
 }
 `

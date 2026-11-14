@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useApp } from '../state/store'
+import { BrandMark } from '../ui/BrandMark'
 
 const TITLES: Record<string, string> = { '/': 'Navigator', '/data': 'Data & methods', '/learn': 'Learn' }
 
@@ -28,8 +29,8 @@ export function Layout() {
       </a>
       <header className="topbar">
         <div className="brand">
-          <span className="brand-mark" aria-hidden="true">
-            ◐
+          <span className="brand-mark">
+            <BrandMark />
           </span>
           <span>
             <span className="brand-name">Lunar Landing Site Navigator</span>
