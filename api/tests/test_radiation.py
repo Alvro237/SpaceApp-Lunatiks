@@ -74,6 +74,24 @@ def test_crater_floor_is_shielded_more_and_conversions_apply():
     assert b["fraction_of_career_limit"] == pytest.approx(e["mean"] / 600.0)
 
 
+def test_risk_index_scale_hand_cases():
+    from app.logic.radiation import risk_index
+    assert risk_index(0.6) == pytest.approx(1.0)        # 0.1 % of 600 mSv
+    assert risk_index(6.0) == pytest.approx(4.0)        # 1 %
+    assert risk_index(60.0) == pytest.approx(7.0)       # 10 %
+    assert risk_index(600.0) == pytest.approx(10.0) and risk_index(5000.0) == 10.0 and risk_index(0.01) == 1.0
+
+
+def test_risk_in_the_api():
+    no_q = client.post("/api/v1/radiation", json=BASE).json()
+    assert no_q["risk"] is None and no_q["mission_effective_dose_msv"] is None
+    b = client.post("/api/v1/radiation", json={**BASE, "quality_factor": 3.8}).json()
+    r, e = b["risk"], b["mission_effective_dose_msv"]["mean"]
+    assert e == pytest.approx(b["mission_gcr_dose_mgy_si"]["mean"] * 1.333 * 3.8)          # default Si -> water
+    assert r["share_of_career_limit"] == pytest.approx(e / 600.0)
+    assert 1.0 <= r["index"] <= r["index_with_worst_storm"] <= 10.0 and r["worst_storm_msv"] > 0
+
+
 def test_errors():
     assert client.post("/api/v1/radiation", json={**BASE, "site_id": "nowhere"}).status_code == 404
     assert client.post("/api/v1/radiation", json={**BASE, "quality_factor": 0}).status_code == 422

@@ -165,6 +165,11 @@ one) as tests with the source of each date in `docs/references.md`.
   `basis="climatology"` (mission dates are outside the record). Effective dose in mSv and the share of the
   NASA-STD-3001 career limit (600 mSv) only when the caller gives `si_to_tissue_factor` and `quality_factor`
   (no cited value yet). Largest SPE day of the record reported for context (2012-03-08, 84 mGy in orbit).
+- Si -> water conversion defaults to 1.333 (CRaTER team, NASA ISWA CRaTER page). `quality_factor` stays an
+  input (MSL RAD cruise, Zeitlin et al. 2013, implies about 3.8: to verify in the paper).
+- `risk` (with `quality_factor`): astronaut risk 1-10 = 1 + 3 log10(share of the 600 mSv career limit / 0.1 %),
+  clipped; 0.1 % -> 1, 1 % -> 4, 10 % -> 7, 100 % -> 10 (a presentation scale, team decision). Also the index if
+  the record's largest storm day hit the mission (storm with Q = 1, lower bound, isotropic approximation).
 - Hard filter `max_dose`: threshold `{ "max_mgy_si": float }`, GCR only.
 - Not modelled: albedo particles from the regolith (surface value is a lower bound), habitat shielding, SPE forecasts.
 

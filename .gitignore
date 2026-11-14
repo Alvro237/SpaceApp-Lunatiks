@@ -19,3 +19,6 @@ dist/
 .vercel/
 .claude/settings.local.json
 *.log
+
+# local dev viewer (not part of the project)
+viewer/

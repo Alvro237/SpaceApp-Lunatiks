@@ -7,11 +7,12 @@ from .common import WindowRequest
 
 
 class RadiationRequest(WindowRequest):
-    si_to_tissue_factor: float | None = Field(None, gt=0.0, description=(
-        "Absorbed dose in tissue (or water) per absorbed dose in silicon; give it with a source. "
-        "Without it only silicon dose is reported"))
+    si_to_tissue_factor: float = Field(1.333, gt=0.0, description=(
+        "Absorbed dose in water per absorbed dose in silicon; default 1.333, the CRaTER team's conversion "
+        "(NASA ISWA CRaTER data page)"))
     quality_factor: float | None = Field(None, gt=0.0, description=(
-        "Mean quality factor to turn absorbed dose (mGy) into effective dose (mSv); give it with a source"))
+        "Mean GCR quality factor to turn absorbed dose (mGy) into effective dose (mSv); give it with a source "
+        "(MSL RAD cruise measurements, Zeitlin et al. 2013, imply about 3.8: verify). Needed for mSv and the risk index"))
 
 
 class DailyStats(BaseModel):
@@ -33,6 +34,16 @@ class SpeRecord(BaseModel):
     days_flagged: int = Field(description="Full days in the record without a GCR value (solar-particle-event days)")
     largest_day: str = Field(description="Date of the largest daily dose in the record, measured in orbit")
     largest_day_mgy_si: float = Field(description="That day's dose as measured in lunar orbit, mGy(Si); not scaled to the surface")
+
+
+class Risk(BaseModel):
+    index: float = Field(description="1 (negligible) .. 10 (whole career limit in one mission), GCR only")
+    share_of_career_limit: float = Field(description="Mean mission effective dose / 600 mSv")
+    index_with_worst_storm: float | None = Field(description=(
+        "Same scale if the record's largest solar storm day also hit the mission (storm counted with Q = 1, "
+        "the minimum: a lower bound)"))
+    worst_storm_msv: float | None = Field(description="That storm day at this point, mSv (lower bound, isotropic approximation)")
+    scale: str
 
 
 class DatasetRef(BaseModel):
@@ -60,5 +71,6 @@ class RadiationResponse(BaseModel):
     mission_effective_dose_msv: Range3 | None = Field(description="Effective dose over the mission, mSv; null without both factors")
     career_limit_msv: float = Field(description="NASA-STD-3001 career effective dose limit, mSv")
     fraction_of_career_limit: float | None = Field(description="Mean mission effective dose / career limit")
+    risk: Risk | None = Field(None, description="Astronaut risk on a 1-10 scale; null without quality_factor or sky data")
     spe_record: SpeRecord
     dataset: DatasetRef

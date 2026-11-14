@@ -6,9 +6,9 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from .. import services
 from ..db.store import DataStore, get_store
-from ..logic.radiation import (CAREER_LIMIT_MSV, climatology, effective_dose_msv, mission_dose, shielding_factor,
-                               sky_solid_angle)
-from ..schemas.radiation import DailyStats, DatasetRef, RadiationRequest, RadiationResponse, Range3, SpeRecord
+from ..logic.radiation import (CAREER_LIMIT_MSV, climatology, effective_dose_msv, mission_dose, risk_index,
+                               shielding_factor, sky_solid_angle, storm_surface_mgy_si)
+from ..schemas.radiation import DailyStats, DatasetRef, RadiationRequest, RadiationResponse, Range3, Risk, SpeRecord
 from .common import resolve_model
 
 router = APIRouter(prefix="/radiation", tags=["radiation"])
@@ -41,18 +41,27 @@ def radiation(req: RadiationRequest, store: DataStore = Depends(get_store)) -> R
                                                                           for s in ("mean", "p05", "p50", "p95", "max")}})
     mission = None if k is None else _range(free, k, req.duration_h)
     eff = None
-    if mission is not None and req.si_to_tissue_factor is not None and req.quality_factor is not None:
+    if mission is not None and req.quality_factor is not None:
         f = lambda d: effective_dose_msv(d, req.si_to_tissue_factor, req.quality_factor)  # noqa: E731
         eff = Range3(low=f(mission.low), mean=f(mission.mean), high=f(mission.high))
     spe_days = int(np.sum(~np.isfinite(rad.corrected) & ok))
     i = int(np.nanargmax(rad.measured))
     m = rad.meta
+    risk = None
+    if eff is not None:
+        both = np.isfinite(rad.corrected) & np.isfinite(rad.measured) & ok & (rad.measured > 0)
+        orbit_to_free = float(np.median(rad.corrected[both] / rad.measured[both]))
+        storm_msv = storm_surface_mgy_si(float(rad.measured[i]), orbit_to_free, k) * req.si_to_tissue_factor * 1.0
+        risk = Risk(index=risk_index(eff.mean), share_of_career_limit=eff.mean / CAREER_LIMIT_MSV,
+                    index_with_worst_storm=risk_index(eff.mean + storm_msv), worst_storm_msv=storm_msv,
+                    scale="1 + 3 log10(share of the 600 mSv career limit / 0.1 %), clipped 1..10: "
+                          "0.1 % -> 1, 1 % -> 4, 10 % -> 7, 100 % -> 10")
     return RadiationResponse(
         site_id=req.site_id, lat=model.lat, lon=model.lon, horizon_kind=model.horizon.kind,
         start=services.iso_utc(services.to_ms(req.start)), duration_h=req.duration_h, basis="climatology",
         assumptions=ASSUMPTIONS, sky_solid_angle_sr=omega, sky_source=source, shielding_factor=k,
         gcr_free_space_daily_mgy_si=free, gcr_surface_daily_mgy_si=surface, mission_gcr_dose_mgy_si=mission,
         mission_effective_dose_msv=eff, career_limit_msv=CAREER_LIMIT_MSV,
-        fraction_of_career_limit=None if eff is None else eff.mean / CAREER_LIMIT_MSV,
+        fraction_of_career_limit=None if eff is None else eff.mean / CAREER_LIMIT_MSV, risk=risk,
         spe_record=SpeRecord(days_flagged=spe_days, largest_day=rad.dates[i], largest_day_mgy_si=float(rad.measured[i])),
         dataset=DatasetRef(name=m["name"], url=m["url"], first=m["first"], last=m["last"]))

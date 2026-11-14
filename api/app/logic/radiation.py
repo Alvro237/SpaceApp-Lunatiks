@@ -27,6 +27,25 @@ import numpy as np
 FREE_SPACE_SR = 4.0 * math.pi
 FLAT_GROUND_SR = 2.0 * math.pi
 CAREER_LIMIT_MSV = 600.0   # NASA-STD-3001: career effective dose limit, all ages and sexes
+SI_TO_WATER = 1.333        # CRaTER team's silicon-to-water dose conversion (NASA ISWA CRaTER data page)
+
+
+def risk_index(effective_msv: float, limit_msv: float = CAREER_LIMIT_MSV) -> float:
+    """Astronaut radiation risk on a 1-10 scale from the share of the career limit one mission uses.
+
+    Logarithmic, because mission doses span orders of magnitude: 0.1 % of the limit -> 1, 1 % -> 4,
+    10 % -> 7, 100 % or more -> 10 (index = 1 + 3 log10(share / 0.001), clipped to 1..10). The scale is a
+    presentation choice of the team, not a medical standard; the share itself is the physical number.
+    """
+    share = max(effective_msv / limit_msv, 1e-12)
+    return float(min(10.0, max(1.0, 1.0 + 3.0 * math.log10(share / 0.001))))
+
+
+def storm_surface_mgy_si(orbit_mgy_si: float, orbit_to_free_space: float, shielding: float) -> float:
+    """A solar-particle-event day measured in orbit, brought to the surface point with the same solid-angle
+    scaling as GCR (free space = orbit x orbit_to_free_space, then x shielding). Treats the storm as isotropic,
+    which real SPEs are not: an order-of-magnitude figure."""
+    return orbit_mgy_si * orbit_to_free_space * shielding
 
 
 def sky_solid_angle(sky_sr: float | None, horizon_kind: str) -> tuple[float | None, str]:
