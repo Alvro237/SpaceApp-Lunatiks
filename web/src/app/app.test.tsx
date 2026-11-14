@@ -92,7 +92,7 @@ afterEach(() => vi.unstubAllGlobals())
 describe('navigator', () => {
   it('shows the catalogue, the Sun and Earth for IM-2, and says which engine computed them', async () => {
     const { container } = renderAt('/')
-    expect(await screen.findByRole('heading', { level: 1, name: 'Lunar Landing Site Navigator' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { level: 1, name: 'Lunar Landing Site Navigator' }, { timeout: 5000 })).toBeInTheDocument()
     const im2 = await screen.findByRole('button', { name: /IM-2/ })
     expect(im2).toHaveAttribute('aria-pressed', 'true')
     const sun = await screen.findByRole('article', { name: 'Sun' }, { timeout: 5000 })

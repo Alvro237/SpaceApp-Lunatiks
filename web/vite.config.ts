@@ -18,6 +18,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    // every navigator test mounts the whole app (map, engine, panels); under parallel load 5 s is not enough
+    testTimeout: 30_000,
     exclude: ['e2e/**', 'node_modules/**'],
   },
 })

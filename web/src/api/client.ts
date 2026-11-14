@@ -79,10 +79,10 @@ const q = (params: Record<string, string | number | undefined>) =>
       .map(([k, v]) => [k, String(v)]),
   ).toString()
 
+/** SW-1 query parameters. No `panel`: the panel orientation only matters to POST /power (MECH). */
 export interface StateParams {
   t: string
   mast_m: number
-  panel: string
   comms_min_fraction: number
 }
 
@@ -91,7 +91,6 @@ export interface SeriesParams {
   duration_h: number
   step_min: number
   mast_m: number
-  panel: string
   comms_min_fraction: number
 }
 
