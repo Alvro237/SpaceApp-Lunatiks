@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 
 from .. import services
 from ..db.store import DataStore, get_store
+from ..logic.eclipse import obscuration
 from ..logic.engine import next_transition
 from ..logic.sun import elevation_stats, events, longest_run_h
 from ..schemas.sun import EclipseEvent, ElevationStats, SunNow, SunRequest, SunResponse, Transition
@@ -26,6 +27,7 @@ def sun(req: SunRequest, store: DataStore = Depends(get_store)) -> SunResponse:
     s = services.evaluate_window(store, model, start_ms, req.duration_h, req.step_min)
     t, lit = s.t_ms, s.sunlit()
     step_h = s.step_ms / 3_600_000.0
+    occ = obscuration(s)
     tr = next_transition(store.ephemeris, model, start_ms, "sun")
     transition = None if tr is None else Transition(kind=tr.kind, at=services.iso_utc(tr.at_ms), in_hours=tr.in_ms / 3_600_000.0)
     return SunResponse(
@@ -39,6 +41,8 @@ def sun(req: SunRequest, store: DataStore = Depends(get_store)) -> SunResponse:
         longest_sunlit_h=longest_run_h(lit, t, True), longest_dark_h=longest_run_h(lit, t, False),
         next_transition=transition,
         hours_to_sunset=transition.in_hours if transition is not None and transition.kind == "set" else None,
+        obscuration=occ.tolist(),
         eclipse_fraction=float((s.eclipse > 0).mean()), eclipse_ranges=ranges(t, s.eclipse > 0),
         eclipses=[EclipseEvent(start=services.iso_utc(e.start_ms), end=services.iso_utc(e.end_ms), duration_h=e.duration_h,
-                               kind="total" if e.max_code == 2 else "partial") for e in events(t, s.eclipse)])
+                               kind="total" if e.max_code == 2 else "partial", max_obscuration=e.max_value)
+                  for e in events(t, s.eclipse, occ)])

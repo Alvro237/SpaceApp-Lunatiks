@@ -23,10 +23,11 @@ class Event:
     end_ms: float            # last sample inside the event
     duration_h: float        # samples x step
     max_code: int            # highest code reached inside the event (eclipse: 1 partial, 2 total)
+    max_value: float | None = None   # highest of ``values`` inside the event, when given
 
 
-def events(t_ms: np.ndarray, codes: np.ndarray) -> list[Event]:
-    """Contiguous runs where ``codes > 0``, with the highest code reached in each run."""
+def events(t_ms: np.ndarray, codes: np.ndarray, values: np.ndarray | None = None) -> list[Event]:
+    """Contiguous runs where ``codes > 0``, with the highest code (and value) reached in each run."""
     t = np.asarray(t_ms, dtype=np.float64)
     c = np.asarray(codes)
     on = c > 0
@@ -35,8 +36,10 @@ def events(t_ms: np.ndarray, codes: np.ndarray) -> list[Event]:
     step_h = (t[1] - t[0]) / MS_PER_HOUR if t.size > 1 else 0.0
     edges = np.diff(np.concatenate(([0], on.astype(np.int8), [0])))
     starts, ends = np.flatnonzero(edges == 1), np.flatnonzero(edges == -1) - 1
+    v = None if values is None else np.asarray(values, dtype=np.float64)
     return [Event(start_ms=float(t[a]), end_ms=float(t[b]), duration_h=float((b - a + 1) * step_h),
-                  max_code=int(c[a:b + 1].max())) for a, b in zip(starts, ends)]
+                  max_code=int(c[a:b + 1].max()), max_value=None if v is None else float(v[a:b + 1].max()))
+            for a, b in zip(starts, ends)]
 
 
 def longest_run_h(flags: np.ndarray, t_ms: np.ndarray, target: bool = True) -> float:

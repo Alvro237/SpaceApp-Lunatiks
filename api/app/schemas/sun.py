@@ -31,6 +31,7 @@ class EclipseEvent(BaseModel):
     end: str = Field(description="Last sample inside the eclipse, ISO 8601 UTC")
     duration_h: float = Field(description="Samples x step, hours (grid resolution)")
     kind: Literal["partial", "total"] = Field(description="Deepest phase reached: Earth covers part or all of the Sun")
+    max_obscuration: float = Field(description="Largest fraction of the solar disc covered by the Earth, 0..1")
 
 
 class ElevationStats(BaseModel):
@@ -53,6 +54,7 @@ class SunResponse(WindowResponse):
     next_transition: Transition | None = Field(description=(
         "Next sunset or sunrise after start (searched up to 45 days); null when none in that time or the tables end"))
     hours_to_sunset: float | None = Field(description="Hours from start to the next sunset when the Sun is up at start")
+    obscuration: list[float] = Field(description="Fraction of the solar disc covered by the Earth at each sample, 0..1")
     eclipse_fraction: float = Field(description="Fraction of samples with the Earth covering part of the Sun, 0..1")
     eclipse_ranges: list[TimeRange]
     eclipses: list[EclipseEvent]

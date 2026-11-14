@@ -168,7 +168,9 @@ one) as tests with the source of each date in `docs/references.md`.
 
 **Status:** in review (`feat/mech-power`). `site_id` or `lat`/`lon`. Every panel and battery parameter is a
 required input (no cited default yet); `night_load_w` defaults to `load_w`. No educational/advanced switch in the
-API: the frontend chooses what to show. Max 20 000 samples. Shared request base `schemas/common.py`
+API: the frontend chooses what to show. Max 20 000 samples. Eclipses: array power x (1 - obscuration), where
+obscuration is the fraction of the solar disc covered by the Earth (`logic/eclipse.py`); the engine's
+`power_w_m2` alone ignores eclipses. Response adds `obscuration`, eclipse ranges and `eclipse_energy_loss_wh`. Shared request base `schemas/common.py`
 (`WindowRequest`, `WindowResponse`) and helpers `routers/common.py`, reused by the next MECH endpoints.
 **Files:** `logic/power.py`, `routers/power.py`, `routers/common.py`, `schemas/power.py`, `schemas/common.py`,
 `tests/test_power.py`.

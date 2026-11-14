@@ -58,6 +58,9 @@ class SunLevel(BaseModel):
     sunlit_fraction: float = Field(description="Fraction of samples with any part of the Sun visible, 0..1")
     sunlit_ranges: list[TimeRange]
     longest_dark_h: float = Field(description="Longest stretch with no part of the Sun visible, hours")
+    obscuration: list[float] = Field(description="Fraction of the solar disc covered by the Earth (eclipse), 0..1")
+    eclipse_fraction: float = Field(description="Fraction of samples with the Earth covering part of the Sun, 0..1")
+    eclipse_ranges: list[TimeRange]
 
 
 class ArrayLevel(BaseModel):
@@ -67,6 +70,7 @@ class ArrayLevel(BaseModel):
     energy_wh: float = Field(description="Array energy over the window (left Riemann sum), Wh")
     producing_fraction: float = Field(description="Fraction of samples with array power above zero, 0..1")
     producing_ranges: list[TimeRange]
+    eclipse_energy_loss_wh: float = Field(description="Array energy lost to eclipses in the window, Wh")
 
 
 class BalanceLevel(BaseModel):

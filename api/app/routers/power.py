@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends
 
 from .. import services
 from ..db.store import DataStore, get_store
+from ..logic.eclipse import obscuration
 from ..logic.engine import AnalysisParams, compute_metrics
 from ..logic.power import (ArrayParams, BatteryParams, LoadParams, array_power_w, energy_balance, energy_wh,
                            load_series_w, night_energy_wh, usable_capacity_wh)
@@ -15,6 +16,7 @@ router = APIRouter(prefix="/power", tags=["power"])
 
 ASSUMPTIONS = [
     "Irradiance 1361 W/m2 at 1 au scaled by (1 au / r)^2; no dust, no light reflected by the terrain.",
+    "Eclipses: power x (1 - fraction of the solar disc covered by the Earth), uniform solar disc, independent of the horizon cut.",
     "Values are constant over each step (left Riemann sum); accuracy is of the order of one step.",
     "Battery: no ageing, no temperature or voltage/current limits; losses only through the given efficiencies.",
 ]
@@ -26,19 +28,24 @@ def power(req: PowerRequest, store: DataStore = Depends(get_store)) -> PowerResp
     start_ms = window_ms(req, store)
     series = services.evaluate_window(store, model, start_ms, req.duration_h, req.step_min, AnalysisParams(panel=req.panel))
     t, m = series.t_ms, compute_metrics(series)
+    occ = obscuration(series)
     out = PowerResponse(
         **window_fields(req, model, store, start_ms, t, ASSUMPTIONS), level=req.level, panel=req.panel,
         sun=SunLevel(sun_el_deg=series.sun_el.tolist(), visible_fraction=series.sun_frac.tolist(),
                      mean_visible_fraction=float(series.sun_frac.mean()), sunlit_fraction=m.sunlight_pct / 100.0,
-                     sunlit_ranges=ranges(t, series.sunlit()), longest_dark_h=m.longest_dark_h))
+                     sunlit_ranges=ranges(t, series.sunlit()), longest_dark_h=m.longest_dark_h,
+                     obscuration=occ.tolist(), eclipse_fraction=float((occ > 0).mean()), eclipse_ranges=ranges(t, occ > 0)))
     if req.level == 1:
         return out
 
     a = req.array
-    p = array_power_w(series.power_w_m2, ArrayParams(area_m2=a.area_m2, efficiency=a.efficiency, derating=a.derating))
+    array = ArrayParams(area_m2=a.area_m2, efficiency=a.efficiency, derating=a.derating)
+    p_clear = array_power_w(series.power_w_m2, array)
+    p = p_clear * (1.0 - occ)
     out.array = ArrayLevel(power_w=p.tolist(), mean_power_w=float(p.mean()), peak_power_w=float(p.max()),
                            energy_wh=energy_wh(p, t), producing_fraction=float((p > 0).mean()),
-                           producing_ranges=ranges(t, p > 0))
+                           producing_ranges=ranges(t, p > 0),
+                           eclipse_energy_loss_wh=energy_wh(p_clear, t) - energy_wh(p, t))
     if req.level == 2:
         return out
 

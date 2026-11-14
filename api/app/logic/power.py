@@ -3,7 +3,8 @@
 Three levels, each built on the previous one:
 
     1. Solar disc visible fraction over the horizon  -> engine.Series.sun_frac (no new physics)
-    2. Array electrical power   P(t) = q(t) * A * eta * d
+    2. Array electrical power   P(t) = q(t) * A * eta * d   (the router then applies the eclipse factor,
+       1 - obscuration, from app/logic/eclipse.py)
          q(t)  engine.Series.power_w_m2: 1361 W/m2 x (1 au / r)^2 x visible fraction x panel cosine factor
          A     array area (m2), eta cell/array efficiency (0..1), d derating for losses (0..1)
     3. Energy balance of a battery through the window (state of charge step by step)
