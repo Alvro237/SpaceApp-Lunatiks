@@ -9,8 +9,6 @@ export function Layout() {
   const { pathname } = useLocation()
   const mode = useApp((s) => s.mode)
   const set = useApp((s) => s.set)
-  const compareMode = useApp((s) => s.compareMode)
-  const setCompareMode = useApp((s) => s.setCompareMode)
   const onMap = pathname === '/'
   const main = useRef<HTMLElement>(null)
   const first = useRef(true)
@@ -47,9 +45,6 @@ export function Layout() {
                 Mission
               </button>
             </div>
-            <button type="button" className="compare-toggle" aria-pressed={compareMode} onClick={() => setCompareMode(!compareMode)}>
-              Compare
-            </button>
           </div>
         )}
         <nav aria-label="Main">

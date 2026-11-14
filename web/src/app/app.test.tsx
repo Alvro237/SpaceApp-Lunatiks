@@ -98,20 +98,29 @@ describe('navigator', () => {
     await waitFor(() => expect(search).toHaveAttribute('placeholder', expect.stringMatching(/IM-2/)))
     expect(screen.getByRole('button', { name: 'Coordinates' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Date and duration' })).toBeInTheDocument()
-    const sun = await screen.findByRole('article', { name: 'Sun' }, { timeout: 5000 })
+    // no side panel until a section is asked for: the sky dial keeps the Sun and Earth on screen
+    expect(await screen.findByRole('img', { name: /Sky above IM-2/ }, { timeout: 5000 })).toBeInTheDocument()
+    expect(document.querySelector('.side-panel')).toBeNull()
+    expect(screen.getByRole('img', { name: /Sunlit .*% and Earth in view/ })).toBeInTheDocument()
+    const tools = screen.getByRole('group', { name: 'Place tools' })
+    expect(within(tools).getByRole('button', { name: 'Multiselect' })).toHaveAttribute('aria-pressed', 'false')
+    await noAxeViolations(container)
+    // the sections are buttons in the map tool bar; each opens the side panel, Escape or a second press closes it
+    const user = userEvent.setup()
+    const horizonBtn = within(tools).getByRole('button', { name: 'Horizon' })
+    await user.click(horizonBtn)
+    expect(horizonBtn).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('heading', { level: 2, name: 'Horizon' })).toHaveFocus()
+    const sun = screen.getByRole('article', { name: 'Sun' })
     expect(within(sun).getByText('Elevation')).toBeInTheDocument()
     expect(screen.getByRole('article', { name: 'Earth' })).toBeInTheDocument()
     expect(screen.getAllByText('Browser engine').length).toBeGreaterThan(0)
     expect(screen.getByText(/LOLA horizon · 2 m/)).toBeInTheDocument()
-    expect(screen.getByRole('img', { name: /Sunlit .*% and Earth in view/ })).toBeInTheDocument()
-    await noAxeViolations(container)
-    // the sections are square buttons; each opens in place with a way back
-    const user = userEvent.setup()
-    await user.click(within(screen.getByRole('group', { name: 'Sections' })).getByRole('button', { name: /Horizon/ }))
-    expect(screen.getByRole('heading', { level: 3, name: /Horizon/ })).toHaveFocus()
     expect(screen.getByRole('img', { name: /360° horizon with the Sun and the Earth/ })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'All sections' }))
-    await user.click(within(screen.getByRole('group', { name: 'Sections' })).getByRole('button', { name: /Power/ }))
+    await user.keyboard('{Escape}')
+    expect(document.querySelector('.side-panel')).toBeNull()
+    await waitFor(() => expect(horizonBtn).toHaveFocus())
+    await user.click(within(tools).getByRole('button', { name: 'Power' }))
     // the engine parameters live in the section they change
     expect(screen.getByRole('radiogroup', { name: 'Panel' })).toBeInTheDocument()
     expect(screen.getByText('Power per m²')).toBeInTheDocument()
@@ -125,8 +134,9 @@ describe('navigator', () => {
     expect(screen.getByRole('radiogroup', { name: 'Model' })).toBeInTheDocument()
     await user.click(screen.getAllByRole('button', { name: /^About / })[0])
     expect(screen.getByRole('note')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'All sections' }))
     await noAxeViolations(container)
+    await user.click(screen.getByRole('button', { name: 'Close Power' }))
+    expect(document.querySelector('.side-panel')).toBeNull()
    }, 30_000)
 
   it('opens on the globe; the map replaces it when entered', async () => {
@@ -166,6 +176,8 @@ describe('navigator', () => {
     await user.click(screen.getByRole('button', { name: 'Analyse this point' }))
     // a valid point closes the coordinates panel
     expect(useApp.getState().selection).toEqual({ kind: 'point', lat: -89.5, lon: 137.3 })
+    // the horizon it is computed over is stated in the Horizon section
+    await user.click(within(screen.getByRole('group', { name: 'Place tools' })).getByRole('button', { name: 'Horizon' }))
     expect((await screen.findAllByText(/Smooth sphere · 2 m/)).length).toBeGreaterThan(0)
   })
 
@@ -202,36 +214,48 @@ describe('navigator', () => {
     await noAxeViolations(container)
   })
 
-  it('compares places live: each pick while Compare is on adds a numbered column', async () => {
+  it('multiselect: two places open the comparison with a radar, strips over time and removal with undo', async () => {
     const user = userEvent.setup()
     const { container } = renderAt('/')
-    await screen.findByRole('article', { name: 'Sun' }, { timeout: 5000 })
-    await user.click(screen.getByRole('button', { name: /^Compare$/ }))
+    await screen.findByRole('img', { name: /Sky above IM-2/ }, { timeout: 5000 })
+    const tools = screen.getByRole('group', { name: 'Place tools' })
+    await user.click(within(tools).getByRole('button', { name: 'Multiselect' }))
+    // the single-place sections step aside; with one place the bar says what to do next
+    expect(within(tools).queryByRole('button', { name: 'Power' })).toBeNull()
+    expect(within(tools).getByRole('status')).toHaveTextContent(/Pick another place/)
     const search = screen.getByRole('combobox', { name: 'Search sites and missions' })
     for (const [q, name] of [['malapert', /Mons Malapert/], ['shackle', /Shackleton crater/]] as const) {
       await user.click(search)
       await user.type(search, q)
       await user.click(await screen.findByRole('option', { name }))
     }
-    // the comparison is a section of the place panel: one card per place, numbers also in a table behind them
-    expect(await screen.findByRole('heading', { level: 3, name: /Compare/ })).toBeInTheDocument()
-    const card = await screen.findByRole('article', { name: /Shackleton crater/ })
-    expect(within(card).getByText('Sunlit')).toBeInTheDocument()
-    const table = await screen.findByRole('table', { name: /Places side by side/ })
-    const heads = within(table).getAllByRole('columnheader').map((h) => h.textContent)
-    expect(heads.join('|')).toMatch(/Metric\|1 IM-2.*\|2 Mons Malapert.*\|3 Shackleton crater/)
-    expect(within(table).getByRole('rowheader', { name: 'Sunlit' })).toBeInTheDocument()
     expect(useApp.getState().compare).toHaveLength(3)
+    expect(await screen.findByRole('heading', { level: 2, name: 'Comparing 3 places' })).toBeInTheDocument()
+    expect(await screen.findByRole('img', { name: /Radar of 3 places/ })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /When each place is sunlit: 1 IM-2.*2 Mons Malapert.*3 Shackleton crater/ })).toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: /Earth/ }))
+    expect(screen.getByRole('img', { name: /When each place is in view of the Earth/ })).toBeInTheDocument()
+    const table = screen.getByRole('table', { name: /Places compared over the window/ })
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent).join('|')).toMatch(/Place\|Sunlight\|Earth contact\|Short nights\|Steady contact\|Power/)
+    await noAxeViolations(container)
+    // removing a place (the keyboard route of a right click on the map) can be undone
     await user.click(screen.getByRole('button', { name: 'Remove Shackleton crater' }))
     expect(useApp.getState().compare).toHaveLength(2)
-    await noAxeViolations(container)
+    expect(await screen.findByText(/Removed Shackleton crater/)).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: 'Undo' }))
+    expect(useApp.getState().compare).toHaveLength(3)
+    // leaving multiselect clears the comparison and closes its panel
+    await user.click(screen.getByRole('button', { name: /Close comparison/ }))
+    expect(useApp.getState().compareMode).toBe(false)
+    expect(useApp.getState().compare).toHaveLength(0)
+    expect(screen.queryByRole('heading', { name: /Comparing/ })).toBeNull()
   })
 
   it('keeps working from static data when the API is down', async () => {
     vi.stubGlobal('fetch', fakeFetch(false))
     const user = userEvent.setup()
     renderAt('/')
-    expect(await screen.findByRole('article', { name: 'Sun' }, { timeout: 5000 })).toBeInTheDocument()
+    expect(await screen.findByRole('img', { name: /Sky above IM-2/ }, { timeout: 5000 })).toBeInTheDocument()
     // the catalogue comes from the static copy, and the search list says so
     await user.click(screen.getByRole('combobox', { name: 'Search sites and missions' }))
     expect(await screen.findByText(/Site catalogue: the API did not answer/, undefined, { timeout: 5000 })).toBeInTheDocument()

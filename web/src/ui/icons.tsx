@@ -241,3 +241,18 @@ export const IconRock = (p: P) => (
     <path d="m9 10 2 3 4-1" />
   </Svg>
 )
+
+/** Multiselect: three places with a selection check. */
+export const IconMulti = (p: P) => (
+  <Svg {...p}>
+    <circle cx="6" cy="7" r="2.5" />
+    <circle cx="6" cy="17" r="2.5" />
+    <circle cx="16" cy="12" r="2.5" />
+    <path d="m14 4 2 2 4-4" />
+  </Svg>
+)
+export const IconClose = (p: P) => (
+  <Svg {...p}>
+    <path d="M6 6l12 12M18 6 6 18" />
+  </Svg>
+)

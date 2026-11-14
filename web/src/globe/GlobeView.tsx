@@ -55,6 +55,7 @@ export function GlobeView() {
   const sites = useMapSites()
   const markerStyle = useApp((s) => s.markerStyle)
   const select = useApp((s) => s.select)
+  const removePlace = useApp((s) => s.removePlace)
   const enterMap = useApp((s) => s.enterMap)
   const [orbit] = useState(() => new OrbitRig(START))
   const anchored = useGlobe((s) => s.anchored)
@@ -122,6 +123,11 @@ export function GlobeView() {
     if (!d || d.moved) return
     const rect = e.currentTarget.getBoundingClientRect()
     const site = orbit.markerAt(e.clientX - rect.left, e.clientY - rect.top) as MapSite | null
+    // right click on a place removes it
+    if (e.button === 2) {
+      if (site) removePlace(site.sel, site.name)
+      return
+    }
     if (site) {
       select(site.sel)
       return goTo(site.lat, site.lon)
@@ -142,6 +148,7 @@ export function GlobeView() {
         aria-describedby="globe-help"
         onKeyDown={onKeyDown}
         onPointerDown={onPointerDown}
+        onContextMenu={(e) => e.preventDefault()}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onWheel={onWheel}
@@ -163,7 +170,7 @@ export function GlobeView() {
           </p>
         )}
         <p id="globe-help" className="sr-only">
-          Arrow keys turn the Moon, plus and minus zoom, Enter opens the detailed south-polar map. Sites are listed, with the same information, in the panels.
+          Arrow keys turn the Moon, plus and minus zoom, Enter opens the detailed south-polar map. Right click a place to remove it. Sites are listed, with the same information, in the panels.
         </p>
       </div>
       <ToolPortal>

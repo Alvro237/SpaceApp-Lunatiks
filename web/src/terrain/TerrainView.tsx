@@ -66,6 +66,7 @@ function MapView({ tileset }: { tileset: Tileset }) {
   const [exaggeration, setExaggeration] = useState<Exaggeration>(2)
   const showCraters = useApp((s) => s.craters)
   const select = useApp((s) => s.select)
+  const removePlace = useApp((s) => s.removePlace)
   const view = useApp((s) => s.view)
   const set = useApp((s) => s.set)
   const mode = useApp((s) => s.mode)
@@ -105,7 +106,8 @@ function MapView({ tileset }: { tileset: Tileset }) {
     }
   }
 
-  // Pointer: drag to pan, shift- or right-drag to rotate and tilt, wheel to zoom, click to pick a point.
+  // Pointer: drag to pan, shift- or right-drag to rotate and tilt, wheel to zoom, click to pick a point,
+  // right click (without dragging) on a place to remove it.
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('button, select, input, a')) return
     drag.current = { x: e.clientX, y: e.clientY, moved: false, rotate: e.button === 2 || e.shiftKey }
@@ -125,8 +127,14 @@ function MapView({ tileset }: { tileset: Tileset }) {
   const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
     const d = drag.current
     drag.current = null
-    if (!d || d.moved || d.rotate) return
+    if (!d) return
     const rect = e.currentTarget.getBoundingClientRect()
+    if (e.button === 2 && !d.moved) {
+      const hit = rig.markerAt(e.clientX - rect.left, e.clientY - rect.top) as MapSite | null
+      if (hit) removePlace(hit.sel, hit.name)
+      return
+    }
+    if (d.moved || d.rotate) return
     // a place drawn on the map wins; otherwise (study mode) the terrain point under the pointer
     const site = rig.markerAt(e.clientX - rect.left, e.clientY - rect.top) as MapSite | null
     if (site) return select(site.sel)
@@ -166,7 +174,7 @@ function MapView({ tileset }: { tileset: Tileset }) {
         </Canvas>
         <p id="map-help" className="sr-only">
           Arrow keys move, plus and minus zoom, T tilts to 3D, Q and E rotate, R shows the whole pole, Space plays.
-          {mode === 'study' && ' Activate a point on the terrain to analyse it.'} Sites are listed, with the same information, in the panels.
+          {mode === 'study' && ' Activate a point on the terrain to analyse it.'} Right click a place to remove it. Sites are listed, with the same information, in the panels.
         </p>
       </div>
       <ToolPortal>
