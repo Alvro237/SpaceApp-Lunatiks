@@ -1,6 +1,7 @@
 """Hard filters ``comms_hours`` and ``max_blackout``: a hand-worked case, validation and a real site."""
 from __future__ import annotations
 
+import dataclasses
 from datetime import datetime, timezone
 
 import numpy as np
@@ -25,11 +26,13 @@ EARTH_FRAC = np.array([1.0, 1.0, 0.5, 0.0, 0.0, 0.49, 1.0, 1.0, 0.0, 1.0])
 
 def _ctx() -> ConstraintContext:
     n = EARTH_FRAC.size
-    zeros = np.zeros(n)
-    series = Series(t_ms=T0 + HOUR_MS * np.arange(n), sun_el=zeros, sun_az=zeros, sun_frac=zeros,
-                    sun_dist_km=zeros, sun_radius_deg=zeros, earth_el=zeros, earth_az=zeros,
-                    earth_frac=EARTH_FRAC, earth_dist_km=zeros, earth_radius_deg=zeros,
-                    eclipse=np.zeros(n, dtype=np.uint8), irradiance_w_m2=zeros, power_w_m2=zeros)
+    # Every Series field is zero except the two this test controls; built from the dataclass fields so a field
+    # added to Series by another branch does not break the test.
+    values = {f.name: np.zeros(n) for f in dataclasses.fields(Series)}
+    values["eclipse"] = np.zeros(n, dtype=np.uint8)
+    values["t_ms"] = T0 + HOUR_MS * np.arange(n)
+    values["earth_frac"] = EARTH_FRAC
+    series = Series(**values)
     return ConstraintContext(site_id=None, lat=-89.0, lon=0.0, start_ms=T0, duration_h=9.0, series=series,
                              metrics=compute_metrics(series), params=DEFAULT_PARAMS, horizon_kind="smooth_sphere")
 
