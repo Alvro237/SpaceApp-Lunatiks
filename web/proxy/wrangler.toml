@@ -1,0 +1,12 @@
+# Cloudflare Worker that lets the browser read the LOLA DEMs from NASA PGDA (CORS proxy for the live terrain
+# levels). Code: ../src/proxy/pgdaProxy.ts. Deploy (needs a Cloudflare account; a team decision):
+#   cd web/proxy && npx wrangler deploy
+# then build the web app with VITE_PGDA_PROXY=https://<worker>.<account>.workers.dev/
+name = "lunatiks-pgda-proxy"
+main = "../src/proxy/pgdaProxy.ts"
+compatibility_date = "2026-10-01"
+
+[vars]
+# Comma-separated origins allowed to read, or "*". Set it to the deployed site, for example
+# "https://<org>.github.io,http://localhost:5173".
+ALLOWED_ORIGINS = "*"

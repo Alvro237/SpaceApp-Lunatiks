@@ -20,7 +20,7 @@ jobs:
           node-version-file: web/.nvmrc
           cache: npm
           cache-dependency-path: web/package-lock.json
-      # uv runs the API's Python to build the preview terrain tiles (and to regenerate the client when needed)
+      # uv runs the pipeline's Python to build the terrain tiles (960 m levels only: CI has no copy of the 80 m DEM)
       - uses: astral-sh/setup-uv@v6
       - run: npm ci
       - run: npm run tiles
