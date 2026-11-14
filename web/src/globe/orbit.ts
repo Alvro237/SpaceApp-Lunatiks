@@ -68,6 +68,19 @@ export function zoomOrbit(o: Orbit, factor: number): Orbit {
   return { ...o, dist: MOON_R_KM + h }
 }
 
+/**
+ * Zoom in toward a point (degrees): the camera comes closer and its centre moves toward the point by the share of
+ * the distance to the surface the zoom removes, so the place under the pointer stays near the pointer. Zooming out
+ * (factor >= 1) does not move the centre.
+ */
+export function zoomOrbitToward(o: Orbit, factor: number, lat: number, lon: number): Orbit {
+  const z = zoomOrbit(o, factor)
+  const w = Math.max(0, 1 - (z.dist - MOON_R_KM) / (o.dist - MOON_R_KM))
+  if (w === 0) return z
+  const dLon = ((((lon - o.lon + 180) % 360) + 360) % 360) - 180
+  return { dist: z.dist, lat: Math.max(-88, Math.min(88, o.lat + (lat - o.lat) * w)), lon: o.lon + dLon * w }
+}
+
 /** Idle time after which the Moon starts turning by itself, ms. */
 export const IDLE_BEFORE_SPIN_MS = 20_000
 /** Slow turn: about two minutes a revolution. */
@@ -137,6 +150,11 @@ export class OrbitRig {
   zoom(factor: number): void {
     this.touch()
     Object.assign(this.goal, zoomOrbit(this.goal, factor))
+  }
+
+  zoomToward(factor: number, lat: number, lon: number): void {
+    this.touch()
+    Object.assign(this.goal, zoomOrbitToward(this.goal, factor, lat, lon))
   }
 
   turnTo(lat: number, lon: number): void {

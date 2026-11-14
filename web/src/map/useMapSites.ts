@@ -11,6 +11,7 @@ import { type Screen, type Selection, sameSelection, screenActive, useApp } from
 import { type Metrics, makeModel } from '../time/engine'
 import { evaluateWindow, useEphemeris, useMasks, useParams, useSiteNames } from '../time/hooks'
 import { pointName } from '../time/place'
+import { placeKey, usePlaceStyles } from '../state/placeStyle'
 import { DATA_BASE } from '../time/staticData'
 
 export interface MapSite {
@@ -28,6 +29,8 @@ export interface MapSite {
   current: boolean
   /** 1-based number in the comparison, or null. */
   compared: number | null
+  /** Pointer colour the viewer chose (place menu), or null for the default. */
+  colour: string | null
 }
 
 interface FeaturesDoc {
@@ -69,6 +72,7 @@ export function useMapSites(): MapSite[] {
   const screen = useApp((s) => s.screen)
   const selection = useApp((s) => s.selection)
   const compare = useApp((s) => s.compare)
+  const styles = usePlaceStyles((s) => s.styles)
 
   // Window metrics per catalogue site, only when a filter needs them.
   const metrics = useMemo(() => {
@@ -100,12 +104,13 @@ export function useMapSites(): MapSite[] {
       const name = names.get(s.id) ?? s.name
       const wanted = searching && matchesQuery(name, s.group, query) && pass !== false
       if (!wanted && !current && compared === null) continue
-      out.push({ key: s.id, sel, name, lat: s.lat, lon: s.lon, diameterKm: features?.features[s.id]?.diameterKm ?? null, slopeDeg: slope, metrics: m, pass, current, compared })
+      out.push({ key: s.id, sel, name, lat: s.lat, lon: s.lon, diameterKm: features?.features[s.id]?.diameterKm ?? null, slopeDeg: slope, metrics: m, pass, current, compared, colour: styles[s.id]?.colour ?? null })
     }
     for (const p of [selection, ...compare]) {
       if (p.kind !== 'point' || out.some((o) => sameSelection(o.sel, p))) continue
-      out.push({ key: `p:${p.lat},${p.lon}`, sel: p, name: pointName(p.lat, p.lon), lat: p.lat, lon: p.lon, diameterKm: null, slopeDeg: null, metrics: null, pass: null, current: sameSelection(p, selection), compared: num(p) })
+      const key = placeKey(p)
+      out.push({ key, sel: p, name: names.get(key) ?? pointName(p.lat, p.lon), lat: p.lat, lon: p.lon, diameterKm: null, slopeDeg: null, metrics: null, pass: null, current: sameSelection(p, selection), compared: num(p), colour: styles[key]?.colour ?? null })
     }
     return out
-  }, [masks, features, names, query, screen, metrics, selection, compare])
+  }, [masks, features, names, query, screen, metrics, selection, compare, styles])
 }

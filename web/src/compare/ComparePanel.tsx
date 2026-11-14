@@ -1,216 +1,259 @@
 /**
- * Comparison, as a section of the place panel: the places picked while "Compare" is on, one card each, at the same
- * instant and over the same window, updating with playback. Numbers match the numbered markers on the map.
+ * Multiselect comparison: the side panel that opens once two or more places are picked with Multiselect on.
  *
- * Each card shows the window metrics (sunlit, Earth in view, longest dark, longest without Earth) with a mini bar
- * that is relative to the other places, and the best value carries a star and the word "Best" (never colour alone).
- * The same numbers are in a table behind the cards. Computed with the browser engine (POST /api/v1/compare will
- * take over when deployed).
+ *   1. The places, numbered as on the map, each with a remove button (the keyboard route to what a right click
+ *      on the map does).
+ *   2. A radar plot of the metrics that decide a landing site, every axis on an absolute 0..1 scale.
+ *   3. A Sunlight / Earth switch and, under it, one strip per place on the window's time axis: when the place is
+ *      sunlit (or sees the Earth), like the strips under the map for a single place, with its share of the window.
+ *
+ * Same instant and window for every place, computed with the browser engine (the same tables and masks as the
+ * rest of the navigator). The numbers behind both charts are in a table.
  */
-import { useId, useMemo, useState } from 'react'
-import { SiteMonthHeatmap } from '../charts/SiteMonthHeatmap'
+import { type MouseEvent, useId, useMemo, useState } from 'react'
 import { DataTable } from '../charts/DataTable'
+import { type RadarAxis, RadarChart } from '../charts/RadarChart'
 import { type Selection, sameSelection, useApp } from '../state/store'
-import { formatDuration } from '../time/clock'
-import { type Metrics, type Sample, type Transition, evaluateAt, nextTransition } from '../time/engine'
-import { evaluateWindow, useEphemeris, useMasks, useParams, useSiteNames, useThrottledTime } from '../time/hooks'
+import { formatUtc } from '../time/clock'
+import { MS_PER_DAY, MS_PER_HOUR, SOLAR_CONSTANT_W_M2 } from '../time/engine'
+import { type WindowSeries, evaluateWindow, useEphemeris, useMasks, useParams, useSiteNames, useThrottledTime } from '../time/hooks'
 import { type ModelInfo, placeModel } from '../time/place'
+import { IconAntenna, IconClose, IconMore, IconSun } from '../ui/icons'
+import { openMenuFrom } from '../panels/PlaceMenu'
 
-interface Column {
+interface Place {
+  num: number
   sel: Selection
   info: ModelInfo
-  now: Sample | null
-  nextSun: Transition | null
-  nextEarth: Transition | null
-  metrics: Metrics | null
+  win: WindowSeries | null
 }
 
-type Tone = 'sun' | 'earth' | 'plain'
-interface Row {
-  label: string
-  value: (c: Column) => number | null
-  text: (v: number, c: Column) => string
-  best?: 'max' | 'min'
-  /** Mini bar, 0..1, relative to the other places (only on window metrics). */
-  bar?: (v: number, all: number[]) => number
-  tone?: Tone
-}
-
-const share = (v: number) => v / 100
-const ofLargest = (v: number, all: number[]) => (all.length === 0 || Math.max(...all) <= 0 ? 0 : v / Math.max(...all))
-
-const WINDOW_ROWS: Row[] = [
-  { label: 'Sunlit', value: (c) => c.metrics?.sunlightPct ?? null, text: (v) => `${v.toFixed(0)} %`, best: 'max', bar: share, tone: 'sun' },
-  { label: 'Earth in view', value: (c) => c.metrics?.commsPct ?? null, text: (v) => `${v.toFixed(0)} %`, best: 'max', bar: share, tone: 'earth' },
-  { label: 'Longest dark', value: (c) => c.metrics?.longestDarkH ?? null, text: (v) => `${v.toFixed(0)} h`, best: 'min', bar: ofLargest },
-  { label: 'Longest without Earth', value: (c) => c.metrics?.longestBlackoutH ?? null, text: (v) => `${v.toFixed(0)} h`, best: 'min', bar: ofLargest },
-]
-const NOW_ROWS: Row[] = [
-  { label: 'Sun now', value: (c) => c.now?.sun.fraction ?? null, text: (v, c) => `${Math.round(v * 100)} % · ${c.now!.sun.el.toFixed(1)}°`, best: 'max' },
-  { label: 'Earth now', value: (c) => c.now?.earth.fraction ?? null, text: (v, c) => `${Math.round(v * 100)} % · ${c.now!.earth.el.toFixed(1)}°`, best: 'max' },
+/** The radar's axes: what a planner wants more of, each on a fixed scale that the label states. */
+const AXES: (RadarAxis & { value: (w: WindowSeries) => number; text: (w: WindowSeries) => string })[] = [
+  { key: 'sun', label: 'Sunlight', value: (w) => w.metrics.sunlightPct / 100, text: (w) => `${w.metrics.sunlightPct.toFixed(0)} % of the window` },
+  { key: 'earth', label: 'Earth contact', value: (w) => w.metrics.commsPct / 100, text: (w) => `${w.metrics.commsPct.toFixed(0)} % of the window` },
   {
-    label: 'Sun changes',
-    value: (c) => (c.nextSun ? c.nextSun.inMs : null),
-    text: (v, c) => `${c.nextSun!.kind === 'set' ? 'sets' : 'rises'} in ${formatDuration(v)}`,
+    key: 'night',
+    label: 'Short nights',
+    value: (w) => 1 - Math.min(1, w.metrics.longestDarkH / Math.max(1, w.metrics.windowHours)),
+    text: (w) => `longest night ${w.metrics.longestDarkH.toFixed(0)} h`,
   },
   {
-    label: 'Earth changes',
-    value: (c) => (c.nextEarth ? c.nextEarth.inMs : null),
-    text: (v, c) => `${c.nextEarth!.kind === 'set' ? 'sets' : 'rises'} in ${formatDuration(v)}`,
+    key: 'blackout',
+    label: 'Steady contact',
+    value: (w) => 1 - Math.min(1, w.metrics.longestBlackoutH / Math.max(1, w.metrics.windowHours)),
+    text: (w) => `longest blackout ${w.metrics.longestBlackoutH.toFixed(0)} h`,
+  },
+  {
+    key: 'power',
+    label: 'Power',
+    value: (w) => Math.min(1, w.metrics.meanPowerWm2 / SOLAR_CONSTANT_W_M2),
+    text: (w) => `${w.metrics.meanPowerWm2.toFixed(0)} W/m² mean`,
   },
 ]
 
-/** The best value of a row among the places that have one; null when there is nothing to rank. */
-function bestOf(r: Row, vals: (number | null)[]): number | null {
-  const known = vals.filter((v): v is number => v !== null)
-  if (!r.best || known.length < 2) return null
-  return r.best === 'max' ? Math.max(...known) : Math.min(...known)
-}
+type Strip = 'sun' | 'earth'
 
-export function ComparePanel() {
+export function ComparePanel({ titleId }: { titleId: string }) {
   const id = useId()
   const compare = useApp((s) => s.compare)
   const selection = useApp((s) => s.selection)
-  const playing = useApp((s) => s.playing)
   const startMs = useApp((s) => s.startMs)
   const durationH = useApp((s) => s.durationH)
   const mastM = useApp((s) => s.mastM)
-  const { removeCompare, clearCompare, select } = useApp.getState()
+  const { select, removePlace, setCompareMode } = useApp.getState()
   const params = useParams()
   const tMs = useThrottledTime()
   const eph = useEphemeris().data
   const masks = useMasks().data
   const names = useSiteNames()
-  const [view, setView] = useState<'sites' | 'months'>('sites')
+  const [strip, setStrip] = useState<Strip>('sun')
 
-  const infos = useMemo(() => (masks ? compare.map((sel) => ({ sel, info: placeModel(masks, sel, mastM, names) })) : []), [masks, compare, mastM, names])
+  const places: Place[] = useMemo(() => {
+    if (!masks) return []
+    return compare
+      .map((sel, i) => {
+        const info = placeModel(masks, sel, mastM, names)
+        if (!info) return null
+        const win = eph ? evaluateWindow(eph.table, info.model, startMs, durationH, 60, params) : null
+        return { num: i + 1, sel, info, win }
+      })
+      .filter((p): p is Place => p !== null)
+  }, [masks, compare, mastM, names, eph, startMs, durationH, params])
 
-  const windows = useMemo(
-    () => infos.map(({ info }) => (eph && info ? (evaluateWindow(eph.table, info.model, startMs, durationH, 60, params)?.metrics ?? null) : null)),
-    [infos, eph, startMs, durationH, params],
-  )
-  // Rise and set times need a scan of up to 45 days: during playback, refresh them every 6 simulated hours.
-  const coarseT = playing ? Math.floor(tMs / 21_600_000) * 21_600_000 : tMs
-  const transitions = useMemo(
-    () =>
-      infos.map(({ info }) =>
-        eph && info && eph.table.covers(coarseT)
-          ? { sun: nextTransition(eph.table, info.model, coarseT, 'sun', params), earth: nextTransition(eph.table, info.model, coarseT, 'earth', params) }
-          : { sun: null, earth: null },
-      ),
-    [infos, eph, coarseT, params],
-  )
-
-  const cols: Column[] = infos
-    .map(({ sel, info }, i) => {
-      if (!info) return null
-      const now = eph?.table.covers(tMs) ? evaluateAt(eph.table, info.model, tMs, params) : null
-      const later = (tr: Transition | null) => (tr && tr.atMs > tMs ? { ...tr, inMs: tr.atMs - tMs } : null)
-      return { sel, info, now, nextSun: later(transitions[i]?.sun), nextEarth: later(transitions[i]?.earth), metrics: windows[i] }
-    })
-    .filter((c): c is Column => c !== null)
-
-  const allRows = [...WINDOW_ROWS, ...NOW_ROWS]
+  const endMs = startMs + durationH * MS_PER_HOUR
+  const ready = places.filter((p) => p.win)
+  const best = (key: string) => {
+    const axis = AXES.find((a) => a.key === key)!
+    const vals = ready.map((p) => axis.value(p.win!))
+    return vals.length > 1 ? Math.max(...vals) : null
+  }
+  const summary =
+    `Radar of ${places.length} places over ${AXES.map((a) => a.label.toLowerCase()).join(', ')}, outward is better. ` +
+    ready.map((p) => `${p.num} ${p.info.name}: ${AXES.map((a) => a.text(p.win!)).join(', ')}`).join('. ')
 
   return (
-    <div className="compare-body">
-      <div className="seg" role="radiogroup" aria-label="Comparison view">
+    <div className="multi">
+      <div className="multi-head">
+        <h2 id={titleId} className="multi-title" tabIndex={-1}>
+          Comparing {places.length} places
+        </h2>
+        <button type="button" className="icon" onClick={() => setCompareMode(false)} aria-label="Close comparison and leave multiselect" title="Leave multiselect">
+          <IconClose size={18} />
+        </button>
+      </div>
+
+      <ol className="multi-places" aria-label="Places compared">
+        {places.map((p) => {
+          const current = sameSelection(p.sel, selection)
+          return (
+            <li key={p.num} className={current ? 'is-current' : undefined}>
+              <span className="num" aria-hidden="true">
+                {p.num}
+              </span>
+              <button type="button" className="multi-name" onClick={() => select(p.sel)} aria-current={current ? 'true' : undefined} title={p.info.name}>
+                {p.info.name}
+              </button>
+              {p.info.model.horizon.kind === 'smooth_sphere' && <span className="tag-pill">smooth sphere</span>}
+              <button
+                type="button"
+                className="icon small"
+                aria-haspopup="dialog"
+                aria-label={`Options for ${p.info.name}`}
+                title="Rename, pointer colour, remove"
+                onClick={(e) => openMenuFrom(e.currentTarget, { sel: p.sel, name: p.info.name })}
+              >
+                <IconMore size={14} />
+              </button>
+              <button type="button" className="icon small" onClick={() => removePlace(p.sel, p.info.name)} aria-label={`Remove ${p.info.name}`}>
+                <IconClose size={14} />
+              </button>
+            </li>
+          )
+        })}
+      </ol>
+
+      {ready.length >= 2 ? (
+        <RadarChart axes={AXES} series={ready.map((p) => ({ num: p.num, name: p.info.name, values: AXES.map((a) => a.value(p.win!)) }))} summary={summary} />
+      ) : (
+        <p className="muted">Computing…</p>
+      )}
+
+      <div className="seg multi-switch" role="radiogroup" aria-label="Compare over time">
         {(
           [
-            ['sites', 'Sites'],
-            ['months', 'By month'],
+            ['sun', 'Sunlight', <IconSun key="s" size={16} />],
+            ['earth', 'Earth', <IconAntenna key="e" size={16} />],
           ] as const
-        ).map(([v, label]) => (
-          <label key={v} className={`seg-item${view === v ? ' is-on' : ''}`}>
-            <input type="radio" name={`${id}-view`} checked={view === v} onChange={() => setView(v)} />
-            <span>{label}</span>
+        ).map(([v, label, icon]) => (
+          <label key={v} className={`seg-item${strip === v ? ' is-on' : ''}`}>
+            <input type="radio" name={`${id}-strip`} checked={strip === v} onChange={() => setStrip(v)} />
+            <span className="seg-icon">
+              {icon} {label}
+            </span>
           </label>
         ))}
       </div>
 
-      {view === 'months' ? (
-        <div className="cmp-months">
-          <SiteMonthHeatmap />
-        </div>
-      ) : (
-        <>
-          {cols.length < 2 && <p className="cmp-empty">Add {cols.length === 0 ? 'places' : 'another place'} from the map or the list (up to 4).</p>}
-          <div className="cmp-grid">
-            {cols.map((c, i) => {
-              const current = sameSelection(c.sel, selection)
-              return (
-                <article key={i} className={`cmp-card${current ? ' is-current' : ''}`} aria-labelledby={`${id}-c${i}`}>
-                  <header className="cmp-head">
-                    <span className="num" aria-hidden="true">
-                      {i + 1}
-                    </span>
-                    <button type="button" id={`${id}-c${i}`} className="cmp-name" onClick={() => select(c.sel)} aria-current={current ? 'true' : undefined}>
-                      {c.info.name}
-                    </button>
-                    <button type="button" className="icon small" onClick={() => removeCompare(i)} aria-label={`Remove ${c.info.name}`}>
-                      ✕
-                    </button>
-                  </header>
-                  {c.info.model.horizon.kind === 'smooth_sphere' && <span className="tag">smooth sphere</span>}
-                  <CardRows title="Window" rows={WINDOW_ROWS} cols={cols} col={c} idx={i} />
-                  <CardRows title="Now" rows={NOW_ROWS} cols={cols} col={c} idx={i} />
-                </article>
-              )
-            })}
-          </div>
-          {cols.length > 0 && (
-            <>
-              <DataTable
-                summary="Table"
-                caption="Places side by side at the chosen instant and over the mission window"
-                head={['Metric', ...cols.map((c, i) => `${i + 1} ${c.info.name}`)]}
-                rows={allRows.map((r) => {
-                  const vals = cols.map(r.value)
-                  const best = bestOf(r, vals)
-                  return [r.label, ...cols.map((c, i) => (vals[i] === null ? '—' : `${r.text(vals[i] as number, c)}${best !== null && vals[i] === best ? ' (best)' : ''}`))]
-                })}
-              />
-              <button type="button" className="link" onClick={clearCompare}>
-                Clear all
-              </button>
-            </>
-          )}
-        </>
-      )}
+      <Strips places={ready} strip={strip} startMs={startMs} endMs={endMs} durationH={durationH} tMs={tMs} best={best(strip === 'sun' ? 'sun' : 'earth')} />
+
+      <DataTable
+        summary="Table"
+        caption={`Places compared over the window from ${formatUtc(startMs)} (${Math.round(durationH / 24)} days)`}
+        head={['Place', ...AXES.map((a) => a.label)]}
+        rows={ready.map((p) => [`${p.num} ${p.info.name}`, ...AXES.map((a) => a.text(p.win!))])}
+      />
     </div>
   )
 }
 
-function CardRows({ title, rows, cols, col, idx }: { title: string; rows: Row[]; cols: Column[]; col: Column; idx: number }) {
+const W = 560
+const ROW = 20
+const LEFT = 0
+
+/** One strip per place over the window, with its share of the window on the right and the playback cursor. */
+function Strips({
+  places,
+  strip,
+  startMs,
+  endMs,
+  durationH,
+  tMs,
+  best,
+}: {
+  places: Place[]
+  strip: Strip
+  startMs: number
+  endMs: number
+  durationH: number
+  tMs: number
+  best: number | null
+}) {
+  const id = useId()
+  const setTime = useApp((s) => s.setTime)
+  const x = (t: number) => LEFT + ((t - startMs) / (endMs - startMs)) * W
+  const H = places.length * (ROW + 16) + 20
+  const ticks: number[] = []
+  const days = durationH / 24
+  const every = days <= 3 ? 0.5 : days <= 14 ? 2 : days <= 60 ? 7 : 30
+  for (let d = 0; d <= days + 1e-9; d += every) ticks.push(startMs + d * MS_PER_DAY)
+  const seek = (e: MouseEvent<SVGSVGElement>) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    const fx = ((e.clientX - r.left) / r.width) * W
+    setTime(startMs + (Math.max(0, Math.min(W, fx)) / W) * (endMs - startMs))
+  }
+  const what = strip === 'sun' ? 'sunlit' : 'in view of the Earth'
+
   return (
-    <>
-      <h4 className="cmp-sub">{title}</h4>
-      <dl className="cmp-metrics">
-        {rows.map((r) => {
-          const vals = cols.map(r.value)
-          const v = vals[idx]
-          const best = bestOf(r, vals)
-          const known = vals.filter((x): x is number => x !== null)
-          return (
-            <div key={r.label} className="cmp-metric">
-              <dt>{r.label}</dt>
-              <dd>
-                <span className="cmp-val">{v === null ? '—' : r.text(v, col)}</span>
-                {best !== null && v === best && (
-                  <span className="best">
-                    ★<span className="cmp-best-word"> Best</span>
-                  </span>
-                )}
-                {r.bar && v !== null && (
-                  <span className={`cmp-bar cmp-bar-${r.tone ?? 'plain'}`} aria-hidden="true">
-                    <i style={{ width: `${Math.round(Math.max(0, Math.min(1, r.bar(v, known))) * 100)}%` }} />
-                  </span>
-                )}
-              </dd>
-            </div>
-          )
-        })}
-      </dl>
-    </>
+    <svg
+      className={`multi-strips is-${strip}`}
+      viewBox={`0 0 ${W} ${H}`}
+      role="img"
+      aria-label={`When each place is ${what}: ${places
+        .map((p) => `${p.num} ${p.info.name} ${(strip === 'sun' ? p.win!.metrics.sunlightPct : p.win!.metrics.commsPct).toFixed(0)} %`)
+        .join(', ')}.`}
+      onClick={seek}
+    >
+      <defs>
+        <pattern id={`${id}-hatch`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width="6" height="6" className="hatch-bg" />
+          <line x1="0" y1="0" x2="0" y2="6" className="hatch-line" />
+        </pattern>
+      </defs>
+      {places.map((p, i) => {
+        const y = i * (ROW + 16) + 16
+        const ranges = strip === 'sun' ? p.win!.sunlit : p.win!.comms
+        const share = strip === 'sun' ? p.win!.metrics.sunlightPct : p.win!.metrics.commsPct
+        const isBest = best !== null && share / 100 === best
+        return (
+          <g key={p.num}>
+            <text x={0} y={y - 4} className="strip-label">
+              {`${p.num}  ${p.info.name}`}
+            </text>
+            <text x={W} y={y - 4} textAnchor="end" className="strip-value">
+              {`${isBest ? '★ ' : ''}${share.toFixed(0)} %`}
+            </text>
+            <rect x={0} y={y} width={W} height={ROW - 6} className="row-bg" />
+            {ranges.map(([a, b], k) => (
+              <rect
+                key={k}
+                x={x(a)}
+                y={y}
+                width={Math.max(1.5, x(b) - x(a))}
+                height={ROW - 6}
+                className={strip === 'sun' ? 'range-sun' : 'range-earth'}
+                fill={strip === 'earth' ? `url(#${id}-hatch)` : undefined}
+              />
+            ))}
+          </g>
+        )
+      })}
+      {ticks.map((t) => (
+        <text key={t} x={Math.min(W - 30, Math.max(30, x(t)))} y={H - 2} textAnchor="middle" className="strip-tick">
+          {new Date(t).toISOString().slice(5, 10)}
+        </text>
+      ))}
+      {tMs >= startMs && tMs <= endMs && <line className="cursor" x1={x(tMs)} x2={x(tMs)} y1={4} y2={H - 14} />}
+    </svg>
   )
 }

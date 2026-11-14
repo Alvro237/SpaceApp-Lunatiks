@@ -69,9 +69,22 @@ export interface Prefs {
   blockView: BlockView
 }
 
+/** The last place removed with a right click, so the removal can be undone. */
+export interface Removed {
+  sel: Selection
+  name: string
+  /** Position it had in the comparison, or -1. */
+  compareIndex: number
+  wasCurrent: boolean
+  seq: number
+}
+
 export interface AppState extends Scene, Prefs {
-  /** While on, every place the user picks is also added to the comparison. */
+  /** Multiselect: while on, every place the user picks is also added to the comparison. */
   compareMode: boolean
+  /** Places selected before the current one, most recent last (what a removal falls back to). */
+  history: Selection[]
+  lastRemoved: Removed | null
   /** Where the map should open when entered from the globe (a navigation target, not a selection). */
   mapEntry: { lat: number; lon: number; seq: number } | null
   enterMap: (lat?: number, lon?: number) => void
@@ -89,6 +102,10 @@ export interface AppState extends Scene, Prefs {
   addCompare: (s?: Selection) => void
   removeCompare: (i: number) => void
   clearCompare: () => void
+  /** Take a place off the map (right click): out of the comparison, and if it was the selection, back to the
+   * previous place. */
+  removePlace: (s: Selection, name: string) => void
+  undoRemove: () => void
 }
 
 /** The current hour, so a first visit opens on "now" (inside the 2025-2035 tables). */
@@ -124,6 +141,8 @@ export const useApp = create<AppState>()((set, get) => ({
   speed: '6h',
   focusSeq: 0,
   compareMode: false,
+  history: [],
+  lastRemoved: null,
   markerStyle: 'pin',
   siteQuery: '',
   screen: NO_SCREEN,
@@ -137,7 +156,11 @@ export const useApp = create<AppState>()((set, get) => ({
     })),
   set: (patch) => set(patch),
   select: (selection) => {
-    set((s) => ({ selection, focusSeq: s.focusSeq + 1 }))
+    set((s) => ({
+      selection,
+      focusSeq: s.focusSeq + 1,
+      history: sameSelection(s.selection, selection) ? s.history : [...s.history.filter((h) => !sameSelection(h, selection)), s.selection].slice(-10),
+    }))
     if (get().compareMode) get().addCompare(selection)
   },
   setTime: (tMs) => {
@@ -151,12 +174,10 @@ export const useApp = create<AppState>()((set, get) => ({
   setPlaying: (playing) => set({ playing }),
   setSpeed: (speed) => set({ speed }),
   setCompareMode: (compareMode) => {
-    set({ compareMode })
-    if (compareMode && get().compare.length === 0) get().addCompare()
-    // The comparison lives in the place panel: turning it on shows it, turning it off closes it if it was open.
-    const panels = usePanels.getState()
-    if (compareMode) panels.setSection('compare')
-    else if (panels.section === 'compare') panels.setSection(null)
+    // Multiselect on: the current place is the first one picked, and the single-place sections step aside.
+    // Off: back to one place, and the comparison is cleared so the map shows one place again.
+    set({ compareMode, compare: compareMode ? (get().compare.length ? get().compare : [get().selection]) : [] })
+    usePanels.getState().setSection(null)
   },
   addCompare: (sel) =>
     set((s) => {
@@ -166,6 +187,38 @@ export const useApp = create<AppState>()((set, get) => ({
     }),
   removeCompare: (i) => set((s) => ({ compare: s.compare.filter((_, k) => k !== i) })),
   clearCompare: () => set({ compare: [] }),
+  removePlace: (sel, name) => {
+    const s = get()
+    const compareIndex = s.compare.findIndex((c) => sameSelection(c, sel))
+    const wasCurrent = sameSelection(s.selection, sel)
+    if (compareIndex < 0 && !wasCurrent) return
+    const compare = s.compare.filter((c) => !sameSelection(c, sel))
+    const history = s.history.filter((h) => !sameSelection(h, sel))
+    let selection = s.selection
+    if (wasCurrent) {
+      // the last place still compared, else the place picked before, else the default site
+      selection = compare[compare.length - 1] ?? history[history.length - 1] ?? defaultScene().selection
+    }
+    set({
+      compare,
+      selection,
+      history: wasCurrent ? history.filter((h) => !sameSelection(h, selection)) : history,
+      lastRemoved: { sel, name, compareIndex, wasCurrent, seq: (s.lastRemoved?.seq ?? 0) + 1 },
+    })
+  },
+  undoRemove: () => {
+    const s = get()
+    const r = s.lastRemoved
+    if (!r) return
+    const compare = [...s.compare]
+    if (r.compareIndex >= 0 && !compare.some((c) => sameSelection(c, r.sel))) compare.splice(Math.min(r.compareIndex, compare.length), 0, r.sel)
+    set({
+      compare: compare.slice(0, MAX_COMPARE),
+      selection: r.wasCurrent ? r.sel : s.selection,
+      history: r.wasCurrent ? [...s.history, s.selection].slice(-10) : s.history,
+      lastRemoved: null,
+    })
+  },
 }))
 
 /** The part of the state that defines a shareable scenario. */
