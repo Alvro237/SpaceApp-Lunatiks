@@ -63,11 +63,32 @@ def _chunk(kind: bytes, data: bytes) -> bytes:
     return struct.pack(">I", len(data)) + kind + data + struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF)
 
 
+def filter_rows(px: np.ndarray, bpp: int) -> np.ndarray:
+    """PNG scanline filtering (PNG spec section 9): each row gets the filter (None, Sub, Up, Average, Paeth) with the
+    smallest sum of absolute signed residuals, the spec's recommended heuristic. Lossless: decoders undo it exactly.
+    For the 16-bit heights it matters: the low byte is near-random, but its row-to-row difference is small."""
+    x = px.astype(np.int16)
+    h = x.shape[0]
+    a = np.zeros_like(x)
+    a[:, bpp:] = x[:, :-bpp]
+    b = np.zeros_like(x)
+    b[1:] = x[:-1]
+    c = np.zeros_like(x)
+    c[1:, bpp:] = x[:-1, :-bpp]
+    p = a + b - c
+    pa, pb, pc = np.abs(p - a), np.abs(p - b), np.abs(p - c)
+    paeth = np.where((pa <= pb) & (pa <= pc), a, np.where(pb <= pc, b, c))
+    cands = np.stack([x, x - a, x - b, x - ((a + b) >> 1), x - paeth]).astype(np.uint8)   # mod 256
+    score = np.abs(cands.view(np.int8).astype(np.int32)).sum(axis=2)
+    best = score.argmin(axis=0)
+    return np.concatenate([best[:, None].astype(np.uint8), cands[best, np.arange(h)]], axis=1)
+
+
 def write_png(path: Path, pixels: np.ndarray, color_type: int) -> None:
-    """8-bit PNG, filter 0 on every row. color_type 2 = RGB (h, w, 3), 4 = grey + alpha (h, w, 2).
+    """8-bit PNG with adaptive scanline filters. color_type 2 = RGB (h, w, 3), 4 = grey + alpha (h, w, 2).
     No gamma or colour-space chunk: the browser decoder reads the bytes exactly."""
     h, w = pixels.shape[:2]
-    raw = np.concatenate([np.zeros((h, 1), dtype=np.uint8), pixels.reshape(h, -1).astype(np.uint8)], axis=1)
+    raw = filter_rows(pixels.reshape(h, -1).astype(np.uint8), pixels.shape[2])
     png = b"\x89PNG\r\n\x1a\n" + _chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, color_type, 0, 0, 0))
     png += _chunk(b"IDAT", zlib.compress(raw.tobytes(), 9)) + _chunk(b"IEND", b"")
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -249,9 +270,10 @@ def main() -> int:
         u, v = fx - c, fy - r
         tile_h = (top[r, c] * (1 - u) * (1 - v) + top[r, c + 1] * u * (1 - v)
                   + top[r + 1, c] * (1 - u) * v + top[r + 1, c + 1] * u * v)
-        level = "960 m"
+        level = "z3, 960 m cells (960 m grid)"
         if fine is not None and (h80 := fine["heightAt"](x, y)) is not None:
-            tile_h, level = h80, "80 m DEM"
+            tile_h, z = h80
+            level = f"z{z}, {2 * HALF_EXTENT_M / (TILE * 2 ** z):.0f} m cells (80 m DEM, decoded tile)"
         checks.append({"site": s["id"], "catalogueGroundM": terrain["groundHeightM"], "finestLevel": level,
                        "tileM": round(float(tile_h), 1), "differenceM": round(float(tile_h) - terrain["groundHeightM"], 1)})
     edge_errors = 0
@@ -261,6 +283,8 @@ def main() -> int:
                 a = vert[ty * TILE: ty * TILE + TILE + 1, tx * TILE + TILE]
                 b = vert[ty * TILE: ty * TILE + TILE + 1, (tx + 1) * TILE]
                 edge_errors += int(np.count_nonzero(a != b))
+    if fine is not None:
+        edge_errors += fine["sharedEdgeMismatches"]
     quantisation_m = max(hi - lo for lo, hi in tiles_index.values()) / 65535.0
 
     doc = {
@@ -286,8 +310,11 @@ def main() -> int:
             + ([{"id": "LDEM_80S_80MPP_ADJ", "description": "LOLA DEM south of about 80 S, 80 m pixels",
                  "source": {"agency": "NASA GSFC PGDA (LRO / LOLA)", "url": fine["sourceUrl"],
                             "product": "https://pgda.gsfc.nasa.gov/products/90"},
-                 "cellM": fine["pixelM"], "levels": sorted(fine["written"]), "coverRadiusM": fine["coverRadiusM"],
-                 "tilesPerLevel": {str(k): v for k, v in fine["written"].items()}}] if fine else []),
+                 "cellM": fine["pixelM"], "levels": sorted(fine["written"]), "crs": fine["crs"],
+                 "dataBoundsM": fine["boundsM"], "coverRadiusM": fine["coverRadiusM"],
+                 "smoothingPixels": fine["smoothingPixels"],
+                 "tilesPerLevel": {str(k): v for k, v in fine["written"].items()},
+                 "tilesWithDemData": {str(k): v for k, v in fine["fromDem"].items()}}] if fine else []),
         },
         "overview": {"path": "overview.png", "samples": n + 1, "min": round(olo, 2), "max": round(ohi, 2),
                      "encoding": "same as height tiles; the finest level as one image, for the shadow pass"},
@@ -298,8 +325,9 @@ def main() -> int:
             "sharedEdgeMismatches": edge_errors,
             "maxQuantisationM": round(quantisation_m, 3),
             "note": ("Catalogue groundHeightM comes from the finest DEM at each site (down to 10 m). Sites inside the "
-                     "80 m DEM are checked against it; elsewhere against the 960 m cell means, where tens of metres "
-                     "of difference are expected on slopes."),
+                     "80 m DEM are checked against the finest tile as the browser decodes it (16-bit quantisation "
+                     "included); elsewhere against the 960 m cell means, where tens of metres of difference are "
+                     "expected on slopes. Shared edges are compared for every level, fine levels included."),
         },
         "builtUtc": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "builtBy": "web/scripts/build_preview_tiles.py",
