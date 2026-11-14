@@ -245,7 +245,7 @@ function globeHeight(data: SceneProps['data'], lat: number, lon: number): number
 }
 
 function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, onExag, onEnter }: SceneProps) {
-  const { camera, size, scene } = useThree()
+  const { camera, size, scene, gl } = useThree()
   const [markersSet] = useState(() => new MarkerSet())
   const eph = useEphemeris().data
   const [reduced] = useState(() => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
@@ -356,7 +356,8 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
     const half = Math.round(e * 2) / 2
     if (half !== exag) onExag(half)
     const g = orbit.goal
-    const view = { fovDeg: FOV, widthPx: size.width, heightPx: size.height }
+    const dpr = gl.getPixelRatio()
+    const view = { fovDeg: FOV, widthPx: size.width * dpr, heightPx: size.height * dpr }
     detail.update(dt, { ...view, lat: n.lat, lon: n.lon, distKm: n.dist }, { ...view, lat: g.lat, lon: g.lon, distKm: g.dist }, material)
 
     // enter the polar map once the flight down has arrived, or when zoomed in over the cap

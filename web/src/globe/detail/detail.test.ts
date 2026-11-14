@@ -83,8 +83,8 @@ describe('detail grid', () => {
     expect(tileAt(0, -90, 180)).toEqual({ z: 0, x: 0, y: 1 })
   })
 
-  it('has 168 m cells at the finest level (182 per degree)', () => {
-    expect(cellM(MAX_LEVEL)).toBeCloseTo(166.6, 0)
+  it('has 83 m cells at the finest level (364 per degree)', () => {
+    expect(cellM(MAX_LEVEL)).toBeCloseTo(83.3, 0)
     expect(cellM(0)).toBeCloseTo(10_662, -1)
   })
 
@@ -114,8 +114,10 @@ describe('detail grid', () => {
     expect(close.coarse.every((t) => t.z === MAX_LEVEL - COARSE_STEP)).toBe(true)
     expect(close.coarse[0]).toEqual(tileAt(MAX_LEVEL - COARSE_STEP, 2.8, 25))
     const whole = wantedTiles({ lat: -48, lon: 10, distKm: MOON_R_KM * 3.4, fovDeg: 35, widthPx: 1600, heightPx: 900 }, MIN_HEIGHT_LEVEL)
-    expect(whole.tiles.length).toBeLessThanOrEqual(MAX_VIEW_TILES)
-    if (whole.level >= 0) expect(whole.level).toBeGreaterThanOrEqual(MIN_HEIGHT_LEVEL)
+    // the whole Moon needs more 22.5-degree tiles than allowed: the ones nearest to the centre are taken
+    expect(whole.level).toBe(MIN_HEIGHT_LEVEL)
+    expect(whole.tiles).toHaveLength(MAX_VIEW_TILES)
+    expect(whole.tiles[0]).toEqual(tileAt(MIN_HEIGHT_LEVEL, -48, 10))
   })
 
   it('wraps the tiles around the 180 degree meridian', () => {

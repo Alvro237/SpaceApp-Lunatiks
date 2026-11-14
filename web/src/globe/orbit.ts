@@ -40,7 +40,8 @@ export interface Orbit {
   dist: number
 }
 
-export const MIN_DIST = MOON_R_KM * 1.12
+/** Closest the camera comes: 50 km above the 1737.4 km sphere (the detail tiles' finest cells, 83 m, fill the view). */
+export const MIN_DIST = MOON_R_KM + 50
 export const MAX_DIST = MOON_R_KM * 8
 
 /** Relief exaggeration of the globe's mesh: x4 when the camera is high enough to see the whole Moon. */

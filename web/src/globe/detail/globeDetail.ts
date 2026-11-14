@@ -15,7 +15,7 @@ import { type DetailKind, MIN_HEIGHT_LEVEL, PHOTO_BASE_LEVEL, type View, allTile
 import { DetailSlots } from './slots'
 
 /** How often the wanted tiles are worked out, seconds. */
-const INTERVAL_S = 0.25
+const INTERVAL_S = 0.15
 const RETRY_BASE_S = 10
 const MAX_RETRIES = 3
 
@@ -49,8 +49,9 @@ export class GlobeDetail {
   }
 
   /**
-   * Called every frame. `now` is the view drawn (it sets the finest level the shader may use); `goal` is where the
-   * camera is heading (it sets the tiles asked for).
+   * Called every frame. `goal` is where the camera is heading: it sets the tiles asked for. The shader may use the
+   * finer of the two views' levels, so zooming in uses each finer tile as soon as it arrives and zooming out keeps
+   * the fine tiles until the camera has left.
    */
   update(dt: number, now: View, goal: View, material: THREE.ShaderMaterial): void {
     this.clockS += dt
@@ -60,8 +61,9 @@ export class GlobeDetail {
     const kind = this.kind
     const slots = this.slots[kind]
     const drawn = wantedTiles(now, MIN_HEIGHT_LEVEL)
-    material.uniforms.uMaxLevel.value = kind === 'photo' ? Math.max(drawn.level, PHOTO_BASE_LEVEL) : drawn.level
     const w = wantedTiles(goal, MIN_HEIGHT_LEVEL)
+    const level = Math.max(drawn.level, w.level)
+    material.uniforms.uMaxLevel.value = kind === 'photo' ? Math.max(level, PHOTO_BASE_LEVEL) : level
     const tiles = [...w.coarse, ...w.tiles, ...(kind === 'photo' ? allTiles(PHOTO_BASE_LEVEL) : [])]
     slots.setWanted(tiles)
     const rank = new Map(tiles.map((t, i) => [keyOf(kind, t), i]))

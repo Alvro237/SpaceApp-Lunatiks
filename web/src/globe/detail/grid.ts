@@ -30,8 +30,11 @@
 import { MOON_R_KM } from '../orbit'
 
 export const TILE_CELLS = 256
-/** Finest level: 1.40625° tiles, 0.0055° cells (182 cells per degree, 168 m at the equator). */
-export const MAX_LEVEL = 6
+/**
+ * Finest level: 0.703° tiles, 0.00275° cells (364 cells per degree, 83 m), about the sources' own resolution
+ * (WAC mosaic 100 m, polar DEMs 100 m, global DEM 118 m), for the closest zoom (50 km above the surface).
+ */
+export const MAX_LEVEL = 7
 /** Coarsest level asked for heights: 22.5° tiles, 2.7 km cells, finer than the 7.6 km of the shipped globe. */
 export const MIN_HEIGHT_LEVEL = 2
 /** Level of the photo base, always asked for in photo mode: 45° tiles, 5.3 km cells, 32 tiles. */
@@ -135,11 +138,12 @@ export interface View {
   /** Camera distance from the Moon's centre, km. */
   distKm: number
   fovDeg: number
+  /** Size of the view in device pixels (CSS pixels × devicePixelRatio, so a high-density screen gets finer tiles). */
   widthPx: number
   heightPx: number
 }
 
-/** Ground metres per CSS pixel at the centre of the view. */
+/** Ground metres per device pixel at the centre of the view. */
 export function metresPerPixel(v: View): number {
   return (2 * (v.distKm - MOON_R_KM) * 1000 * Math.tan(((v.fovDeg / 2) * Math.PI) / 180)) / v.heightPx
 }
@@ -174,8 +178,8 @@ export function tilesAround(z: number, lat: number, lon: number, latHalf: number
  * The detail tiles a view wants: the level whose cells match the screen pixels, over the part of the Moon in the
  * view (the camera always looks at the Moon's centre with north up, so the view is a box in latitude and
  * longitude around the centre, plus half a tile of margin for the panels' offset). If that takes more than
- * MAX_VIEW_TILES tiles, the next coarser level is tried. Levels below `minLevel` are not wanted at all: the
- * shipped globe is already as fine there.
+ * MAX_VIEW_TILES tiles, the next coarser level is tried; at `minLevel` the MAX_VIEW_TILES nearest to the centre are
+ * taken. Levels below `minLevel` are not wanted at all: the shipped globe is already as fine there.
  *
  * Returns the level used (−1 when none), `coarse`: the few tiles COARSE_STEP levels up (not below minLevel) over
  * the same box, to ask for first so the whole view sharpens quickly, then `tiles`: the view's level, nearest first.
@@ -190,7 +194,12 @@ export function wantedTiles(v: View, minLevel: number): { level: number; coarse:
     const s = tileSize(z)
     const lonHalf = Math.min(180, (across + s / 2) / cosLat)
     const tiles = tilesAround(z, v.lat, v.lon, latHalf + s / 2, lonHalf)
-    if (tiles.length > MAX_VIEW_TILES) continue
+    if (tiles.length > MAX_VIEW_TILES && z > minLevel) continue
+    if (tiles.length > MAX_VIEW_TILES) {
+      // the whole Moon or a wide polar view: even the coarsest level needs more tiles than allowed, so take the
+      // ones nearest to the centre (the rest of the view keeps the shipped grid)
+      return { level: z, coarse: [], tiles: tiles.slice(0, MAX_VIEW_TILES) }
+    }
     const zc = Math.max(minLevel, z - COARSE_STEP)
     const coarse = zc < z ? tilesAround(zc, v.lat, v.lon, latHalf, Math.min(180, across / cosLat)) : []
     return { level: z, coarse, tiles }
