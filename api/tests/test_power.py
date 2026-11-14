@@ -123,6 +123,11 @@ def test_level_2_power_is_panel_irradiance_times_area_efficiency():
     assert b["power_w"] == pytest.approx(expected.tolist())
     assert b["mean_power_w"] == pytest.approx(float(expected.mean()))
     assert b["energy_wh"] == pytest.approx(float(np.sum(expected[:-1])))
+    # incident power per m2: mean of the panel irradiance, also given at level 1 (no panel size needed)
+    assert b["mean_power_w_m2"] == pytest.approx(float(np.mean(b["irradiance_w_m2"])))
+    assert b["mean_power_w"] == pytest.approx(b["mean_power_w_m2"] * 2.0 * 0.3)
+    l1 = client.post("/api/v1/power", json={**BASE, "level": 1, "panel": "tracking"}).json()
+    assert l1["mean_power_w_m2"] == pytest.approx(b["mean_power_w_m2"])
     derated = client.post("/api/v1/power", json={**BASE, "level": 2, "panel": "tracking", **FLAT2, "derating": 0.85}).json()
     assert derated["energy_wh"] == pytest.approx(0.85 * b["energy_wh"])
 

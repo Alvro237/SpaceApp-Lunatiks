@@ -198,6 +198,8 @@ Contract = the team's API rules (2026-11-14), flat fields:
   `energy_margin_wh` ((min_soc - battery_min_soc) x capacity when it survives, minus the unserved energy when not).
   Fields of a higher level are null at lower levels. Extras beyond the rules (eclipse ranges and loss, peak power,
   load profile, final SoC, depleted ranges, unserved / curtailed energy, usable capacity) may be ignored.
+  Extra `mean_power_w_m2` (all levels): mean of `irradiance_w_m2` over the window, W/m2, for comparing places
+  without a panel size; the same value as `/sweep` `mean_power_w_m2` for that landing.
 - The same flat names are used by `/sweep` and by the `battery_survives` hard filter threshold.
 
 ## MECH · Sun over a mission window

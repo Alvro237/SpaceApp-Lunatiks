@@ -63,6 +63,9 @@ class PowerResponse(WindowResponse):
     sunlit_fraction: float = Field(description="Extra: share of samples with any of the Sun visible, 0..1")
     obscuration: list[float] = Field(description="Extra: fraction of the solar disc covered by the Earth (eclipse), 0..1")
     eclipse_ranges: list[TimeRange] = Field(description="Extra: time ranges with the Earth covering part of the Sun")
+    mean_power_w_m2: float = Field(description=(
+        "Extra: mean solar power incident on 1 m2 of panel over the window (mean of irradiance_w_m2, eclipses "
+        "included), W/m2. Needs no panel size, so it compares places directly; same as /sweep mean_power_w_m2"))
     # level 2 (API rules)
     irradiance_w_m2: list[float] | None = Field(None, description=(
         "Irradiance reaching the panel at each sample, W/m2: solar irradiance x visible fraction x panel orientation "

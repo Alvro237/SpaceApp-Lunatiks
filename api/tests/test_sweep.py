@@ -65,6 +65,7 @@ def test_each_window_equals_the_single_window_endpoints():
             assert row["comms_fraction"][k] == pytest.approx(earth["visible_window_fraction"])
             assert row["longest_blackout_h"][k] == pytest.approx(earth["longest_blackout_h"])
             assert row["mean_array_w"][k] == pytest.approx(pw["mean_power_w"])
+            assert row["mean_power_w_m2"][k] == pytest.approx(pw["mean_power_w_m2"])
             assert row["battery_min_soc"][k] == pytest.approx(pw["min_soc"])
             assert row["battery_survived"][k] == pw["survives"]
     assert b["places"][0]["horizon_kind"] == "terrain" and b["places"][1]["horizon_kind"] == "smooth_sphere"

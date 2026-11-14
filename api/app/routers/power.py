@@ -30,16 +30,16 @@ def power(req: PowerRequest, store: DataStore = Depends(get_store)) -> PowerResp
     s = services.evaluate_window(store, model, start_ms, req.duration_h, req.step_min, AnalysisParams(panel=req.panel))
     t, m = s.t_ms, compute_metrics(s)
     occ = obscuration(s)
+    q = s.power_w_m2 * (1.0 - occ)                        # irradiance reaching the panel
     out = PowerResponse(
         **window_fields(req, model, store, start_ms, t, ASSUMPTIONS), level=req.level, panel=req.panel,
         sun_fraction=s.sun_frac.tolist(), sun_el_deg=s.sun_el.tolist(), sunlit_ranges=ranges(t, s.sunlit()),
         longest_dark_h=m.longest_dark_h, sunlit_fraction=m.sunlight_pct / 100.0, obscuration=occ.tolist(),
-        eclipse_ranges=ranges(t, occ > 0))
+        eclipse_ranges=ranges(t, occ > 0), mean_power_w_m2=float(q.mean()))
     if req.level == 1:
         return out
 
     array, battery, load = params_from_flat(req.model_dump())
-    q = s.power_w_m2 * (1.0 - occ)                        # irradiance reaching the panel
     p = array_power_w(q, array)
     out.irradiance_w_m2 = q.tolist()
     out.power_w, out.mean_power_w, out.energy_wh = p.tolist(), float(p.mean()), energy_wh(p, t)
