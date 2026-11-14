@@ -1,8 +1,7 @@
 # Accessibility
 
-> Written for the first static prototype (a React site whose engine lived in `web/src/core`). The method and
-> the numbers still hold; the engine now lives in `api/app/logic`, the data in `data/` and the tests in
-> `api/tests`. Paths under `web/` no longer exist in this repository.
+> First written for an earlier static prototype; the measures below apply to the current `web/` app, which
+> keeps them. Audit rows from 2026-11-14 (afternoon) on are for this app.
 
 Target: **WCAG 2.2 level AA**. This page lists what the design does, how it is checked and what is
 known to fall short. Update the audit table whenever it is re-run.
@@ -12,6 +11,8 @@ known to fall short. Update the audit table whenever it is re-run.
 | Area | Measure |
 | --- | --- |
 | Structure | One `h1`, ordered headings, landmarks (`header`, `nav` "Main", `main`, `footer`), skip link, `lang="en"`. |
+| Globe | The globe is a focusable `application` too: arrows turn it, + and − zoom, Enter opens the polar map; sites on the visible hemisphere are buttons. |
+| Map | The map fills the window and the panels float over it; each panel can be folded with a button that states its state (`aria-expanded`). The 3D map is a focusable `application` with a described key set (arrows move, + and − zoom, T tilts, Q and E rotate, R resets, Space plays). Site markers are real buttons over the canvas. Everything the map shows (Sun, Earth, horizon, layers' values) is also text in the panels, the legend and the tables. |
 | Keyboard | Everything works without a mouse: tabs, forms, the time slider, the site maps (each site is a button), the **date planner grid** (arrow keys move, Shift+arrows jump a week, Enter opens the scenario), compare table buttons. Focus is moved to `main` and announced when the view changes. |
 | Focus | Visible 3 px outline in a colour that contrasts with both themes (`:focus-visible`). |
 | Names and labels | Every control has a visible `label`; errors use `aria-invalid` + `role="alert"`; buttons that act on an item name it ("Remove IM-1 2027-02-01"). |
@@ -40,6 +41,11 @@ known to fall short. Update the audit table whenever it is re-run.
 | Date | Method | Result |
 | --- | --- | --- |
 | 2026-11-13 | axe-core in jsdom (`npm test`), five views, WCAG 2 A/AA, 2.1, 2.2 AA, best practice | 0 violations after fixing one real defect (`<dl>` groups contained a `<p>`) |
+| 2026-11-14 | Current `web/` app: axe-core in jsdom (`npm test`, `src/app/app.test.tsx`), navigator in both modes, Data & methods, Learn | 0 violations after fixing one real defect: the hour-step buttons' visible text was not part of their accessible name (WCAG 2.5.3) |
+| 2026-11-14 | Current `web/` app: axe-core 4.14 via Playwright in Chromium (`npm run test:e2e`), 1440 px, navigator, Data & methods, Learn, dark and light schemes, colour contrast included | 0 violations |
+| 2026-11-14 | Globe view added, axe-core 4.14 via Playwright, both schemes | 0 violations after fixing marker spacing: 24 px targets now keep 34 px between centres (corners of square buttons entered the neighbour's 24 px circle at 26 px), labels sit outside the button box, and unplaced markers are `display: none` |
+| 2026-11-14 | Full-screen map layout with floating panels, axe-core 4.14 via Playwright, both schemes | 0 violations after fixing two real defects: map markers whose name was hidden with the label, and markers overlapping below the 24 px target size near the pole (now hidden when crowded, selected and compared ones first; every site stays reachable from the list) |
+| 2026-11-14 | Current `web/` app: text colour on the site × month table computed per cell (`textOn`), checked over 101 points of each colour map | ≥ 4.5:1 everywhere (test in `src/app/app.test.tsx`) |
 | 2026-11-14 | axe-core 4.14 in Chromium, dark theme, 1280 px, five views | 0 violations. `color-contrast` reported "incomplete" for SVG text over SVG backgrounds (axe cannot resolve those); verified by computing the ratios below |
 | 2026-11-14 | axe-core in Chromium, light theme, 1280 px, five views | 0 violations |
 | 2026-11-14 | axe-core in Chromium, 375 px wide (phone), five views | 0 violations. Found and fixed: a chart's 640 px minimum widened the whole page (grid track needed `minmax(0, 1fr)`); `role="group"` on `<figure>` is not allowed |

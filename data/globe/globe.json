@@ -1,0 +1,107 @@
+{
+ "format": 1,
+ "file": "lola_global_4ppd.png",
+ "width": 1440,
+ "height": 720,
+ "pixelsPerDegree": 4,
+ "layout": "simple cylindrical; row 0 is 90 N, column 0 starts at longitude 0, longitude grows east",
+ "encoding": "RGB PNG, 16-bit value in red (high byte) and green (low byte); height = min + value / 65535 x (max - min), metres above the 1737.4 km sphere",
+ "min": -8613.06,
+ "max": 10428.28,
+ "frame": "Mean Earth / polar axis (as LOLA, PDS label: DE421 orientation)",
+ "transformation": "4 x 4 area mean of LDEM_16 (16 ppd) to 4 ppd",
+ "source": {
+  "product": "LRO LOLA Gridded Data Record LDEM_16, version 3.1",
+  "dataSet": "LRO-L-LOLA-4-GDR-V1.0",
+  "url": "https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/cylindrical/img/ldem_16.img",
+  "agency": "NASA PDS Geosciences Node (LRO LOLA team, Smith et al.)",
+  "bytes": 33177600
+ },
+ "citation": "Smith, D. E., et al. (2010). The Lunar Orbiter Laser Altimeter investigation on the Lunar Reconnaissance Orbiter mission. Space Sci. Rev. 150, 209-241.",
+ "validation": {
+  "siteHeights": [
+   {
+    "site": "im-1",
+    "catalogueGroundM": 2592.0,
+    "globeM": 2617.8,
+    "differenceM": 25.8
+   },
+   {
+    "site": "im-2",
+    "catalogueGroundM": 5312.6,
+    "globeM": 5210.3,
+    "differenceM": -102.3
+   },
+   {
+    "site": "chandrayaan-3",
+    "catalogueGroundM": 529.2,
+    "globeM": 546.3,
+    "differenceM": 17.1
+   },
+   {
+    "site": "mons-malapert",
+    "catalogueGroundM": 4916.1,
+    "globeM": 3914.1,
+    "differenceM": -1002.0
+   },
+   {
+    "site": "shackleton",
+    "catalogueGroundM": -2788.7,
+    "globeM": -2579.5,
+    "differenceM": 209.2
+   },
+   {
+    "site": "haworth",
+    "catalogueGroundM": -3315.7,
+    "globeM": -3337.2,
+    "differenceM": -21.5
+   },
+   {
+    "site": "faustini",
+    "catalogueGroundM": -2755.8,
+    "globeM": -2712.2,
+    "differenceM": 43.6
+   },
+   {
+    "site": "amundsen",
+    "catalogueGroundM": -3571.0,
+    "globeM": -3535.3,
+    "differenceM": 35.7
+   },
+   {
+    "site": "nobile",
+    "catalogueGroundM": 915.6,
+    "globeM": 762.5,
+    "differenceM": -153.1
+   },
+   {
+    "site": "de-gerlache",
+    "catalogueGroundM": -1220.9,
+    "globeM": -1842.1,
+    "differenceM": -621.2
+   },
+   {
+    "site": "cabeus",
+    "catalogueGroundM": -3735.8,
+    "globeM": -3749.2,
+    "differenceM": -13.4
+   },
+   {
+    "site": "shoemaker",
+    "catalogueGroundM": -3929.7,
+    "globeM": -3934.5,
+    "differenceM": -4.8
+   },
+   {
+    "site": "sverdrup",
+    "catalogueGroundM": -2888.9,
+    "globeM": -2887.8,
+    "differenceM": 1.1
+   }
+  ],
+  "maxAbsSiteDifferenceM": 1002.0,
+  "note": "groundHeightM is the finest DEM at each site; the globe pixel is a 7.6 km-wide mean."
+ },
+ "builtUtc": "2026-11-14T13:01:05Z",
+ "builtBy": "pipeline/lunarnav/globe.py"
+}

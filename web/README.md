@@ -1,0 +1,68 @@
+# Web
+
+Frontend of the Lunar Landing Site Navigator. It opens on the whole Moon (global LOLA topography, lit by the Sun
+at the chosen instant): drag to turn it, wheel to come closer. A click on the south-polar cap (or zooming in over
+it) dives into the polar map: the lunar south pole (south of 60° S) seen from above, with more detail the
+closer you get, dragged to move, tilting into 3D LOLA relief, with shadows from the Sun at the chosen instant;
+zooming far out returns to the globe. Panels
+float over it: where and when (or mission filters) on the left, the chosen place on the right (Sun and Earth over
+its horizon, horizon chart, power, link), playback along the bottom. With Compare on, every place picked on the
+map or in the list joins a live comparison table, numbered as on the map. Vite, React, TypeScript, React Three
+Fiber (Three.js), Zustand, TanStack Query, D3 colour scales. Plan: "Plan de implementación del frontend"
+(2026-11-14).
+
+```
+cd web
+npm install
+npm run tiles        # preview terrain tiles from data/grids (needs uv); about 3 s
+npm run dev          # http://localhost:5173/SpaceApp-Lunatiks/ ; /api is proxied to http://127.0.0.1:8000
+npm test             # Vitest: engine vs JPL Horizons, LOD, PNG decoding, shadows, URL, components + axe
+npm run test:e2e     # Playwright: WebGL rendering, keyboard, axe with contrast in both themes
+npm run lint && npm run typecheck && npm run build
+npm run gen:api      # regenerate src/api/schema.gen.ts from the API's OpenAPI document
+```
+
+Start the API first (`cd api && uv run uvicorn app.main:app --reload`). `API_PROXY=http://127.0.0.1:8010` points
+the dev proxy elsewhere; in production set `VITE_API_URL` to the API's public URL.
+
+## Where the numbers come from
+
+- **The API** computes everything it exposes. Views use `/sites`, `/meta/*` today and call `/state`, `/series`,
+  `/points/*`, `/candidates/search`, `/power` and `/craters` as soon as they are deployed (they are being built
+  in parallel). A route that does not exist yet is reported on screen as "not deployed yet", never faked.
+- **The browser engine** (`src/time/engine.ts`) is a line-by-line port of the API's validated engine. It moves
+  the Sun every frame during playback (the plan's "posición del Sol en el navegador") and fills the panels
+  while an endpoint is missing. It reads the same tables and masks (`data/ephemeris_*.f32`, `data/horizons.i16`,
+  copied to `public/data` by `scripts/copy_static_data.mjs`) and is tested against the same JPL Horizons fixture
+  (0.01°). Every value says which source it came from ("API" or "Browser engine").
+- **Terrain tiles** follow `docs/web-tileset.md`. The preview set comes from the 960 m LOLA grids already in the
+  repository; `pipeline/lunarnav/terrain_tiles.py` (AERO-1) adds the 240, 80 and 20 m levels without changes here.
+
+## Layout
+
+| Folder | What |
+| --- | --- |
+| `src/app` | Router (hash, for static hosting), header, the navigator screen |
+| `src/state` | Zustand store (mode, view, instant, layers, place, comparison) and the shareable URL (`?s=`) |
+| `src/api` | Client generated from `/openapi.json` (`schema.gen.ts`), hand-typed pending endpoints, query hooks |
+| `src/globe` | The whole Moon: orbit controller, globe shaders, entry into the polar map |
+| `src/terrain` | Engine: tileset, quadtree LOD, decode worker, GPU cache, shaders, shadow pass, camera, map |
+| `src/time` | Browser engine (ephemeris, horizon, disc fractions), playback clock, static data loaders |
+| `src/panels` | Where, when, the chosen place (Sun and Earth now, power, link), mission filters |
+| `src/charts` | Horizon chart, timeline, site × month table; every chart has a table |
+| `src/compare` | Live comparison of up to four places, and the site × month table |
+| `src/pages` | Data & methods, Learn (Lunar Quest hub and the ideas behind it) |
+| `src/learn` | Lunar Quest: challenges that set up a real scene in the navigator and check the answer with the browser engine |
+| `src/ui` | Design tokens (`theme.css`: monochrome plus Sun amber and Earth blue), brand mark |
+| `e2e` | Playwright tests |
+
+## Accessibility and performance
+
+WCAG 2.2 AA target (`docs/accessibility.md`): everything on the map is also text in the panels; site markers
+are buttons; keyboard map control (arrows, + and −, T to tilt, Q and E to rotate, R to reset, Space to play);
+verdicts carry a symbol and a word; reduced motion makes playback jump in 6-hour steps. The LOD refines a tile
+above 2 px of screen error and merges it below 1.5 px, loads at most 6 tiles at a time, keeps up to 300 tiles in
+GPU memory and lowers its quality below 45 fps.
+
+Code written with Claude (Anthropic) assistance under the team's direction; declared in the app's Data & methods
+page and in the repository README.
