@@ -49,9 +49,20 @@ def weighted_score(parts: dict[str, float], weights: dict[str, float]) -> float:
     return 100.0 * sum(max(0.0, weights.get(k, 0.0)) * v for k, v in parts.items()) / total
 
 
-def score_metrics(m: Metrics, weights: dict[str, float] | None = None) -> ScoreResult:
+def score_metrics(m: Metrics, weights: dict[str, float] | None = None, favourable_min: float = VERDICT_FAVOURABLE,
+                  marginal_min: float = VERDICT_MARGINAL) -> ScoreResult:
     w = dict(DEFAULT_WEIGHTS if weights is None else weights)
     parts = {k: float(min(1.0, max(0.0, fn(m)))) for k, fn in CRITERIA.items()}
     s = weighted_score(parts, w)
-    verdict = "favourable" if s >= VERDICT_FAVOURABLE else "marginal" if s >= VERDICT_MARGINAL else "poor"
+    verdict = "favourable" if s >= favourable_min else "marginal" if s >= marginal_min else "poor"
     return ScoreResult(score=s, verdict=verdict, parts=parts, weights=w)
+
+
+def overall_verdict(hard_passed: list[bool | None], score: ScoreResult, unknown_passes: bool = False) -> str:
+    """RF-11 viability verdict. A failed hard filter makes the site-date unfeasible whatever its score;
+    an unknown one makes it "unknown" unless the caller accepts unknowns; otherwise the score band decides."""
+    if any(p is False for p in hard_passed):
+        return "unfeasible"
+    if any(p is None for p in hard_passed) and not unknown_passes:
+        return "unknown"
+    return score.verdict

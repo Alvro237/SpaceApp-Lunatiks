@@ -241,8 +241,14 @@ GCR dose per stay (CRaTER climatology). Every window equals the single-window en
 
 ## MECH · Soft score
 
-**Status:** reference in place (`logic/scoring.py`: sunlight, comms, continuity). Decide the criteria and the
-default weights with the team, add criteria as functions in `CRITERIA`, keep every weight visible in responses.
+**Status:** verdict done on `feat/mech-power`; default weights (0.5 / 0.3 / 0.2) and bands (75 / 50) are still
+the prototype's, not yet decided with a source. `POST /api/v1/verdict` (RF-11): runs the requested hard filters
+(`hard_filters`: id -> threshold), then the soft score with visible, adjustable `weights`, `favourable_min`,
+`marginal_min`. Verdict: `unfeasible` if any filter fails, `unknown` if any cannot be evaluated (unless
+`unknown_passes`), else the score band. New hard filter `battery_survives` (`logic/constraints/power.py`,
+threshold `{array, battery, load: {day_w, night_w}}`), same model as `/power` level 3.
+**Files:** `logic/scoring.py` (`overall_verdict`, band arguments), `routers/verdict.py`, `schemas/verdict.py`,
+`logic/constraints/power.py`, `tests/test_verdict.py`.
 
 ## MECH · Demo video and form texts
 
