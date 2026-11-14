@@ -1,6 +1,6 @@
 /**
  * Block Moon's small shared state: what the 3D view can see (published by the scene, read by the story), and the
- * learner's place in Pip's story. Progress is kept in this browser only (a convenience; nothing depends on it).
+ * learner's place in the mission log. Progress is kept in this browser only (a convenience; nothing depends on it).
  */
 import { create } from 'zustand'
 import { CHAPTERS, EMPTY_MEMORY, type StoryMemory } from './story'
@@ -16,7 +16,7 @@ export const useHud = create<{ sunOnScreen: boolean; earthOnScreen: boolean; loo
   lookFromAz: 0,
 }))
 
-const KEY = 'lunatiks-block-story'
+const KEY = 'lunatiks-block-missions'
 
 interface Saved {
   chapter: number
@@ -49,19 +49,26 @@ function save(s: Saved) {
   }
 }
 
+/**
+ * Setting a chapter's scene takes two steps: `apply` moves the place, date and view; `settle` waits until the
+ * engine has the new place, then records the starting state (and turns the camera, or jumps to sunrise).
+ */
+export type SetupStage = 'apply' | 'settle' | null
+
 export interface StoryState extends Saved {
   memory: StoryMemory
-  /** True while the chapter's setup still has to run (set when a chapter is opened). */
-  needsSetup: boolean
+  stage: SetupStage
   open: boolean
   begin: () => void
   goTo: (chapter: number) => void
   markDone: (id: string) => void
   remember: (patch: Partial<StoryMemory>) => void
-  setupDone: () => void
+  setStage: (stage: SetupStage) => void
   setOpen: (open: boolean) => void
   restart: () => void
 }
+
+const fresh = (): StoryMemory => ({ ...EMPTY_MEMORY, visited: {}, latched: [] })
 
 export const useStory = create<StoryState>()((set, get) => {
   const persist = () => {
@@ -71,16 +78,16 @@ export const useStory = create<StoryState>()((set, get) => {
   const saved = load()
   return {
     ...saved,
-    memory: EMPTY_MEMORY,
-    // a story resumed from an earlier visit sets its chapter up again
-    needsSetup: saved.started,
+    memory: fresh(),
+    // a story resumed from an earlier visit sets its chapter's scene again
+    stage: saved.started ? 'apply' : null,
     open: true,
     begin: () => {
-      set({ started: true, open: true, memory: { ...EMPTY_MEMORY, visited: {}, latched: [] }, needsSetup: true })
+      set({ started: true, open: true, memory: fresh(), stage: 'apply' })
       persist()
     },
     goTo: (chapter) => {
-      set({ chapter, memory: { ...EMPTY_MEMORY, visited: {}, latched: [] }, needsSetup: true, open: true })
+      set({ chapter, memory: fresh(), stage: 'apply', open: true })
       persist()
     },
     markDone: (id) => {
@@ -89,10 +96,10 @@ export const useStory = create<StoryState>()((set, get) => {
       persist()
     },
     remember: (patch) => set({ memory: { ...get().memory, ...patch } }),
-    setupDone: () => set({ needsSetup: false }),
+    setStage: (stage) => set({ stage }),
     setOpen: (open) => set({ open }),
     restart: () => {
-      set({ chapter: 0, done: [], started: true, memory: { ...EMPTY_MEMORY, visited: {}, latched: [] }, needsSetup: true, open: true })
+      set({ chapter: 0, done: [], started: true, memory: fresh(), stage: 'apply', open: true })
       persist()
     },
   }
