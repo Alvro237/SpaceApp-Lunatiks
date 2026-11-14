@@ -127,7 +127,7 @@ export interface CandidateSearchResponse {
   eliminated_by?: Record<string, number>
 }
 
-/** POST /api/v1/power (MECH, branch feat/mech-power) */
+/** POST /api/v1/power (MECH, branch feat/mech-power; contract in docs/api-guide-mech.md). Flat fields. */
 export interface PowerRequest {
   site_id?: string
   lat?: number
@@ -136,30 +136,65 @@ export interface PowerRequest {
   duration_h: number
   step_min: number
   mast_m: number
-  panel: string
+  panel: 'tracking' | 'vertical' | 'horizontal'
   level: 1 | 2 | 3
-  array?: { area_m2: number; efficiency: number; derating: number }
-  battery?: { capacity_wh: number; initial_soc: number; min_soc: number; charge_efficiency: number; discharge_efficiency: number }
-  load?: { load_w: number; night_load_w?: number | null }
+  // level 2
+  panel_area_m2?: number
+  cell_efficiency?: number
+  derating?: number
+  // level 3
+  load_w?: number
+  night_load_w?: number
+  battery_capacity_wh?: number
+  battery_initial_soc?: number
+  battery_min_soc?: number
+  charge_efficiency?: number
+  discharge_efficiency?: number
 }
 
 export interface PowerResponse {
-  horizon_kind: string
+  site_id: string | null
+  lat: number
+  lon: number
+  horizon_kind: HorizonKind
   mast_m_used: number
+  start: string
+  duration_h: number
+  step_min: number
   assumptions: string[]
   t: string[]
   level: number
-  sun: { mean_visible_fraction: number; sunlit_fraction: number; sunlit_ranges: TimeRange[]; longest_dark_h: number }
-  array?: { mean_power_w: number; peak_power_w: number; energy_wh: number; producing_fraction: number } | null
-  balance?: {
-    survived: boolean
-    min_soc_fraction: number
-    final_soc_fraction: number
-    first_depletion_at: string | null
-    unserved_energy_wh: number
-    longest_dark_energy_wh: number
-    usable_capacity_wh: number
-  } | null
+  panel: string
+  // level 1
+  sun_fraction: number[]
+  sun_el_deg: number[]
+  sunlit_ranges: TimeRange[]
+  longest_dark_h: number
+  sunlit_fraction: number
+  obscuration: number[]
+  eclipse_ranges: TimeRange[]
+  mean_power_w_m2: number
+  // level 2 (null below)
+  irradiance_w_m2: number[] | null
+  power_w: number[] | null
+  mean_power_w: number | null
+  energy_wh: number | null
+  peak_power_w: number | null
+  eclipse_energy_loss_wh: number | null
+  // level 3 (null below)
+  net_power_w: number[] | null
+  battery_soc: number[] | null
+  min_soc: number | null
+  survives: boolean | null
+  first_depletion_at: string | null
+  energy_margin_wh: number | null
+  load_profile_w: number[] | null
+  final_soc: number | null
+  depleted_ranges: TimeRange[] | null
+  unserved_energy_wh: number | null
+  curtailed_energy_wh: number | null
+  usable_capacity_wh: number | null
+  longest_dark_energy_wh: number | null
 }
 
 /** GET /api/v1/craters (AERO-1, requested by the frontend plan) */
