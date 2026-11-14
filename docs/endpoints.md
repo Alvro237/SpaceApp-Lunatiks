@@ -33,33 +33,40 @@ Numbers given as defaults below are placeholders for the owner to set with a cit
 
 ## SW-1 · Site state at a date and time
 
-**Status:** to do. **Files:** `routers/state.py`, `schemas/state.py`, `tests/test_state.py`.
+**Status:** done in branch `seryitron-branchito`, validated (output format: `docs/sw1-output-format.md`). **Files:** `routers/state.py`, `schemas/state.py`, `tests/test_state.py`.
 
-- `GET /api/v1/sites/{site_id}/state?t=&mast_m=&panel=&comms_min_fraction=`
-- Response: Sun and Earth `az`, `el`, `visible_fraction`, `angular_radius_deg`, `distance_km`; `eclipse`;
-  `irradiance_w_m2`, `power_w_m2`; `next_sun_transition` and `next_earth_transition` (`kind`, `at`, `in_hours`);
-  `horizon_kind`.
+- `GET /api/v1/sites/{site_id}/state?t=&mast_m=&comms_min_fraction=` (`mast_m` absent or null = 0 m)
+- Response: Sun and Earth `az`, `el`, `horizon_el`, `visible_fraction`, `visible`, `angular_radius_deg`,
+  `distance_km`; `eclipse`, `sun_eclipsed_fraction`; `next_sun_transition` and `next_earth_transition` (`kind`,
+  `at`, `in_hours`); `horizon_kind`. No irradiance or power: those belong to MECH's `/power` (owner's decision).
 - Logic: `services.model_for_site` + `engine.evaluate` at one instant + `engine.next_transition`. No new physics.
 - Done when: the values for a fixture case in `tests/fixtures/horizons_reference.json` match within 0.01 degrees
   through the HTTP layer, and a date outside the tables returns 400.
 
 ## SW-1 · Series over a window
 
-**Status:** to do. **Files:** `routers/state.py` (same router), `schemas/state.py`.
+**Status:** done in branch `seryitron-branchito`, validated (output format: `docs/sw1-output-format.md`, plan:
+`docs/sw1-roadmap.md`). **Files:** `routers/state.py` (same router), `schemas/state.py`, `tests/test_series.py`.
 
 - `GET /api/v1/sites/{site_id}/series?start=&duration_h=&step_min=&mast_m=...`
-- Response: arrays (`t`, Sun and Earth az/el/fraction, `power_w_m2`, `eclipse`), `metrics` (the `Metrics`
-  dataclass), `sunlit_ranges` and `comms_ranges` (time ranges), `horizon_kind`.
+- Response: arrays (`t`, Sun and Earth az/el/horizon_el/fraction/visible, `eclipse`, `sun_eclipsed_fraction`),
+  `metrics` (the `Metrics` dataclass without power), `sunlit_ranges`, `comms_ranges` and `eclipse_ranges` (edges
+  refined to the second), `horizon_kind`. No power: MECH's `/power` (owner's decision).
 - Guard: cap the number of samples (for example 20 000) and return 422 above it.
 
 ## SW-1 · Horizon profile
 
-**Status:** to do. `GET /api/v1/sites/{site_id}/horizon?mast_m=` returns the 720 azimuth values, `kind`, the mast
+**Status:** done in branch `seryitron-branchito`, validated (output format: `docs/sw1-output-format.md`).
+**Files:** `routers/horizon.py`, `schemas/horizon.py`, `tests/test_horizon.py`.
+`GET /api/v1/sites/{site_id}/horizon?mast_m=&include_zone=` returns the 720 azimuth values, `kind`, the mast
 actually used, and optionally the zone neighbours (`db/horizons.py: zone`).
 
 ## SW-1 · Manual coordinates
 
-**Status:** to do. **Files:** `routers/points.py`, `schemas/points.py`, `tests/test_points.py`.
+**Status:** `points/state` and `points/series` done in branch `seryitron-branchito`, validated (output format:
+`docs/sw1-output-format.md`); `points/info` not assigned in the team table.
+**Files:** `routers/points.py`, `schemas/points.py` (the site models plus `terrain_reference`),
+`tests/test_points.py`.
 
 - `GET /api/v1/points/state`, `/points/series`: same as the site endpoints with `lat`, `lon` instead of an id
   (`services.model_for_point`).

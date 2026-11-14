@@ -6,6 +6,7 @@ import { create } from 'zustand'
 import type { PanelModel } from '../time/engine'
 import { MS_PER_HOUR } from '../time/engine'
 import { type SpeedId, snapMinute } from '../time/clock'
+import { usePanels } from './panels'
 
 export type Selection = { kind: 'site'; id: string } | { kind: 'point'; lat: number; lon: number }
 
@@ -152,6 +153,10 @@ export const useApp = create<AppState>()((set, get) => ({
   setCompareMode: (compareMode) => {
     set({ compareMode })
     if (compareMode && get().compare.length === 0) get().addCompare()
+    // The comparison lives in the place panel: turning it on shows it, turning it off closes it if it was open.
+    const panels = usePanels.getState()
+    if (compareMode) panels.setSection('compare')
+    else if (panels.section === 'compare') panels.setSection(null)
   },
   addCompare: (sel) =>
     set((s) => {

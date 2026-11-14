@@ -4,6 +4,9 @@
  * Catalogue sites are buttons over the globe; the panels hold the same information as text.
  */
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { ToolPortal } from '../ui/ToolSlot'
+import { IconMinus, IconPin, IconPlus, IconPole } from '../ui/icons'
+import { useGlobe } from '../state/globe'
 import { useQuery } from '@tanstack/react-query'
 import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
@@ -54,6 +57,7 @@ export function GlobeView() {
   const select = useApp((s) => s.select)
   const enterMap = useApp((s) => s.enterMap)
   const [orbit] = useState(() => new OrbitRig(START))
+  const anchored = useGlobe((s) => s.anchored)
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null)
   const pickRef = useRef<((cx: number, cy: number) => [number, number] | null) | null>(null)
 
@@ -78,6 +82,7 @@ export function GlobeView() {
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return
+    orbit.touch()
     const h = e.currentTarget.clientHeight || 600
     const keys: Record<string, () => void> = {
       ArrowLeft: () => orbit.drag(h * 0.08, 0, h, FOV),
@@ -96,6 +101,7 @@ export function GlobeView() {
     }
   }
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    orbit.touch()
     if ((e.target as HTMLElement).closest('button, select, input, a')) return
     drag.current = { x: e.clientX, y: e.clientY, moved: false }
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -160,17 +166,33 @@ export function GlobeView() {
           Arrow keys turn the Moon, plus and minus zoom, Enter opens the detailed south-polar map. Sites are listed, with the same information, in the panels.
         </p>
       </div>
+      <ToolPortal>
       <div className="map-controls" role="group" aria-label="Globe view">
-        <button type="button" onClick={() => orbit.zoom(0.6)} aria-label="Zoom in">
-          +
+        <div className="tool-group">
+          <button type="button" onClick={() => orbit.zoom(0.6)} aria-label="Zoom in" title="Zoom in (+)">
+            <IconPlus />
+          </button>
+          <button type="button" onClick={() => orbit.zoom(1 / 0.6)} aria-label="Zoom out" title="Zoom out (−)">
+            <IconMinus />
+          </button>
+        </div>
+        <button type="button" onClick={() => enterMap()} aria-label="South pole map" title="Detailed south-polar map">
+          <IconPole />
         </button>
-        <button type="button" onClick={() => orbit.zoom(1 / 0.6)} aria-label="Zoom out">
-          −
-        </button>
-        <button type="button" onClick={() => enterMap()} title="Detailed south-polar map">
-          South pole map
+        <button
+          type="button"
+          aria-pressed={anchored}
+          aria-label="Pin the Moon"
+          title={anchored ? 'Pinned: the Moon stays still. Press to let it turn when idle' : 'Pin the Moon: stop it turning by itself when idle'}
+          onClick={() => {
+            orbit.touch()
+            useGlobe.getState().setAnchored(!anchored)
+          }}
+        >
+          <IconPin />
         </button>
       </div>
+      </ToolPortal>
       <p className="globe-caption">Global LOLA topography (relief ×{RELIEF_EXAGGERATION}) · lit by the Sun at the chosen time</p>
     </>
   )
@@ -297,6 +319,7 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, onEnter }: Scene
   const toPoint = useMemo(() => new THREE.Vector3(), [])
 
   useFrame((_, dt) => {
+    orbit.setAnchored(useGlobe.getState().anchored)
     orbit.fit(size.width, size.height, useInsets.getState(), FOV)
     orbit.step(dt, reduced)
     const n = orbit.now

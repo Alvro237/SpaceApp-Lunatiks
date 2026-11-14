@@ -39,3 +39,30 @@ def disc_visible_fraction(el_deg, az_deg, r_deg, horizon: HorizonProfile, slices
     frac = np.minimum(1.0, visible / (np.pi * r * r))
     frac = np.where(el - r >= horizon.max, 1.0, frac)    # whole disc above the highest skyline
     return np.where(el + r <= horizon.min, 0.0, frac)    # whole disc below the lowest skyline
+
+
+def disc_overlap_fraction(sep, r_target, r_cover) -> np.ndarray:
+    """Fraction (0..1) of a target disc of angular radius ``r_target`` hidden by a covering disc of radius
+    ``r_cover`` whose centre is ``sep`` away (all in the same angular units). Used for the Earth covering the
+    Sun as seen from the Moon (a lunar eclipse seen from the Earth).
+
+    Area of the lens where two circles intersect, divided by the target's area (Weisstein, "Circle-Circle
+    Intersection", MathWorld):
+        A = r1^2 acos((d^2 + r1^2 - r2^2) / (2 d r1)) + r2^2 acos((d^2 + r2^2 - r1^2) / (2 d r2))
+            - 0.5 sqrt((-d + r1 + r2)(d + r1 - r2)(d - r1 + r2)(d + r1 + r2))
+    Plane geometry: at radii of about 1 degree the curvature of the sky changes the result by ~1e-4 relative.
+    The solar disc is taken as uniformly bright (no limb darkening)."""
+    d, r1, r2 = np.broadcast_arrays(np.asarray(sep, dtype=np.float64), np.asarray(r_target, dtype=np.float64),
+                                    np.asarray(r_cover, dtype=np.float64))
+    out = np.zeros(d.shape, dtype=np.float64)
+    inside = d <= np.abs(r2 - r1)                       # one disc entirely inside the other
+    out = np.where(inside, np.minimum(1.0, (r2 / r1) ** 2), out)
+    lens = (d < r1 + r2) & ~inside
+    if np.any(lens):
+        dd, a, b = d[lens], r1[lens], r2[lens]
+        c1 = np.clip((dd * dd + a * a - b * b) / (2 * dd * a), -1.0, 1.0)
+        c2 = np.clip((dd * dd + b * b - a * a) / (2 * dd * b), -1.0, 1.0)
+        k = np.maximum(0.0, (-dd + a + b) * (dd + a - b) * (dd - a + b) * (dd + a + b))
+        area = a * a * np.arccos(c1) + b * b * np.arccos(c2) - 0.5 * np.sqrt(k)
+        out[lens] = np.clip(area / (np.pi * a * a), 0.0, 1.0)
+    return out
