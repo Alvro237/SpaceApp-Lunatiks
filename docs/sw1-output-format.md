@@ -432,7 +432,12 @@ With `include_zone=true` the response is about 72 KB; without it about 9 KB.
    sites for the Sun and 13 of 13 for the Earth**. The six permanently shadowed craters are 0 in both. PGDA's
    Earth map counts "any part of the disc visible", so the comparison uses that definition; the comms flag
    (half the disc) reads lower.
-6. **The validator is tested**: a value changed by 0.01°, a wrong azimuth of the maximum, a neighbour moved by
+6. **Open sky against NASA PGDA SKYV** (independent solid-angle map, 960 m cells): the open-sky solid angle
+   integrated from each served 2 m mask, `∫ (1 − sin h) d(az)`, matches with a median error of 0.024 sr over the
+   13 terrain sites (Shackleton 3.997 against 4.004 sr; a flat plain is 6.283). Largest gap Mons Malapert, 5.918
+   against 6.222 sr: the cell averages the summit with its slopes. Criterion: median < 0.05 sr, every site
+   < 0.35 sr.
+7. **The validator is tested**: a value changed by 0.01°, a wrong azimuth of the maximum, a neighbour moved by
    0.01°, a reversed zone mask and a wrong `mast_used_m` are each rejected.
 
 ---

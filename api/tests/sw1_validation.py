@@ -421,6 +421,27 @@ def horizon_vs_pgda(client) -> list[dict]:
     return rows
 
 
+
+SKY_MEDIAN_TOL_SR = 0.05   # the real criterion: typical agreement
+SKY_TOL_SR = 0.35          # loose cap per site: a 960 m cell averages a summit with its slopes (Mons Malapert)
+
+
+def horizon_sky_vs_pgda(client) -> list[dict]:
+    """Open-sky solid angle from each served mask, integral over azimuth of (1 - sin(skyline)) d(az) in steradians
+    (a flat plain sees 2 pi), against NASA PGDA SKYV_65S_240M (product 69, 960 m cells), at every terrain site.
+    The cell is a mean over ~1 km, so a summit's value is diluted by its slopes: tolerance SKY_TOL_SR."""
+    from app.db.store import get_store
+    grids = get_store().grids
+    rows = []
+    for site in client.get("/api/v1/sites", params={"terrain_only": True}).json()["sites"]:
+        r = client.get(HORIZON.format(site_id=site["id"]), params={"mast_m": 2}).json()
+        step = math.radians(r["az_step_deg"])
+        own = sum(1.0 - math.sin(math.radians(h)) for h in r["elevation_deg"]) * step
+        ref = grids.sample("sky_visibility_65s", r["lat"], r["lon"])
+        rows.append({"site": r["site_id"], "own_sr": own, "pgda_sr": ref, "ok": abs(own - ref) <= SKY_TOL_SR})
+    return rows
+
+
 # ---------------------------------------------------------------------------- points (manual coordinates)
 
 POINT_STATE = "/api/v1/points/state"
@@ -580,6 +601,15 @@ def main() -> int:
     ok &= not fails
     n_sun = sum(x["ok"] for x in rows if x["kind"] == "sun")
     n_earth = sum(x["ok"] for x in rows if x["kind"] == "earth")
+    sky = horizon_sky_vs_pgda(client)
+    bad_sky = [x for x in sky if not x["ok"]]
+    errs = sorted(abs(x["own_sr"] - x["pgda_sr"]) for x in sky)
+    median = errs[len(errs) // 2]
+    ok &= not bad_sky and median < SKY_MEDIAN_TOL_SR
+    worst = max(sky, key=lambda x: abs(x["own_sr"] - x["pgda_sr"]))
+    print(f"[{'PASS' if not bad_sky and median < SKY_MEDIAN_TOL_SR else 'FAIL'}] horizon open-sky solid angle vs NASA "
+          f"PGDA SKYV: median error {median:.3f} sr (< {SKY_MEDIAN_TOL_SR}), all {len(sky)} within {SKY_TOL_SR} sr, "
+          f"worst {worst['site']} {worst['own_sr']:.3f} vs {worst['pgda_sr']:.3f} sr")
     print(f"[{'PASS' if not fails else 'FAIL'}] horizon vs NASA PGDA product 69 (2025-2035 engine over the served "
           f"masks): Sun {n_sun}/{len(rows) // 2}, Earth {n_earth}/{len(rows) // 2} inside the zone range +/-{PGDA_TOL}"
           + "".join(f"\n    {x['site']} {x['kind']}: PGDA {x['pgda']:.3f} vs zone [{x['lo']:.3f}, {x['hi']:.3f}]"

@@ -70,6 +70,15 @@ def test_agrees_with_nasa_pgda_long_term_maps():
     assert [r for r in rows if not r["ok"]] == []
 
 
+def test_open_sky_matches_nasa_pgda_sky_visibility():
+    """Solid angle of open sky from the served masks against PGDA SKYV (an independent NASA computation): typical
+    agreement within 0.05 sr, every site within 0.35 sr (a 960 m cell averages a summit with its slopes)."""
+    rows = v.horizon_sky_vs_pgda(client)
+    errs = sorted(abs(r["own_sr"] - r["pgda_sr"]) for r in rows)
+    assert len(rows) == len(TERRAIN) and all(r["ok"] for r in rows)
+    assert errs[len(errs) // 2] < v.SKY_MEDIAN_TOL_SR
+
+
 def test_null_mast_is_zero():
     assert get(mast_m="null").json() == get(mast_m=0).json()
 
