@@ -63,7 +63,7 @@ export class GlobeDetail {
   uniforms(): Record<string, THREE.IUniform> {
     return {
       uDetail: { value: this.slots.dem.texture },
-      uBox: { value: this.slots.dem.boxes },
+      uIndex: { value: this.slots.dem.index },
       uMaxLevel: { value: -1 },
       uPhotoMode: { value: 0 },
     }
@@ -74,7 +74,7 @@ export class GlobeDetail {
     this.kind = kind
     const u = material.uniforms
     u.uDetail.value = this.slots[kind].texture
-    u.uBox.value = this.slots[kind].boxes
+    u.uIndex.value = this.slots[kind].index
     u.uPhotoMode.value = kind === 'photo' ? 1 : 0
     this.since = Infinity
   }

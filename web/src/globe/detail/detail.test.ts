@@ -26,7 +26,10 @@ import {
   quadOf,
   quadTiles,
   quadUrl,
+  TILE_CELLS,
+  tileSize,
 } from './grid'
+import { CAPACITY, DetailSlots, INDEX_HEIGHT, INDEX_WIDTH, findSlot, indexRow } from './slots'
 import { decodeDemTile, greyFromRgba, readGeoTile, splitQuad } from './trekGeo'
 
 const fixture = (name: string) => {
@@ -219,5 +222,35 @@ describe('Moon Trek global tiles', () => {
     const t0 = Date.now()
     await expect(readGeoTile(req, new MemoryBlockStore(), hang, 2, 50)).rejects.toThrow()
     expect(Date.now() - t0).toBeLessThan(2000)
+  })
+})
+
+describe('detail slots index', () => {
+  it('stacks every level of the grid in the index texture', () => {
+    expect(INDEX_WIDTH).toBe(columns(MAX_LEVEL))
+    expect(indexRow(MAX_LEVEL, rows(MAX_LEVEL) - 1)).toBe(INDEX_HEIGHT - 1)
+    for (let z = 1; z <= MAX_LEVEL; z++) expect(indexRow(z, 0)).toBe(indexRow(z - 1, rows(z - 1) - 1) + 1)
+  })
+
+  it('finds the finest loaded tile not finer than the view, and forgets a replaced one', () => {
+    const slots = new DetailSlots('photo')
+    const data = new Uint8Array(TILE_CELLS * TILE_CELLS)
+    const index = slots.index.image.data as Uint8Array
+    const coarse = tileAt(2, -60, 30)
+    const fine = tileAt(4, -60, 30)
+    expect(findSlot(index, 7, -60, 30)).toBe(-1)
+    slots.put(coarse, data)
+    slots.put(fine, data)
+    expect(findSlot(index, 7, -60, 30)).toBe(1)
+    expect(findSlot(index, 3, -60, 30)).toBe(0) // the view's level is 3: the level-4 tile is not used
+    expect(findSlot(index, 7, 60, 30)).toBe(-1)
+    // fill every layer, wanting only the new tiles: the two first ones are replaced and leave the index
+    slots.setWanted([])
+    for (let i = 0; i < CAPACITY; i++) slots.put({ z: 7, x: i, y: 0 }, data)
+    expect(slots.has(coarse) || slots.has(fine)).toBe(false)
+    expect(findSlot(index, 7, -60, 30)).toBe(-1)
+    // layers 0 and 1 went to the last two tiles (126, 127); tile 2 of the top row sits in layer 2 + 2
+    expect(findSlot(index, 7, 89.9, -180 + 2.5 * tileSize(7))).toBe(4)
+    expect(findSlot(index, 7, 89.9, -180 + 126.5 * tileSize(7))).toBe(0)
   })
 })
