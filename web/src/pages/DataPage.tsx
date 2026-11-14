@@ -79,11 +79,12 @@ export function DataPage() {
             <tr>
               <th scope="row">Finest relief, read while you zoom</th>
               <td>
-                LOLA LDEM_80S_20MPP_ADJ (30 m cells) and LDEM_83S_10MPP_ADJ (15 and 7.5 m cells), PGDA product 90: blocks of the NASA files read on demand
-                and kept in this browser's storage (the oldest are deleted above 45 % of the site's quota)
-                {import.meta.env.DEV || import.meta.env.VITE_PGDA_PROXY ? '' : '. Not enabled in this build'}
+                LOLA DEMs read on demand and kept in this browser's storage (the oldest are deleted above 45 % of the site's quota):{' '}
+                <a href="https://trek.nasa.gov/moon/">NASA Moon Trek</a> 100 m and 30 m south-pole DEMs (120 and 60 m cells across the whole map) and
+                its 5 m DEM (3.75 m cells near the pole); PGDA product 90 LDEM_80S_20MPP_ADJ (30 m cells) and LDEM_83S_10MPP_ADJ (15 and 7.5 m cells)
+                {import.meta.env.DEV || import.meta.env.VITE_PGDA_PROXY ? '' : ' (the PGDA ones are not enabled in this build)'}
               </td>
-              <td>2D and 3D terrain within about 300 km of the pole</td>
+              <td>2D and 3D terrain when you zoom in</td>
             </tr>
             <tr>
               <th scope="row">Slope</th>

@@ -96,16 +96,33 @@ Before the 80 m levels the sites differed by up to 52 m.
 The CI job (`.github/workflows/web.yml`) has no copy of the DEM, so it builds and checks the 960 m levels only; a
 deploy that should show the 80 m detail needs the DEM (189 MB) downloaded before `npm run tiles`.
 
-## Live levels (z8-z10, read on demand)
+## Live levels (read on demand)
 
-Below the static pyramid the engine adds three levels that are not files on our host: the browser reads them from
-NASA PGDA while you zoom (`web/src/terrain/live/`).
+Wherever the static tiles stop, the engine adds tiles that are not files on our host: the browser reads them from
+NASA servers while you zoom (`web/src/terrain/live/`). A tile gets live children only where its children are not
+static and it lies inside a source of the next level; within a level the finest source that contains it wins.
 
-| z | Cell | Source (PGDA product 90) | Coverage | Tiles available |
-| --- | --- | --- | --- | --- |
-| 8 | 30 m | `LDEM_80S_20MPP_ADJ.TIF`, 20 m, 30 400 × 30 400 px, 2.70 GB | children of every z7 tile inside ±303 960 m | 5 776 |
-| 9 | 15 m | `LDEM_83S_10MPP_ADJ.TIF`, 10 m, 43 280 × 43 280 px, 5.12 GB | children of every z8 tile inside ±216 380 m | 12 544 |
-| 10 | 7.5 m | same 10 m DEM | children of every z9 tile | 50 176 |
+| z | Cell | Source | Coverage |
+| --- | --- | --- | --- |
+| 4-6 | 480, 240, 120 m | Moon Trek `LRO_LOLA_DEM_SPole45_100mp_v04`, 100 m | the whole map outside the 80 m DEM square |
+| 7 | 60 m | Moon Trek `LRO_LOLA_DEM_SPole75_30mp_v04`, 30 m | outside the 80 m square, inside ±457 380 m (about 75 S) |
+| 8 | 30 m | PGDA `LDEM_80S_20MPP_ADJ.TIF`, 20 m, 30 400 × 30 400 px, 2.70 GB; Moon Trek 30 m in the ring outside it | inside ±303 960 m (20 m), then to about 75 S (30 m) |
+| 9 | 15 m | PGDA `LDEM_83S_10MPP_ADJ.TIF`, 10 m, 43 280 × 43 280 px, 5.12 GB | inside ±216 380 m |
+| 10 | 7.5 m | same 10 m DEM | inside ±216 380 m |
+| 11 | 3.75 m | Moon Trek `LRO_LOLA_DEM_SPole875_5mp_v04`, 5 m | inside ±75 830 m (about 87.5 S) |
+
+With the build of 2026-11-14 that is 105 904 possible live tiles; listing them takes 210-280 ms when the map opens
+(measured). Unit-tested counts: 192 at z4, 5 776 PGDA tiles at z8, 12 544 at z9, 50 176 at z10, 24 336 at z11.
+
+- **Moon Trek.** NASA's Moon Trek (JPL) serves these DEMs through an ArcGIS ImageServer that sends
+  `Access-Control-Allow-Origin: *`, so the browser calls it directly, without our proxy. One `exportImage` request
+  per tile returns a float32 GeoTIFF of 257 × 257 pixels whose centres are the tile's vertices (the box is widened
+  by half a cell), resampled bilinearly on the server; the client checks its size, georeference and no-data before
+  using or caching it (`trek.ts`). Measured on 2026-11-14: about 1.1 s and 197 KB per 257 × 257 tile at 5 m
+  (LZ77), 112 KB at 3.75 m; two neighbouring tiles share bit-identical edges (257 of 257 values). Against the
+  catalogue's `groundHeightM`: 5 m DEM within 0.86 m at the 4 sites it covers, 30 m within 4.70 m (12 sites),
+  100 m within 6.56 m (13 sites; the largest at Cabeus, on a steep wall). Moon Trek also offers a Chang'e-2 DEM
+  (`CE2_DEM_20m_SP`); it is not used (no CNSA data).
 
 - **How.** Both DEMs are Cloud Optimized GeoTIFFs (float32, 512 × 512 deflate blocks, floating-point predictor,
   overviews; read from their headers on 2026-11-14). The decode worker opens a file once with geotiff.js, reads
@@ -138,6 +155,11 @@ NASA PGDA while you zoom (`web/src/terrain/live/`).
   geotiff.js keeps another 16 MiB of blocks in memory.
 - **Failure.** A tile whose blocks cannot be read is retried three times, then left out for the session; its
   parent stays on screen. Measured with PGDA blocked: 70 live tiles failed, the 60 m tiles stayed, no page errors.
+- **Measured with Moon Trek on 2026-11-14** (headless Chromium): at Chandrayaan-3 (69.4 S, where the static tiles
+  stop at 960 m) the map drew z6 (120 m) from the 100 m DEM, 21 live tiles, 0 failed, 21 requests to Moon Trek
+  (4.9 MB); with Moon Trek and the proxy blocked it stayed at z3. Zoomed in fully at the pole: 27 tiles of z11
+  (3.75 m), 4 of z10 and 1 of z9 drawn, 72 live tiles, 0 failed (36 requests to Moon Trek, 5.6 MB; 18 to the
+  PGDA proxy).
 - **Measured on 2026-11-14** (headless Chromium, development proxy, zoomed in at the pole near Shackleton, 20 zoom
   steps): 16 tiles of z10 and 1 of z9 drawn, 42 live tiles loaded, 0 failed; 16 requests to PGDA, 13.4 MB.
   Reloading with the same browser profile: 5 requests and 3.3 MB on the second run, 0 on the third (the rest
