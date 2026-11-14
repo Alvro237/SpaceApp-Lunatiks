@@ -232,6 +232,8 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
   const perf = useRef({ frames: 0, time: 0, degraded: false })
   const masks = useMasks().data
   const [markersSet] = useState(() => new MarkerSet())
+  /** The camera where the current motion ends (the rig's goal): what the engine loads ahead for. */
+  const [goalCam] = useState(() => new THREE.PerspectiveCamera())
   const [heightsReady, setHeightsReady] = useState(false)
 
   useEffect(() => {
@@ -386,7 +388,10 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
       engine.setSun([p[0] / d, p[1] / d, p[2] / d], THREE.MathUtils.radToDeg(Math.asin(SUN_R_KM / d)), mastM)
     }
     engine.renderShadows(gl, playing)
-    engine.update(cam, size.height, [rig.now.tx, rig.now.tz])
+    goalCam.fov = cam.fov
+    goalCam.aspect = cam.aspect
+    rig.apply(goalCam, ((engine.heightAt(rig.goal.tx * 1000, -rig.goal.tz * 1000) ?? 0) / 1000) * exaggeration, size.width, size.height, insets, rig.goal)
+    engine.update(cam, size.height, [rig.now.tx, rig.now.tz], goalCam, !rig.settled)
 
     markersSet.update(cam, size.width, size.height, true)
 

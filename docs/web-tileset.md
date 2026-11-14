@@ -106,7 +106,7 @@ static and it lies inside a source of the next level; within a level the finest 
 | --- | --- | --- | --- |
 | 4-6 | 480, 240, 120 m | Moon Trek `LRO_LOLA_DEM_SPole45_100mp_v04`, 100 m | the whole map outside the 80 m DEM square |
 | 7 | 60 m | Moon Trek `LRO_LOLA_DEM_SPole75_30mp_v04`, 30 m | outside the 80 m square, inside ±457 380 m (about 75 S) |
-| 8 | 30 m | PGDA `LDEM_80S_20MPP_ADJ.TIF`, 20 m, 30 400 × 30 400 px, 2.70 GB; Moon Trek 30 m in the ring outside it | inside ±303 960 m (20 m), then to about 75 S (30 m) |
+| 8 | 30 m | Moon Trek `LRO_LOLA_DEM_SPole75_30mp_v04`, 30 m (PGDA's 20 m DEM until 2026-11-14; see "Loading" below) | inside ±457 380 m (about 75 S) |
 | 9 | 15 m | PGDA `LDEM_83S_10MPP_ADJ.TIF`, 10 m, 43 280 × 43 280 px, 5.12 GB | inside ±216 380 m |
 | 10 | 7.5 m | same 10 m DEM | inside ±216 380 m |
 | 11 | 3.75 m | Moon Trek `LRO_LOLA_DEM_SPole875_5mp_v04`, 5 m | inside ±75 830 m (about 87.5 S) |
@@ -138,7 +138,8 @@ With the build of 2026-11-14 that is 105 904 possible live tiles; listing them t
 - **Proxy.** PGDA answers Range requests (206) but sends no `Access-Control-Allow-Origin` (checked 2026-11-14), so
   a browser cannot read it directly. Development uses the Vite proxy `/pgda/`; production needs the Cloudflare
   Worker in `web/src/proxy/pgdaProxy.ts` (`web/proxy/wrangler.toml`), deployed by the team and passed to the build
-  as `VITE_PGDA_PROXY`. The Worker forwards only the two files above, only single ranges up to 16 MiB, checks that
+  as `VITE_PGDA_PROXY`. The Worker forwards only the files in its `ALLOWED_FILES` (the DEMs above and the layer products below; a test
+  checks that the app reads nothing outside it), only single ranges up to 16 MiB, checks that
   the answer matches the range (PGDA sometimes truncates them) and keeps each range in the edge cache. Without
   `VITE_PGDA_PROXY` a production build has no live levels and the map ends at z7 (60 m).
 - **Deployed proxy** (2026-11-14, version `28147e49`): `https://lunatiks-pgda-proxy.lunatiks-spaceapps.workers.dev/`,
@@ -167,6 +168,41 @@ With the build of 2026-11-14 that is 105 904 possible live tiles; listing them t
   steps): 16 tiles of z10 and 1 of z9 drawn, 42 live tiles loaded, 0 failed; 16 requests to PGDA, 13.4 MB.
   Reloading with the same browser profile: 5 requests and 3.3 MB on the second run, 0 on the third (the rest
   came from IndexedDB, 18 MB on disk).
+
+## Loading (measured 2026-11-14)
+
+Headless Chromium on Metal (Apple M2), 1440 × 900 at pixel ratio 2, empty browser cache, development proxy to
+PGDA; tilted 3D view at Shackleton, eight zoom steps 1.2 s apart, then 6 s of panning. PGDA answered at 0.35-0.9 MB/s
+per connection that day (through the deployed Worker a range already in its edge cache came at 13 MB/s), Moon Trek in
+about 1.3 s per tile.
+
+| | Before | After |
+| --- | --- | --- |
+| Full detail (z10, 7.5 m) drawn after the first zoom step | 44.2 s | 19.4 s |
+| Tiles asked for at once (peak) | 147 | 33 |
+| Downloaded | 24.6 MB | 16.1 MB |
+| With the slope layer: finest slope cell / when | 120 m / 44.6 s | 7.5 m / 32.8 s |
+
+What changed (`web/src/terrain`):
+
+- **Height ranges before a tile loads** (`live/config.ts`, `descendantRanges`). A live tile used to borrow its
+  ancestor's range widened by 250 m: near Shackleton that is kilometres, the camera sat inside every such box, its
+  distance read as zero and every tile split to the finest level (130-190 tiles asked for where 22 were drawn). Each
+  loaded tile now sets the range of its descendants, four levels down, from its own samples plus twice its cell size.
+- **One limit per server** (`loader.ts`): six requests in flight to our host, six to Moon Trek (HTTP/1.1), eight to the
+  PGDA proxy (HTTP/2), instead of six shared. Reads of one GeoTIFF stay in one decode worker (shared open file and
+  block cache); different files and the PNG tiles spread over a pool of three.
+- **Block runs in parallel** (`live/rangeClient.ts`): the missing runs of one read are fetched at once.
+- **Files opened ahead** (`live/cog.ts`, `warm`): the PGDA files are opened when the map opens or a layer is chosen.
+- **What is asked for**: PGDA tiles only for the view where the camera's motion ends (the rig's goal), not for the
+  levels a zoom passes through (a request in flight cannot be called back: geotiff.js shares its blocks between
+  tiles); stand-in ancestors from PGDA only one level up (static and Moon Trek ones as before); z8 from Moon Trek's
+  30 m DEM (about 0.29 MB per tile, cut and resampled on the server) instead of PGDA's 20 m DEM (about 2.5 MB of
+  blocks per tile). The cost is accuracy at that one level: 4.70 m at most from the catalogue heights against 0.61 m;
+  from z9 the 10 m DEM (0.05 m) takes over.
+
+Frame rate was not the limit on this machine: 60 fps and 0.2-0.5 ms of engine work per frame while panning zoomed in,
+before and after.
 
 ## Rendering cost
 
@@ -244,8 +280,11 @@ zooming in shows a smooth field instead of 960 m blocks.
 Live layer levels (`web/src/terrain/live/layers.ts`): when the map is zoomed in and the PGDA proxy is configured
 (always in development; `VITE_PGDA_PROXY` in a build), finer layer tiles are read block by block from the original
 products: levels 4-5 (480 and 240 m cells) for sunlight, Earth visibility and permanent shadow from the 240 m PGDA
-product 69 files (south of about 65° S), and for slope from `LDSM_60S_240MPP_ADJ`, with level 6 (120 m) from
-`LDSM_80S_80MPP_ADJ` within 304 km of the pole. Each cell is bilinear between the valid source pixels around its
+product 69 files (south of about 65° S), and for slope from `LDSM_60S_240MPP_ADJ`, with levels 6-8 (120-30 m) from
+`LDSM_80S_80MPP_ADJ` within 304 km of the pole and levels 9-10 (15 and 7.5 m) from `LDSM_83S_10MPP_ADJ` within
+216 km (float32 degrees on the grid of the 10 m DEM, checked 2026-11-14). The 20 m slope is not read: a z8 tile from
+it costs about 2.5 MB of PGDA blocks for a level the 10 m slope replaces as the zoom goes on. Live layer tiles are
+asked for only once the camera has stopped moving. Each cell is bilinear between the valid source pixels around its
 centre; values use the GeoTIFFs' own scale and offset tags (illumination ×4e-5; permanent shadow ×2.5e-5 + 0.5) and
 the static tiles' byte range (steeper 240 m and 80 m slopes clip at its top). While a live tile loads, the nearest
 loaded ancestor is shown; live tiles no longer in view are cancelled. Measured 2026-11-14: a 240 m sunlight tile

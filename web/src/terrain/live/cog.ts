@@ -18,6 +18,11 @@ export interface LiveTileRequest {
   geometry: TileGeometry
   /** A colour-layer tile (live/layers.ts): cells are sampled into value + coverage bytes instead of heights. */
   layer?: Omit<LayerSpec, 'noData'>
+  /**
+   * Only open the file (read its header and keep it open) and answer with no samples: asked for when the map opens or
+   * a layer is chosen, so the first tile does not wait for the several round trips of opening a remote GeoTIFF.
+   */
+  warm?: boolean
 }
 
 interface OpenDem {
@@ -60,6 +65,7 @@ export async function readLiveTile(
     dem.catch(() => dems.delete(req.url)) // a failed open is retried by the next tile
   }
   const { image, grid } = await dem
+  if (req.warm) return { heights: new Float32Array(0), min: 0, max: 0, samples: 0 }
   const win = req.layer ? layerWindowFor(grid, req.geometry) : windowFor(grid, req.geometry)
   if (!win) throw new Error(`tile outside ${req.file}`)
   const rasters = await image.readRasters({
