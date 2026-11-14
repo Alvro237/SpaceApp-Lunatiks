@@ -24,6 +24,17 @@ export function useApiState(sel: Selection, p: StateParams, enabled: boolean) {
   })
 }
 
+/** Ray-traced skyline of manual coordinates (one call per point and mast; kept for the session). */
+export function usePointHorizon(sel: Selection, mastM: number) {
+  return useQuery({
+    queryKey: ['point-horizon', sel.kind === 'point' ? sel.lat : null, sel.kind === 'point' ? sel.lon : null, mastM],
+    queryFn: ({ signal }) => (sel.kind === 'point' ? api.pointHorizon(sel.lat, sel.lon, mastM, signal) : Promise.reject(new Error('not a point'))),
+    enabled: sel.kind === 'point',
+    retry,
+    staleTime: Infinity,
+  })
+}
+
 export function useApiSeries(sel: Selection, p: SeriesParams, enabled: boolean) {
   return useQuery({
     queryKey: ['series', sel, p],

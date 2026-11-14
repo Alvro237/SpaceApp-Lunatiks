@@ -56,20 +56,45 @@ const float R = ${R_M.toFixed(1)};
 const float PI = 3.141592653589793;
 
 float hAt(ivec2 t) { return texelFetch(uHeight, clamp(t, ivec2(0), ivec2(256)), 0).r; }
-float hBil(vec2 uv) {
+
+// Colour layer at a layer uv, bilinear between cell centres and weighted by each cell's alpha, so the 960 m
+// cells read as a smooth field when the camera is much closer than one cell, and cells without data neither
+// pull their neighbours towards zero nor leave a hard staircase edge. Returns value (x) and coverage (y).
+// Display interpolation only: the legend states the cell size of the data.
+vec2 layerAt(vec2 luv) {
+  ivec2 n = textureSize(uLayer, 0);
+  vec2 p = luv * vec2(n) - 0.5;
+  ivec2 i = ivec2(floor(p));
+  vec2 f = p - floor(p);
+  ivec2 hi = n - 1;
+  vec2 a = texelFetch(uLayer, clamp(i, ivec2(0), hi), 0).rg;
+  vec2 b = texelFetch(uLayer, clamp(i + ivec2(1, 0), ivec2(0), hi), 0).rg;
+  vec2 c = texelFetch(uLayer, clamp(i + ivec2(0, 1), ivec2(0), hi), 0).rg;
+  vec2 d = texelFetch(uLayer, clamp(i + ivec2(1, 1), ivec2(0), hi), 0).rg;
+  vec4 w = vec4((1.0 - f.x) * (1.0 - f.y), f.x * (1.0 - f.y), (1.0 - f.x) * f.y, f.x * f.y);
+  vec4 wa = w * step(0.5, vec4(a.y, b.y, c.y, d.y));
+  float cover = wa.x + wa.y + wa.z + wa.w;
+  float v = cover > 0.0 ? dot(wa, vec4(a.x, b.x, c.x, d.x)) / cover : 0.0;
+  return vec2(v, cover);
+}
+// Height gradient (dh/dx, dh/dy in map metres) by central differences at a sample, then blended bilinearly
+// between the four samples around the fragment. Differentiating the bilinear surface instead gives one
+// constant normal per cell, which shows as square facets when a coarse tile is seen from close up.
+vec2 gAt(ivec2 t) {
+  return vec2(hAt(t + ivec2(1, 0)) - hAt(t - ivec2(1, 0)), hAt(t - ivec2(0, 1)) - hAt(t + ivec2(0, 1))) / (2.0 * uCellM);
+}
+vec2 gBil(vec2 uv) {
   vec2 f = clamp(uv, 0.0, 1.0) * 256.0;
   ivec2 i = ivec2(floor(f));
   vec2 t = fract(f);
-  return mix(mix(hAt(i), hAt(i + ivec2(1, 0)), t.x), mix(hAt(i + ivec2(0, 1)), hAt(i + ivec2(1, 1)), t.x), t.y);
+  return mix(mix(gAt(i), gAt(i + ivec2(1, 0)), t.x), mix(gAt(i + ivec2(0, 1)), gAt(i + ivec2(1, 1)), t.x), t.y);
 }
 
 void main() {
   float rMap = length(vMap);
   if (rMap > uDiscR) discard;
-  float du = 1.0 / 256.0;
-  float hx = (hBil(vUv + vec2(du, 0.0)) - hBil(vUv - vec2(du, 0.0))) / (2.0 * uCellM);
-  float hy = (hBil(vUv - vec2(0.0, du)) - hBil(vUv + vec2(0.0, du))) / (2.0 * uCellM);
-  vec3 nrm = normalize(vec3(-hx, 1.0, hy));   // scene axes: X = x, Y = up, Z = -y
+  vec2 g = gBil(vUv);
+  vec3 nrm = normalize(vec3(-g.x, 1.0, g.y));   // scene axes: X = x, Y = up, Z = -y
 
   // Sun direction in the scene at this point (local east/north/up of the sphere, drawn on the polar map).
   float colat = 2.0 * atan(length(vMap) / (2.0 * R));
@@ -97,9 +122,9 @@ void main() {
     base = texture(uLut, vec2(clamp((vHeight - uElevRange.x) / (uElevRange.y - uElevRange.x), 0.0, 1.0), 0.5)).rgb;
     coloured = true;
   } else if (uLayerMode == 1 && uHasLayer > 0.5) {
-    vec4 l = texture(uLayer, uLayerXf.xy + vUv * uLayerXf.zw);
-    if (l.g > 0.5) {
-      base = texture(uLut, vec2(l.r, 0.5)).rgb;
+    vec2 l = layerAt(uLayerXf.xy + vUv * uLayerXf.zw);
+    if (l.y > 0.5) {
+      base = texture(uLut, vec2(l.x, 0.5)).rgb;
       coloured = true;
     }
   }

@@ -302,50 +302,6 @@ details.advanced[open] { padding-bottom: 10px; }
 .place-head .place-name { font-size: 1.2rem; }
 .place-head button { border-radius: 999px; }
 
-/* ---------------------------------------------------------------- sky dial on the map */
-.sky-dial {
-  position: absolute;
-  z-index: 21;
-  margin: 0;
-  top: calc(var(--inset-top) + 10px);
-  right: calc(var(--inset-right) + 10px);
-  padding: 8px 10px;
-  border-radius: 16px;
-  background: rgba(12, 13, 16, 0.86);
-  backdrop-filter: blur(12px);
-  border: 1px solid #2d3036;
-  color: #eceae4;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
-  pointer-events: none;
-}
-.sky-dial figcaption { display: grid; margin-bottom: 2px; max-width: 160px; }
-.sky-dial-kicker { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.1em; color: #a8a59d; font-weight: 600; }
-.sky-dial-name { font-size: 0.85rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sky-dial svg { display: block; }
-.sd-sky { fill: #050608; stroke: #3b4050; }
-.sd-ground { fill: #6d6b66; opacity: 0.85; }
-.sd-horizon { fill: none; stroke: #cfccc4; stroke-width: 1.2; stroke-linejoin: round; }
-.sd-ring { fill: none; stroke: rgba(236, 234, 228, 0.18); stroke-dasharray: 2 3; }
-.sd-ring-zero { stroke: rgba(236, 234, 228, 0.4); }
-.sd-ring-label { fill: #a8a59d; font-size: 7px; font-family: var(--mono); }
-.sd-zenith { fill: #a8a59d; }
-.sd-cardinal { fill: #a8a59d; font-size: 9px; font-weight: 600; font-family: var(--font); }
-.sd-cardinal.is-north { fill: #eceae4; font-weight: 800; }
-.sd-sun circle { fill: #ffb547; stroke: #0b0c0e; stroke-width: 1; }
-.sd-sun line { stroke: #ffb547; stroke-width: 1.6; stroke-linecap: round; }
-.sd-earth circle { fill: #6cb2ff; stroke: #0b0c0e; stroke-width: 1; }
-.sd-earth-shade { fill: #1f62c4; opacity: 0.6; }
-.sd-body.is-down circle { fill: #050608; stroke-dasharray: 2 1.5; stroke-width: 1.4; }
-.sd-sun.is-down circle { stroke: #ffb547; }
-.sd-earth.is-down circle { stroke: #6cb2ff; }
-.sd-body.is-down .sd-earth-shade { display: none; }
-.sky-dial-legend { list-style: none; margin: 4px 0 0; padding: 0; display: flex; gap: 10px; font-family: var(--mono); font-size: 0.72rem; }
-.sky-dial-legend .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 3px; }
-.sky-dial-legend .is-sun .dot { background: #ffb547; }
-.sky-dial-legend .is-earth .dot { background: #6cb2ff; }
-@media (max-width: 760px) {
-  .sky-dial { top: 8px; right: 8px; transform: scale(0.8); transform-origin: top right; }
-}
 
 
 /* ---------------------------------------------------------------- info buttons (Tip) */
@@ -411,10 +367,6 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
 }
 @media (prefers-reduced-motion: reduce) {
   .float-right { transition: none; }
-}
-/* on screens too small to hold the wide panel and the dial side by side, the dial steps aside in focus mode */
-@media (min-width: 761px) and (max-width: 1500px) {
-  .navigator:has(.float-right.is-wide) .sky-dial, .navigator:has(.float-right.is-mid) .sky-dial { display: none; }
 }
 
 /* ---------------------------------------------------------------- compare: a section of the place panel */
@@ -701,7 +653,6 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
 /* the place panel and map overlays start below the bars */
 @media (min-width: 761px) {
   .float-right { top: calc(var(--inset-top) + 62px); max-height: calc(100vh - var(--inset-top) - var(--inset-bottom) - 76px); }
-  .sky-dial { top: calc(var(--inset-top) + 62px); }
   .quest-card { top: calc(var(--inset-top) + 62px); left: 10px; }
 }
 @media (max-width: 760px) {
@@ -728,7 +679,6 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
 .toolstrip .layers-menu { left: 0; right: auto; }
 @media (min-width: 761px) {
   .float-right { top: calc(var(--inset-top) + 10px); max-height: calc(100vh - var(--inset-top) - var(--inset-bottom) - 24px); }
-  .sky-dial { top: calc(var(--inset-top) + 62px); }
 }
 @media (max-width: 760px) {
   .top-left { top: 8px; left: 8px; right: 8px; }
@@ -891,6 +841,68 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
 .opt-actions .primary { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 18px; border-radius: 12px; }
 .opt-actions .fine { margin: 0; }
 .radiation-panel { margin-top: 2px; }
+
+/* ---------------------------------------------------------------- first-person horizon view */
+.map-layer { display: contents; }
+.horizon-view {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  background: #000;
+  cursor: grab;
+  touch-action: none;
+  outline: none;
+}
+.horizon-view:active { cursor: grabbing; }
+.horizon-view:focus-visible { box-shadow: inset 0 0 0 3px var(--focus); }
+.horizon-view canvas { display: block; }
+/* the map's own tools and captions step aside while the view is open */
+.navigator.is-horizon .toolslot .map-controls,
+.navigator.is-horizon .globe-caption,
+.navigator.is-horizon .legend-chip { display: none; }
+.horizon-tools { display: flex; gap: 8px; }
+.horizon-tools .tool-group { display: flex; flex-direction: row; border-radius: 12px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35); }
+.horizon-tools .tool-group .tool-btn { box-shadow: none; }
+.horizon-tools .tool-group .tool-btn:first-child { border-radius: 12px 0 0 12px; border-right-color: rgba(236, 234, 228, 0.12); }
+.horizon-tools .tool-group .tool-btn:last-child { border-radius: 0 12px 12px 0; border-left: 0; }
+@media (max-width: 760px) {
+  .horizon-view { position: relative; height: 58vh; }
+  .navigator.is-horizon .map-layer > * { display: none; }
+}
+
+/* the narrow Horizon panel */
+.horizon-panel { display: grid; gap: 10px; }
+.horizon-panel .setting { margin: 0; }
+.hz-readout { margin: 0; display: grid; gap: 6px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); border: 1px solid var(--border); }
+.hz-readout div { display: grid; grid-template-columns: 58px 1fr; gap: 8px; align-items: baseline; }
+.hz-readout dt { font-size: 0.78rem; font-weight: 600; color: var(--muted); }
+.hz-readout dd { margin: 0; font-family: var(--mono); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.hz-sun dt { color: var(--sun); }
+.hz-earth dt { color: var(--earth); }
+.hz-state { color: var(--muted); font-family: var(--font); font-size: 0.78rem; }
+
+/* ---------------------------------------------------------------- map ⇄ horizon transition */
+/* the map's own camera flies to the place (state/horizon DIVE_MS, RETURN_MS); CSS only fades at the hand-over */
+.navigator.is-diving .map-view { animation: map-dive 1300ms linear forwards; }
+.navigator.is-returning .map-view { animation: map-return 450ms ease-out both; }
+.horizon-view { animation: horizon-in 380ms ease-out both; }
+@keyframes map-dive {
+  0%, 72% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes map-return {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes horizon-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* ---------------------------------------------------------------- planner asleep under Block Moon */
+/* hidden but laid out (no canvas resize, nothing to rebuild on the way back); its portal tools step aside too */
+.map-layer.is-dormant > * { visibility: hidden; }
+.navigator.is-blocks .toolslot .map-controls:not(.block-controls) { display: none; }
 
 @media (forced-colors: active) {
   .switch[aria-checked='true'] { outline: 2px solid Highlight; }

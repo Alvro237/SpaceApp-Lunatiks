@@ -7,13 +7,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from collections import OrderedDict
+from typing import Literal
 
 import numpy as np
 
 from .db.sites import Site
 from .db.store import DataStore
 from .logic.constraints import ConstraintContext
-from .logic.horizon import HorizonProfile
+from .logic.horizon import RAY_AZIMUTHS, RAY_MAX_RANGE_M, HorizonProfile, destination, horizon_from_heights, ray_distances
 from .logic.engine import (DEFAULT_PARAMS, AnalysisParams, Metrics, RefinedRange, Series, SiteModel, Transition,
                            compute_metrics, evaluate, make_model, next_transition, refined_ranges, time_grid)
 
@@ -43,12 +45,87 @@ def model_for_site(store: DataStore, site: Site, mast_m: float) -> SiteModel:
     return make_model(site.lat, site.lon, site.ground_m, store.horizons.for_site(site, mast_m), mast_m)
 
 
-def model_for_point(store: DataStore, lat: float, lon: float, mast_m: float) -> SiteModel:
-    """Manual coordinates: ground height from the LOLA grid when covered, smooth-sphere horizon.
-    Say so in the response (``horizon.kind``): a smooth sphere is an estimate, not a bound. Real terrain shortens
-    light and comms in craters and lengthens them on peaks, where the skyline drops below the horizontal."""
+def model_for_point(store: DataStore, lat: float, lon: float, mast_m: float,
+                    horizon: Literal["terrain", "smooth_sphere"] = "smooth_sphere") -> SiteModel:
+    """Manual coordinates. ``horizon="terrain"``: skyline ray-traced over the LOLA elevation grids wherever they
+    cover the point (south of about 60 S; point_horizon), else the smooth sphere. ``"smooth_sphere"`` (default, the
+    contract the endpoints were built and validated on): ground height from the LOLA grid, smooth-sphere skyline.
+    Responses say which one they used (``horizon_kind``)."""
+    ph = point_horizon(store, lat, lon, mast_m) if horizon == "terrain" else None
+    if ph is not None:
+        return make_model(lat, lon, ph.ground_m, ph.profile, mast_m)
     ground = store.grids.sample("lola_elevation_60s", lat, lon) or 0.0
     return make_model(lat, lon, ground, store.horizons.for_point(mast_m), mast_m)
+
+
+# ---------------------------------------------------------------------------- ray-traced horizon of a point
+
+# Finest first: each ray sample reads the finest grid that has data there.
+POINT_DEM_GRIDS = ("lola_elevation_80s", "lola_elevation_60s")
+
+
+@dataclass(frozen=True)
+class PointHorizon:
+    profile: HorizonProfile
+    ground_m: float
+    #: cell size of the finest grid at the point (the near field decides most of the error), metres
+    near_cell_m: float
+    near_grid: str
+    #: shortest distance over all azimuths up to which terrain data exists, metres (max = RAY_MAX_RANGE_M)
+    terrain_range_m: float
+
+
+def point_dem_heights(store: DataStore, lat_rad: np.ndarray, lon_rad: np.ndarray) -> np.ndarray:
+    """Terrain height (m above the 1737.4 km sphere) from the finest LOLA grid covering each sample; NaN where none."""
+    lat, lon = np.degrees(lat_rad), np.degrees(lon_rad)
+    out = np.full(np.shape(lat), np.nan)
+    for grid_id in POINT_DEM_GRIDS:
+        miss = np.isnan(out)
+        if not miss.any():
+            break
+        out[miss] = store.grids.bilinear_many(grid_id, lat[miss], lon[miss])
+    return out
+
+
+_RAYS_CACHE: OrderedDict = OrderedDict()
+_RAYS_CACHE_SIZE = 8
+
+
+def _point_rays(store: DataStore, lat: float, lon: float):
+    """Terrain heights along all the rays of a point (shared by every mast height), or None outside the grids.
+    The last few points are kept in memory (least recently used dropped), about 2 MB each."""
+    key = (id(store), lat, lon)
+    if key in _RAYS_CACHE:
+        _RAYS_CACHE.move_to_end(key)
+        return _RAYS_CACHE[key]
+    rays = _trace_point_rays(store, lat, lon)
+    _RAYS_CACHE[key] = rays
+    if len(_RAYS_CACHE) > _RAYS_CACHE_SIZE:
+        _RAYS_CACHE.popitem(last=False)
+    return rays
+
+
+def _trace_point_rays(store: DataStore, lat: float, lon: float):
+    for grid_id in POINT_DEM_GRIDS:
+        ground = store.grids.bilinear_many(grid_id, np.array([lat]), np.array([lon]))[0]
+        if not np.isnan(ground):
+            cell = float(store.grids.meta(grid_id)["pixelM"])
+            dist = ray_distances(cell, RAY_MAX_RANGE_M)
+            az = np.radians(np.arange(RAY_AZIMUTHS) * (360.0 / RAY_AZIMUTHS))[:, None]
+            la, lo = destination(np.radians(lat), np.radians(lon), az, dist[None, :])
+            heights = point_dem_heights(store, la, lo).astype(np.float32)
+            return float(ground), grid_id, cell, dist, heights
+    return None
+
+
+def point_horizon(store: DataStore, lat: float, lon: float, mast_m: float) -> PointHorizon | None:
+    """Ray-traced terrain horizon of manual coordinates (logic.horizon), cached per point; None outside the grids."""
+    rays = _point_rays(store, round(float(lat), 6), round(float(lon), 6))
+    if rays is None:
+        return None
+    ground, grid_id, cell, dist, heights = rays
+    values, last = horizon_from_heights(dist, heights.astype(np.float64), ground, mast_m)
+    return PointHorizon(HorizonProfile(values, kind="terrain"), ground, cell, grid_id, float(last.min()))
 
 
 def point_lookups(store: DataStore, lat: float, lon: float, site: Site | None = None) -> dict:
@@ -174,7 +251,7 @@ def site_ground_source(site: Site) -> str:
 
 def point_ground_source(store: DataStore, lat: float, lon: float) -> str:
     """Same look-up as ``model_for_point``: the LOLA grid when it covers the point, else the reference sphere."""
-    return "reference_sphere" if store.grids.sample("lola_elevation_60s", lat, lon) is None else "lola_grid"
+    return "reference_sphere" if np.isnan(point_dem_heights(store, np.radians([lat]), np.radians([lon]))[0]) else "lola_grid"
 
 
 # ---------------------------------------------------------------------------- SW-1: terrain reference for a point
@@ -194,8 +271,8 @@ class LongTermValues:
 def smooth_sphere_long_term(store: DataStore, lat: float, lon: float, mast_m: float) -> LongTermValues:
     """Long-term light and Earth visibility at a point over the smooth sphere, with PGDA's definitions: mean
     visible solar-disc fraction, share of time with any of the Earth's disc visible."""
-    s = evaluate_window(store, model_for_point(store, lat, lon, mast_m), to_ms(LONG_TERM_START), LONG_TERM_HOURS,
-                        LONG_TERM_STEP_MIN)
+    s = evaluate_window(store, model_for_point(store, lat, lon, mast_m, horizon="smooth_sphere"), to_ms(LONG_TERM_START),
+                        LONG_TERM_HOURS, LONG_TERM_STEP_MIN)
     return LongTermValues(float(s.sun_frac.mean()), float((s.earth_frac > 0.0).mean()))
 
 

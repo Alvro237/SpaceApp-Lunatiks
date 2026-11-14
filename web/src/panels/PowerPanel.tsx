@@ -149,7 +149,7 @@ function useRadiationRequest(): RadiationRequest {
   return useMemo(() => {
     const q = Number(qf)
     return {
-      ...(selection.kind === 'site' ? { site_id: selection.id } : { lat: selection.lat, lon: selection.lon }),
+      ...(selection.kind === 'site' ? { site_id: selection.id } : { lat: selection.lat, lon: selection.lon, horizon: 'terrain' as const }),
       start: isoMinute(startMs),
       duration_h: durationH,
       step_min: stepFor(durationH),
@@ -268,7 +268,7 @@ function Model() {
         }
       }
       const body: PowerRequest = {
-        ...(selection.kind === 'site' ? { site_id: selection.id } : { lat: selection.lat, lon: selection.lon }),
+        ...(selection.kind === 'site' ? { site_id: selection.id } : { lat: selection.lat, lon: selection.lon, horizon: 'terrain' as const }),
         start: isoMinute(startMs),
         duration_h: durationH,
         // keep within the API's 20 000-sample limit for long windows

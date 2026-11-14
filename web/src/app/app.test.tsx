@@ -17,6 +17,7 @@ import { colorAt, luminance, textOn } from '../terrain/colormaps'
 
 vi.mock('../terrain/TerrainView', () => ({ TerrainView: () => <div role="img" aria-label="Map (test stub)" /> }))
 vi.mock('../globe/GlobeView', () => ({ GlobeView: () => <div role="img" aria-label="Globe (test stub)" /> }))
+vi.mock('../blocks/BlockMode', () => ({ default: () => <div role="img" aria-label="Block Moon (test stub)" /> }))
 
 const ROOT = resolve(__dirname, '../../..')
 const sitesDoc = JSON.parse(readFileSync(resolve(ROOT, 'data/sites.json'), 'utf8')) as {
@@ -108,9 +109,19 @@ describe('navigator', () => {
     // the sections are square buttons; each opens in place with a way back
     const user = userEvent.setup()
     await user.click(within(screen.getByRole('group', { name: 'Sections' })).getByRole('button', { name: /Horizon/ }))
-    expect(screen.getByRole('heading', { level: 3, name: /Horizon/ })).toHaveFocus()
-    expect(screen.getByRole('img', { name: /360° horizon with the Sun and the Earth/ })).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'All sections' }))
+    // Horizon opens the first-person view on the place: it takes the focus and the keyboard; the panel steers it
+    // (after the short dive into the place)
+    const hv = await screen.findByRole('application', { name: /Horizon view from IM-2/ }, { timeout: 3000 })
+    expect(hv).toHaveFocus()
+    const camera = screen.getByRole('radiogroup', { name: 'Camera' })
+    expect(within(camera).getByRole('radio', { name: /Sun/ })).toBeChecked()
+    await user.keyboard('{ArrowRight}')
+    expect(within(camera).getByRole('radio', { name: /Free/ })).toBeChecked()
+    await user.keyboard('e')
+    expect(within(camera).getByRole('radio', { name: /Earth/ })).toBeChecked()
+    expect(hv).toHaveAccessibleName(/facing .* Earth at azimuth .*in view/)
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('application', { name: /Horizon view/ })).not.toBeInTheDocument()
     await user.click(within(screen.getByRole('group', { name: 'Sections' })).getByRole('button', { name: /Power/ }))
     // the engine parameters live in the section they change
     expect(screen.getByRole('radiogroup', { name: 'Panel' })).toBeInTheDocument()
@@ -128,6 +139,25 @@ describe('navigator', () => {
     await user.click(screen.getByRole('button', { name: 'All sections' }))
     await noAxeViolations(container)
    }, 30_000)
+
+  it('Block Moon loads on demand; the planner sleeps under it and comes back without being rebuilt', async () => {
+    const user = userEvent.setup()
+    renderAt('/')
+    const globe = await screen.findByRole('img', { name: 'Globe (test stub)' })
+    const toggle = screen.getByRole('switch', { name: 'Block Moon' })
+    await user.click(toggle)
+    expect(await screen.findByRole('img', { name: 'Block Moon (test stub)' })).toBeInTheDocument()
+    // the planner is still mounted (same node), hidden from assistive technology and out of the tab order
+    const layer = document.querySelector('.map-layer')!
+    expect(layer).toHaveClass('is-dormant')
+    expect(layer).toHaveAttribute('aria-hidden', 'true')
+    expect(layer.contains(globe)).toBe(true)
+    expect(screen.queryByRole('region', { name: /Place/ })).not.toBeInTheDocument()
+    await user.click(toggle)
+    expect(screen.queryByRole('img', { name: 'Block Moon (test stub)' })).not.toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Globe (test stub)' })).toBe(globe)
+    expect(layer).not.toHaveClass('is-dormant')
+  })
 
   it('opens on the globe; the map replaces it when entered', async () => {
     renderAt('/')

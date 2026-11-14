@@ -6,7 +6,6 @@
  * equivalent of the map.
  */
 import { type ReactNode, useEffect, useId, useRef } from 'react'
-import { HorizonChart } from '../charts/HorizonChart'
 import { type SectionId, usePanels } from '../state/panels'
 import { sameSelection, useApp } from '../state/store'
 import { formatUtc } from '../time/clock'
@@ -15,7 +14,8 @@ import { ComparePanel } from '../compare/ComparePanel'
 import { IconAntenna, IconBack, IconBolt, IconChevron, IconCompare, IconHorizon } from '../ui/icons'
 import { fmtLat, fmtLon } from './format'
 import { LinkPanel } from './LinkPanel'
-import { ContactSetting, HeightSetting } from './Settings'
+import { HorizonPanel } from './HorizonPanel'
+import { ContactSetting } from './Settings'
 import { NowCards } from './NowPanel'
 import { PowerPanel } from './PowerPanel'
 import { useNow } from './useNow'
@@ -37,7 +37,8 @@ export function PlacePanel() {
   useEffect(() => () => usePanels.getState().setSection(null), [])
   // Focus goes to the section heading when one opens, and back to its button when it closes.
   useEffect(() => {
-    if (open) heading.current?.focus()
+    // the horizon view takes the focus itself (it is driven by the keyboard); other sections focus their heading
+    if (open && open !== 'horizon') heading.current?.focus()
     else if (lastOpened.current) tiles.current?.querySelector<HTMLButtonElement>(`[data-section='${lastOpened.current}']`)?.focus()
   }, [open])
 
@@ -47,12 +48,7 @@ export function PlacePanel() {
       title: 'Horizon',
       icon: <IconHorizon size={18} />,
       value: view ? `Sun ${view.sun.el.toFixed(1)}°` : '…',
-      body: (
-        <>
-          <HeightSetting />
-          {info && view ? <HorizonChart info={info} sun={view.sun} earth={view.earth} tMs={view.tMs} /> : <p className="muted">Loading…</p>}
-        </>
-      ),
+      body: <HorizonPanel />,
     },
     {
       id: 'power',
@@ -115,7 +111,11 @@ export function PlacePanel() {
           <p className="meta-line">
             <span>{formatUtc(view.tMs)}</span>
             <span className={`badge badge-${view.horizonKind}`}>
-              {view.horizonKind === 'terrain' ? `LOLA horizon · ${view.mastUsedM} m` : `Smooth sphere · ${view.mastUsedM} m`}
+              {info?.horizonSource === 'traced'
+                ? `Traced horizon · ${info.demCellM ?? '?'} m DEM · ${view.mastUsedM} m`
+                : view.horizonKind === 'terrain'
+                  ? `LOLA horizon · ${view.mastUsedM} m`
+                  : `Smooth sphere · ${view.mastUsedM} m`}
             </span>
             <SourceTag source={view.source} />
           </p>
