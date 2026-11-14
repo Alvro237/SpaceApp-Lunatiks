@@ -12,7 +12,7 @@
  *   - Chandrayaan-3: landed 23 August 2023 near 69.4° S; rover asleep 2 September, lander 4 September; no signal
  *     after the next sunrise (ISRO, 22 September 2023).
  *   - IM-2 Athena: landed 6 March 2025 on Mons Mouton, on its side in a crater; with the low Sun and the panels'
- *     orientation the batteries could not recharge, and the mission ended on 7 March (Intuitive Machines).
+ *     orientation the batteries could not recharge, and the mission ended on 7 March (Spaceflight Now, 7 March 2025).
  *   - LCROSS: impact in Cabeus crater on 9 October 2009, water found in the plume (Colaprete et al. 2010).
  *   - Artemis III candidate regions on rims and ridges near the south pole: sites.json notes (NASA).
  * Pure functions over a context, so every chapter is testable.
@@ -86,6 +86,8 @@ export interface Scene {
   view?: BlockView
   /** Turn the ground camera to look away from the Sun, so the learner has to find it. */
   lookAway?: boolean
+  /** The body the task asks to find: the camera tips up so it fits in the picture (the Sun when `lookAway`). */
+  find?: 'sun' | 'earth'
   /** Start the window at the first sunrise in it (once the place's series is known). */
   atSunrise?: boolean
   /** Playback speed for the chapter's task. */
@@ -189,7 +191,7 @@ export const CHAPTERS: Chapter[] = [
       c.memory.startSunEl === null
         ? null
         : {
-            stats: [{ value: deg(c.memory.startSunEl), label: 'how high the Sun was (0° is the ground, 90° is straight up)' }],
+            stats: [{ value: deg(c.memory.startSunEl), label: 'how high the Sun was. Straight up is 90°, so that is low!' }],
             note: 'Low Sun, long shadows. Look at the shadows of the cubes!',
           },
   },
@@ -200,7 +202,7 @@ export const CHAPTERS: Chapter[] = [
     short: 'Long day',
     where: 'Near the South Pole',
     when: '23 August 2023',
-    story: ['India’s robot lander touched down here at sunrise.', 'It worked hard while the Sun was shining.', 'When night came it went to sleep, and never woke up.'],
+    story: ['India’s robot lander touched down here in the morning.', 'It worked hard while the Sun was shining.', 'When night came it went to sleep, and never woke up.'],
     note: 'Our Sun data starts in 2025, so we replay a sunrise from our own time.',
     source: { label: 'ISRO', url: 'https://www.isro.gov.in/Chandrayaan3_Details.html' },
     scene: { site: CHANDRAYAAN3, view: 'ground', atSunrise: true, speed: '1d' },
@@ -307,8 +309,8 @@ export const CHAPTERS: Chapter[] = [
     when: '12 February 2027',
     story: ['Every lander needs to talk to Earth.', 'Radio only works if the Earth is above the hills.', 'The Earth wobbles a little in the sky, so hills can hide it.'],
     source: { label: 'NASA SVS, Moon libration', url: 'https://svs.gsfc.nasa.gov/5588' },
-    scene: { site: NOBILE, atMs: NOBILE_EARTH_UP_MS, view: 'ground', speed: '1d' },
-    hint: 'The Earth is the blue ball. Then press play, or click a dark block in the Earth row.',
+    scene: { site: NOBILE, atMs: NOBILE_EARTH_UP_MS, view: 'ground', find: 'earth', speed: '1d' },
+    hint: 'Drag the picture sideways to find the blue ball: that is the Earth. Then press play, or click a dark block in the Earth row.',
     lesson: 'No Earth in the sky means no call home.',
     steps: (c) => {
       const never = c.metrics !== null && c.metrics.commsPct >= 99.9

@@ -33,12 +33,20 @@ import {
   groundBlocks,
   moonBlocks,
   sampleGlobal,
+  groundTopNear,
   sampleGround,
   skyVector,
   sunBlocks,
 } from './voxels'
 
 const FOV = 40
+/**
+ * Looking up in the ground view: the camera tips up by at most this many degrees, and its field of view widens by
+ * one degree per degree of tilt, so the ground stays in the picture while a body high in the (stretched) sky comes in.
+ */
+const MAX_TILT = 40
+/** The ground camera stays at least this many cubes above the columns under it. */
+const CAMERA_CLEARANCE = 2.5
 /** Cubes per side of the ground world (odd, so the chosen place is the centre cube). */
 const GROUND_N = 161
 /** Cubes across the whole Moon, and how much its relief is stretched so it shows at that size. */
@@ -149,18 +157,43 @@ class BlockCam {
   yaw: number
   pitch: number
   dist: number
-  goal: { yaw: number; pitch: number; dist: number }
+  /** Degrees the camera looks up from the line to its target (0 unless `maxTilt` allows it). */
+  tilt = 0
+  goal: { yaw: number; pitch: number; dist: number; tilt: number }
   readonly limits: { pitch: [number, number]; dist: [number, number] }
-  constructor(yaw: number, pitch: number, dist: number, limits: { pitch: [number, number]; dist: [number, number] }) {
+  readonly maxTilt: number
+  constructor(yaw: number, pitch: number, dist: number, limits: { pitch: [number, number]; dist: [number, number] }, maxTilt = 0) {
     this.limits = limits
+    this.maxTilt = maxTilt
     this.yaw = yaw
     this.pitch = pitch
     this.dist = dist
-    this.goal = { yaw, pitch, dist }
+    this.goal = { yaw, pitch, dist, tilt: 0 }
   }
+  /** Dragging up lowers the camera and, once it is as low as it goes, tips it up toward the sky; dragging down undoes that first. */
   drag(dx: number, dy: number) {
     this.goal.yaw -= dx * 0.3
-    this.goal.pitch = Math.max(this.limits.pitch[0], Math.min(this.limits.pitch[1], this.goal.pitch + dy * 0.25))
+    let d = dy * 0.25
+    if (d > 0 && this.goal.tilt > 0) {
+      const back = Math.min(d, this.goal.tilt)
+      this.goal.tilt -= back
+      d -= back
+    }
+    const pitch = Math.max(this.limits.pitch[0], Math.min(this.limits.pitch[1], this.goal.pitch + d))
+    const left = this.goal.pitch + d - pitch
+    this.goal.pitch = pitch
+    if (left < 0) this.goal.tilt = Math.min(this.maxTilt, this.goal.tilt - left)
+  }
+  /**
+   * Tips the camera so a body `elDeg` above the horizontal (as drawn, seen from the target) at `skyDist` sits in the
+   * upper half of the picture once the camera faces it. With the field of view FOV + tilt, a body e degrees above the
+   * camera's horizontal is half-way up the top half when e + pitch − tilt = (FOV + tilt) / 4.
+   */
+  lookUpTo(elDeg: number, skyDist: number) {
+    const e = (elDeg * Math.PI) / 180
+    const p = (this.goal.pitch * Math.PI) / 180
+    const fromCam = (Math.atan2(skyDist * Math.sin(e) - this.goal.dist * Math.sin(p), skyDist * Math.cos(e) + this.goal.dist * Math.cos(p)) * 180) / Math.PI
+    this.goal.tilt = Math.max(0, Math.min(this.maxTilt, (fromCam + this.goal.pitch - FOV / 4) / 1.25))
   }
   zoom(f: number) {
     this.goal.dist = Math.max(this.limits.dist[0], Math.min(this.limits.dist[1], this.goal.dist * f))
@@ -170,6 +203,7 @@ class BlockCam {
     this.yaw += (this.goal.yaw - this.yaw) * k
     this.pitch += (this.goal.pitch - this.pitch) * k
     this.dist += (this.goal.dist - this.dist) * k
+    this.tilt += (this.goal.tilt - this.tilt) * k
   }
 }
 
@@ -182,10 +216,12 @@ function freeInsets(w: number) {
 }
 
 /** Puts the camera at `pos` looking at `target`, with the target in the middle of the space the panels leave free. */
-function aimCamera(cam: THREE.PerspectiveCamera, pos: [number, number, number], target: THREE.Vector3, far: number, w: number, h: number) {
+function aimCamera(cam: THREE.PerspectiveCamera, pos: [number, number, number], target: THREE.Vector3, far: number, w: number, h: number, tiltDeg = 0) {
   cam.position.set(pos[0], pos[1], pos[2])
   cam.up.set(0, 1, 0)
   cam.lookAt(target)
+  cam.rotateX((tiltDeg * Math.PI) / 180)
+  cam.fov = FOV + tiltDeg
   cam.near = 0.5
   cam.far = far
   const ins = freeInsets(w)
@@ -397,17 +433,18 @@ function GroundScene({ blocks, sun, earth, cam }: { blocks: GroundBlocks; sun: B
     instant.current = false
     const yaw = (cam.yaw * Math.PI) / 180
     const pitch = (cam.pitch * Math.PI) / 180
+    const cx = target.x + Math.sin(yaw) * Math.cos(pitch) * cam.dist
+    const cz = target.z - Math.cos(yaw) * Math.cos(pitch) * cam.dist
+    // a low camera over a hill or a crater wall rides over it rather than going inside the cubes
+    const groundTop = groundTopNear(blocks.columns, cx, cz)
     aimCamera(
       camera as THREE.PerspectiveCamera,
-      [
-        target.x + Math.sin(yaw) * Math.cos(pitch) * cam.dist,
-        target.y + Math.sin(pitch) * cam.dist,
-        target.z - Math.cos(yaw) * Math.cos(pitch) * cam.dist,
-      ],
+      [cx, Math.max(target.y + Math.sin(pitch) * cam.dist, groundTop === null ? -Infinity : groundTop + CAMERA_CLEARANCE), cz],
       target,
       2000,
       size.width,
       size.height,
+      cam.tilt,
     )
 
     if (sun && light.current && sunBall.current) {
@@ -574,19 +611,25 @@ export function BlockWorld() {
   // a new camera for each world and each place, looking across the place toward the Sun
   const groundKey = `${ll?.[0]},${ll?.[1]}`
   const groundCam = useMemo(
-    () => new BlockCam(sunAz + 180, 16, 85, { pitch: [2, 85], dist: [6, 260] }),
+    () => new BlockCam(sunAz + 180, 16, 85, { pitch: [2, 85], dist: [6, 260] }, MAX_TILT),
     // the Sun's azimuth only sets the first view of each place
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [groundKey],
   )
-  // the story can ask the ground camera to look from a given azimuth
-  useEffect(
-    () =>
-      useHud.subscribe((h, was) => {
-        if (h.lookSeq !== was.lookSeq) groundCam.yaw = groundCam.goal.yaw = h.lookFromAz
-      }),
-    [groundCam],
-  )
+  // the story can ask the ground camera to look from a given azimuth, and to tip up to a body in the sky
+  useEffect(() => {
+    const tip = (el: number | null) => {
+      if (el === null) groundCam.goal.tilt = 0
+      else groundCam.lookUpTo(Math.asin(skyVector(0, el)[1]) * (180 / Math.PI), SKY_DIST)
+    }
+    // a camera made after the request (a new place) still gets it
+    tip(useHud.getState().lookEl)
+    return useHud.subscribe((h, was) => {
+      if (h.lookSeq === was.lookSeq) return
+      if (h.lookFromAz !== null) groundCam.yaw = groundCam.goal.yaw = h.lookFromAz
+      tip(h.lookEl)
+    })
+  }, [groundCam])
   const [moonCam] = useState(() => new BlockCam(ll?.[1] ?? 0, -50, MOON_R * 4.2, { pitch: [-85, 85], dist: [MOON_R * 1.6, MOON_R * 9] }))
   const cam = showGround ? groundCam : moonCam
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null)

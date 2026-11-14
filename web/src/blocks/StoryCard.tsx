@@ -4,7 +4,7 @@
  * engine's numbers. The checklist reads the same state as everything else (place, view, time, the engine's
  * answers), so nothing is typed by hand.
  */
-import { useEffect, useId, useLayoutEffect, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { useNow } from '../panels/useNow'
 import { useApp } from '../state/store'
 import { evaluateWindow, useEphemeris, useMasks, useParams, useSiteNames } from '../time/hooks'
@@ -97,8 +97,15 @@ function useStoryEffects(ctx: StoryCtx) {
         targetMs = around.t[day.set]
       }
     }
-    // look from the Sun's side, so the Sun is behind the camera and has to be found
-    if (scene.lookAway) useHud.setState((h) => ({ lookSeq: h.lookSeq + 1, lookFromAz: now.sun.az, sunOnScreen: false, earthOnScreen: false }))
+    // look from the Sun's side, so the Sun is behind the camera and has to be found; and tip the camera up far enough
+    // that the body to find comes into the picture by turning alone
+    const find = scene.find ?? (scene.lookAway ? 'sun' : null)
+    useHud.setState((h) => ({
+      lookSeq: h.lookSeq + 1,
+      lookFromAz: scene.lookAway ? now.sun.az : null,
+      lookEl: find ? now[find].el : null,
+      ...(scene.lookAway ? { sunOnScreen: false, earthOnScreen: false } : {}),
+    }))
     remember({ startTMs, startSunUp, startSunEl, startSel: app.selection, targetMs })
     setStage(null)
   }, [started, stage, now, series, info, masks, eph, params, ch, remember, setStage])
@@ -233,6 +240,14 @@ export function StoryCard() {
   const asking = ready && questionReady(ch, ctx) && ctx.memory.answer === null
   const right = ch.question && ctx.memory.answer !== null ? ctx.memory.answer === ch.question.answer(ctx) : null
   const found = complete ? ch.found(ctx) : null
+  // the question, then the answer and the "Next" button, appear at the foot of a card that may be taller than the
+  // window: bring them into view rather than leave them below the fold
+  const foot = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!asking && !complete) return
+    const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+    foot.current?.scrollIntoView?.({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' })
+  }, [asking, complete])
   const open1 = (i: number) => {
     setHint(false)
     goTo(i)
@@ -396,7 +411,7 @@ export function StoryCard() {
         </div>
       )}
 
-      <div className="blk-story-actions">
+      <div className="blk-story-actions" ref={foot}>
         {complete && !last && (
           <button type="button" className="blk-big" onClick={() => open1(chapter + 1)}>
             Next: {CHAPTERS[chapter + 1].title}

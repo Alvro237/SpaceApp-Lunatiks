@@ -7,13 +7,16 @@ import { CHAPTERS, EMPTY_MEMORY, type StoryMemory } from './story'
 
 /**
  * Between the story and the 3D view: whether the Sun and Earth balls are on screen in the ground view (written by
- * the scene when it changes), and a request to turn the ground camera to look from an azimuth (bumped `lookSeq`).
+ * the scene when it changes), and a request to the ground camera (bumped `lookSeq`): look from an azimuth
+ * (`lookFromAz`, null to leave it), and tip up so a body at elevation `lookEl` (degrees, real) fits in the picture
+ * (null for the level view).
  */
-export const useHud = create<{ sunOnScreen: boolean; earthOnScreen: boolean; lookSeq: number; lookFromAz: number }>()(() => ({
+export const useHud = create<{ sunOnScreen: boolean; earthOnScreen: boolean; lookSeq: number; lookFromAz: number | null; lookEl: number | null }>()(() => ({
   sunOnScreen: false,
   earthOnScreen: false,
   lookSeq: 0,
-  lookFromAz: 0,
+  lookFromAz: null,
+  lookEl: null,
 }))
 
 const KEY = 'lunatiks-block-missions'

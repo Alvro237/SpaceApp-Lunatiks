@@ -192,6 +192,21 @@ export function groundBlocks(grid: HeightGrid, exaggeration = GROUND_EXAGGERATIO
 }
 
 /**
+ * Top of the tallest column within `reach` cells of the scene point (x east, z south, in cubes from the centre), in
+ * the scene's height units (the upper face of its top cube). Null outside the island. Keeps the camera out of the ground.
+ */
+export function groundTopNear(columns: Int16Array, x: number, z: number, reach = 2): number | null {
+  const n = Math.round(Math.sqrt(columns.length))
+  const half = (n - 1) / 2
+  const i0 = Math.round(x + half)
+  const j0 = Math.round(z + half)
+  let top: number | null = null
+  for (let j = Math.max(0, j0 - reach); j <= Math.min(n - 1, j0 + reach); j++)
+    for (let i = Math.max(0, i0 - reach); i <= Math.min(n - 1, i0 + reach); i++) top = Math.max(top ?? -Infinity, columns[j * n + i] + 0.5)
+  return top
+}
+
+/**
  * The outer shell of a ball of cubes, `size` cubes across. `scaleAt(lat, lon)` stretches the radius there (1 = a
  * plain sphere); only cubes within `band` of the radius are tested, so a 200-cube ball builds in a fraction of a
  * second. Scene axes as the globe (orbit.ts): x toward longitude 0, y north, z = −(toward 90 E).
