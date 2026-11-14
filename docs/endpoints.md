@@ -166,7 +166,12 @@ one) as tests with the source of each date in `docs/references.md`.
 
 ## MECH · Power levels
 
-**Status:** to do. **Files:** `logic/power.py`, `routers/power.py`, `schemas/power.py`, `tests/test_power.py`.
+**Status:** in review (`feat/mech-power`). `site_id` or `lat`/`lon`. Every panel and battery parameter is a
+required input (no cited default yet); `night_load_w` defaults to `load_w`. No educational/advanced switch in the
+API: the frontend chooses what to show. Max 20 000 samples. Shared request base `schemas/common.py`
+(`WindowRequest`, `WindowResponse`) and helpers `routers/common.py`, reused by the next MECH endpoints.
+**Files:** `logic/power.py`, `routers/power.py`, `routers/common.py`, `schemas/power.py`, `schemas/common.py`,
+`tests/test_power.py`.
 
 - `POST /api/v1/power` with `level`:
   1. Fraction of the solar disc visible (engine).

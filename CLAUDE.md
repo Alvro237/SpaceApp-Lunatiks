@@ -146,6 +146,7 @@ work: merged, tested, called on a running server. Not before.
 | Hard filter | `max_slope` | `logic/constraints/slope.py` | scaffold | Dataset-based reference; AERO-1 to review |
 | Hard filter | `continuous_light` | `logic/constraints/light.py` | scaffold | Time-based reference; AERO-1 to review |
 | Soft score | sunlight, comms, continuity | `logic/scoring.py` | scaffold | Visible weights; MECH to set criteria and defaults |
+| Endpoint | `POST /api/v1/power` | `routers/power.py`, `logic/power.py` | MECH | Levels 1-3 (Sun fraction, array W, battery SoC); every parameter an input, no unsourced defaults |
 
 Also in place and verified: the engine in `app/logic` (ephemeris, geometry, horizon, disc-visible fraction,
 series, metrics, time ranges, next sunset/Earthset; reproduces JPL Horizons to better than 0.01 degrees) and the
