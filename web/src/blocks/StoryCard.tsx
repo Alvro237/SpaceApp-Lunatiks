@@ -194,6 +194,7 @@ export function StoryCard() {
   const total = steps.length + (ch.question ? 1 : 0)
   const asking = ready && questionReady(ch, ctx) && ctx.memory.answer === null
   const right = ch.question && ctx.memory.answer !== null ? ctx.memory.answer === ch.question.answer(ctx) : null
+  const found = complete ? ch.found(ctx) : null
   const open1 = (i: number) => {
     setHint(false)
     goTo(i)
@@ -211,14 +212,11 @@ export function StoryCard() {
             </h2>
           </div>
         </div>
-        <p className="blk-intro">
-          Stand where real missions landed and find out, with NASA data, how the Sun and the Earth shaped what happened to them. Then plan a landing of
-          your own.
-        </p>
+        <p className="blk-intro">Stand where real missions landed. See what the Sun and the Earth did to them.</p>
         <ol className="blk-intro-list">
           {CHAPTERS.map((c) => (
             <li key={c.id}>
-              {c.tag}: {c.title}
+              <span className="blk-intro-tag">{c.tag}</span> {c.title}
             </li>
           ))}
         </ol>
@@ -280,12 +278,25 @@ export function StoryCard() {
         ))}
       </nav>
 
-      <p className="blk-fact">
-        {ch.fact(ctx)}{' '}
-        <a className="blk-source" href={ch.source.url} target="_blank" rel="noreferrer">
-          Source: {ch.source.label}
-        </a>
-      </p>
+      <dl className="blk-chips">
+        <div>
+          <dt>Where</dt>
+          <dd>{ch.where}</dd>
+        </div>
+        <div>
+          <dt>When</dt>
+          <dd>{ch.when}</dd>
+        </div>
+      </dl>
+      <ul className="blk-lines">
+        {ch.story.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+      {ch.note && <p className="blk-note">{ch.note}</p>}
+      <a className="blk-source" href={ch.source.url} target="_blank" rel="noreferrer">
+        Source: {ch.source.label}
+      </a>
 
       {!ready ? (
         <p className="blk-meta" role="status">
@@ -334,7 +345,17 @@ export function StoryCard() {
         {complete && (
           <div className="blk-found">
             <p className="blk-found-h">{right === null ? 'What the data says' : right ? 'Right! What the data says' : 'Not quite. What the data says'}</p>
-            <p>{ch.found(ctx)}</p>
+            {found && found.stats.length > 0 && (
+              <ul className="blk-stats">
+                {found.stats.map((s) => (
+                  <li key={s.label}>
+                    <span className="blk-stat-v">{s.value}</span>
+                    <span className="blk-stat-l">{s.label}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {found && <p>{found.note}</p>}
           </div>
         )}
       </div>

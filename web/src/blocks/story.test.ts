@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { CHAPTERS, EMPTY_MEMORY, MALAPERT, SHACKLETON, type StoryCtx, chapterDone, firstDay, questionReady, stepsOf } from './story'
+import { CHAPTERS, EMPTY_MEMORY, dur, MALAPERT, SHACKLETON, type StoryCtx, chapterDone, firstDay, questionReady, stepsOf } from './story'
 
 const base: StoryCtx = {
   view: 'moon',
@@ -22,10 +22,16 @@ const ch = (id: string) => CHAPTERS.find((c) => c.id === id)!
 const H = 3_600_000
 
 describe('mission log', () => {
-  it('has six chapters, each with a fact, a source, a task, a hint and a lesson', () => {
+  it('has six chapters, each with a place, a date, short facts, a source, a task, a hint and a short lesson', () => {
     expect(CHAPTERS).toHaveLength(6)
     for (const c of CHAPTERS) {
-      expect(c.fact(base).length).toBeGreaterThan(80)
+      expect(c.where.length).toBeGreaterThan(2)
+      expect(c.when.length).toBeGreaterThan(2)
+      expect(c.story.length).toBeGreaterThanOrEqual(2)
+      expect(c.story.length).toBeLessThanOrEqual(3)
+      // one idea per line: no paragraphs
+      for (const line of c.story) expect(line.length).toBeLessThanOrEqual(70)
+      expect(c.lesson.length).toBeLessThanOrEqual(90)
       expect(c.source.url).toMatch(/^https:\/\//)
       expect(c.steps(base).length).toBeGreaterThan(0)
       expect(c.hint.length).toBeGreaterThan(10)
@@ -44,7 +50,7 @@ describe('mission log', () => {
     expect(chapterDone(a, found)).toBe(false)
     const answered = { ...found, memory: { ...found.memory, answer: 'low' } }
     expect(chapterDone(a, answered)).toBe(true)
-    expect(a.found(answered)).toContain('10.8° above the horizon')
+    expect(a.found(answered)?.stats[0].value).toBe('10.8°')
   })
 
   it('Apollo 11: no answer until the landing elevation is known, none for an ambiguous 20–45°', () => {
@@ -63,8 +69,10 @@ describe('mission log', () => {
     // 13.5 days later the Sun has set
     const later = { ...start, tMs: 13.6 * 24 * H, sunUp: false }
     expect(chapterDone(c, later)).toBe(true)
-    expect(c.found(later)).toContain('about 13.5 Earth days')
-    expect(c.found(later)).toContain('325 hours (about 14 days)')
+    expect(c.found(later)?.stats).toEqual([
+      { value: '13.5 days', label: 'of sunlight' },
+      { value: '14 days', label: 'longest night' },
+    ])
   })
 
   it('finds the first day in a series, ignoring the Sun grazing the skyline at dawn', () => {
@@ -84,7 +92,7 @@ describe('mission log', () => {
     expect(questionReady(c, aDay)).toBe(true)
     expect(c.question!.answer(aDay)).toBe('around')
     expect(c.question!.answer({ ...aDay, sunElMax: 40 })).toBe('over')
-    expect(c.found({ ...aDay, memory: { ...aDay.memory, answer: 'around' } })).toContain('never climbs higher than 6.2°')
+    expect(c.found({ ...aDay, memory: { ...aDay.memory, answer: 'around' } })?.stats[0]).toEqual({ value: '6.2°', label: 'highest Sun in 30 days' })
   })
 
   it('Peaks of light: visit both places, then the answer is the one with more sunlight', () => {
@@ -95,15 +103,17 @@ describe('mission log', () => {
     expect(c.question!.answer(ctx)).toBe(MALAPERT)
     const done = { ...ctx, memory: { ...ctx.memory, answer: SHACKLETON } }
     expect(chapterDone(c, done)).toBe(true)
-    expect(c.found(done)).toContain('71 %')
-    expect(c.found(done)).toContain('Shackleton crater) 0 %')
+    expect(c.found(done)?.stats).toEqual([
+      { value: '71 %', label: 'Mons Malapert sunlit' },
+      { value: '0 %', label: 'Shackleton crater sunlit' },
+    ])
   })
 
   it('Calling home: find the Earth, then wait for it to hide; a place where it never hides says so', () => {
     const c = ch('call-home')
     const ctx = { ...base, view: 'ground' as const, earthOnScreen: true, earthContact: false }
     expect(chapterDone(c, ctx)).toBe(true)
-    expect(c.found(ctx)).toContain('124 hours (about 5 days)')
+    expect(c.found(ctx)?.stats.map((s) => s.value)).toEqual(['83 %', '5 days'])
     const never = { ...base, metrics: { ...base.metrics!, commsPct: 100 } }
     expect(c.steps(never)[1].text).toContain('never hides')
   })
@@ -116,9 +126,15 @@ describe('mission log', () => {
     const point = { kind: 'point' as const, lat: -70, lon: 10 }
     const ready = { ...start, selection: point, sunUp: true, earthContact: true, view: 'ground' as const, horizonKind: 'smooth_sphere' as const, placeName: '70.000° S, 10.000° E' }
     expect(chapterDone(c, ready)).toBe(true)
-    expect(c.found(ready)).toContain('70.000° S, 10.000° E: ready for landing')
-    expect(c.found(ready)).toContain('treat the Moon as smooth')
-    expect(c.found({ ...ready, horizonKind: 'terrain' })).toContain('real LOLA skyline')
+    expect(c.found(ready)?.note).toContain('70.000° S, 10.000° E: ready for landing')
+    expect(c.found(ready)?.note).toContain('taken as smooth')
+    expect(c.found({ ...ready, horizonKind: 'terrain' })?.note).toContain('Real LOLA skyline')
+    expect(c.found(ready)?.stats).toHaveLength(4)
+  })
+
+  it('says durations as hours below two days and as whole days above', () => {
+    expect(dur(30)).toBe('30 h')
+    expect(dur(123.5)).toBe('5 days')
   })
 
   it('keeps a step ticked once reached (latched), even if the view moves on', () => {
