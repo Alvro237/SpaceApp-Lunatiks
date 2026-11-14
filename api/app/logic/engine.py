@@ -73,7 +73,7 @@ class Series:
     earth_radius_deg: np.ndarray
     eclipse: np.ndarray           # 0 none, 1 partial, 2 total: the Earth covering the Sun
     irradiance_w_m2: np.ndarray   # normal to the rays, before horizon and panel factors
-    power_w_m2: np.ndarray        # irradiance x visible fraction x (1 - eclipsed) x panel cosine factor
+    power_w_m2: np.ndarray        # irradiance x visible fraction x panel cosine factor (no eclipse: see below)
     sun_eclipsed_fraction: np.ndarray  # 0..1 of the solar disc hidden behind the Earth (lunar eclipse)
 
     def sunlit(self) -> np.ndarray:
@@ -116,12 +116,12 @@ def evaluate(eph: EphemerisTable, model: SiteModel, t_ms, params: AnalysisParams
     sep = separation_deg(sun.unit, earth.unit)
     eclipse = np.where(sep < er - sr, 2, np.where(sep < er + sr, 1, 0)).astype(np.uint8)
     irradiance = solar_irradiance_w_m2(sun.dist_km)
-    # Light reaching the array: the part of the disc above the horizon and not behind the Earth. The product
-    # treats the two occulters as independent; it is exact whenever either fraction is 0 or 1, and otherwise
-    # lies between the true bounds max(0, f_h + f_e - 1) and min(f_h, f_e) (only when an eclipse coincides with
-    # the Sun crossing the skyline).
+    # power_w_m2 keeps the horizon and panel factors only. The eclipse is the power model's to apply, once:
+    # MECH's power, thermal and battery code multiply by (1 - obscuration) themselves (feat/mech-power,
+    # logic/eclipse.py), so folding it in here would count every eclipse twice. sun_eclipsed_fraction is the
+    # same overlap geometry, reported for light and comms answers.
     sun_eclipsed = disc_overlap_fraction(sep, sr, er)
-    power = irradiance * sun_frac * (1.0 - sun_eclipsed) * panel_factor(params.panel, sun.el)
+    power = irradiance * sun_frac * panel_factor(params.panel, sun.el)
     return Series(t_ms=t, sun_el=sun.el, sun_az=sun.az, sun_frac=sun_frac, sun_dist_km=sun.dist_km,
                   sun_radius_deg=sr, earth_el=earth.el, earth_az=earth.az, earth_frac=earth_frac,
                   earth_dist_km=earth.dist_km, earth_radius_deg=er, eclipse=eclipse,

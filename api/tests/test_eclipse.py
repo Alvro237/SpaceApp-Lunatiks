@@ -101,13 +101,14 @@ def test_eclipse_phases_through_the_endpoint():
     assert [x["sun_eclipsed_fraction"] for x in p][0] == 0.0 and 0.0 < p[1]["sun_eclipsed_fraction"] < 1.0
 
 
-def test_engine_power_goes_dark_in_an_eclipse():
-    """The engine's power series (what the MECH power endpoint builds on) drops through the partial phase and
-    is zero in totality: power = irradiance x horizon fraction x (1 - eclipsed) x panel factor."""
+def test_engine_power_leaves_the_eclipse_to_the_power_model():
+    """power_w_m2 = irradiance x horizon fraction x panel factor, with no eclipse factor: MECH's power, thermal and
+    battery code apply (1 - obscuration) themselves, so the engine must not (it would count eclipses twice).
+    sun_eclipsed_fraction carries the eclipse: 0, partial, then 1 in totality on 2029-06-26."""
     store = get_store()
     model = services.model_for_site(store, store.sites.get(SITE), 0.0)
     t = [services.to_ms(datetime(2029, 6, 26, h, m, tzinfo=timezone.utc)) for h, m in ((1, 0), (2, 0), (3, 22))]
     s = evaluate(store.ephemeris, model, t)
-    expected = s.irradiance_w_m2 * s.sun_frac * (1 - s.sun_eclipsed_fraction) * np.cos(np.radians(s.sun_el))
-    assert s.power_w_m2 == pytest.approx(expected)
-    assert s.power_w_m2[0] > s.power_w_m2[1] > s.power_w_m2[2] == 0.0
+    assert s.power_w_m2 == pytest.approx(s.irradiance_w_m2 * s.sun_frac * np.cos(np.radians(s.sun_el)))
+    assert s.power_w_m2[2] > 0
+    assert s.sun_eclipsed_fraction[0] == 0.0 and 0 < s.sun_eclipsed_fraction[1] < 1 and s.sun_eclipsed_fraction[2] == 1.0

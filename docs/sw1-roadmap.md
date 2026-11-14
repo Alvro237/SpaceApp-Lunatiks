@@ -19,6 +19,9 @@ table; it is not part of this roadmap until someone assigns it.
 
 ## Decisions that apply to every SW-1 endpoint
 
+- **Eclipses in power belong to MECH.** The engine's `power_w_m2` carries horizon and panel factors only; MECH's
+  `/power`, thermal and battery code apply `(1 − obscuration)` once. A first version of this branch put the factor
+  in the engine; it was removed on 2026-11-14 when `feat/mech-power` showed it would count every eclipse twice.
 - **No power numbers.** Irradiance, array power and energy belong to MECH's `POST /api/v1/power`; SW-1 responses
   carry the light geometry power is built from (visible fraction, eclipsed fraction, Sun distance and elevation).
   One source for power in the merged API. (Owner's decision, 2026-11-14.)

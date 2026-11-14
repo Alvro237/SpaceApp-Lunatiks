@@ -26,7 +26,9 @@ Earthset/Earthrise.
 **No power numbers here, by design.** Irradiance, array power and energy belong to the MECH power endpoint
 (`POST /api/v1/power`), so the merged API has one source for power and no two figures can disagree. This endpoint
 gives the light geometry that power is built from (`sun.visible_fraction`, `sun_eclipsed_fraction`,
-`sun.distance_km`, `sun.el`). The engine's `Series.power_w_m2` already includes the eclipse factor for MECH to use.
+`sun.distance_km`, `sun.el`). The engine's `Series.power_w_m2` has **no** eclipse factor: MECH applies
+`(1 − obscuration)` once in its own power, thermal and battery code. `sun_eclipsed_fraction` here and MECH's
+`obscuration` are the same geometry and agree to 4e-12.
 
 ### Request
 
@@ -159,7 +161,8 @@ Run `cd api && uv run python -m tests.sw1_validation` (pytest runs the same chec
    of each of the 10 total ones the Sun is fully hidden (`sun_eclipsed_fraction` = 1); no penumbral one hides the whole
    Sun; every eclipse the engine finds at Apollo 11 in eleven years is a catalogue eclipse. The overlap formula
    has hand-worked tests (disjoint, inside, area ratio, two unit circles one radius apart = 0.391002), and the
-   engine's power series is tested to fall through the partial phase and reach 0 in totality.
+   engine's `power_w_m2` is tested to carry no eclipse factor (MECH applies it), and `sun_eclipsed_fraction` to go
+   0 → partial → 1 through the 2029-06-26 eclipse.
 5. **The validator is tested**: tampered responses (a power field, wrong disc size, fraction out of range,
    eclipse inconsistent with the eclipsed share, wrong flag) are rejected.
 
