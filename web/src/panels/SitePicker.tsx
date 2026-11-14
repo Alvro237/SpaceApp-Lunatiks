@@ -9,6 +9,8 @@ import { useApp } from '../state/store'
 import { useMasks } from '../time/hooks'
 import type { StaticSite } from '../time/staticData'
 import { ApiStatus } from '../ui/ApiStatus'
+import { matchesQuery, useMapSites } from '../map/useMapSites'
+import { type Screen, NO_SCREEN, screenActive } from '../state/store'
 import { fmtLat, fmtLon, parseCoordinates } from './format'
 
 
@@ -37,9 +39,13 @@ export function SitePicker() {
   const { sites, fromApi, error } = useCatalogue()
   const selection = useApp((s) => s.selection)
   const select = useApp((s) => s.select)
-  const [query, setQuery] = useState('')
-  const q = query.trim().toLowerCase()
-  const shown = sites.filter((s) => !q || `${s.name} ${s.region ?? ''} ${s.group}`.toLowerCase().includes(q))
+  const query = useApp((s) => s.siteQuery)
+  const set = useApp((s) => s.set)
+  const setQuery = (siteQuery: string) => set({ siteQuery })
+  // the same rule as the map (useMapSites): name search and the screening filters
+  const verdicts = new Map(useMapSites().map((m) => [m.key, m.pass]))
+  const screening = screenActive(useApp((s) => s.screen))
+  const shown = sites.filter((s) => matchesQuery(s.name, `${s.region ?? ''} ${s.group}`, query) && (!screening || verdicts.get(s.id) === true))
   // Groups with LOLA terrain horizons (the south pole) first; the API's order within each group.
   const terrainShare = (g: string) => shown.filter((s) => s.group === g && s.terrain_available).length / Math.max(1, shown.filter((s) => s.group === g).length)
   const groups = [...new Set(shown.map((s) => s.group))].sort((a, b) => terrainShare(b) - terrainShare(a))
@@ -81,8 +87,9 @@ export function SitePicker() {
             </ul>
           </div>
         ))}
-        {shown.length === 0 && <p className="muted">No site matches “{query}”.</p>}
+        {shown.length === 0 && <p className="muted">No site matches.</p>}
       </div>
+      <ScreenFilters />
       <ManualPoint />
     </div>
   )
@@ -123,6 +130,48 @@ function ManualPoint() {
       )}
       <button type="submit">Analyse this point</button>
     </form>
+    </details>
+  )
+}
+
+/**
+ * Screening of the catalogue over the analysis window (browser engine) and the sites' LOLA slope. The map and the
+ * list show only the sites that pass; a site with no terrain has no slope and does not pass a slope limit.
+ */
+function ScreenFilters() {
+  const id = useId()
+  const screen = useApp((s) => s.screen)
+  const set = useApp((s) => s.set)
+  const field = (key: keyof Screen, label: string, max: number) => (
+    <div className="field stack">
+      <label htmlFor={`${id}-${key}`}>{label}</label>
+      <input
+        id={`${id}-${key}`}
+        type="number"
+        inputMode="decimal"
+        min={0}
+        max={max}
+        value={screen[key] ?? ''}
+        onChange={(e) => {
+          const v = e.target.value.trim() === '' ? null : Number(e.target.value)
+          set({ screen: { ...screen, [key]: v !== null && Number.isFinite(v) ? Math.min(max, Math.max(0, v)) : null } })
+        }}
+      />
+    </div>
+  )
+  return (
+    <details className="manual" open={screenActive(screen)}>
+      <summary>Filter sites</summary>
+      <div className="row">
+        {field('minSunPct', 'Sunlit ≥ %', 100)}
+        {field('minEarthPct', 'Earth ≥ %', 100)}
+        {field('maxSlopeDeg', 'Slope ≤ °', 45)}
+      </div>
+      {screenActive(screen) && (
+        <button type="button" className="link" onClick={() => set({ screen: NO_SCREEN })}>
+          Clear filters
+        </button>
+      )}
     </details>
   )
 }

@@ -20,6 +20,8 @@ dist/
 .claude/settings.local.json
 *.log
 
+# local dev viewer (not part of the project)
+viewer/
 # Frontend static data: copied from data/ and built by web/scripts (npm run tiles), never committed
 web/public/data/
 web/public/tiles/

@@ -50,7 +50,7 @@ export interface Tileset {
   overview: { path: string; samples: number; min: number; max: number }
   layers: Record<string, LayerMeta>
   validation?: {
-    siteHeights: { site: string; catalogueGroundM: number; tileM: number; differenceM: number }[]
+    siteHeights: { site: string; catalogueGroundM: number; tileM: number; differenceM: number; finestLevel?: string }[]
     maxAbsSiteDifferenceM: number | null
     sharedEdgeMismatches: number
     maxQuantisationM: number

@@ -9,16 +9,16 @@ import { useQuery } from '@tanstack/react-query'
 import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { useInsets } from '../state/layout'
-import { type Selection, sameSelection, useApp } from '../state/store'
+import { type MarkerStyle, useApp } from '../state/store'
+import { MarkerSet } from '../map/markerSet'
+import { type MapSite, useMapSites } from '../map/useMapSites'
 import { TileLoader } from '../terrain/loader'
-import { useEphemeris, useMasks, useSiteNames } from '../time/hooks'
+import { useEphemeris, useMasks } from '../time/hooks'
 import { DATA_BASE } from '../time/staticData'
 import { MOON_R_KM, type Orbit, OrbitRig, latLonToScene, raySphere, sceneToLatLon } from './orbit'
 import { GLOBE_FRAG, GLOBE_VERT } from './shaders'
 
 const FOV = 35
-/** 24 px targets need about 34 px between centres so that no corner enters a neighbour's 24 px circle (WCAG 2.5.8). */
-const MIN_MARKER_GAP_PX = 34
 /** The polar map covers the disc south of this latitude (the LOLA polar grids). */
 export const MAP_DISC_LAT = -60
 /** Zooming in closer than this over the polar cap enters the map. */
@@ -50,27 +50,13 @@ const START: Orbit = { lat: -48, lon: 10, dist: MOON_R_KM * 3.4 }
 export function GlobeView() {
   const globe = useQuery({ queryKey: ['static', 'globe'], queryFn: loadGlobe, staleTime: Infinity, gcTime: Infinity, retry: 1 })
   const masks = useMasks().data
-  const names = useSiteNames()
-  const selection = useApp((s) => s.selection)
-  const compare = useApp((s) => s.compare)
+  const sites = useMapSites()
+  const markerStyle = useApp((s) => s.markerStyle)
   const select = useApp((s) => s.select)
   const enterMap = useApp((s) => s.enterMap)
   const [orbit] = useState(() => new OrbitRig(START))
-  const markerEls = useRef(new Map<string, HTMLButtonElement>())
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null)
   const pickRef = useRef<((cx: number, cy: number) => [number, number] | null) | null>(null)
-
-  const markers = useMemo(
-    () =>
-      (masks?.doc.sites ?? []).map((s) => ({
-        key: s.id,
-        name: names.get(s.id) ?? s.name,
-        lat: s.lat,
-        lon: s.lon,
-        sel: { kind: 'site', id: s.id } as Selection,
-      })),
-    [masks, names],
-  )
 
   // Picking a place in the panels turns the globe toward it.
   useEffect(() => {
@@ -79,11 +65,11 @@ export function GlobeView() {
       if (s.focusSeq === seq) return
       seq = s.focusSeq
       const sel = s.selection
-      const site = sel.kind === 'site' ? markers.find((m) => m.key === sel.id) : null
+      const site = sel.kind === 'site' ? masks?.site(sel.id) : null
       const ll = sel.kind === 'point' ? [sel.lat, sel.lon] : site ? [site.lat, site.lon] : null
       if (ll) orbit.turnTo(ll[0], ll[1])
     })
-  }, [markers, orbit])
+  }, [masks, orbit])
 
   /** Fly down to a point and open the map there (polar cap), or just turn toward it (elsewhere). */
   const goTo = (lat: number, lon: number) => {
@@ -130,6 +116,11 @@ export function GlobeView() {
     drag.current = null
     if (!d || d.moved) return
     const rect = e.currentTarget.getBoundingClientRect()
+    const site = orbit.markerAt(e.clientX - rect.left, e.clientY - rect.top) as MapSite | null
+    if (site) {
+      select(site.sel)
+      return goTo(site.lat, site.lon)
+    }
     const ll = pickRef.current?.((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height)
     if (ll) goTo(ll[0], ll[1])
   }
@@ -155,8 +146,8 @@ export function GlobeView() {
             <GlobeScene
               data={globe.data}
               orbit={orbit}
-              markers={markers}
-              markerEls={markerEls}
+              sites={sites}
+              markerStyle={markerStyle}
               pickRef={pickRef}
               onEnter={(lat, lon) => enterMap(lat, lon)}
             />
@@ -166,39 +157,8 @@ export function GlobeView() {
             {globe.isError ? 'Global LOLA topography not available.' : 'Loading the Moon…'}
           </p>
         )}
-        <div className="markers">
-          {markers.map((m) => {
-            const current = sameSelection(m.sel, selection)
-            const n = compare.findIndex((c) => sameSelection(c, m.sel))
-            return (
-              <button
-                key={m.key}
-                type="button"
-                ref={(el) => {
-                  if (el) markerEls.current.set(m.key, el)
-                  else markerEls.current.delete(m.key)
-                }}
-                className={`site-marker${current ? ' is-selected' : ''}${n >= 0 ? ' is-compared' : ''}`}
-                aria-pressed={current}
-                aria-label={n >= 0 ? `${m.name}, compared as number ${n + 1}` : m.name}
-                onClick={() => {
-                  select(m.sel)
-                  goTo(m.lat, m.lon)
-                }}
-                style={{ display: 'none' }}
-              >
-                <span className="site-dot" aria-hidden="true">
-                  {n >= 0 ? n + 1 : ''}
-                </span>
-                <span className="site-label" aria-hidden="true">
-                  {m.name}
-                </span>
-              </button>
-            )
-          })}
-        </div>
         <p id="globe-help" className="sr-only">
-          Arrow keys turn the Moon, plus and minus zoom, Enter opens the detailed south-polar map. Sites are buttons.
+          Arrow keys turn the Moon, plus and minus zoom, Enter opens the detailed south-polar map. Sites are listed, with the same information, in the panels.
         </p>
       </div>
       <div className="map-controls" role="group" aria-label="Globe view">
@@ -242,14 +202,23 @@ function setSun(m: THREE.ShaderMaterial, x: number, y: number, z: number) {
 interface SceneProps {
   data: { meta: GlobeMeta; heights: Float32Array }
   orbit: OrbitRig
-  markers: { key: string; lat: number; lon: number }[]
-  markerEls: { current: Map<string, HTMLButtonElement> }
+  sites: MapSite[]
+  markerStyle: MarkerStyle
   pickRef: { current: ((cx: number, cy: number) => [number, number] | null) | null }
   onEnter: (lat: number, lon: number) => void
 }
 
-function GlobeScene({ data, orbit, markers, markerEls, pickRef, onEnter }: SceneProps) {
-  const { camera, size } = useThree()
+/** Height (m) of the global grid at a point, nearest sample. */
+function globeHeight(data: SceneProps['data'], lat: number, lon: number): number {
+  const { width, height } = data.meta
+  const col = Math.floor((((lon % 360) + 360) % 360) / 360 * width) % width
+  const row = Math.min(height - 1, Math.max(0, Math.floor(((90 - lat) / 180) * height)))
+  return data.heights[row * width + col]
+}
+
+function GlobeScene({ data, orbit, sites, markerStyle, pickRef, onEnter }: SceneProps) {
+  const { camera, size, scene } = useThree()
+  const [markersSet] = useState(() => new MarkerSet())
   const eph = useEphemeris().data
   const [reduced] = useState(() => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
   const [material] = useState(() => {
@@ -279,6 +248,44 @@ function GlobeScene({ data, orbit, markers, markerEls, pickRef, onEnter }: Scene
   )
 
   useEffect(() => {
+    scene.add(markersSet.group)
+    return () => {
+      scene.remove(markersSet.group)
+      markersSet.dispose()
+    }
+  }, [scene, markersSet])
+
+  // Places on the globe, just above the (exaggerated) relief; crater outlines as small circles on the sphere.
+  useEffect(() => {
+    const radius = (lat: number, lon: number) => MOON_R_KM + ((globeHeight(data, lat, lon) + 300) / 1000) * RELIEF_EXAGGERATION
+    markersSet.set(sites, markerStyle, {
+      anchor: (s) => new THREE.Vector3(...latLonToScene(s.lat, s.lon, radius(s.lat, s.lon))),
+      ring: (s) => {
+        if (!s.diameterKm) return null
+        const c = new THREE.Vector3(...latLonToScene(s.lat, s.lon, 1)).normalize()
+        const e1 = new THREE.Vector3(0, 1, 0).cross(c)
+        if (e1.lengthSq() < 1e-9) e1.set(1, 0, 0)
+        e1.normalize()
+        const e2 = c.clone().cross(e1)
+        const theta = s.diameterKm / 2 / MOON_R_KM
+        const r = radius(s.lat, s.lon)
+        const n = 64
+        const out = new Float32Array((n + 1) * 3)
+        for (let i = 0; i <= n; i++) {
+          const a = (i / n) * Math.PI * 2
+          const p = c.clone().multiplyScalar(Math.cos(theta))
+            .addScaledVector(e1, Math.sin(theta) * Math.cos(a))
+            .addScaledVector(e2, Math.sin(theta) * Math.sin(a))
+            .multiplyScalar(r)
+          out.set([p.x, p.y, p.z], i * 3)
+        }
+        return out
+      },
+    })
+    orbit.setMarkerPicker((px, py) => markersSet.pick(px, py, camera as THREE.PerspectiveCamera, size.width, size.height))
+  }, [markersSet, sites, markerStyle, data, camera, size, orbit])
+
+  useEffect(() => {
     pickRef.current = (cx, cy) => {
       const ray = new THREE.Raycaster()
       ray.setFromCamera(new THREE.Vector2(cx * 2 - 1, -(cy * 2 - 1)), camera)
@@ -289,8 +296,8 @@ function GlobeScene({ data, orbit, markers, markerEls, pickRef, onEnter }: Scene
     }
   }, [camera, pickRef])
 
-  const v = useMemo(() => new THREE.Vector3(), [])
   const camDir = useMemo(() => new THREE.Vector3(), [])
+  const toPoint = useMemo(() => new THREE.Vector3(), [])
 
   useFrame((_, dt) => {
     orbit.fit(size.width, size.height, useInsets.getState(), FOV)
@@ -319,27 +326,12 @@ function GlobeScene({ data, orbit, markers, markerEls, pickRef, onEnter }: Scene
       return
     }
 
-    // site buttons on the visible hemisphere
-    camDir.copy(cam.position).normalize()
-    const placed: [number, number][] = []
-    const rank = (el?: HTMLElement) => (!el ? 0 : el.classList.contains('is-selected') ? 2 : el.classList.contains('is-compared') ? 1 : 0)
-    const ordered = [...markers].sort((a, b) => rank(markerEls.current.get(b.key)) - rank(markerEls.current.get(a.key)))
-    for (const m of ordered) {
-      const el = markerEls.current.get(m.key)
-      if (!el) continue
-      const q = latLonToScene(m.lat, m.lon)
-      v.set(q[0], q[1], q[2])
-      const facing = v.clone().normalize().dot(camDir) > 0.08
-      v.project(cam)
-      const sx = ((v.x + 1) / 2) * size.width
-      const sy = ((1 - v.y) / 2) * size.height
-      const crowded = placed.some(([a, b]) => Math.hypot(a - sx, b - sy) < MIN_MARKER_GAP_PX)
-      const visible = facing && !crowded && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05
-      if (visible) placed.push([sx, sy])
-      el.style.display = visible ? '' : 'none'
-      el.style.transform = `translate(${sx}px, ${sy}px)`
-      el.dataset.labels = n.dist < MOON_R_KM * 2.2 || el.classList.contains('is-selected') ? 'on' : 'off'
-    }
+    // places on the visible hemisphere only (a point is hidden when the sphere is between it and the camera)
+    camDir.copy(cam.position)
+    markersSet.update(cam, size.width, size.height, true, (p) => {
+      toPoint.copy(camDir).sub(p)
+      return p.dot(toPoint) > 0
+    })
   })
 
   return <mesh geometry={geometry} material={material} />
