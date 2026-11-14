@@ -15,6 +15,8 @@ import type {
   Health,
   PowerRequest,
   PowerResponse,
+  RadiationRequest,
+  RadiationResponse,
   SiteDetail,
   SiteList,
   SiteSeries,
@@ -77,10 +79,10 @@ const q = (params: Record<string, string | number | undefined>) =>
       .map(([k, v]) => [k, String(v)]),
   ).toString()
 
+/** SW-1 query parameters. No `panel`: the panel orientation only matters to POST /power (MECH). */
 export interface StateParams {
   t: string
   mast_m: number
-  panel: string
   comms_min_fraction: number
 }
 
@@ -89,7 +91,6 @@ export interface SeriesParams {
   duration_h: number
   step_min: number
   mast_m: number
-  panel: string
   comms_min_fraction: number
 }
 
@@ -112,6 +113,7 @@ export const api = {
   searchCandidates: (body: CandidateSearchRequest) =>
     request<CandidateSearchResponse>('POST', '/api/v1/candidates/search', body),
   power: (body: PowerRequest) => request<PowerResponse>('POST', '/api/v1/power', body),
+  radiation: (body: RadiationRequest, signal?: AbortSignal) => request<RadiationResponse>('POST', '/api/v1/radiation', body, signal),
   craters: (bbox: [number, number, number, number], minDiamKm: number, signal?: AbortSignal) =>
     request<CraterList>('GET', `/api/v1/craters?${q({ bbox: bbox.join(','), min_diam_km: minDiamKm })}`, undefined, signal),
 }

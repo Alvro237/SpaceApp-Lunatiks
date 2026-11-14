@@ -1,0 +1,80 @@
+{
+ "eclipse": {
+  "comms_min_fraction": 0.5,
+  "earth": {
+   "angular_radius_deg": 0.9551330069532576,
+   "az": 234.96570402502317,
+   "distance_km": 382624.4668382341,
+   "el": -0.942581179260692,
+   "horizon_el": 21.551371838999074,
+   "visible": false,
+   "visible_fraction": 0.0
+  },
+  "eclipse": "total",
+  "ground_m": -2788.7,
+  "ground_source": "lola_site",
+  "horizon_kind": "terrain",
+  "lat": -89.67,
+  "lon": 129.78,
+  "mast_m": 2.0,
+  "mast_used_m": 2.0,
+  "next_earth_transition": null,
+  "next_sun_transition": null,
+  "site_id": "shackleton",
+  "sun": {
+   "angular_radius_deg": 0.26809583419823013,
+   "az": 235.01501652375134,
+   "distance_km": 148681233.2675598,
+   "el": -0.32819880096457155,
+   "horizon_el": 21.548798678099892,
+   "visible": false,
+   "visible_fraction": 0.0
+  },
+  "sun_eclipsed_fraction": 1.0,
+  "t": "2026-03-03T11:33:00Z",
+  "transition_search_days": 45.0
+ },
+ "im2": {
+  "comms_min_fraction": 0.5,
+  "earth": {
+   "angular_radius_deg": 0.9019476012293526,
+   "az": 328.9037441973932,
+   "distance_km": 405184.7628819192,
+   "el": 0.4382113865499505,
+   "horizon_el": -1.433850232104271,
+   "visible": true,
+   "visible_fraction": 1.0
+  },
+  "eclipse": "none",
+  "ground_m": 5312.6,
+  "ground_source": "lola_site",
+  "horizon_kind": "terrain",
+  "lat": -84.78,
+  "lon": 29.13,
+  "mast_m": 2.0,
+  "mast_used_m": 2.0,
+  "next_earth_transition": {
+   "at": "2026-12-04T09:56:26Z",
+   "in_hours": 475.94055555555553,
+   "kind": "set"
+  },
+  "next_sun_transition": {
+   "at": "2026-11-15T02:43:50Z",
+   "in_hours": 12.730555555555556,
+   "kind": "rise"
+  },
+  "site_id": "im-2",
+  "sun": {
+   "angular_radius_deg": 0.26969323589737515,
+   "az": 90.51833283152378,
+   "distance_km": 147800595.99330547,
+   "el": 1.5157143566524045,
+   "horizon_el": 2.89,
+   "visible": false,
+   "visible_fraction": 0.0
+  },
+  "sun_eclipsed_fraction": 0.0,
+  "t": "2026-11-14T14:00:00Z",
+  "transition_search_days": 45.0
+ }
+}

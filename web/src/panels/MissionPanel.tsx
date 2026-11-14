@@ -1,19 +1,65 @@
 /**
  * Mission mode: hard filters (pass or fail) then a soft score with weights the planner sees and can change
  * (POST /api/v1/candidates/search). A site that fails any filter is out; it does not just score lower.
- * Every result says pass, fail or unknown in words and symbols, never colour alone.
+ *
+ * Laid out as grouped lists (iOS style) inside the tool bar's flyout: each registered filter is a row with an icon,
+ * its name, an ⓘ with what it checks, and a switch; switching it on reveals its thresholds, each with its unit.
+ * Weights are sliders with the share in %, the search options a segmented control and a switch. Every result says
+ * pass, fail or unknown in words and symbols, never colour alone.
  */
-import { type FormEvent, useId, useState } from 'react'
+import { type FormEvent, type ReactNode, useId, useState } from 'react'
 import { isMissing } from '../api/client'
 import { useCandidateSearch, useConstraints } from '../api/hooks'
 import type { Candidate, ConstraintResult } from '../api/types'
 import { useApp } from '../state/store'
 import { isoMinute } from '../time/clock'
 import { ApiStatus } from '../ui/ApiStatus'
-import { FILTER_SPECS, buildThreshold } from './filterSpecs'
+import {
+  IconAntenna,
+  IconBattery,
+  IconClock,
+  IconCrater,
+  IconMountain,
+  IconRadiation,
+  IconRock,
+  IconSearch,
+  IconSliders,
+  IconSun,
+  IconThermo,
+} from '../ui/icons'
+import { Tip } from '../ui/Tip'
+import { FILTER_SPECS, type FieldSpec, type FilterIcon, buildThreshold } from './filterSpecs'
 
 const verdict = (p: boolean | null) =>
   p === true ? { s: '✓', w: 'pass', c: 'pass' } : p === false ? { s: '✗', w: 'fail', c: 'fail' } : { s: '?', w: 'unknown', c: 'unknown' }
+
+const ICONS: Record<FilterIcon, ReactNode> = {
+  slope: <IconMountain size={16} />,
+  sun: <IconSun size={16} />,
+  radiation: <IconRadiation size={16} />,
+  battery: <IconBattery size={16} />,
+  thermo: <IconThermo size={16} />,
+  earth: <IconAntenna size={16} />,
+  crater: <IconCrater size={16} />,
+  rock: <IconRock size={16} />,
+  clock: <IconClock size={16} />,
+}
+const TONE: Record<FilterIcon, string> = {
+  slope: 'gray',
+  sun: 'orange',
+  radiation: 'purple',
+  battery: 'green',
+  thermo: 'red',
+  earth: 'blue',
+  crater: 'gray',
+  rock: 'gray',
+  clock: 'blue',
+}
+const WEIGHT_LABEL: Record<string, { label: string; icon: ReactNode; tone: string; tip: string }> = {
+  sunlight: { label: 'Sunlight', icon: <IconSun size={16} />, tone: 'orange', tip: 'Share of the window with the Sun visible.' },
+  comms: { label: 'Earth contact', icon: <IconAntenna size={16} />, tone: 'blue', tip: 'Share of the window with the Earth in view.' },
+  continuity: { label: 'Continuity', icon: <IconClock size={16} />, tone: 'gray', tip: 'Shorter longest night and blackout score higher.' },
+}
 
 export function MissionPanel() {
   const id = useId()
@@ -30,6 +76,8 @@ export function MissionPanel() {
 
   const filters = meta.data ? Object.entries(meta.data.hard_filters) : []
   const w = weights ?? meta.data?.soft_score_default_weights ?? {}
+  const wSum = Object.values(w).reduce((a, b) => a + b, 0) || 1
+  const onCount = filters.filter(([fid]) => enabled[fid]).length
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
@@ -64,125 +112,211 @@ export function MissionPanel() {
     })
   }
 
+  const setValue = (fid: string, key: string, v: string) => setValues({ ...values, [fid]: { ...values[fid], [key]: v } })
+
+  const field = (fid: string, f: FieldSpec) => {
+    const fieldId = `${id}-${fid}-${f.key}`
+    const value = values[fid]?.[f.key] ?? ''
+    if (f.kind === 'select') {
+      return (
+        <div className="pfield" key={f.key}>
+          <div className="pfield-top">
+            <span id={`${fieldId}-l`} className="pfield-label">
+              {f.label}
+            </span>
+            {f.hint && <Tip label={f.label.toLowerCase()}>{f.hint}</Tip>}
+          </div>
+          <div className="seg" role="radiogroup" aria-labelledby={`${fieldId}-l`}>
+            {f.options!.map((o) => (
+              <label key={o.value} className={`seg-item${value === o.value ? ' is-on' : ''}`}>
+                <input type="radio" name={fieldId} checked={value === o.value} onChange={() => setValue(fid, f.key, o.value)} />
+                <span>{o.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )
+    }
+    return (
+      <div className="pfield" key={f.key}>
+        <div className="pfield-top">
+          <label htmlFor={fieldId}>
+            {f.label}
+            {f.optional && <span className="opt"> (optional)</span>}
+          </label>
+          {f.hint && (
+            <Tip label={f.label.toLowerCase()}>
+              {f.hint}
+              {f.unit ? ` Unit: ${f.unit}.` : ''}
+            </Tip>
+          )}
+        </div>
+        <div className="unit-input">
+          <input id={fieldId} inputMode="decimal" autoComplete="off" value={value} onChange={(e) => setValue(fid, f.key, e.target.value)} />
+          {f.unit && (
+            <span className="unit" aria-hidden="true">
+              {f.unit}
+            </span>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="panel-section">
+    <div className="panel-section mission">
       {!!meta.error && <ApiStatus error={meta.error} what="Registered filters" />}
-      <form onSubmit={submit} noValidate>
-        {filters.map(([fid, doc]) => {
-          const spec = FILTER_SPECS[fid]
-          return (
-            <fieldset key={fid} className="filter">
-              <legend>
-                <label>
-                  <input type="checkbox" checked={!!enabled[fid]} onChange={(e) => setEnabled({ ...enabled, [fid]: e.target.checked })} />{' '}
-                  {spec?.title ?? fid}
-                </label>
-              </legend>
-              {enabled[fid] && (
-                <>
-                  {spec ? (
-                    <div className="grid-fields">
-                      {spec.fields.map((f) => (
-                        <div className="field stack" key={f.key}>
-                          <label htmlFor={`${id}-${fid}-${f.key}`}>
-                            {f.label}
-                            {f.optional ? ' (optional)' : ''}
-                          </label>
-                          {f.kind === 'select' ? (
-                            <select
-                              id={`${id}-${fid}-${f.key}`}
-                              value={values[fid]?.[f.key] ?? ''}
-                              onChange={(e) => setValues({ ...values, [fid]: { ...values[fid], [f.key]: e.target.value } })}
-                            >
-                              <option value="">Choose…</option>
-                              {f.options!.map((o) => (
-                                <option key={o}>{o}</option>
-                              ))}
-                            </select>
-                          ) : (
-                            <input
-                              id={`${id}-${fid}-${f.key}`}
-                              inputMode="decimal"
-                              value={values[fid]?.[f.key] ?? ''}
-                              onChange={(e) => setValues({ ...values, [fid]: { ...values[fid], [f.key]: e.target.value } })}
-                            />
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="field stack">
-                      <label htmlFor={`${id}-${fid}-raw`}>Threshold (JSON)</label>
-                      <textarea id={`${id}-${fid}-raw`} rows={2} value={raw[fid] ?? ''} onChange={(e) => setRaw({ ...raw, [fid]: e.target.value })} />
-                    </div>
-                  )}
-                  {spec?.help && <p className="fine">{spec.help}</p>}
-                  <details>
-                    <summary>Definition</summary>
-                    <pre className="doc">{doc}</pre>
-                  </details>
-                </>
-              )}
-            </fieldset>
-          )
-        })}
+      <form onSubmit={submit} noValidate className="mission-form">
+        <h3 className="ios-header">
+          Must pass{onCount > 0 && <span className="count-pill">{onCount} on</span>}
+          <Tip label="hard filters">A site that fails any filter you switch on is out. It does not just score lower.</Tip>
+        </h3>
+        <div className="ios-list filter-list">
+          {filters.map(([fid, doc]) => {
+            const spec = FILTER_SPECS[fid]
+            const on = !!enabled[fid]
+            const icon = spec?.icon ?? 'slope'
+            const labelId = `${id}-${fid}-name`
+            return (
+              <div key={fid} className={`filter-row${on ? ' is-on' : ''}`}>
+                <div className="ios-row">
+                  <span className={`ios-icon ios-icon-${TONE[icon]}`}>{ICONS[icon]}</span>
+                  <span id={labelId} className="ios-label">
+                    {spec?.title ?? fid}
+                  </span>
+                  <Tip label={(spec?.title ?? fid).toLowerCase()}>
+                    {spec?.summary ?? ''} <span className="tip-doc">{doc}</span>
+                  </Tip>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={on}
+                    aria-labelledby={labelId}
+                    className="switch"
+                    onClick={() => setEnabled({ ...enabled, [fid]: !on })}
+                  >
+                    <span className="switch-knob" aria-hidden="true" />
+                  </button>
+                </div>
+                {on && (
+                  <div className="filter-fields">
+                    {spec ? (
+                      <>
+                        {spec.fields.filter((f) => !f.key.includes('.')).map((f) => field(fid, f))}
+                        {spec.fields.some((f) => f.key.includes('.')) && (
+                          <details className="pgroup-d">
+                            <summary>
+                              <IconThermo size={16} /> Ground properties
+                            </summary>
+                            {spec.fields.filter((f) => f.key.includes('.')).map((f) => field(fid, f))}
+                          </details>
+                        )}
+                      </>
+                    ) : (
+                      <div className="pfield">
+                        <label htmlFor={`${id}-${fid}-raw`}>Threshold (JSON)</label>
+                        <textarea id={`${id}-${fid}-raw`} rows={2} value={raw[fid] ?? ''} onChange={(e) => setRaw({ ...raw, [fid]: e.target.value })} />
+                      </div>
+                    )}
+                    {spec?.help && <p className="fine">{spec.help}</p>}
+                  </div>
+                )}
+              </div>
+            )
+          })}
+          {filters.length === 0 && !meta.error && <p className="muted pad">Loading filters…</p>}
+        </div>
 
         {Object.keys(w).length > 0 && (
-          <fieldset className="weights">
-            <legend>Score weights</legend>
-            {Object.entries(w).map(([k, v]) => (
-              <div className="field" key={k}>
-                <label htmlFor={`${id}-w-${k}`}>{k}</label>
-                <input
-                  id={`${id}-w-${k}`}
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={v}
-                  onChange={(e) => setWeights({ ...w, [k]: Number(e.target.value) })}
-                  aria-valuetext={v.toFixed(2)}
-                />
-                <output htmlFor={`${id}-w-${k}`}>{v.toFixed(2)}</output>
-              </div>
-            ))}
-            {weights && (
-              <button type="button" className="link" onClick={() => setWeights(null)}>
-                Reset
-              </button>
-            )}
-          </fieldset>
+          <>
+            <h3 className="ios-header">
+              Ranking
+              <Tip label="the ranking">Among the sites that pass, a weighted mean of these scores. The weights are shown as shares of the total.</Tip>
+              {weights && (
+                <button type="button" className="link header-link" onClick={() => setWeights(null)}>
+                  Reset
+                </button>
+              )}
+            </h3>
+            <div className="ios-list">
+              {Object.entries(w).map(([k, v]) => {
+                const wl = WEIGHT_LABEL[k] ?? { label: k, icon: <IconSliders size={16} />, tone: 'gray', tip: k }
+                return (
+                  <div className="ios-row stack" key={k}>
+                    <div className="ios-row-top">
+                      <span className={`ios-icon ios-icon-${wl.tone}`}>{wl.icon}</span>
+                      <label htmlFor={`${id}-w-${k}`} className="ios-label">
+                        {wl.label}
+                      </label>
+                      <Tip label={wl.label.toLowerCase()}>{wl.tip}</Tip>
+                      <output htmlFor={`${id}-w-${k}`} className="ios-value">
+                        {Math.round((v / wSum) * 100)} %
+                      </output>
+                    </div>
+                    <input
+                      id={`${id}-w-${k}`}
+                      className="ios-slider"
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={v}
+                      onChange={(e) => setWeights({ ...w, [k]: Number(e.target.value) })}
+                      aria-valuetext={`weight ${v.toFixed(2)}, ${Math.round((v / wSum) * 100)} percent of the score`}
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          </>
         )}
 
-        <div className="row">
-          <div className="field stack">
-            <label htmlFor={`${id}-scope`}>Candidates</label>
-            <select id={`${id}-scope`} value={scope} onChange={(e) => setScope(e.target.value as 'catalogue' | 'zones')}>
-              <option value="catalogue">Catalogue sites</option>
-              <option value="zones">Catalogue sites and their neighbours</option>
-            </select>
+        <h3 className="ios-header">Search</h3>
+        <div className="ios-list">
+          <div className="ios-row stack">
+            <div className="ios-row-top">
+              <span id={`${id}-scope-l`} className="ios-label">
+                Candidates
+              </span>
+              <Tip label="candidates">Catalogue: the curated sites. With neighbours: also the screening-grid points around them.</Tip>
+            </div>
+            <div className="seg" role="radiogroup" aria-labelledby={`${id}-scope-l`}>
+              {(
+                [
+                  ['catalogue', 'Catalogue'],
+                  ['zones', 'With neighbours'],
+                ] as const
+              ).map(([v, label]) => (
+                <label key={v} className={`seg-item${scope === v ? ' is-on' : ''}`}>
+                  <input type="radio" name={`${id}-scope`} checked={scope === v} onChange={() => setScope(v)} />
+                  <span>{label}</span>
+                </label>
+              ))}
+            </div>
           </div>
-          <label className="check">
-            <input type="checkbox" checked={unknownPasses} onChange={(e) => setUnknownPasses(e.target.checked)} /> Treat “unknown” (no data) as pass
-          </label>
+          <div className="ios-row">
+            <span id={`${id}-unk`} className="ios-label">
+              Count “no data” as pass
+            </span>
+            <Tip label="no data">Off: a filter that cannot be evaluated at a site (no dataset) puts it out. On: it lets it through.</Tip>
+            <button type="button" role="switch" aria-checked={unknownPasses} aria-labelledby={`${id}-unk`} className="switch" onClick={() => setUnknownPasses(!unknownPasses)}>
+              <span className="switch-knob" aria-hidden="true" />
+            </button>
+          </div>
         </div>
+
         {error && (
           <p role="alert" className="error">
             {error}
           </p>
         )}
-        <button type="submit" className="primary" disabled={search.isPending || filters.length === 0}>
+        <button type="submit" className="primary search-go" disabled={search.isPending || filters.length === 0}>
+          <IconSearch size={17} />
           {search.isPending ? 'Searching…' : 'Find viable sites'}
         </button>
       </form>
 
-      {search.error && (
-        <ApiStatus
-          error={search.error}
-          what="Candidate search"
-          fallback={isMissing(search.error) ? 'Coming soon.' : undefined}
-        />
-      )}
+      {search.error && <ApiStatus error={search.error} what="Candidate search" fallback={isMissing(search.error) ? 'Coming soon.' : undefined} />}
       {search.data && <Results candidates={search.data.candidates} onShow={(c) => c.site_id && select({ kind: 'site', id: c.site_id })} />}
     </div>
   )
@@ -193,9 +327,15 @@ function Results({ candidates, onShow }: { candidates: Candidate[]; onShow: (c: 
   const ids = [...new Set(candidates.flatMap((c) => c.results.map((r) => r.id)))]
   return (
     <div className="results" aria-live="polite">
-      <h3>
-        {viable} of {candidates.length} candidates pass every filter
-      </h3>
+      <h3 className="ios-header">Results</h3>
+      <p className="result-chips">
+        <span className="chip-stat pass">
+          <span aria-hidden="true">✓</span> {viable} viable
+        </span>
+        <span className="chip-stat fail">
+          <span aria-hidden="true">✗</span> {candidates.length - viable} out
+        </span>
+      </p>
       <div className="table-scroll" tabIndex={0} role="region" aria-label="Candidate results">
         <table>
           <caption className="sr-only">Hard-filter results and score per candidate</caption>
