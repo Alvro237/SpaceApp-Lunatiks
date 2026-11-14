@@ -186,8 +186,10 @@ finer tiles from NASA Moon Trek (`web/src/globe/detail`): LOLA heights for the r
 photo view, the LROC WAC mosaic.
 
 - Grid: geographic, level z has tiles of 90 / 2^z degrees (4·2^z × 2·2^z tiles from 180° W, 90° N), 256 × 256
-  cell-centred cells. Levels 2 to 6 for the view (2.7 km to 168 m cells, the level whose cells match a screen
-  pixel, at most 48 tiles); level 1 (32 tiles of 45°) is the photo view's base. Boxes never cross ±180° or ±90°.
+  cell-centred cells. Levels 2 to 7 for the view (2.7 km to 83 m cells, the level whose cells match a device
+  pixel, at most 48 tiles; the whole Moon takes the 48 level-2 tiles nearest the centre); level 1 (32 tiles of
+  45°) is the photo view's base. Boxes never cross ±180° or ±90°. The globe's closest zoom is 50 km above the
+  surface.
 - Heights, by where the tile is (all measured 2026-11-14): between 45° S and 45° N the global DEM
   `LRO_LOLA_DEM_Global_256ppd_v06`; poleward of 45° the 100 m polar DEMs in geographic form
   (`LRO_LOLA_DEM_SPole45_100mp_v04_EQ`, `..._NPole45_...`), which answer every level in about 1.3 s where the
