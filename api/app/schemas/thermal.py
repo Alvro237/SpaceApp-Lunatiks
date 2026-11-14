@@ -1,6 +1,7 @@
 """Request and response models of POST /api/v1/thermal (MECH). snake_case JSON, units in descriptions.
 
-No thermal property has a default: each one needs a cited source, so the caller gives them.
+The regolith defaults to lunar values from Hayne et al. 2017 (logic.thermal.LUNAR_REGOLITH); equipment values
+have no cited default, so the caller gives them.
 """
 from __future__ import annotations
 
@@ -39,7 +40,8 @@ class LimitsIn(BaseModel):
 
 
 class ThermalRequest(WindowRequest):
-    regolith: RegolithIn
+    regolith: RegolithIn | None = Field(None, description=(
+        "Regolith properties; default lunar values from Hayne et al. 2017 (constant-property equivalent)"))
     equipment: EquipmentIn | None = Field(None, description="Lumped equipment box; limits then apply to it")
     limits: LimitsIn | None = None
 

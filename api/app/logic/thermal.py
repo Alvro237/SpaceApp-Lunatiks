@@ -48,6 +48,19 @@ class Regolith:
     geothermal_flux_w_m2: float
 
 
+# Lunar regolith by default (team decision 2026-11-14: "it is the Moon, we know it"), from Hayne et al. (2017),
+# JGR Planets 122, doi:10.1002/2017JE005387, Table A1 and abstract, turned into this model's constant properties:
+#   albedo 0.12 (lunar average Bond albedo at normal incidence) and emissivity 0.95 (Keihm 1984): Table A1
+#   geothermal flux 0.018 W/m2 (Langseth et al. 1976): Table A1
+#   heat capacity = their polynomial c_p(T) at 273 K = 719.7 J/kg K
+#   density = their profile 1800 - 700 exp(-z / 0.06 m) at one diurnal skin depth (4.7 cm, solved together) = 1478
+#   conductivity = I^2 / (rho c_p) with their global thermal inertia I = 55 J m-2 K-1 s-1/2 at 273 K = 2.84e-3 W/m K
+# so a one-layer model has the measured global-average thermal inertia. Their model has depth- and temperature-
+# dependent properties; this one does not (stated in the assumptions).
+LUNAR_REGOLITH = Regolith(albedo=0.12, emissivity=0.95, conductivity_w_mk=2.84e-3, density_kg_m3=1478.0,
+                          heat_capacity_j_kgk=719.7, geothermal_flux_w_m2=0.018)
+
+
 @dataclass(frozen=True)
 class Equipment:
     absorptivity: float

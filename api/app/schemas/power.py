@@ -87,7 +87,7 @@ class PowerRequest(WindowRequest, PowerInputs):
         "1 visible solar disc; 2 adds array power (panel_area_m2, cell_efficiency, derating); 3 adds the battery "
         "balance (load_w, battery_capacity_wh, battery_initial_soc, battery_min_soc, charge_efficiency, "
         "discharge_efficiency); 4 colony analysis: the battery fields without load_w, plus critical_load_w, "
-        "deferrable_load_w, comms_load_w, shed_soc, max_charge_w, max_discharge_w, habitat and regolith; "
+        "deferrable_load_w, comms_load_w, shed_soc, max_charge_w, max_discharge_w and habitat (regolith optional); "
         "window of at least one synodic month (708.7 h)"))
     # level 4 (colony analysis, extension beyond the team's API rules)
     critical_load_w: float | None = Field(None, ge=0.0, description="Level 4: life support and other loads that must never stop, W (heater added by the model)")
@@ -99,14 +99,15 @@ class PowerRequest(WindowRequest, PowerInputs):
     max_charge_w: float | None = Field(None, gt=0.0, description="Level 4: highest charging power the battery accepts (array side), W")
     max_discharge_w: float | None = Field(None, gt=0.0, description="Level 4: highest power the battery can deliver, W")
     habitat: HabitatIn | None = Field(None, description="Level 4: habitat thermal model")
-    regolith: RegolithIn | None = Field(None, description="Level 4: regolith properties for the ground temperature (as /thermal)")
+    regolith: RegolithIn | None = Field(None, description=(
+        "Level 4, optional: regolith properties for the ground temperature; default lunar values from Hayne et al. 2017"))
     include_sizing: bool = Field(True, description="Level 4: also search the smallest battery and array that survive independently")
 
     @model_validator(mode="after")
     def _check_level(self) -> "PowerRequest":
         missing = (self._missing(ARRAY_KEYS) if self.level >= 2 else []) + \
                   (self._missing(BATTERY_KEYS) if self.level == 3 else []) + \
-                  (self._missing(BATTERY_STORE_KEYS + COLONY_KEYS + ("habitat", "regolith")) if self.level == 4 else [])
+                  (self._missing(BATTERY_STORE_KEYS + COLONY_KEYS + ("habitat",)) if self.level == 4 else [])
         if missing:
             raise ValueError(f"level {self.level} needs " + ", ".join(missing))
         if self.level == 4:
