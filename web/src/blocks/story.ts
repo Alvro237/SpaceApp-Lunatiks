@@ -1,7 +1,7 @@
 /**
- * Pip's journey: the Block Moon story. Six short chapters that teach the navigator by using it. Each chapter tells
- * a bit of the story, gives a task as a checklist that ticks itself from what the learner does, and ends with what
- * was found, in the engine's own numbers. Pure functions over a context, so every chapter is testable.
+ * Pip's journey: the Block Moon story, written for children. Six short chapters told by Pip, a little lander made
+ * of blocks. Each one tells a bit of the story, gives a task as a checklist that ticks itself from what the learner
+ * does, and ends with what Pip found, in the engine's own numbers, and one sentence to remember. Pure functions over a context, so every chapter is testable.
  */
 import type { BlockView, Selection } from '../state/store'
 
@@ -55,6 +55,10 @@ export interface Chapter {
   steps: (c: StoryCtx) => Step[]
   /** What the learner found, once every step is done. */
   found: (c: StoryCtx) => string
+  /** A nudge for when the learner is stuck. */
+  hint: string
+  /** One sentence to remember, collected at the end of the story. */
+  lesson: string
   /** A question to answer as the last step, when the chapter has one. */
   choices?: (c: StoryCtx) => { id: string; label: string }[] | null
   /** Done when the chapter starts: put the scene where the story needs it. */
@@ -75,91 +79,102 @@ export const IM2 = 'im-2'
 export const CHAPTERS: Chapter[] = [
   {
     id: 'arrival',
-    title: 'Arrival',
+    title: 'Hello, Moon!',
     story:
-      'Meet Pip, a small lander made of blocks that runs on sunlight. Pip is flying to the Moon’s south pole, to the spot the IM-2 Athena lander was aiming for. Help Pip land.',
+      'Beep boop! I’m Pip, a little lander made of blocks. I eat sunshine to stay awake. I’m flying to the south pole of the Moon. Can you help me land?',
+    hint: 'Open “Places” on the left to see the landing spots.',
+    lesson: 'The blocks are the real shape of the Moon, measured with a laser from space.',
     setup: 'land-im2',
     steps: (c) => [
-      { text: 'In Places, choose IM-2 Athena', done: isSite(c.selection, IM2) },
+      { text: 'Open “Places” and pick IM-2 Athena', done: isSite(c.selection, IM2) },
       { text: 'Press “Stand here” to land', done: c.view === 'ground' && isSite(c.selection, IM2) },
     ],
     found: (c) =>
-      `Pip has landed${c.lat !== null ? ` at ${Math.abs(c.lat).toFixed(1)}° south, about ${Math.round(poleKm(c.lat))} km from the pole` : ''}. Every cube under Pip is a real piece of ground: 960 m wide, its height measured by NASA’s Lunar Reconnaissance Orbiter (LOLA).`,
+      `I landed! ${c.lat !== null ? `I’m only ${Math.round(poleKm(c.lat))} km from the south pole. ` : ''}Every block under me is a real piece of the Moon. A spacecraft called LRO measured how high the ground is by bouncing a laser off it.`,
   },
   {
     id: 'sun',
     title: 'Where is the Sun?',
-    story:
-      'Pip’s solar panel needs the Sun, so first Pip has to find it. But near the pole the Sun never climbs high: it slides around the edge of the sky.',
+    story: 'Brrr, it’s dark here! My solar panel needs the Sun. I’m looking the wrong way. Can you turn around and find it for me?',
+    hint: 'Drag the world with your mouse or finger. The Sun is the golden ball.',
+    lesson: 'At the pole the Sun stays low, so even small hills make long shadows.',
     setup: 'look-away',
     steps: (c) => [
-      { text: 'Stand at a place (“Stand here”)', done: c.view === 'ground' },
-      { text: 'Drag the view until the gold ball, the Sun, is on your screen', done: c.view === 'ground' && c.sunOnScreen },
+      { text: 'Be on the ground (“Stand here”)', done: c.view === 'ground' },
+      { text: 'Drag the world until you see the golden ball', done: c.view === 'ground' && c.sunOnScreen },
     ],
     found: (c) => {
-      if (c.sunEl === null) return 'You found the Sun.'
-      const widths = Math.abs(c.sunEl) / 0.53
+      if (c.sunEl === null) return 'There it is: the Sun!'
+      const widths = Math.max(1, Math.round(Math.abs(c.sunEl) / 0.53))
       const where =
         c.sunEl >= 0
-          ? `only ${c.sunEl.toFixed(2)}° above flat ground, about ${widths < 1.5 ? 'one' : Math.round(widths)} Sun-width${widths < 1.5 ? '' : 's'}`
-          : `${Math.abs(c.sunEl).toFixed(2)}° below flat ground`
-      const seen = c.sunUp ? 'Pip can see it.' : c.sunEl > 0 ? 'But the hills are taller, so Pip, down on the ground, cannot see it.' : 'So it is night for Pip.'
-      return `The Sun is ${where}. ${seen} That is why the shape of the ground matters so much at the pole. (In the cube world the heights and the sky angles are both stretched 4 times, so the Sun looks higher than it is.)`
+          ? `It’s only a tiny bit above the ground: about ${widths} Sun${widths === 1 ? '' : 's'} high.`
+          : 'It’s just below the edge of the sky.'
+      const seen = c.sunUp
+        ? 'And I can see it. Yummy sunshine!'
+        : c.sunEl > 0
+          ? 'But the hills are taller, so they hide it from me.'
+          : 'So for me, it’s night.'
+      return `There it is! ${where} ${seen} At the pole the Sun never climbs high: it rolls around the edge of the sky like a ball along the floor. (In my block world, hills and sky are stretched 4 times so you can see them.)`
     },
   },
   {
     id: 'night',
     title: 'The long night',
-    story:
-      'Pip’s batteries only last so long in the dark. Mission control asks: how long until sunlight reaches Pip again? Let’s find out by moving time forward.',
+    story: 'My batteries are getting low… How long until the Sun reaches me again? Let’s make time go faster and watch!',
+    hint: '“Play the days” makes time fly. It stops by itself when the Sun comes back.',
+    lesson: 'A Moon day, from one sunrise to the next, lasts about 29 and a half Earth days.',
     setup: 'after-sunset',
     steps: (c) => [
-      { text: 'Press “Play the days” or “Day ▸” to move time forward', done: c.memory.startTMs !== null && Math.abs(c.tMs - c.memory.startTMs) >= H },
-      { text: 'Stop when “Is the Sun up?” turns to YES or PARTLY', done: c.memory.startSunUp === false && c.sunUp === true },
+      { text: 'Press “Play the days”', done: c.memory.startTMs !== null && Math.abs(c.tMs - c.memory.startTMs) >= H },
+      { text: 'Wait until “Is the Sun up?” says YES', done: c.memory.startSunUp === false && c.sunUp === true },
     ],
     found: (c) => {
       const waited = c.memory.startTMs !== null ? (c.tMs - c.memory.startTMs) / H : null
-      const dark = c.metrics ? ` In these 30 days, the longest dark spell here lasts ${hours(c.metrics.longestDarkH)}.` : ''
-      return `${waited !== null ? `Pip waited ${hours(waited)} for the Sun.` : 'The Sun is back.'} A day on the Moon, from one sunrise to the next, lasts about 29.5 Earth days, so nights are long.${dark} Landers must carry enough battery for the longest night they will meet.`
+      const dark = c.metrics ? ` The longest night here this month: ${hours(c.metrics.longestDarkH)}.` : ''
+      return `Sunshine! ${waited !== null ? `I waited ${hours(waited)}.` : ''} On the Moon, one day, from sunrise to sunrise, lasts about 29 and a half Earth days, so nights can be very long.${dark} That’s why landers carry big batteries.`
     },
   },
   {
     id: 'call',
     title: 'Calling home',
     story:
-      'Pip took its first photos and wants to send them to Earth. Radio travels in straight lines, so Pip can only call home while the Earth is above the hills.',
+      'I took a picture and I want to send it to Earth! But radio goes in straight lines, like the beam of a torch. I can only call home when I can see the Earth.',
+    hint: 'The Earth is the blue ball. Then use “Play the days” or click a grey block in the Earth row.',
+    lesson: 'No Earth in the sky means no phone call home.',
     steps: (c) => {
       const never = c.metrics !== null && c.metrics.commsPct >= 99.9
       return [
-        { text: 'Stand at a place and drag the view until the blue ball, the Earth, is on your screen', done: c.view === 'ground' && c.earthOnScreen },
+        { text: 'On the ground, drag the world until you see the blue ball', done: c.view === 'ground' && c.earthOnScreen },
         {
           text: never
-            ? 'Here the Earth never hides in these 30 days. Choose Shackleton crater, then move time until “Can we see Earth?” says NO'
-            : 'Move time (or click a grey block in the Earth row) until “Can we see Earth?” says NO',
+            ? 'Here the Earth never hides this month! Pick Shackleton crater, then make time go by until “Can we see Earth?” says NO'
+            : 'Make time go by until “Can we see Earth?” says NO',
           done: c.earthContact === false,
         },
       ]
     },
     found: (c) => {
-      const gap = c.metrics ? ` Here, the longest time without Earth in these 30 days is ${hours(c.metrics.longestBlackoutH)}.` : ''
-      return `No Earth in the sky means no direct call: Pip has to store its photos and wait.${gap} Real missions plan around these blackouts, or use a satellite to relay their messages.`
+      const gap = c.metrics ? ` The longest wait without Earth here this month: ${hours(c.metrics.longestBlackoutH)}.` : ''
+      return `Oh no, the Earth is hiding behind the hills! I can’t call home now. I’ll keep my picture safe until it comes back.${gap} Real missions plan for this, or send messages through a satellite.`
     },
   },
   {
     id: 'home',
-    title: 'A better home',
-    story:
-      'Mission control is planning Pip’s next trip. Should Pip go to a mountain top or to the floor of a crater? Visit both and compare their gold Sun blocks.',
+    title: 'Mountain or crater?',
+    story: 'Good news: Mission Control says I can move! Should I live on top of a mountain or down in a deep crater? Visit both and count the golden Sun blocks at the bottom.',
+    hint: 'Open “Places”. The Sun row at the bottom shows each day: gold means sunshine.',
+    lesson: 'Mountain tops catch the low Sun; deep crater floors near the pole can stay dark for a very long time.',
     steps: (c) => [
-      { text: 'In Places, choose Mons Malapert (a mountain)', done: MALAPERT in c.memory.visited },
-      { text: 'Then choose Shackleton crater', done: SHACKLETON in c.memory.visited },
-      { text: 'Answer: which one gets more sunlight?', done: c.memory.answer !== null },
+      { text: 'Visit Mons Malapert (a mountain)', done: MALAPERT in c.memory.visited },
+      { text: 'Visit Shackleton (a deep crater)', done: SHACKLETON in c.memory.visited },
+      { text: 'Tell me: which one gets more sunshine?', done: c.memory.answer !== null },
     ],
     choices: (c) =>
       MALAPERT in c.memory.visited && SHACKLETON in c.memory.visited
         ? [
-            { id: MALAPERT, label: c.names(MALAPERT) },
-            { id: SHACKLETON, label: c.names(SHACKLETON) },
+            { id: MALAPERT, label: 'The mountain' },
+            { id: SHACKLETON, label: 'The crater' },
           ]
         : null,
     found: (c) => {
@@ -167,22 +182,24 @@ export const CHAPTERS: Chapter[] = [
       const b = c.memory.visited[SHACKLETON]
       if (!a || !b) return ''
       const winner = a.sunPct >= b.sunPct ? MALAPERT : SHACKLETON
-      const verdict = c.memory.answer === winner ? 'You chose right.' : 'Not this time, but now you know.'
-      return `${verdict} Over the next 30 days ${c.names(MALAPERT)} gets sunlight ${pct(a.sunPct)} of the time and ${c.names(SHACKLETON)} ${pct(b.sunPct)}. High ground rises above the long shadows of the pole; deep crater floors can stay dark for a very long time, which is also where ice may hide.`
+      const verdict = c.memory.answer === winner ? 'Yes, you got it!' : 'Good guess, but not this time.'
+      return `${verdict} This month the mountain (${c.names(MALAPERT)}) gets sunshine ${pct(a.sunPct)} of the time, and the crater (${c.names(SHACKLETON)}) ${pct(b.sunPct)}. Mountain tops poke up into the low sunlight. Deep crater floors can stay dark for a very long time, and that’s where ice may be hiding!`
     },
   },
   {
     id: 'yours',
-    title: 'Your own spot',
-    story: 'Now you are the planner. Pick any spot near the south pole and send Pip there to look around.',
+    title: 'You are Mission Control',
+    story: 'Now YOU are Mission Control! Pick any spot on the whole Moon and send me there. Where will I go?',
+    hint: 'Press “Whole Moon”, then click (don’t drag) on the Moon.',
+    lesson: 'Planners pick landing spots by checking sunlight, Earth and the shape of the ground.',
     steps: (c) => [
-      { text: 'Choose “Whole Moon”, then click anywhere near the south pole', done: c.selection.kind === 'point' && c.lat !== null && c.lat <= -60 },
-      { text: 'Press “Stand here” to land there', done: c.view === 'ground' && c.selection.kind === 'point' },
+      { text: 'Press “Whole Moon” and click anywhere on it', done: c.selection.kind === 'point' },
+      { text: 'Press “Stand here” to send me', done: c.view === 'ground' && c.selection.kind === 'point' },
     ],
     found: (c) =>
       c.horizonKind === 'smooth_sphere'
-        ? 'Pip has landed on your spot. Careful: nobody has measured the full skyline for this exact point, so here the Sun and Earth answers treat the Moon as smooth. Real hills could hide the Sun, or lift Pip above the shadows. The cubes show those hills: compare them with the answers.'
-        : 'Pip has landed on your spot, with its real skyline measured from LOLA.',
+        ? 'Wheee, I’m here! One secret: nobody has measured the faraway hills around this exact spot yet, so my Sun and Earth answers pretend the Moon is smooth. Look at the blocks around me: do you think the hills would hide the Sun?'
+        : 'Wheee, I’m here, and my skyline was measured from real laser data!',
   },
 ]
 

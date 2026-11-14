@@ -3,6 +3,7 @@
  * story over the map. Every answer comes from the same engine and data as the planner's panels; "Show the real
  * numbers" opens them.
  */
+import { type ReactNode, useId, useState } from 'react'
 import { useNow } from '../panels/useNow'
 import { sameSelection, useApp } from '../state/store'
 import { MS_PER_DAY, MS_PER_HOUR, hasComms, isSunlit } from '../time/engine'
@@ -48,6 +49,28 @@ const shortName = (name: string) =>
 const fmtLat = (v: number) => `${Math.abs(v).toFixed(2)}° ${v < 0 ? 'S' : 'N'}`
 const fmtLon = (v: number) => `${Math.abs(v).toFixed(2)}° ${v < 0 ? 'W' : 'E'}`
 
+/** A Block Moon panel that folds to its title bar, so the world stays visible. */
+function Fold({ side, title, summary, defaultOpen, children }: { side: 'left' | 'right'; title: string; summary?: ReactNode; defaultOpen: boolean; children: ReactNode }) {
+  const [open, setOpen] = useState(defaultOpen)
+  const id = useId()
+  return (
+    <section className={`float float-${side} blk-panel blk-fold${open ? '' : ' is-closed'}`} aria-labelledby={`${id}-h`}>
+      <div className="blk-fold-head">
+        <h2 id={`${id}-h`} className="blk-h">
+          {title}
+        </h2>
+        {!open && summary}
+        <button type="button" className="blk-icon" aria-expanded={open} aria-controls={`${id}-b`} aria-label={`${open ? 'Hide' : 'Show'} ${title}`} onClick={() => setOpen(!open)}>
+          {open ? '−' : '+'}
+        </button>
+      </div>
+      <div id={`${id}-b`} hidden={!open} className="blk-fold-body">
+        {children}
+      </div>
+    </section>
+  )
+}
+
 function Places() {
   const masks = useMasks().data
   const selection = useApp((s) => s.selection)
@@ -57,12 +80,10 @@ function Places() {
     { title: 'Landers', items: sites.filter((s) => kindOf(s) === 'lander') },
     { title: 'Mountains and craters', items: sites.filter((s) => kindOf(s) !== 'lander') },
   ]
+  const chosen = selection.kind === 'site' ? sites.find((s) => s.id === selection.id)?.name : `${fmtLat(selection.lat)}, ${fmtLon(selection.lon)}`
   return (
-    <section className="float float-left blk-panel" aria-labelledby="blk-places">
-      <h2 id="blk-places" className="blk-h">
-        Places
-      </h2>
-      <p className="blk-sub">Near the Moon’s south pole.</p>
+    <Fold side="left" title="Places" defaultOpen={false} summary={chosen && <span className="blk-fold-sum">{shortName(chosen)}</span>}>
+      <p className="blk-sub">Near the Moon’s south pole, or anywhere you click.</p>
       {groups.map((g) => (
         <div key={g.title} className="blk-group">
           <h3>{g.title}</h3>
@@ -100,7 +121,7 @@ function Places() {
           <p className="blk-hint">Choose “Whole Moon” and click anywhere on it.</p>
         )}
       </div>
-    </section>
+    </Fold>
   )
 }
 
@@ -123,7 +144,7 @@ function Sky() {
   const deg = (v: number) => `${v.toFixed(2)}°`
   const terrain = view?.horizonKind === 'terrain'
   return (
-    <section className="float float-right blk-panel" aria-labelledby="blk-sky">
+    <section className="float float-right blk-panel blk-sky" aria-labelledby="blk-sky">
       <h2 id="blk-sky" className="blk-h">
         The sky now
       </h2>
@@ -160,20 +181,19 @@ function Sky() {
               )}
             </div>
           </div>
-          <p className="blk-why">{sunWhy(view.sun.el, view.sun.fraction, terrain)}</p>
-          <p className="blk-why">{earthWhy(view.earth.el, view.earth.fraction >= params.commsMinFraction, terrain)}</p>
           {!terrain && (
             <p className="blk-note">
-              No measured skyline for this spot: these answers treat the Moon as smooth. Real hills, like the cubes you see, could hide the Sun or
-              the Earth, or lift you above the shadows.
+              Nobody has measured the skyline here, so these answers pretend the Moon is smooth. Real hills could change them.
             </p>
           )}
-          <p className="blk-legend-sky">
-            <span className="blk-dot blk-dot-sun" aria-hidden="true" /> Gold ball: the Sun
-            <span className="blk-dot blk-dot-earth" aria-hidden="true" /> Blue ball: the Earth
-          </p>
           <details className="blk-real">
-            <summary>Show the real numbers</summary>
+            <summary>Why? And the real numbers</summary>
+            <p className="blk-why">{sunWhy(view.sun.el, view.sun.fraction, terrain)}</p>
+            <p className="blk-why">{earthWhy(view.earth.el, view.earth.fraction >= params.commsMinFraction, terrain)}</p>
+            <p className="blk-legend-sky">
+              <span className="blk-dot blk-dot-sun" aria-hidden="true" /> Gold ball: the Sun
+              <span className="blk-dot blk-dot-earth" aria-hidden="true" /> Blue ball: the Earth
+            </p>
             <dl>
               <dt>Sun</dt>
               <dd>
@@ -261,8 +281,7 @@ function NextDays() {
           </div>
         )}
         <p className="blk-legend">
-          One block = one Earth day: full colour all day, striped part of the day, grey none. Click a block to jump there. Sun on {sunDays} of{' '}
-          {days} days, Earth on {earthDays}.
+          1 block = 1 day (striped: part of the day). Sun on {sunDays} of {days} days, Earth on {earthDays}.
         </p>
       </section>
     </div>

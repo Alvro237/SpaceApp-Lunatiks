@@ -21,7 +21,19 @@ import { type Tileset, polarXY } from '../terrain/tileset'
 import { useEphemeris, useMasks } from '../time/hooks'
 import { useHud } from './useStory'
 import { voxelBodyMaterial } from './voxelMaterial'
-import { type Blocks, GROUND_EXAGGERATION, type GroundBlocks, earthBlocks, groundBlocks, moonBlocks, sampleGround, skyVector, sunBlocks } from './voxels'
+import {
+  type Blocks,
+  GROUND_EXAGGERATION,
+  type GroundBlocks,
+  earthBlocks,
+  gridHeightBilinear,
+  groundBlocks,
+  moonBlocks,
+  sampleGlobal,
+  sampleGround,
+  skyVector,
+  sunBlocks,
+} from './voxels'
 
 const FOV = 40
 /** Cubes per side of the ground world (odd, so the chosen place is the centre cube). */
@@ -85,25 +97,48 @@ function useSelectedLatLon(): [number, number] | null {
   }, [sel, masks])
 }
 
-/** The ground world for the selection, or null while loading or where the polar map does not reach. */
-function useGroundBlocks(): { blocks: GroundBlocks | null; available: boolean; loading: boolean } {
+/** Cell of the ground world away from the polar map: a quarter of the global grid's 7.6 km pixel. */
+const GLOBAL_CELL_M = 1920
+
+export interface GroundWorld {
+  blocks: GroundBlocks | null
+  loading: boolean
+  /** Which heights the cubes come from: the 960 m polar map, or the 7.6 km global grid (anywhere else). */
+  source: 'polar' | 'global' | null
+  cellM: number
+}
+
+/**
+ * The ground world for the selection, anywhere on the Moon: from the LOLA polar map (960 m) where it reaches, and
+ * from the global LOLA grid (7.6 km pixels, sampled every 1.92 km) everywhere else.
+ */
+function useGroundBlocks(): GroundWorld {
   const ll = useSelectedLatLon()
-  const tileset = useQuery({ queryKey: ['static', 'tileset'], queryFn: loadTileset, ...forever })
+  const polar = !!ll && ll[0] <= -60
+  const tileset = useQuery({ queryKey: ['static', 'tileset'], queryFn: loadTileset, enabled: polar, ...forever })
   const overview = useQuery({
     queryKey: ['static', 'overview-heights'],
     queryFn: () => loadOverview(tileset.data!),
-    enabled: !!tileset.data,
+    enabled: polar && !!tileset.data,
     ...forever,
   })
+  const globe = useQuery({ queryKey: ['static', 'globe'], queryFn: loadGlobe, ...forever })
   return useMemo(() => {
-    if (!ll || ll[0] > -60) return { blocks: null, available: false, loading: false }
-    if (!tileset.data || !overview.data) return { blocks: null, available: true, loading: !tileset.isError && !overview.isError }
-    const ts = tileset.data
-    const ov = overview.data
-    const cellM = (ts.extentM[2] - ts.extentM[0]) / (ov.samples - 1)
-    const grid = sampleGround((x, y) => overviewHeight(ts, ov, x, y), polarXY, ll[0], ll[1], GROUND_N, cellM)
-    return { blocks: grid ? groundBlocks(grid) : null, available: !!grid, loading: false }
-  }, [ll, tileset.data, tileset.isError, overview.data, overview.isError])
+    const none: GroundWorld = { blocks: null, loading: false, source: null, cellM: 0 }
+    if (!ll) return { ...none, loading: true }
+    if (polar && tileset.data && overview.data) {
+      const ts = tileset.data
+      const ov = overview.data
+      const cellM = (ts.extentM[2] - ts.extentM[0]) / (ov.samples - 1)
+      const grid = sampleGround((x, y) => overviewHeight(ts, ov, x, y), polarXY, ll[0], ll[1], GROUND_N, cellM)
+      if (grid) return { blocks: groundBlocks(grid), loading: false, source: 'polar', cellM }
+    } else if (polar && !tileset.isError && !overview.isError) return { ...none, loading: true }
+    // the global grid: anywhere the polar map does not reach (or could not load)
+    if (!globe.data) return { ...none, loading: !globe.isError }
+    const g = globe.data
+    const grid = sampleGlobal((la, lo) => gridHeightBilinear(g.heights, g.meta.width, g.meta.height, la, lo), ll[0], ll[1], GROUND_N, GLOBAL_CELL_M)
+    return { blocks: groundBlocks(grid), loading: false, source: 'global', cellM: GLOBAL_CELL_M }
+  }, [ll, polar, tileset.data, tileset.isError, overview.data, overview.isError, globe.data, globe.isError])
 }
 
 /** Camera that circles a target: yaw is the azimuth it looks from (clockwise from north), pitch its height. */
@@ -135,6 +170,14 @@ class BlockCam {
   }
 }
 
+/** The panels' insets, plus the story card when it sits on the left: the world is centred in what is left. */
+function freeInsets(w: number) {
+  const ins = { ...useInsets.getState() }
+  const card = typeof document === 'undefined' ? null : document.querySelector('.blk-story')?.getBoundingClientRect()
+  if (card && card.width > 0 && card.left < w / 2 && card.width < w * 0.6) ins.left = Math.max(ins.left, card.right)
+  return ins
+}
+
 /** Puts the camera at `pos` looking at `target`, with the target in the middle of the space the panels leave free. */
 function aimCamera(cam: THREE.PerspectiveCamera, pos: [number, number, number], target: THREE.Vector3, far: number, w: number, h: number) {
   cam.position.set(pos[0], pos[1], pos[2])
@@ -142,7 +185,7 @@ function aimCamera(cam: THREE.PerspectiveCamera, pos: [number, number, number], 
   cam.lookAt(target)
   cam.near = 0.5
   cam.far = far
-  const ins = useInsets.getState()
+  const ins = freeInsets(w)
   const cx = ins.left + (w - ins.left - ins.right) / 2
   const cy = ins.top + (h - ins.top - ins.bottom) / 2
   cam.setViewOffset(w, h, w / 2 - cx, h / 2 - cy, w, h)
@@ -511,7 +554,7 @@ export function BlockWorld() {
     () => (globe.data ? moonBlocks(globe.data.heights, globe.data.meta.width, globe.data.meta.height, MOON_SIZE, MOON_EXAGGERATION) : null),
     [globe.data],
   )
-  const showGround = view === 'ground' && ground.available
+  const showGround = view === 'ground'
   const sunAz = now?.sun.az ?? 0
 
   // a new camera for each world and each place, looking across the place toward the Sun
@@ -595,7 +638,7 @@ export function BlockWorld() {
       ? null
       : ground.loading
         ? 'Building the ground out of cubes…'
-        : 'The ground map could not be loaded.'
+        : 'The LOLA heights could not be loaded.'
     : moon
       ? null
       : globe.isError
@@ -644,8 +687,6 @@ export function BlockWorld() {
             type="button"
             role="radio"
             aria-checked={showGround}
-            disabled={!ground.available}
-            title={ground.available ? undefined : 'The ground view covers the south pole, south of 60° S'}
             onClick={() => pick('ground')}
           >
             Stand here
@@ -663,7 +704,7 @@ export function BlockWorld() {
         {about && (
           <p id="block-about" className="block-about">
             {showGround
-              ? `Each cube is 960 m wide and ${960 / GROUND_EXAGGERATION} m tall: heights and sky angles are both stretched ×${GROUND_EXAGGERATION}, so the shadows fall as on the real ground. Heights: LOLA polar DEM (NASA PGDA). Sun and Earth: where the engine puts them, drawn larger than life.`
+              ? `Each cube is ${Math.round(ground.cellM)} m wide and ${Math.round(ground.cellM / GROUND_EXAGGERATION)} m tall: heights and sky angles are both stretched ×${GROUND_EXAGGERATION}, so the shadows fall as on the real ground. Heights: ${ground.source === 'global' ? 'the global LOLA grid (NASA LRO), whose 7.6 km pixels smooth out small hills' : 'the LOLA polar map (NASA PGDA)'}. Sun and Earth: where the engine puts them, drawn larger than life.`
               : `Global LOLA heights (NASA LRO), relief stretched ×${MOON_EXAGGERATION}, lit by the Sun at the chosen time. The gold column is your place; click anywhere to choose a spot of your own. Sun and Earth: real directions, not real distances.`}
           </p>
         )}

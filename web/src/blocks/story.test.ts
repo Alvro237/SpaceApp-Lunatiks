@@ -24,6 +24,8 @@ describe('Pip’s story', () => {
     for (const c of CHAPTERS) {
       expect(c.story.length).toBeGreaterThan(40)
       expect(c.steps(base).length).toBeGreaterThan(0)
+      expect(c.hint.length).toBeGreaterThan(10)
+      expect(c.lesson.length).toBeGreaterThan(10)
     }
   })
 
@@ -32,7 +34,7 @@ describe('Pip’s story', () => {
     expect(chapterDone(a, base)).toBe(false)
     expect(chapterDone(a, { ...base, selection: { kind: 'site', id: IM2 }, view: 'ground' })).toBe(true)
     // 90 − 84.78 = 5.22° of arc on a 1737.4 km sphere: 158 km
-    expect(a.found({ ...base, lat: -84.78 })).toContain('about 158 km from the pole')
+    expect(a.found({ ...base, lat: -84.78 })).toContain('158 km from the south pole')
   })
 
   it('Where is the Sun? needs the Sun on screen in the ground view, and explains the hills', () => {
@@ -40,7 +42,8 @@ describe('Pip’s story', () => {
     expect(chapterDone(s, { ...base, view: 'ground' })).toBe(false)
     const done = { ...base, view: 'ground' as const, sunOnScreen: true }
     expect(chapterDone(s, done)).toBe(true)
-    expect(s.found(done)).toContain('1.47°')
+    // 1.47° is about 3 Sun-widths (the Sun is 0.53° wide)
+    expect(s.found(done)).toContain('about 3 Suns high')
     expect(s.found(done)).toContain('hills')
   })
 
@@ -49,7 +52,7 @@ describe('Pip’s story', () => {
     const memory = { ...EMPTY_MEMORY, startTMs: 0, startSunUp: false }
     expect(chapterDone(n, { ...base, memory })).toBe(false)
     expect(chapterDone(n, { ...base, memory, tMs: 30 * 3_600_000, sunUp: true })).toBe(true)
-    expect(n.found({ ...base, memory, tMs: 30 * 3_600_000, sunUp: true })).toContain('Pip waited 30 hours')
+    expect(n.found({ ...base, memory, tMs: 30 * 3_600_000, sunUp: true })).toContain('I waited 30 hours')
   })
 
   it('Calling home needs the Earth seen, then lost', () => {
@@ -67,9 +70,9 @@ describe('Pip’s story', () => {
     const ctx = { ...base, memory: { ...EMPTY_MEMORY, visited, answer: MALAPERT } }
     expect(h.choices!(ctx)).toHaveLength(2)
     expect(chapterDone(h, ctx)).toBe(true)
-    expect(h.found(ctx)).toContain('You chose right')
+    expect(h.found(ctx)).toContain('you got it')
     expect(h.found(ctx)).toContain('80 %')
-    expect(h.found({ ...ctx, memory: { ...ctx.memory, answer: SHACKLETON } })).toContain('Not this time')
+    expect(h.found({ ...ctx, memory: { ...ctx.memory, answer: SHACKLETON } })).toContain('not this time')
   })
 
   it('Your own spot warns that a typed point has no measured skyline', () => {

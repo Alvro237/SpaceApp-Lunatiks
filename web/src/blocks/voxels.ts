@@ -62,6 +62,49 @@ export function sampleGround(
   return { n, cellM, heightsM }
 }
 
+/** The point reached from (lat, lon) by going `eastM` east and `northM` north along the sphere, degrees. */
+export function offsetLatLon(lat: number, lon: number, eastM: number, northM: number): [number, number] {
+  const d = Math.hypot(eastM, northM) / MOON_R_M
+  if (d === 0) return [lat, lon]
+  const th = Math.atan2(eastM, northM)
+  const p1 = lat * DEG
+  const p2 = Math.asin(Math.sin(p1) * Math.cos(d) + Math.cos(p1) * Math.sin(d) * Math.cos(th))
+  const l2 = lon * DEG + Math.atan2(Math.sin(th) * Math.sin(d) * Math.cos(p1), Math.cos(d) - Math.sin(p1) * Math.sin(p2))
+  const lonDeg = ((((l2 / DEG + 180) % 360) + 360) % 360) - 180
+  return [p2 / DEG, lonDeg]
+}
+
+/** Bilinear height (m) from a simple cylindrical grid (row 0 = 90 N, column 0 starts at longitude 0, east-positive). */
+export function gridHeightBilinear(heights: Float32Array, width: number, height: number, lat: number, lon: number): number {
+  const fx = ((((lon % 360) + 360) % 360) / 360) * width - 0.5
+  const fy = Math.min(height - 1, Math.max(0, ((90 - lat) / 180) * height - 0.5))
+  const c0 = Math.floor(fx)
+  const r0 = Math.min(height - 2, Math.floor(fy))
+  const u = fx - c0
+  const v = fy - r0
+  const c = (k: number) => ((k % width) + width) % width
+  const at = (r: number, k: number) => heights[r * width + c(k)]
+  return at(r0, c0) * (1 - u) * (1 - v) + at(r0, c0 + 1) * u * (1 - v) + at(r0 + 1, c0) * (1 - u) * v + at(r0 + 1, c0 + 1) * u * v
+}
+
+/**
+ * Like sampleGround, anywhere on the Moon: n × n cells centred on (lat, lon), east and north at that point, heights
+ * from `heightAt(lat, lon)` (the global LOLA grid), curvature drop subtracted.
+ */
+export function sampleGlobal(heightAt: (lat: number, lon: number) => number, lat: number, lon: number, n: number, cellM: number): HeightGrid {
+  const half = (n - 1) / 2
+  const heightsM = new Float32Array(n * n)
+  for (let j = 0; j < n; j++) {
+    for (let i = 0; i < n; i++) {
+      const east = (i - half) * cellM
+      const north = (half - j) * cellM
+      const [la, lo] = offsetLatLon(lat, lon, east, north)
+      heightsM[j * n + i] = heightAt(la, lo) - (east * east + north * north) / (2 * MOON_R_M)
+    }
+  }
+  return { n, cellM, heightsM }
+}
+
 export interface Blocks {
   count: number
   /** Cube centres, scene units (one cube = 1). */

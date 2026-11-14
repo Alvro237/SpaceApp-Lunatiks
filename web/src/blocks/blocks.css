@@ -15,6 +15,7 @@
 }
 
 .blk-panel.float,
+.blk-panel.blk-story,
 .blk-bottom > .blk-panel {
   background: var(--blk-bg);
   color: var(--blk-text);
@@ -75,7 +76,7 @@
 .blk-row-name { width: 46px; flex: none; font-weight: 700; font-size: 0.85rem; }
 .blk-cells { display: flex; gap: 3px; flex: 1; min-width: 0; }
 .blk-cell {
-  flex: 1 1 0; min-width: 6px; height: 22px; min-height: 22px; padding: 0; border-radius: 0; border: 0;
+  flex: 1 1 0; min-width: 6px; height: 18px; min-height: 18px; padding: 0; border-radius: 0; border: 0;
   box-shadow: inset -2px -2px 0 rgba(0, 0, 0, 0.35), inset 2px 2px 0 rgba(255, 255, 255, 0.14);
 }
 .blk-cell.is-off { background: #2b2d31; }
@@ -91,6 +92,19 @@
 .block-controls .block-seg button { border: 0; border-radius: 0; min-height: 40px; background: transparent; color: #e8ecf3; }
 .block-controls .block-seg button[aria-checked='true'] { background: var(--blk-sun); color: #0b0c0e; font-weight: 700; }
 .block-controls > button { border-radius: 0; }
+
+/* Folding panels and a slimmer layout, so the world stays in view */
+.blk-fold.is-closed { width: auto; max-width: 300px; padding: 6px 8px 6px 12px; }
+.blk-fold-head { display: flex; align-items: center; gap: 8px; }
+.blk-fold-head .blk-h { flex: none; }
+.blk-fold-head .blk-icon { margin-left: auto; min-width: 32px; min-height: 32px; border-color: #3a3e45; }
+.blk-fold-sum { font-size: 0.82rem; color: var(--blk-sun); font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.blk-fold-body { margin-top: 6px; }
+.blk-panel.float-left.blk-fold { width: 280px; }
+.blk-panel.float-right.blk-sky { width: 290px; }
+.blk-sky .blk-a { font-size: 1.5rem; }
+.blk-sky .blk-answer { padding: 6px 8px; }
+.blk-sky .blk-real summary { font-weight: 600; }
 
 /* Sky panel extras */
 .blk-note { margin: 8px 0 0; padding: 6px 8px; background: #2a2410; border: 2px solid #5a4620; font-size: 0.84rem; line-height: 1.4; }
@@ -108,12 +122,15 @@
 }
 
 /* Pip's story: over the map, at the top left of the free area */
-.blk-story.float {
-  left: calc(var(--inset-left) + 10px); top: calc(var(--inset-top) + 10px);
-  width: max(260px, min(350px, calc(100vw - var(--inset-left) - var(--inset-right) - 290px))); max-height: calc(100vh - var(--inset-top) - var(--inset-bottom) - 30px);
-  border-color: #2e7d4f; border-right-color: #0b1810; border-bottom-color: #0b1810; background: #121a15;
+/* not a .float: the panels' inset measuring must not count it, or it would push itself aside */
+.blk-panel.blk-story {
+  position: absolute; z-index: 20;
+  /* below the folded Places bar (when Places is open, the left inset moves the card beside it) */
+  left: calc(var(--inset-left) + 10px); top: calc(var(--inset-top) + 76px);
+  width: max(260px, min(350px, calc(100vw - var(--inset-left) - var(--inset-right) - 290px))); max-height: calc(100vh - var(--inset-top) - var(--inset-bottom) - 96px); overflow-y: auto;
+  border-color: #2e7d4f; border-right-color: #0b1810; border-bottom-color: #0b1810; background: #121a15; box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
 }
-.blk-story.is-closed { width: auto; max-width: 420px; padding: 6px 10px; }
+.blk-panel.blk-story.is-closed { width: auto; max-width: 420px; padding: 6px 10px; }
 .blk-story-top { display: flex; align-items: center; gap: 10px; }
 .blk-story-head { flex: 1; min-width: 0; }
 .blk-story-mini { margin: 0; font-size: 0.92rem; flex: 1; }
@@ -125,7 +142,6 @@
 }
 .blk-chapter.is-done { background: #2e7d4f; color: #f0fff5; }
 .blk-chapter[aria-current='step'] { outline: 3px solid var(--blk-sun); outline-offset: 1px; }
-.blk-story-text { margin: 8px 0; font-size: 0.93rem; line-height: 1.5; font-style: italic; color: #e9f3ec; }
 .blk-task-h { margin: 10px 0 4px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em; color: #7ee2a8; }
 .blk-tasks { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
 .blk-tasks li { display: flex; gap: 8px; align-items: flex-start; font-size: 0.9rem; line-height: 1.4; }
@@ -147,6 +163,21 @@
 }
 .blk-link { background: none; border: 0; color: var(--blk-text); text-decoration: underline; min-height: 32px; padding: 0; }
 .blk-end { margin: 0; font-size: 0.88rem; }
+
+/* Pip talks in speech bubbles */
+.blk-title { font-size: 1.25rem; }
+.blk-bubble-row { display: flex; gap: 10px; align-items: flex-start; margin: 8px 0; }
+.blk-bubble-row svg { flex: none; width: 40px; height: 40px; margin-top: 4px; }
+.blk-bubble {
+  position: relative; margin: 0; padding: 8px 10px; background: #eceae4; color: #16171a; font-size: 0.95rem; line-height: 1.45;
+  border: 3px solid #fff; border-right-color: #a8a59d; border-bottom-color: #a8a59d;
+}
+.blk-bubble::before {
+  content: ''; position: absolute; left: -9px; top: 12px; border: 6px solid transparent; border-right-color: #eceae4; border-left: 0;
+}
+.blk-hint-text { margin: 4px 0 0; padding: 6px 8px; background: #2a2410; border: 2px solid #5a4620; font-size: 0.88rem; }
+.blk-lesson { margin: 8px 0 0; padding: 6px 8px; border: 2px dashed #7ee2a8; font-size: 0.9rem; }
+.blk-found ul { margin: 4px 0 0; padding-left: 18px; font-size: 0.86rem; line-height: 1.45; }
 
 /* The switch in the top bar */
 .block-toggle {
@@ -171,5 +202,5 @@
 }
 
 @media (max-width: 760px) {
-  .blk-story.float, .blk-story.is-closed { width: auto; max-width: none; max-height: none; }
+  .blk-story, .blk-story.is-closed { position: static; width: auto; max-width: none; max-height: none; margin: 8px; }
 }

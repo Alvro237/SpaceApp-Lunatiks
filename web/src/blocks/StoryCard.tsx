@@ -3,7 +3,7 @@
  * The checklist reads the same state as everything else (place, view, time, the engine's answers), so nothing is
  * typed by hand: the numbers in "What Pip found" are the engine's.
  */
-import { useEffect, useId, useMemo } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import { useNow } from '../panels/useNow'
 import { useApp } from '../state/store'
 import { useMasks, useParams, useSiteNames } from '../time/hooks'
@@ -107,34 +107,44 @@ function PipIcon() {
   )
 }
 
+/** What Pip says: a speech bubble next to Pip. */
+function Bubble({ children }: { children: string }) {
+  return (
+    <div className="blk-bubble-row">
+      <PipIcon />
+      <p className="blk-bubble">
+        <span className="sr-only">Pip says: </span>
+        {children}
+      </p>
+    </div>
+  )
+}
+
 export function StoryCard() {
   const ctx = useStoryCtx()
   const { chapter, done, started, open, begin, goTo, setOpen, restart, remember } = useStory()
   const { steps, complete } = useStoryEffects(ctx)
+  const [hint, setHint] = useState(false)
   const headingId = useId()
   const ch = CHAPTERS[chapter]
   const choices = useMemo(() => ch.choices?.(ctx) ?? null, [ch, ctx])
   const last = chapter === CHAPTERS.length - 1
   const doneCount = steps.filter((s) => s.done).length
+  const open1 = (i: number) => {
+    setHint(false)
+    goTo(i)
+  }
 
   if (!started) {
     return (
-      <section className="float blk-panel blk-story" aria-labelledby={headingId}>
-        <div className="blk-story-top">
-          <PipIcon />
-          <div>
-            <p className="blk-kicker">A story in {CHAPTERS.length} short chapters</p>
-            <h2 id={headingId} className="blk-h">
-              Pip’s journey
-            </h2>
-          </div>
-        </div>
-        <p className="blk-story-text">
-          Pip is a tiny lander made of blocks that runs on sunlight. Guide Pip to the Moon’s south pole and discover why the Sun, the Earth and the
-          shape of the ground decide where to land.
-        </p>
+      <section className="blk-panel blk-story" aria-labelledby={headingId}>
+        <p className="blk-kicker">A story in {CHAPTERS.length} short chapters</p>
+        <h2 id={headingId} className="blk-h blk-title">
+          Pip’s Moon adventure
+        </h2>
+        <Bubble>Hi! I’m Pip, a little lander made of blocks. Will you help me explore the Moon?</Bubble>
         <button type="button" className="blk-big" onClick={begin}>
-          Start the story
+          Let’s go!
         </button>
       </section>
     )
@@ -142,15 +152,15 @@ export function StoryCard() {
 
   if (!open) {
     return (
-      <section className="float blk-panel blk-story is-closed" aria-labelledby={headingId}>
+      <section className="blk-panel blk-story is-closed" aria-labelledby={headingId}>
         <div className="blk-story-top">
           <PipIcon />
           <h2 id={headingId} className="blk-story-mini">
-            Chapter {chapter + 1}: {ch.title}
-            <span className="blk-kicker"> · {complete ? 'done' : `${doneCount} of ${steps.length} tasks`}</span>
+            {ch.title}
+            <span className="blk-kicker"> · {complete ? 'done!' : `${doneCount} of ${steps.length}`}</span>
           </h2>
-          <button type="button" className="blk-icon" aria-expanded={false} aria-label="Show the story" onClick={() => setOpen(true)}>
-            ▾
+          <button type="button" className="blk-icon" aria-expanded={false} aria-label="Show Pip’s story" onClick={() => setOpen(true)}>
+            +
           </button>
         </div>
       </section>
@@ -158,19 +168,18 @@ export function StoryCard() {
   }
 
   return (
-    <section className="float blk-panel blk-story" aria-labelledby={headingId}>
+    <section className="blk-panel blk-story" aria-labelledby={headingId}>
       <div className="blk-story-top">
-        <PipIcon />
         <div className="blk-story-head">
           <p className="blk-kicker">
-            Pip’s journey · chapter {chapter + 1} of {CHAPTERS.length}
+            Chapter {chapter + 1} of {CHAPTERS.length}
           </p>
-          <h2 id={headingId} className="blk-h">
+          <h2 id={headingId} className="blk-h blk-title">
             {ch.title}
           </h2>
         </div>
-        <button type="button" className="blk-icon" aria-expanded={true} aria-label="Hide the story" onClick={() => setOpen(false)}>
-          ▴
+        <button type="button" className="blk-icon" aria-expanded={true} aria-label="Hide Pip’s story" onClick={() => setOpen(false)}>
+          −
         </button>
       </div>
       <nav className="blk-chapters" aria-label="Chapters">
@@ -181,66 +190,76 @@ export function StoryCard() {
             className={`blk-chapter${done.includes(c.id) ? ' is-done' : ''}`}
             aria-current={i === chapter ? 'step' : undefined}
             aria-label={`Chapter ${i + 1}: ${c.title}${done.includes(c.id) ? ' (done)' : ''}`}
-            onClick={() => goTo(i)}
+            onClick={() => open1(i)}
           >
-            {done.includes(c.id) ? '✓' : i + 1}
+            {done.includes(c.id) ? '★' : i + 1}
           </button>
         ))}
       </nav>
 
-      <p className="blk-story-text">{ch.story}</p>
+      <div role="status" aria-live="polite">
+        {complete ? <Bubble>{ch.found(ctx)}</Bubble> : null}
+      </div>
 
-      <h3 className="blk-task-h">Your task</h3>
-      <ol className="blk-tasks">
-        {steps.map((s, i) => (
-          <li key={i} className={s.done ? 'is-done' : ''}>
-            <span className="blk-check" aria-hidden="true">
-              {s.done ? '✓' : ''}
-            </span>
-            <span>
-              {s.text}
-              <span className="sr-only">{s.done ? ' (done)' : ' (to do)'}</span>
-            </span>
-          </li>
-        ))}
-      </ol>
+      {!complete && (
+        <>
+          <Bubble>{ch.story}</Bubble>
+          <h3 className="blk-task-h">Your mission</h3>
+          <ol className="blk-tasks">
+            {steps.map((s, i) => (
+              <li key={i} className={s.done ? 'is-done' : ''}>
+                <span className="blk-check" aria-hidden="true">
+                  {s.done ? '✓' : ''}
+                </span>
+                <span>
+                  {s.text}
+                  <span className="sr-only">{s.done ? ' (done)' : ' (to do)'}</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+          {choices && ctx.memory.answer === null && (
+            <div className="blk-choices" role="group" aria-label="Your answer">
+              {choices.map((c) => (
+                <button key={c.id} type="button" onClick={() => remember({ answer: c.id })}>
+                  {c.label}
+                </button>
+              ))}
+            </div>
+          )}
+          <button type="button" className="blk-link" aria-expanded={hint} onClick={() => setHint(!hint)}>
+            {hint ? 'Hide the hint' : 'Need a hint?'}
+          </button>
+          {hint && <p className="blk-hint-text">{ch.hint}</p>}
+        </>
+      )}
 
-      {choices && ctx.memory.answer === null && (
-        <div className="blk-choices" role="group" aria-label="Your answer">
-          {choices.map((c) => (
-            <button key={c.id} type="button" onClick={() => remember({ answer: c.id })}>
-              {c.label}
-            </button>
-          ))}
+      {complete && (
+        <p className="blk-lesson">
+          <strong>Remember:</strong> {ch.lesson}
+        </p>
+      )}
+
+      {complete && last && (
+        <div className="blk-found">
+          <p className="blk-found-h">You did it, Mission Control! You learned that:</p>
+          <ul>
+            {CHAPTERS.map((c) => (
+              <li key={c.id}>{c.lesson}</li>
+            ))}
+          </ul>
         </div>
       )}
 
-      <div role="status" aria-live="polite">
-        {complete && (
-          <div className="blk-found">
-            <p className="blk-found-h">What Pip found</p>
-            <p>{ch.found(ctx)}</p>
-          </div>
-        )}
-      </div>
-
       <div className="blk-story-actions">
         {complete && !last && (
-          <button type="button" className="blk-big" onClick={() => goTo(chapter + 1)}>
-            Next chapter
+          <button type="button" className="blk-big" onClick={() => open1(chapter + 1)}>
+            Next chapter ▸
           </button>
         )}
         {complete && last && (
-          <>
-            <p className="blk-end">The end of Pip’s journey. You have used the same tools mission planners use.</p>
-            <button type="button" onClick={restart}>
-              Start again
-            </button>
-          </>
-        )}
-        {!complete && chapter > 0 && (
-          <button type="button" className="blk-link" onClick={() => goTo(chapter - 1)}>
-            ◂ Previous chapter
+          <button type="button" className="blk-big" onClick={restart}>
+            Play again
           </button>
         )}
       </div>

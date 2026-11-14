@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { polarXY } from '../terrain/tileset'
-import { dayBlocks, earthBlocks, earthSurface, groundBlocks, moonBlocks, sampleGround, simpleDuration, skyVector, sunBlocks } from './voxels'
+import { dayBlocks, earthBlocks, gridHeightBilinear, offsetLatLon, sampleGlobal, earthSurface, groundBlocks, moonBlocks, sampleGround, simpleDuration, skyVector, sunBlocks } from './voxels'
 
 describe('skyVector', () => {
   it('points north, east, south and up as the scene axes say', () => {
@@ -39,6 +39,35 @@ describe('sampleGround', () => {
 
   it('returns null off the map', () => {
     expect(sampleGround(() => null, polarXY, -85, 0, 3, 1000)).toBeNull()
+  })
+})
+
+describe('anywhere on the Moon', () => {
+  it('walks east and north along the sphere', () => {
+    // 1° of arc on a 1737.4 km sphere is 30.32 km
+    const km1deg = (Math.PI / 180) * 1_737_400
+    const [la, lo] = offsetLatLon(0, 10, km1deg, 0)
+    expect(la).toBeCloseTo(0, 6)
+    expect(lo).toBeCloseTo(11, 6)
+    const [la2, lo2] = offsetLatLon(20, 10, 0, km1deg)
+    expect(la2).toBeCloseTo(21, 6)
+    expect(lo2).toBeCloseTo(10, 6)
+    // across the antimeridian
+    expect(offsetLatLon(0, 179.5, km1deg, 0)[1]).toBeCloseTo(-179.5, 6)
+  })
+
+  it('interpolates the global grid and wraps in longitude', () => {
+    // 4 × 2 grid: columns centred at 45, 135, 225, 315 E; rows at 45 N and 45 S
+    const h = new Float32Array([0, 100, 200, 300, 0, 100, 200, 300])
+    expect(gridHeightBilinear(h, 4, 2, 45, 90)).toBeCloseTo(50, 6)
+    // between 315 E and 45 E (wrap): halfway
+    expect(gridHeightBilinear(h, 4, 2, 45, 0)).toBeCloseTo(150, 6)
+  })
+
+  it('samples a flat Moon as the curvature drop only, centre at 0', () => {
+    const g = sampleGlobal(() => 0, 10, 20, 5, 2000)
+    expect(g.heightsM[2 * 5 + 2]).toBeCloseTo(0, 6)
+    expect(g.heightsM[0]).toBeCloseTo(-(2 * 4000 ** 2) / (2 * 1_737_400), 4)
   })
 })
 
