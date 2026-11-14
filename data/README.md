@@ -22,6 +22,8 @@ longitude, planetocentric latitude, degrees. The API reads these files only thro
 | `craters/craters.json` | Source, citation, counts, completeness | JSON | `lunarnav.craters` |
 | `globe/lola_global_4ppd.png`, `globe/globe.json` | Global LOLA topography for the web globe: 1440 x 720, 4 px/deg, simple cylindrical (row 0 = 90 N, column 0 = longitude 0, east-positive), metres above the 1737.4 km sphere | 16-bit value in the red and green bytes of a PNG; height = min + v / 65535 x (max - min) (min, max in the sidecar) | `lunarnav.globe` |
 | `radiation/crater_dosimeter_daily.json` | LRO CRaTER dosimeter daily dose rate 2009-06-19 to 2013-04-30 (1405 days): as measured in orbit and corrected for lunar shielding (free-space GCR equivalent, N/A on solar-particle-event days), partial-day flag; `meta` holds source URL, SHA-256 and caveats | JSON, arrays `date`, `measured_mgy_si_per_day`, `corrected_mgy_si_per_day` (null = missing), `partial_day`; mGy in silicon per day | `lunarnav.crater_dose` |
+| `ground_stations.json` | Radio-link catalogue: 18 deep-space antennas in three networks (`dsn` 12, `estrack` 3, `jaxa` 3). Per antenna: WGS84 geodetic position, dish, bands when a source states them, elevation limits and their source (`cited` or `owner_estimate`). The index of the Moon table and the SHA-256 of every kernel and mask file are in the same document | JSON, snake_case; limits in degrees, a number (all azimuths) or an array at azimuths 0, step, ... (clockwise from north) | `lunarnav.ground_stations` |
+| `moon_itrf_2025_2035.f32` | Geocentric Moon vector in the Earth-fixed frame ITRF93, hourly on the same grid as `ephemeris_2025_2035.f32`; light time and stellar aberration corrected | float32 little-endian `[sample][x,y,z]`, km | `lunarnav.ground_stations` |
 | `basemap_south.png`, `.json` | Hillshade of the south pole with its georeference (for maps) | PNG + JSON | `lunarnav.basemap` |
 | `provenance.json` | Source, version, size, terms and transformation of the ephemeris, DEM and catalogue inputs | JSON | `lunarnav.provenance` |
 | `validation.json` | Pipeline validation against JPL Horizons and the Apollo tables | JSON | `lunarnav.validate` |
@@ -57,6 +59,13 @@ South polar stereographic, true scale at the pole: `x = r sin(lon)`, `y = r cos(
 - **Crater catalogue**: complete above about 1-2 km diameter. No boulders, no small craters.
 - **Terrain horizons** were ray-marched to 175 km over LOLA DEMs from 20 m to 240 m per pixel, with exact lunar
   curvature (`docs/data-and-computation.md`).
+- **Ground stations**: elevation limits of the DSN and JAXA antennas are published masks (DSN: 810-005 module 301
+  horizon-mask workbook, effective 2024-05-01, 1 deg steps; JAXA: its own skyline files, which dip below the DSN's
+  6 deg mechanical limit in places). ESA publishes none: the three ESA antennas carry **6 deg, flagged
+  `owner_estimate`**, borrowed from the DSN handbook's mechanical limit for azimuth-elevation antennas. ESA
+  coordinates are those of the GNSS station on each site (IGS site logs), a few hundred metres from the dish at most.
+  A limit is geometry only: visible does not mean scheduled, and the bands are `null` where no source states them.
+  The Earth orientation is high-precision until 2027-02 and a lower-accuracy prediction afterwards.
 - **Ephemeris tables** use SPICE correction `LT+S` (matches Horizons "airless apparent"); 4-point cubic Lagrange
   interpolation between hourly samples.
 
