@@ -14,7 +14,10 @@ import type {
   DatasetsMeta,
   Health,
   PowerRequest,
+  PointHorizon,
   PowerResponse,
+  RadiationRequest,
+  RadiationResponse,
   SiteDetail,
   SiteList,
   SiteSeries,
@@ -77,10 +80,10 @@ const q = (params: Record<string, string | number | undefined>) =>
       .map(([k, v]) => [k, String(v)]),
   ).toString()
 
+/** SW-1 query parameters. No `panel`: the panel orientation only matters to POST /power (MECH). */
 export interface StateParams {
   t: string
   mast_m: number
-  panel: string
   comms_min_fraction: number
 }
 
@@ -89,7 +92,6 @@ export interface SeriesParams {
   duration_h: number
   step_min: number
   mast_m: number
-  panel: string
   comms_min_fraction: number
 }
 
@@ -102,16 +104,20 @@ export const api = {
 
   siteState: (id: string, p: StateParams, signal?: AbortSignal) =>
     request<SiteState>('GET', `/api/v1/sites/${encodeURIComponent(id)}/state?${q({ ...p })}`, undefined, signal),
+  // Manual coordinates ask for the skyline ray-traced over LOLA terrain, the same one the browser engine uses.
+  pointHorizon: (lat: number, lon: number, mast_m: number, signal?: AbortSignal) =>
+    request<PointHorizon>('GET', `/api/v1/points/horizon?${q({ lat, lon, mast_m })}`, undefined, signal),
   pointState: (lat: number, lon: number, p: StateParams, signal?: AbortSignal) =>
-    request<SiteState>('GET', `/api/v1/points/state?${q({ lat, lon, ...p })}`, undefined, signal),
+    request<SiteState>('GET', `/api/v1/points/state?${q({ lat, lon, ...p, horizon: 'terrain' })}`, undefined, signal),
   siteSeries: (id: string, p: SeriesParams, signal?: AbortSignal) =>
     request<SiteSeries>('GET', `/api/v1/sites/${encodeURIComponent(id)}/series?${q({ ...p })}`, undefined, signal),
   pointSeries: (lat: number, lon: number, p: SeriesParams, signal?: AbortSignal) =>
-    request<SiteSeries>('GET', `/api/v1/points/series?${q({ lat, lon, ...p })}`, undefined, signal),
+    request<SiteSeries>('GET', `/api/v1/points/series?${q({ lat, lon, ...p, horizon: 'terrain' })}`, undefined, signal),
 
   searchCandidates: (body: CandidateSearchRequest) =>
     request<CandidateSearchResponse>('POST', '/api/v1/candidates/search', body),
   power: (body: PowerRequest) => request<PowerResponse>('POST', '/api/v1/power', body),
+  radiation: (body: RadiationRequest, signal?: AbortSignal) => request<RadiationResponse>('POST', '/api/v1/radiation', body, signal),
   craters: (bbox: [number, number, number, number], minDiamKm: number, signal?: AbortSignal) =>
     request<CraterList>('GET', `/api/v1/craters?${q({ bbox: bbox.join(','), min_diam_km: minDiamKm })}`, undefined, signal),
 }

@@ -25,3 +25,5 @@ web/public/data/
 web/public/tiles/
 web/test-results/
 web/playwright-report/
+# local dev viewer (not part of the project)
+viewer/

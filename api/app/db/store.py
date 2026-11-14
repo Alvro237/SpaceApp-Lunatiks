@@ -17,6 +17,7 @@ from .craters import CraterRepository
 from .ephemeris import load_ephemeris
 from .grids import GridRepository
 from .horizons import HorizonRepository
+from .radiation import RadiationRepository
 from .sites import SiteRepository
 
 
@@ -31,6 +32,7 @@ class DataStore:
     craters: CraterRepository
     provenance: dict
     validation: dict
+    radiation: RadiationRepository | None = None   # LRO CRaTER daily dose (MECH)
 
 
 def _json(path: Path) -> dict:
@@ -43,7 +45,7 @@ def load_store(data_dir: Path) -> DataStore:
     return DataStore(data_dir=data_dir, sites=sites, ephemeris=ephemeris, ephemeris_index=index,
                      horizons=HorizonRepository(data_dir, sites), grids=GridRepository(data_dir),
                      craters=CraterRepository(data_dir), provenance=_json(data_dir / "provenance.json"),
-                     validation=_json(data_dir / "validation.json"))
+                     validation=_json(data_dir / "validation.json"), radiation=RadiationRepository(data_dir))
 
 
 @lru_cache(maxsize=1)

@@ -84,6 +84,10 @@ in float vHeight;
 in vec3 vSunScene;
 layout(location = 0) out highp vec4 fragColor;
 
+// Heights between samples, bilinear. The slope below is the difference of two such reads one sample apart on either
+// side, which equals the central-difference gradients at the four samples around the fragment blended bilinearly:
+// smooth across cells, without the square facets that differentiating the bilinear surface within a cell shows on
+// a coarse tile seen from close up.
 #ifdef FLOAT_LINEAR
 // the 257 samples sit at texel centres: sample i of 0..256 is at (i + 0.5) / 257
 float hBil(vec2 uv) { return texture(uHeight, (clamp(uv, 0.0, 1.0) * 256.0 + 0.5) / 257.0).r; }
@@ -123,7 +127,9 @@ void main() {
     base = texture(uLut, vec2(clamp((vHeight - uElevRange.x) / (uElevRange.y - uElevRange.x), 0.0, 1.0), 0.5)).rgb;
     coloured = true;
   } else if (uLayerMode == 1 && uHasLayer > 0.5) {
-    // bilinear: r is value × coverage (value 0 where there is no data), g the coverage
+    // bilinear between cell centres, so the 960 m cells read as a smooth field when zoomed in: r is value ×
+    // coverage (value 0 where there is no data), g the coverage, so r / g is the mean of the cells with data and
+    // cells without data neither pull their neighbours towards zero nor leave a staircase edge
     vec4 l = texture(uLayer, uLayerXf.xy + vUv * uLayerXf.zw);
     if (l.g > 0.5) {
       base = texture(uLut, vec2(clamp(l.r / l.g, 0.0, 1.0), 0.5)).rgb;

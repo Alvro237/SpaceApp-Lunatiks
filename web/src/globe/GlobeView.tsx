@@ -4,6 +4,10 @@
  * Catalogue sites are buttons over the globe; the panels hold the same information as text.
  */
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { ToolPortal } from '../ui/ToolSlot'
+import { IconMinus, IconPin, IconPlus, IconPole } from '../ui/icons'
+import { useGlobe } from '../state/globe'
+import { useHorizonTransition } from '../state/horizon'
 import { useQuery } from '@tanstack/react-query'
 import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
@@ -15,7 +19,7 @@ import { TileLoader } from '../terrain/loader'
 import { useEphemeris, useMasks } from '../time/hooks'
 import { DATA_BASE } from '../time/staticData'
 import { GlobeDetail } from './detail/globeDetail'
-import { MOON_R_KM, type Orbit, OrbitRig, RELIEF_MAX, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon } from './orbit'
+import { MIN_DIST, MOON_R_KM, type Orbit, OrbitRig, RELIEF_MAX, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon } from './orbit'
 import { GLOBE_FRAG, GLOBE_VERT } from './shaders'
 
 const FOV = 35
@@ -29,7 +33,7 @@ const DETAIL_SHADE_EXAGGERATION = 1.5
 /** What the globe's surface shows: LOLA heights lit by the Sun at the chosen time, or the LROC WAC photo mosaic. */
 export type GlobeSurface = 'relief' | 'photo'
 
-interface GlobeMeta {
+export interface GlobeMeta {
   file: string
   width: number
   height: number
@@ -37,7 +41,7 @@ interface GlobeMeta {
   max: number
 }
 
-async function loadGlobe(): Promise<{ meta: GlobeMeta; heights: Float32Array }> {
+export async function loadGlobe(): Promise<{ meta: GlobeMeta; heights: Float32Array }> {
   const meta = (await (await fetch(`${DATA_BASE}globe/globe.json`)).json()) as GlobeMeta
   const loader = new TileLoader(1)
   try {
@@ -62,6 +66,36 @@ export function GlobeView() {
   const [surface, setSurface] = useState<GlobeSurface>('relief')
   /** The mesh's relief exaggeration, to half a unit (for the caption and the markers' height). */
   const [exag, setExag] = useState(RELIEF_MAX)
+  const anchored = useGlobe((s) => s.anchored)
+  // In the horizon view the globe is hidden and paused: it must not start turning there, nor right after.
+  // paused (no frames drawn) while the horizon view or Block Moon covers the map; it keeps its camera and tiles
+  const underHorizon = useHorizonTransition((s) => s.phase === 'horizon')
+  const underBlocks = useApp((s) => s.blocks)
+  const covered = underHorizon || underBlocks
+  useEffect(() => orbit.touch(), [covered, orbit])
+
+  // Opening the horizon view: turn to the place and come down over it; back to the previous view when it closes.
+  useEffect(() => {
+    let before: Orbit | null = null
+    let phase = useHorizonTransition.getState().phase
+    return useHorizonTransition.subscribe((t) => {
+      if (t.phase === phase) return
+      phase = t.phase
+      if (phase === 'diving') {
+        const sel = useApp.getState().selection
+        const site = sel.kind === 'site' ? masks?.site(sel.id) : null
+        const ll = sel.kind === 'point' ? [sel.lat, sel.lon] : site ? [site.lat, site.lon] : null
+        if (!ll) return
+        before = { ...orbit.goal }
+        orbit.turnTo(ll[0], ll[1])
+        orbit.goal.dist = MIN_DIST
+      } else if ((phase === 'returning' || phase === 'map') && before) {
+        orbit.touch()
+        Object.assign(orbit.goal, before)
+        before = null
+      }
+    })
+  }, [masks, orbit])
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null)
   const pickRef = useRef<((cx: number, cy: number) => [number, number] | null) | null>(null)
 
@@ -86,6 +120,7 @@ export function GlobeView() {
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return
+    orbit.touch()
     const h = e.currentTarget.clientHeight || 600
     const keys: Record<string, () => void> = {
       ArrowLeft: () => orbit.drag(h * 0.08, 0, h, FOV),
@@ -104,6 +139,7 @@ export function GlobeView() {
     }
   }
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    orbit.touch()
     if ((e.target as HTMLElement).closest('button, select, input, a')) return
     drag.current = { x: e.clientX, y: e.clientY, moved: false }
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -149,7 +185,7 @@ export function GlobeView() {
         onWheel={onWheel}
       >
         {globe.data ? (
-          <Canvas camera={{ fov: FOV, near: 10, far: 50_000, position: [0, 0, 6000] }} dpr={[1, 2]} flat linear gl={{ antialias: true }} aria-hidden="true">
+          <Canvas camera={{ fov: FOV, near: 10, far: 50_000, position: [0, 0, 6000] }} dpr={[1, 2]} flat linear gl={{ antialias: true }} aria-hidden="true" frameloop={covered ? 'never' : 'always'}>
             <GlobeScene
               data={globe.data}
               orbit={orbit}
@@ -171,15 +207,30 @@ export function GlobeView() {
           Arrow keys turn the Moon, plus and minus zoom, Enter opens the detailed south-polar map. Sites are listed, with the same information, in the panels.
         </p>
       </div>
+      <ToolPortal>
       <div className="map-controls" role="group" aria-label="Globe view">
-        <button type="button" onClick={() => orbit.zoom(0.6)} aria-label="Zoom in">
-          +
+        <div className="tool-group">
+          <button type="button" onClick={() => orbit.zoom(0.6)} aria-label="Zoom in" title="Zoom in (+)">
+            <IconPlus />
+          </button>
+          <button type="button" onClick={() => orbit.zoom(1 / 0.6)} aria-label="Zoom out" title="Zoom out (−)">
+            <IconMinus />
+          </button>
+        </div>
+        <button type="button" onClick={() => enterMap()} aria-label="South pole map" title="Detailed south-polar map">
+          <IconPole />
         </button>
-        <button type="button" onClick={() => orbit.zoom(1 / 0.6)} aria-label="Zoom out">
-          −
-        </button>
-        <button type="button" onClick={() => enterMap()} title="Detailed south-polar map">
-          South pole map
+        <button
+          type="button"
+          aria-pressed={anchored}
+          aria-label="Pin the Moon"
+          title={anchored ? 'Pinned: the Moon stays still. Press to let it turn when idle' : 'Pin the Moon: stop it turning by itself when idle'}
+          onClick={() => {
+            orbit.touch()
+            useGlobe.getState().setAnchored(!anchored)
+          }}
+        >
+          <IconPin />
         </button>
         <button
           type="button"
@@ -190,6 +241,7 @@ export function GlobeView() {
           Photo
         </button>
       </div>
+      </ToolPortal>
       <p className="globe-caption">
         {surface === 'photo'
           ? `LROC WAC photo mosaic, 100 m, from NASA Moon Trek (lighting as photographed; night side from the chosen time) · LOLA relief ×${exag}`
@@ -341,6 +393,7 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
   const toPoint = useMemo(() => new THREE.Vector3(), [])
 
   useFrame((_, dt) => {
+    orbit.setAnchored(useGlobe.getState().anchored)
     orbit.fit(size.width, size.height, useInsets.getState(), FOV)
     orbit.step(dt, reduced)
     const n = orbit.now
@@ -367,14 +420,17 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
     detail.update(dt, { ...view, lat: n.lat, lon: n.lon, distKm: n.dist }, { ...view, lat: g.lat, lon: g.lon, distKm: g.dist }, material)
 
     // enter the polar map once the flight down has arrived, or when zoomed in over the cap
-    const target = orbit.arrived()
-    if (target) {
-      onEnter(target[0], target[1])
-      return
-    }
-    if (!orbit.isDiving && orbit.goal.dist < ENTER_MAP_DIST && n.lat <= MAP_DISC_LAT + 2) {
-      onEnter(Math.min(n.lat, MAP_DISC_LAT - 1), n.lon)
-      return
+    // (not while the horizon view opens or closes: then the camera comes down over the place on purpose)
+    if (useHorizonTransition.getState().phase === 'map') {
+      const target = orbit.arrived()
+      if (target) {
+        onEnter(target[0], target[1])
+        return
+      }
+      if (!orbit.isDiving && orbit.goal.dist < ENTER_MAP_DIST && n.lat <= MAP_DISC_LAT + 2) {
+        onEnter(Math.min(n.lat, MAP_DISC_LAT - 1), n.lon)
+        return
+      }
     }
 
     // places on the visible hemisphere only (a point is hidden when the sphere is between it and the camera)

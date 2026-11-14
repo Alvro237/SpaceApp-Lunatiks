@@ -16,10 +16,15 @@ import { BANDS, ShadowSchedule } from './shadowSchedule'
 import { type TileKey, type Tileset, keyOf, parent, tileBounds, tileUrl } from './tileset'
 
 export const GPU_TILE_CAPACITY = 300
-/** Shadow texture: one texel per 960 m cell of the preview over the 60 S disc. */
-const SHADOW_SIZE = 2048
-/** The shadow pass while the Sun moves (a quarter of the work); shadowSchedule.ts says when each runs. */
-const SHADOW_FAST_SIZE = 1024
+/** Shadow texture at rest: one texel per 960 m cell of the preview over the 60 S disc (the overview is 2049²). */
+export const SHADOW_SIZE = 2048
+/**
+ * Shadow texture while the Sun moves (time playing or the slider dragged): one texel per 1 920 m. The pass costs one
+ * 72-step ray per texel, so halving the side divides its cost by about four; measured on an Intel UHD (integrated)
+ * GPU, 25-44 ms per pass at 2048² against 8-16 ms at 1024², with a whole frame budget of 16.7 ms at 60 fps. Once the
+ * Sun is still the full-size texture is computed again, in strips (shadowSchedule.ts says when each pass runs).
+ */
+export const SHADOW_FAST_SIZE = 1024
 
 export type LayerMode = { kind: 'none' } | { kind: 'elevation' } | { kind: 'data'; id: string; colormap: ColormapId; levels: number }
 

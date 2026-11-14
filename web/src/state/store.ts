@@ -6,6 +6,7 @@ import { create } from 'zustand'
 import type { PanelModel } from '../time/engine'
 import { MS_PER_HOUR } from '../time/engine'
 import { type SpeedId, snapMinute } from '../time/clock'
+import { usePanels } from './panels'
 
 export type Selection = { kind: 'site'; id: string } | { kind: 'point'; lat: number; lon: number }
 
@@ -20,6 +21,8 @@ export const MASTS_M = [0, 2, 5, 10] as const
 
 /** How places are drawn on the map and globe (three mock-ups to choose from). */
 export type MarkerStyle = 'pin' | 'crater' | 'cross'
+
+export type BlockView = 'moon' | 'ground'
 
 /** Site screening by the browser engine over the analysis window; null = not used. */
 export interface Screen {
@@ -60,6 +63,10 @@ export interface Prefs {
   /** Text typed in the site search; the map shows the sites that match it. */
   siteQuery: string
   screen: Screen
+  /** Block Moon: the educational mode, the same places and times drawn as a world of cubes. */
+  blocks: boolean
+  /** In Block Moon: the whole Moon, or the ground around the chosen place. */
+  blockView: BlockView
 }
 
 export interface AppState extends Scene, Prefs {
@@ -120,6 +127,8 @@ export const useApp = create<AppState>()((set, get) => ({
   markerStyle: 'pin',
   siteQuery: '',
   screen: NO_SCREEN,
+  blocks: false,
+  blockView: 'moon',
   mapEntry: null,
   enterMap: (lat, lon) =>
     set((s) => ({
@@ -144,6 +153,10 @@ export const useApp = create<AppState>()((set, get) => ({
   setCompareMode: (compareMode) => {
     set({ compareMode })
     if (compareMode && get().compare.length === 0) get().addCompare()
+    // The comparison lives in the place panel: turning it on shows it, turning it off closes it if it was open.
+    const panels = usePanels.getState()
+    if (compareMode) panels.setSection('compare')
+    else if (panels.section === 'compare') panels.setSection(null)
   },
   addCompare: (sel) =>
     set((s) => {

@@ -7,6 +7,8 @@ sky view). These grids are averages of NASA products, small enough to commit and
 Sources
   * LOLA slope / elevation (Barker et al.), PGDA product 90: read remotely from the overview
     (pre-averaged) levels of the Cloud-Optimized GeoTIFFs, no full download.
+  * LOLA elevation of the cap south of 80 S at the full 240 m resolution (mode "window": only the blocks of
+    that box are read): the near field of the API's ray-traced horizons for manual coordinates.
   * LOLA-derived illumination, Earth visibility, permanent shadow and sky visibility
     (Mazarico et al. 2011), PGDA product 69: plain GeoTIFFs downloaded once into
     ``data/raw/illumination`` and block-averaged here.
@@ -38,8 +40,15 @@ ILLUM_DIR = DATA_DIR / "illumination"
 STRIP_ROWS = 256
 ATTEMPTS = 8
 
-# id -> spec. ``mode`` is "overview" (remote COG overview level) or "local" (downloaded file).
+# id -> spec. ``mode`` is "overview" (remote COG overview level), "window" (full resolution inside a box,
+# remote) or "local" (downloaded file).
 GRIDS: dict[str, dict] = {
+    "lola_elevation_80s": {
+        "mode": "window", "url": f"{PGDA_LOLA_BASE}/LDEM_60S_240MPP_ADJ.TIF", "half_width_m": 304_000.0,
+        "unit": "m", "scale": 0.5, "product": "https://pgda.gsfc.nasa.gov/products/90",
+        "description": "LOLA elevation above the 1737.4 km sphere at the full 240 m resolution, south of about "
+                       "80 S (a 608 km box centred on the pole); near field of ray-traced horizons",
+    },
     "lola_slope_60s": {
         "mode": "overview", "url": f"{PGDA_LOLA_BASE}/LDSM_60S_240MPP_ADJ.TIF", "factor": 4,
         "unit": "deg", "scale": 0.01, "clip_min": 0.0, "product": "https://pgda.gsfc.nasa.gov/products/90",
@@ -116,6 +125,30 @@ def read_overview(url: str, factor: int) -> tuple[np.ndarray, dict]:
     return np.vstack(rows), meta
 
 
+def read_box(url: str, half_width_m: float) -> tuple[np.ndarray, dict]:
+    """Read the full-resolution pixels of a square box centred on the pole; only the blocks it touches."""
+    path = f"/vsicurl/{url}"
+    meta = _open_meta(path)
+    t = meta["transform"]
+    c0 = int(np.floor((-half_width_m - t.c) / t.a))
+    c1 = int(np.ceil((half_width_m - t.c) / t.a))
+    r0 = int(np.floor((t.f - half_width_m) / -t.e))
+    r1 = int(np.ceil((t.f + half_width_m) / -t.e))
+    rows = []
+    for r in range(r0, r1, STRIP_ROWS):
+        h = min(STRIP_ROWS, r1 - r)
+        rows.append(_read_strip(path, Window(c0, r, c1 - c0, h)))
+        print(f"  rows {r + h - r0}/{r1 - r0}", flush=True)
+    a = np.vstack(rows)
+    if meta["nodata"] is not None and np.isfinite(meta["nodata"]):
+        a[a == meta["nodata"]] = np.nan
+    a = a * (meta["scale"] or 1.0) + (meta["offset"] or 0.0)
+    meta["source_pixel_m"] = t.a
+    meta["transform"] = t * t.translation(c0, r0)
+    meta["height"], meta["width"] = a.shape
+    return a, meta
+
+
 def block_mean(a: np.ndarray, factor: int) -> np.ndarray:
     """Mean over factor x factor blocks ignoring NaN; a block with no valid sample stays NaN."""
     h, w = (a.shape[0] // factor) * factor, (a.shape[1] // factor) * factor
@@ -165,7 +198,11 @@ def build(only: list[str] | None = None) -> None:
         if only and gid not in only:
             continue
         print(gid, flush=True)
-        if spec["mode"] == "overview":
+        if spec["mode"] == "window":
+            values, meta = read_box(spec["url"], spec["half_width_m"])
+            url, unit, scale = spec["url"], spec["unit"], spec["scale"]
+            aggregation = "none: the source pixels inside the box"
+        elif spec["mode"] == "overview":
             values, meta = read_overview(spec["url"], spec["factor"])
             url, unit, scale = spec["url"], spec["unit"], spec["scale"]
             # The producer's overviews are not plain means (the slope overview dips slightly below 0),
