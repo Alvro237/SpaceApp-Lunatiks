@@ -27,6 +27,8 @@ asks for this list; keep it current when something is added.
 | Zeitlin et al. (2013), Science 340, 1080-1084, MSL RAD cruise radiation (doi 10.1126/science.1235989) | Order of the GCR quality factor (about 3.8, to verify) | https://www.swri.org/newsroom/press-releases/swri-led-team-calculates-the-radiation-exposure-associated-trip-mars |
 | LRO CRaTER Level 2 archive, PDS PPI node | Longer record (2009-2026), not yet used | https://pds-ppi.igpp.ucla.edu/data/lro-crater/ |
 | NASA OCHMO, Radiation Protection technical brief (NASA-STD-3001) | Career effective dose limit 600 mSv | https://www.nasa.gov/wp-content/uploads/2023/03/radiation-protection-technical-brief-ochmo.pdf |
+| NAIF station SPK `earthstns_itrf93_260814.bsp` and topocentric frame kernel `earth_topo_260814.tf` (DSN stations DSS-14/15/24/25/26 Goldstone, DSS-34/35/36/43/45 Canberra, DSS-54/55/63/65 Madrid, as listed in the kernel comments) | Ground-station dataset for the radio link: position of each deep-space antenna in the Earth-fixed frame (`pipeline` downloads to `data/raw/kernels`, not committed) | https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/stations/ , https://naif.jpl.nasa.gov/pub/naif/generic_kernels/fk/stations/ |
+| NAIF Earth orientation binary PCKs `earth_000101_270208_261113.bpc` (high precision, to 2027-02-08) and `earth_2026_260806_2126_predict.bpc` (predicted, lower accuracy, to 2126) | Where each station is relative to the Moon at a given time (Earth rotation and polar motion); needed to decide when the Moon is above a station's horizon | https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/ |
 | Moon Trek, QuickMap | Context and cross-checks while designing | https://trek.nasa.gov/moon/ , https://quickmap.lroc.asu.edu/ |
 | VIPER lunar operations, Artemis III candidate regions | Lessons on what real missions plan for | https://science.nasa.gov/mission/viper/lunar-operations/ , https://www.nasa.gov/news-release/nasa-identifies-candidate-regions-for-landing-next-americans-on-moon/ |
 
@@ -36,6 +38,17 @@ asks for this list; keep it current when something is added.
 | --- | --- | --- |
 | USGS / IAU Gazetteer of Planetary Nomenclature (Moon) | Centres of south-polar craters and massifs | https://planetarynames.wr.usgs.gov/ |
 | Robbins (2018) Lunar Crater Database, USGS Astrogeology Science Center (built from NASA LRO LROC/LOLA and JAXA Kaguya Terrain Camera data) | Crater density for the hazard filter (`data/craters`) | https://astrogeology.usgs.gov/search/map/moon_crater_database_v1_robbins |
+
+## Ground-station sources consulted (radio link; values not yet in the dataset)
+
+| Resource | Used for | URL |
+| --- | --- | --- |
+| ESA ESOC, ground stations (Cebreros, Malargüe, New Norcia) and ESA press release on the New Norcia 3 antenna (2025) | Which ESTRACK antennas are deep-space (35 m) and their bands; official coordinates still to be sourced | https://esoc.esa.int/explore-our-ground-stations , https://www.esa.int/Enabling_Support/Operations/ESA_Ground_Stations/Estrack_ground_stations , https://www.esa.int/enabling_support/operations/esa_inaugurates_deep_space_antenna_in_australia |
+| JAXA ISAS, Misasa Deep Space Station overview; JAXA station coordinates page (updated 2026-01-11), which gives ITRF2014 positions and horizon-mask spreadsheets `Misasa_horizon_mask.xls`, `UDSC_horizon_mask.xls`, `USC_horizon_mask.xls`; Misasa 54 m is DSS-30 and Usuda 64 m is DSS-48 in DSN numbering | JAXA deep-space antennas (Misasa 54 m, Usuda 64 m, Uchinoura 34 m): coordinates and official per-azimuth horizon masks | https://www.isas.jaxa.jp/home/great/english/profile1001en.html , https://ddor.nav.isas.jaxa.jp/station_coordinates |
+| NASA, LunaNet Interoperability Specification v5 | Frequency plan for direct-with-Earth links (to confirm band by band) | https://www.nasa.gov/wp-content/uploads/2025/02/lunanet-interoperability-specification-v5-baseline.pdf |
+| NASA/JPL DSN Telecommunications Link Design Handbook, 810-005, module 301 Rev. N (Coverage and Geometry), sections 2.2 to 2.2.4: mechanical elevation limit about 6 deg for az-el antennas; generic limits 6.0 deg receive, 10.0 low-power and 13.5 deg high-power transmit | Minimum elevation of the DSN antennas | https://deepspace.jpl.nasa.gov/dsndocs/810-005/301/301N.pdf |
+| NASA/JPL DSN 810-005 module 301 Horizon Mask Spreadsheet (V2, for 301-O, effective 2024-05-01, S. Slobin): per-azimuth receive, low-power and high-power transmit elevation limits for DSS-14, 24, 25, 26, 34, 35, 36, 43, 54, 55, 63, 65 and planned antennas | Per-antenna horizon masks for the DSN stations of the radio-link dataset (the separate "Coverage and Visibility" spreadsheet uses generic limits and is not used for masks) | https://deepspace.jpl.nasa.gov/dsndocs/810-005/301/Horizon-Masks-Download-V2-301O.xlsx , https://deepspace.jpl.nasa.gov/dsndocs/810-005/downloads/ |
+| IGS site logs of the ESA stations CEBR (Cebreros), MGUE (Malargüe), NNOR (New Norcia) | Public coordinates of the ESA deep-space sites (km-level accuracy is enough to decide Moon visibility) | https://files.igs.org/pub/station/log/ , https://files.igs.org/pub/station/oldlog/cebr_20201019.log , https://files.igs.org/pub/station/log/nnor00aus_20251107.log |
 
 ## Papers and documents consulted
 
