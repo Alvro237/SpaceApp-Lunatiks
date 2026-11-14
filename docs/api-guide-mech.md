@@ -31,6 +31,41 @@ cd api
 - **Errors**: 404 unknown `site_id`; 422 invalid or missing input (the body says which field); 400 dates outside
   the ephemeris tables (2025-2035, 1969-1972 for Apollo).
 
+## Interface rules (MECH request, 2026-11-14)
+
+**Use explanatory names in the interface, never the API field names, and keep the text to a minimum.**
+
+- Labels: 1-3 plain words plus the unit, e.g. "Battery left (%)", not `battery_soc` and not a sentence.
+- One number or one chart per idea. Put no paragraphs on screen. Definitions, assumptions and sources go in a
+  tooltip or an "i" icon, one line each. `assumptions[]` goes behind a single "Assumptions" toggle.
+- Show the verdict first, as a word or a colour. Show the detail only on demand.
+- Units the user understands: days or hours (not ms), °C next to K for temperatures, kWh for big energies,
+  % for fractions.
+- Unknown (`null`) shows as "—" with a tooltip "no data here", never as 0.
+
+Suggested labels:
+
+| API field | Label |
+| --- | --- |
+| `colony_status` | "Survives on its own" / "Survives, but draining" / "Fails after X days" |
+| `sun_fraction`, `sunlit_fraction` | "Sunlight (%)" |
+| `longest_dark_h` | "Longest night (h)" |
+| `visible_window_fraction`, `longest_blackout_h` | "Earth contact (%)", "Longest silence (h)" |
+| `mean_power_w_m2` | "Solar power (W/m²)" |
+| `power_w`, `energy_wh` | "Panel power (W)", "Energy produced (kWh)" |
+| `battery_soc`, `min_soc` | "Battery left (%)", "Lowest battery (%)" |
+| `energy_margin_wh` | "Energy to spare (kWh)" |
+| `autonomy_h` | "Battery-only time (h)" |
+| `sunrise_margin_wh` | "Spare at sunrise (kWh)" |
+| `heater_w`, `interior_k` | "Heating (W)", "Inside temp (°C)" |
+| `degraded_days` | "Saving mode (days)" |
+| `cold_soak_h` | "Time to freeze if power is lost (h)" |
+| `min_battery_capacity_wh`, `min_panel_area_m2` | "Battery needed (kWh)", "Panels needed (m²)" |
+| `risk.index` | "Radiation risk (1-10)" |
+| `surface.max_k`, `surface.min_k` | "Hottest", "Coldest" (°C) |
+| `verdict` | "Good" / "Marginal" / "Poor" / "Not feasible" / "Unknown" |
+| `horizon_kind` | badge: "Real terrain" / "Estimated horizon" |
+
 ## Which endpoint for what
 
 | Question in the UI | Call | Main fields to show |
