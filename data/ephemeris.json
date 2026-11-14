@@ -1,0 +1,75 @@
+{
+  "format": 1,
+  "layout": "float32 little-endian [sample][body][x,y,z], kilometres from the Moon centre",
+  "bodies": [
+    "sun",
+    "earth"
+  ],
+  "frame": "MOON_ME (Moon Mean-Earth / polar axis), DE440 orientation",
+  "correction": "LT+S (light time + stellar aberration), airless",
+  "interpolation": "4-point cubic Lagrange in the browser",
+  "segments": [
+    {
+      "id": "2025_2035",
+      "file": "ephemeris_2025_2035.f32",
+      "startUtc": "2025-01-01T00:00:00Z",
+      "startUnixMs": 1735689600000,
+      "stepSeconds": 3600,
+      "count": 96409,
+      "bytes": 2313816,
+      "maxFloat32DirectionErrorDeg": 2.709484673417237e-06
+    },
+    {
+      "id": "apollo_1969_1972",
+      "file": "ephemeris_apollo_1969_1972.f32",
+      "startUtc": "1969-01-01T00:00:00Z",
+      "startUnixMs": -31536000000,
+      "stepSeconds": 3600,
+      "count": 35065,
+      "bytes": 841560,
+      "maxFloat32DirectionErrorDeg": 2.6360644912623372e-06
+    }
+  ],
+  "kernels": {
+    "lsk": {
+      "file": "naif0012.tls",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/lsk/naif0012.tls",
+      "description": "Leapseconds kernel (UTC <-> TDB)",
+      "bytes": 5257,
+      "sha256": "678e32bdb5a744117a467cd9601cd6b373f0e9bc9bbde1371d5eee39600a039b",
+      "server_last_modified": "Fri, 15 Jul 2016 00:00:37 GMT"
+    },
+    "pck_constants": {
+      "file": "pck00011.tpc",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/pck00011.tpc",
+      "description": "Planetary constants (body radii)",
+      "bytes": 131226,
+      "sha256": "3dff7b1dbeceaa01f25467767d3fa25816051c85d162d1edf04acb310ee28bb1",
+      "server_last_modified": "Tue, 27 Dec 2022 16:28:50 GMT"
+    },
+    "spk": {
+      "file": "de440s.bsp",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/spk/planets/de440s.bsp",
+      "description": "JPL DE440 planetary ephemeris, 1849-2150 (short version)",
+      "bytes": 32726016,
+      "sha256": "c1c7feeab882263fc493a9d5a5b2ddd71b54826cdf65d8d17a76126b260a49f2",
+      "server_last_modified": "Mon, 21 Dec 2020 19:39:26 GMT"
+    },
+    "pck_moon": {
+      "file": "moon_pa_de440_200625.bpc",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/moon_pa_de440_200625.bpc",
+      "description": "High-accuracy lunar orientation (principal axes) from DE440",
+      "bytes": 12863488,
+      "sha256": "60cd55aa401ea2ea97360636f567554bfe4e37bb829f901b4460a455dfaf783f",
+      "server_last_modified": "Sat, 26 Jun 2021 01:49:57 GMT"
+    },
+    "fk_moon": {
+      "file": "moon_de440_250416.tf",
+      "url": "https://naif.jpl.nasa.gov/pub/naif/generic_kernels/fk/satellites/moon_de440_250416.tf",
+      "description": "Lunar frame kernel: defines MOON_ME / MOON_PA aliases for DE440",
+      "bytes": 19478,
+      "sha256": "a47c71e9c9f33796bdafb2c9d69a7ee447b6016ecad80f71cd6f3e479f9cf768",
+      "server_last_modified": "Wed, 16 Apr 2025 12:47:17 GMT"
+    }
+  }
+}

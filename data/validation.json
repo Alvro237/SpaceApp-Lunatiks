@@ -1,0 +1,62 @@
+{
+ "generatedUtc": "2026-11-13T22:59:47+00:00",
+ "ephemerisVsHorizons": {
+  "reference": "JPL Horizons API (airless apparent azimuth/elevation of the target centre, DE441)",
+  "sites": 11,
+  "epochs": 16,
+  "comparisons": 352,
+  "dateRange": [
+   "2027-01-01T12:14:13Z",
+   "2033-09-04T21:11:12Z"
+  ],
+  "maxElevationErrorDeg": 2.6e-05,
+  "maxAzimuthErrorDeg": 1e-06,
+  "toleranceDeg": 0.01
+ },
+ "ephemerisVsApolloTables": {
+  "reference": "NASA Apollo Lunar Surface Journal, Sun/Earth altitude-azimuth tables (Nautical Almanac lunar ephemeris, 1970s)",
+  "events": 43,
+  "missions": [
+   11,
+   12,
+   14,
+   15,
+   16,
+   17
+  ],
+  "sunElevationMaxErrorDeg": 0.066,
+  "sunAzimuthMaxErrorDeg": 0.03,
+  "earthElevationMaxErrorNoParallaxDeg": 0.075,
+  "earthParallaxOffsetDeg": [
+   -0.261,
+   -0.051
+  ],
+  "note": "The 1970s tables place the Earth at infinity (no lunar-radius parallax, up to 0.26 deg). Without parallax we match them; with parallax, as Horizons and this project do, the difference equals the parallax.",
+  "excludedAzimuthEntry": "Apollo 12 EVA1 end (out of sequence in the source table, 0.41 deg off)"
+ },
+ "terrainHeightVsLroc": [
+  {
+   "site": "IM-1 Odysseus",
+   "referenceElevationM": 2579.0,
+   "ourDemElevationM": 2592.0,
+   "differenceM": 13.0,
+   "reference": "https://lroc.im-ldi.com/images/1360"
+  },
+  {
+   "site": "Chandrayaan-3 (Shiv Shakti)",
+   "referenceElevationM": 532.0,
+   "ourDemElevationM": 529.2,
+   "differenceM": -2.8,
+   "reference": "https://lroc.im-ldi.com/images/1314"
+  }
+ ],
+ "horizonAlgorithm": {
+  "method": "Ray marching over LOLA DEMs in the plane Moon-centre/observer/sample (exact curvature)",
+  "analyticTests": [
+   "smooth sphere gives the geometric dip -acos(R/(R+mast)) in every azimuth",
+   "a 500 m ridge 10 km away appears at the analytic angle (0.08 deg tolerance)",
+   "a higher mast sees lower; NaN samples are ignored",
+   "a 10 deg plane returns a 10 deg slope"
+  ]
+ }
+}

@@ -1,0 +1,2448 @@
+{
+ "format": 1,
+ "referenceRadiusKm": 1737.4,
+ "azimuthStepDeg": 0.5,
+ "azimuthCount": 720,
+ "mastsM": [
+  0.0,
+  2.0,
+  5.0,
+  10.0
+ ],
+ "horizonFile": "horizons.i16",
+ "horizonUnit": "int16 little-endian, hundredths of a degree, layout [terrainSite][mast][azimuth]",
+ "zoneFile": "zones.i16",
+ "zoneUnit": "int16 little-endian, hundredths of a degree, layout [terrainSite][zonePoint][azimuth], 2 m mast",
+ "maxRangeM": 175000.0,
+ "sites": [
+  {
+   "id": "apollo-11",
+   "name": "Apollo 11",
+   "group": "Apollo (1969-1972)",
+   "kind": "landing",
+   "lat": 0.67416,
+   "lon": 23.47314,
+   "region": "Mare Tranquillitatis",
+   "source": {
+    "label": "NASA NSSDCA, Apollo Landing Site Coordinates",
+    "url": "https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html",
+    "note": "Lunar Module position from LRO images (Wagner et al., Icarus 283, 2017); frame: Mean Earth/Polar Axis, DE421"
+   },
+   "history": {
+    "label": "NASA Apollo Lunar Surface Journal Sun/Earth tables",
+    "url": "https://www.nasa.gov/wp-content/uploads/static/history/alsj/Scotti_AltAz.txt"
+   },
+   "apollo": 11,
+   "landingUtc": "1969-07-20T20:17:39Z",
+   "terrain": {
+    "available": false,
+    "reason": "Terrain data (LOLA south-pole products) covers south of 60 S only; the geometric horizon of a smooth sphere is used"
+   }
+  },
+  {
+   "id": "apollo-12",
+   "name": "Apollo 12",
+   "group": "Apollo (1969-1972)",
+   "kind": "landing",
+   "lat": -3.0128,
+   "lon": -23.4219,
+   "region": "Oceanus Procellarum",
+   "source": {
+    "label": "NASA NSSDCA, Apollo Landing Site Coordinates",
+    "url": "https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html",
+    "note": "Lunar Module position from LRO images (Wagner et al., Icarus 283, 2017); frame: Mean Earth/Polar Axis, DE421"
+   },
+   "history": {
+    "label": "NASA Apollo Lunar Surface Journal Sun/Earth tables",
+    "url": "https://www.nasa.gov/wp-content/uploads/static/history/alsj/Scotti_AltAz.txt"
+   },
+   "apollo": 12,
+   "landingUtc": "1969-11-19T06:54:36Z",
+   "terrain": {
+    "available": false,
+    "reason": "Terrain data (LOLA south-pole products) covers south of 60 S only; the geometric horizon of a smooth sphere is used"
+   }
+  },
+  {
+   "id": "apollo-14",
+   "name": "Apollo 14",
+   "group": "Apollo (1969-1972)",
+   "kind": "landing",
+   "lat": -3.64589,
+   "lon": -17.47194,
+   "region": "Fra Mauro",
+   "source": {
+    "label": "NASA NSSDCA, Apollo Landing Site Coordinates",
+    "url": "https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html",
+    "note": "Lunar Module position from LRO images (Wagner et al., Icarus 283, 2017); frame: Mean Earth/Polar Axis, DE421"
+   },
+   "history": {
+    "label": "NASA Apollo Lunar Surface Journal Sun/Earth tables",
+    "url": "https://www.nasa.gov/wp-content/uploads/static/history/alsj/Scotti_AltAz.txt"
+   },
+   "apollo": 14,
+   "landingUtc": "1971-02-05T09:18:13Z",
+   "terrain": {
+    "available": false,
+    "reason": "Terrain data (LOLA south-pole products) covers south of 60 S only; the geometric horizon of a smooth sphere is used"
+   }
+  },
+  {
+   "id": "apollo-15",
+   "name": "Apollo 15",
+   "group": "Apollo (1969-1972)",
+   "kind": "landing",
+   "lat": 26.13239,
+   "lon": 3.6333,
+   "region": "Hadley Rille",
+   "source": {
+    "label": "NASA NSSDCA, Apollo Landing Site Coordinates",
+    "url": "https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html",
+    "note": "Lunar Module position from LRO images (Wagner et al., Icarus 283, 2017); frame: Mean Earth/Polar Axis, DE421"
+   },
+   "history": {
+    "label": "NASA Apollo Lunar Surface Journal Sun/Earth tables",
+    "url": "https://www.nasa.gov/wp-content/uploads/static/history/alsj/Scotti_AltAz.txt"
+   },
+   "apollo": 15,
+   "landingUtc": "1971-07-30T22:16:29Z",
+   "terrain": {
+    "available": false,
+    "reason": "Terrain data (LOLA south-pole products) covers south of 60 S only; the geometric horizon of a smooth sphere is used"
+   }
+  },
+  {
+   "id": "apollo-16",
+   "name": "Apollo 16",
+   "group": "Apollo (1969-1972)",
+   "kind": "landing",
+   "lat": -8.9734,
+   "lon": 15.5011,
+   "region": "Descartes",
+   "source": {
+    "label": "NASA NSSDCA, Apollo Landing Site Coordinates",
+    "url": "https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html",
+    "note": "Lunar Module position from LRO images (Wagner et al., Icarus 283, 2017); frame: Mean Earth/Polar Axis, DE421"
+   },
+   "history": {
+    "label": "NASA Apollo Lunar Surface Journal Sun/Earth tables",
+    "url": "https://www.nasa.gov/wp-content/uploads/static/history/alsj/Scotti_AltAz.txt"
+   },
+   "apollo": 16,
+   "landingUtc": "1972-04-21T02:23:35Z",
+   "terrain": {
+    "available": false,
+    "reason": "Terrain data (LOLA south-pole products) covers south of 60 S only; the geometric horizon of a smooth sphere is used"
+   }
+  },
+  {
+   "id": "apollo-17",
+   "name": "Apollo 17",
+   "group": "Apollo (1969-1972)",
+   "kind": "landing",
+   "lat": 20.1911,
+   "lon": 30.7723,
+   "region": "Taurus-Littrow",
+   "source": {
+    "label": "NASA NSSDCA, Apollo Landing Site Coordinates",
+    "url": "https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html",
+    "note": "Lunar Module position from LRO images (Wagner et al., Icarus 283, 2017); frame: Mean Earth/Polar Axis, DE421"
+   },
+   "history": {
+    "label": "NASA Apollo Lunar Surface Journal Sun/Earth tables",
+    "url": "https://www.nasa.gov/wp-content/uploads/static/history/alsj/Scotti_AltAz.txt"
+   },
+   "apollo": 17,
+   "landingUtc": "1972-12-11T19:54:58Z",
+   "terrain": {
+    "available": false,
+    "reason": "Terrain data (LOLA south-pole products) covers south of 60 S only; the geometric horizon of a smooth sphere is used"
+   }
+  },
+  {
+   "id": "im-1",
+   "name": "IM-1 Odysseus",
+   "group": "Recent landers",
+   "kind": "landing",
+   "lat": -80.13,
+   "lon": 1.44,
+   "region": "Near Malapert A",
+   "landingUtc": "2024-02-22T23:23:53Z",
+   "source": {
+    "label": "LROC, Intuitive Machines IM-1 On The Moon!",
+    "url": "https://lroc.im-ldi.com/images/1360",
+    "note": "Came to rest at 80.13 S, 1.44 E, 2579 m elevation, in a degraded 1 km crater with 12 deg slope"
+   },
+   "referenceElevationM": 2579.0,
+   "terrain": {
+    "available": true,
+    "groundHeightM": 2592.0,
+    "slopeDeg": 12.54,
+    "levels": [
+     {
+      "file": "LDEM_80S_20MPP_ADJ.TIF",
+      "pixelM": 20.0
+     },
+     {
+      "file": "LDEM_75S_30MPP_ADJ.TIF",
+      "pixelM": 30.0
+     },
+     {
+      "file": "LDEM_80S_80MPP_ADJ.TIF",
+      "pixelM": 80.0
+     },
+     {
+      "file": "LDEM_60S_120MPP_ADJ.TIF",
+      "pixelM": 120.0
+     },
+     {
+      "file": "LDEM_60S_240MPP_ADJ.TIF",
+      "pixelM": 240.0
+     }
+    ],
+    "horizon2mMaxDeg": 11.14,
+    "horizon2mMeanDeg": 4.87,
+    "fallbackAzimuths": 0,
+    "zone": {
+     "mastM": 2.0,
+     "points": [
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 0.0,
+       "lat": -80.13,
+       "lon": 1.44,
+       "groundHeightM": 2592.0
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 500.0,
+       "lat": -80.1135110568916,
+       "lon": 1.4400000000000122,
+       "groundHeightM": 2553.3
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 500.0,
+       "lat": -80.11833374615924,
+       "lon": 1.5079399976242067,
+       "groundHeightM": 2608.5
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 500.0,
+       "lat": -80.12998636320486,
+       "lon": 1.5361939972274925,
+       "groundHeightM": 2669.6
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 500.0,
+       "lat": -80.14165261702188,
+       "lon": 1.5080991078768553,
+       "groundHeightM": 2684.3
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 500.0,
+       "lat": -80.14648894310838,
+       "lon": 1.4400000000000122,
+       "groundHeightM": 2677.5
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 500.0,
+       "lat": -80.14165261702188,
+       "lon": 1.3719008921231437,
+       "groundHeightM": 2591.3
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 500.0,
+       "lat": -80.12998636320486,
+       "lon": 1.3438060027725065,
+       "groundHeightM": 2493.5
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 500.0,
+       "lat": -80.11833374615924,
+       "lon": 1.372060002375792,
+       "groundHeightM": 2515.2
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 1500.0,
+       "lat": -80.08053317067477,
+       "lon": 1.4400000000000122,
+       "groundHeightM": 2536.8
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 1500.0,
+       "lat": -80.09496052083178,
+       "lon": 1.6433441732988483,
+       "groundHeightM": 2607.7
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 1500.0,
+       "lat": -80.12987726952231,
+       "lon": 1.7285798863013049,
+       "groundHeightM": 2749.0
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 1500.0,
+       "lat": -80.16491674676747,
+       "lon": 1.6447761657305155,
+       "groundHeightM": 2788.4
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 1500.0,
+       "lat": -80.17946682932522,
+       "lon": 1.4400000000000122,
+       "groundHeightM": 2698.4
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 1500.0,
+       "lat": -80.16491674676747,
+       "lon": 1.2352238342694832,
+       "groundHeightM": 2685.4
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 1500.0,
+       "lat": -80.12987726952231,
+       "lon": 1.1514201136986941,
+       "groundHeightM": 2587.9
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 1500.0,
+       "lat": -80.09496052083178,
+       "lon": 1.2366558267011507,
+       "groundHeightM": 2541.8
+      }
+     ]
+    },
+    "horizonOffset": 0,
+    "zoneOffset": 0
+   }
+  },
+  {
+   "id": "im-2",
+   "name": "IM-2 Athena (intended site)",
+   "group": "Recent landers",
+   "kind": "landing",
+   "lat": -84.78,
+   "lon": 29.13,
+   "region": "Mons Mouton",
+   "landingDate": "2025-03-06",
+   "source": {
+    "label": "LROC, IM-2 Landing Region",
+    "url": "https://www.lroc.asu.edu/images/1401",
+    "note": "Intended landing site; the lander came to rest somewhere else on Mons Mouton"
+   },
+   "terrain": {
+    "available": true,
+    "groundHeightM": 5312.6,
+    "slopeDeg": 1.12,
+    "levels": [
+     {
+      "file": "LDEM_83S_10MPP_ADJ.TIF",
+      "pixelM": 10.0
+     },
+     {
+      "file": "LDEM_80S_20MPP_ADJ.TIF",
+      "pixelM": 20.0
+     },
+     {
+      "file": "LDEM_75S_30MPP_ADJ.TIF",
+      "pixelM": 30.0
+     },
+     {
+      "file": "LDEM_80S_80MPP_ADJ.TIF",
+      "pixelM": 80.0
+     },
+     {
+      "file": "LDEM_60S_120MPP_ADJ.TIF",
+      "pixelM": 120.0
+     },
+     {
+      "file": "LDEM_60S_240MPP_ADJ.TIF",
+      "pixelM": 240.0
+     }
+    ],
+    "horizon2mMaxDeg": 4.01,
+    "horizon2mMeanDeg": 1.02,
+    "fallbackAzimuths": 0,
+    "zone": {
+     "mastM": 2.0,
+     "points": [
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 0.0,
+       "lat": -84.78,
+       "lon": 29.13,
+       "groundHeightM": 5312.6
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 500.0,
+       "lat": -84.76351105689159,
+       "lon": 29.129999999999995,
+       "groundHeightM": 5291.1
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 500.0,
+       "lat": -84.76832760019217,
+       "lon": 29.257868603926426,
+       "groundHeightM": 5297.3
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 500.0,
+       "lat": -84.77997402951081,
+       "lon": 29.311236003681184,
+       "groundHeightM": 5307.3
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 500.0,
+       "lat": -84.79164642915678,
+       "lon": 29.258439509531346,
+       "groundHeightM": 5313.9
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 500.0,
+       "lat": -84.79648894310846,
+       "lon": 29.129999999999995,
+       "groundHeightM": 5327.1
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 500.0,
+       "lat": -84.79164642915678,
+       "lon": 29.00156049046867,
+       "groundHeightM": 5312.0
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 500.0,
+       "lat": -84.77997402951081,
+       "lon": 28.948763996318803,
+       "groundHeightM": 5297.6
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 500.0,
+       "lat": -84.76832760019217,
+       "lon": 29.00213139607359,
+       "groundHeightM": 5292.2
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 1500.0,
+       "lat": -84.73053317067475,
+       "lon": 29.129999999999995,
+       "groundHeightM": 5199.3
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 1500.0,
+       "lat": -84.74490558123183,
+       "lon": 29.511903309737644,
+       "groundHeightM": 5223.8
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 1500.0,
+       "lat": -84.7797662702484,
+       "lon": 29.673693624821937,
+       "groundHeightM": 5266.9
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 1500.0,
+       "lat": -84.81486067590545,
+       "lon": 29.51704146073571,
+       "groundHeightM": 5285.4
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 1500.0,
+       "lat": -84.8294668293252,
+       "lon": 29.129999999999995,
+       "groundHeightM": 5329.4
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 1500.0,
+       "lat": -84.81486067590545,
+       "lon": 28.74295853926428,
+       "groundHeightM": 5321.4
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 1500.0,
+       "lat": -84.7797662702484,
+       "lon": 28.58630637517808,
+       "groundHeightM": 5294.3
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 1500.0,
+       "lat": -84.74490558123183,
+       "lon": 28.74809669026237,
+       "groundHeightM": 5227.1
+      }
+     ]
+    },
+    "horizonOffset": 1,
+    "zoneOffset": 1
+   }
+  },
+  {
+   "id": "blue-ghost-1",
+   "name": "Blue Ghost Mission 1",
+   "group": "Recent landers",
+   "kind": "landing",
+   "lat": 18.56,
+   "lon": 61.81,
+   "region": "Mare Crisium",
+   "landingDate": "2025-03-02",
+   "source": {
+    "label": "LROC, Firefly Blue Ghost Landing Region",
+    "url": "https://www.lroc.asu.edu/images/1400",
+    "note": "Landing region centre as published before landing"
+   },
+   "terrain": {
+    "available": false,
+    "reason": "Terrain data (LOLA south-pole products) covers south of 60 S only; the geometric horizon of a smooth sphere is used"
+   }
+  },
+  {
+   "id": "chandrayaan-3",
+   "name": "Chandrayaan-3 (Shiv Shakti)",
+   "group": "Recent landers",
+   "kind": "landing",
+   "lat": -69.3741,
+   "lon": 32.32,
+   "region": "Near Manzinus C / Simpelius N",
+   "landingDate": "2023-08-23",
+   "source": {
+    "label": "LROC, Chandrayaan-3 Landing Site",
+    "url": "https://lroc.im-ldi.com/images/1314",
+    "note": "69.3741 S, 32.32 E, 532 m elevation"
+   },
+   "referenceElevationM": 532.0,
+   "terrain": {
+    "available": true,
+    "groundHeightM": 529.2,
+    "slopeDeg": 1.4,
+    "levels": [
+     {
+      "file": "LDEM_60S_120MPP_ADJ.TIF",
+      "pixelM": 120.0
+     },
+     {
+      "file": "LDEM_60S_240MPP_ADJ.TIF",
+      "pixelM": 240.0
+     }
+    ],
+    "horizon2mMaxDeg": 2.46,
+    "horizon2mMeanDeg": 1.36,
+    "fallbackAzimuths": 0,
+    "zone": {
+     "mastM": 2.0,
+     "points": [
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 0.0,
+       "lat": -69.3741,
+       "lon": 32.32,
+       "groundHeightM": 529.2
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 500.0,
+       "lat": -69.35761105689159,
+       "lon": 32.32,
+       "groundHeightM": 524.1
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 500.0,
+       "lat": -69.36243740646229,
+       "lon": 32.353080636881685,
+       "groundHeightM": 528.9
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 500.0,
+       "lat": -69.37409369633116,
+       "lon": 32.366808373359916,
+       "groundHeightM": 540.8
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 500.0,
+       "lat": -69.38575628986638,
+       "lon": 32.35311642626962,
+       "groundHeightM": 539.2
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 500.0,
+       "lat": -69.3905889431084,
+       "lon": 32.32,
+       "groundHeightM": 529.2
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 500.0,
+       "lat": -69.38575628986638,
+       "lon": 32.28688357373038,
+       "groundHeightM": 531.2
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 500.0,
+       "lat": -69.37409369633116,
+       "lon": 32.273191626640084,
+       "groundHeightM": 522.1
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 500.0,
+       "lat": -69.36243740646229,
+       "lon": 32.286919363118315,
+       "groundHeightM": 517.6
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 1500.0,
+       "lat": -69.32463317067479,
+       "lon": 32.32,
+       "groundHeightM": 544.6
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 1500.0,
+       "lat": -69.33909335114589,
+       "lon": 32.419134708223986,
+       "groundHeightM": 545.7
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 1500.0,
+       "lat": -69.37404326705001,
+       "lon": 32.46042490116586,
+       "groundHeightM": 544.3
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 1500.0,
+       "lat": -69.40904991570169,
+       "lon": 32.41945681275091,
+       "groundHeightM": 545.5
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 1500.0,
+       "lat": -69.4235668293252,
+       "lon": 32.32,
+       "groundHeightM": 528.0
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 1500.0,
+       "lat": -69.40904991570169,
+       "lon": 32.22054318724909,
+       "groundHeightM": 543.1
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 1500.0,
+       "lat": -69.37404326705001,
+       "lon": 32.17957509883414,
+       "groundHeightM": 522.6
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 1500.0,
+       "lat": -69.33909335114589,
+       "lon": 32.220865291776015,
+       "groundHeightM": 538.9
+      }
+     ]
+    },
+    "horizonOffset": 2,
+    "zoneOffset": 2
+   }
+  },
+  {
+   "id": "slim",
+   "name": "SLIM (JAXA)",
+   "group": "Recent landers",
+   "kind": "landing",
+   "lat": -13.316,
+   "lon": 25.251,
+   "region": "Shioli crater ejecta",
+   "landingUtc": "2024-01-19T15:20:00Z",
+   "source": {
+    "label": "LROC, JAXA SLIM Landing",
+    "url": "https://www.lroc.asu.edu/images/1358",
+    "note": "13.3160 S, 25.2510 E, -912 m elevation"
+   },
+   "terrain": {
+    "available": false,
+    "reason": "Terrain data (LOLA south-pole products) covers south of 60 S only; the geometric horizon of a smooth sphere is used"
+   }
+  },
+  {
+   "id": "mons-malapert",
+   "name": "Mons Malapert",
+   "group": "South-polar features",
+   "kind": "massif",
+   "lat": -85.98,
+   "lon": -1.67,
+   "diameterKm": 67.0,
+   "source": {
+    "label": "USGS/IAU Gazetteer of Planetary Nomenclature, feature 16338",
+    "url": "https://planetarynames.wr.usgs.gov/Feature/16338",
+    "note": "IAU centre of the named feature (not a landing site). Malapert Massif is one of NASA's 13 Artemis III candidate regions; the region itself is defined by NASA, this is the centre of the named massif."
+   },
+   "terrain": {
+    "available": true,
+    "groundHeightM": 4916.1,
+    "slopeDeg": 8.39,
+    "levels": [
+     {
+      "file": "LDEM_83S_10MPP_ADJ.TIF",
+      "pixelM": 10.0
+     },
+     {
+      "file": "LDEM_80S_20MPP_ADJ.TIF",
+      "pixelM": 20.0
+     },
+     {
+      "file": "LDEM_75S_30MPP_ADJ.TIF",
+      "pixelM": 30.0
+     },
+     {
+      "file": "LDEM_80S_80MPP_ADJ.TIF",
+      "pixelM": 80.0
+     },
+     {
+      "file": "LDEM_60S_120MPP_ADJ.TIF",
+      "pixelM": 120.0
+     },
+     {
+      "file": "LDEM_60S_240MPP_ADJ.TIF",
+      "pixelM": 240.0
+     }
+    ],
+    "horizon2mMaxDeg": 10.6,
+    "horizon2mMeanDeg": 3.35,
+    "fallbackAzimuths": 0,
+    "zone": {
+     "mastM": 2.0,
+     "points": [
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 0.0,
+       "lat": -85.98,
+       "lon": -1.67,
+       "groundHeightM": 4916.1
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 500.0,
+       "lat": -85.96351105689169,
+       "lon": -1.669999999999998,
+       "groundHeightM": 4842.2
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 500.0,
+       "lat": -85.96832372483452,
+       "lon": -1.5041658942034213,
+       "groundHeightM": 4820.5
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 500.0,
+       "lat": -85.97996623907734,
+       "lon": -1.43479673313538,
+       "groundHeightM": 4879.8
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 500.0,
+       "lat": -85.991642513888,
+       "lon": -1.5032027327567445,
+       "groundHeightM": 4906.3
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 500.0,
+       "lat": -85.99648894310842,
+       "lon": -1.669999999999998,
+       "groundHeightM": 4879.0
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 500.0,
+       "lat": -85.991642513888,
+       "lon": -1.8367972672432513,
+       "groundHeightM": 4914.8
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 500.0,
+       "lat": -85.97996623907734,
+       "lon": -1.9052032668646157,
+       "groundHeightM": 4957.6
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 500.0,
+       "lat": -85.96832372483452,
+       "lon": -1.8358341057965744,
+       "groundHeightM": 4917.8
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 1500.0,
+       "lat": -85.93053317067476,
+       "lon": -1.669999999999998,
+       "groundHeightM": 4649.9
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 1500.0,
+       "lat": -85.94487105805665,
+       "lon": -1.1753648031188777,
+       "groundHeightM": 4736.0
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 1500.0,
+       "lat": -85.97969616190215,
+       "lon": -0.9644217493516256,
+       "groundHeightM": 4810.0
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 1500.0,
+       "lat": -86.01482507510131,
+       "lon": -1.166696349207009,
+       "groundHeightM": 4755.5
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 1500.0,
+       "lat": -86.02946682932523,
+       "lon": -1.669999999999998,
+       "groundHeightM": 4663.2
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 1500.0,
+       "lat": -86.01482507510131,
+       "lon": -2.173303650792987,
+       "groundHeightM": 4725.8
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 1500.0,
+       "lat": -85.97969616190215,
+       "lon": -2.37557825064837,
+       "groundHeightM": 4932.5
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 1500.0,
+       "lat": -85.94487105805665,
+       "lon": -2.1646351968811435,
+       "groundHeightM": 4854.5
+      }
+     ]
+    },
+    "horizonOffset": 3,
+    "zoneOffset": 3
+   }
+  },
+  {
+   "id": "shackleton",
+   "name": "Shackleton crater",
+   "group": "South-polar features",
+   "kind": "crater",
+   "lat": -89.67,
+   "lon": 129.78,
+   "diameterKm": 20.92,
+   "source": {
+    "label": "USGS/IAU Gazetteer of Planetary Nomenclature, feature 5450",
+    "url": "https://planetarynames.wr.usgs.gov/Feature/5450",
+    "note": "IAU centre of the named feature (not a landing site). Crater centre (floor): in permanent shadow. 'Peak Near Shackleton' is an Artemis III candidate region."
+   },
+   "terrain": {
+    "available": true,
+    "groundHeightM": -2788.7,
+    "slopeDeg": 1.91,
+    "levels": [
+     {
+      "file": "LDEM_83S_10MPP_ADJ.TIF",
+      "pixelM": 10.0
+     },
+     {
+      "file": "LDEM_80S_20MPP_ADJ.TIF",
+      "pixelM": 20.0
+     },
+     {
+      "file": "LDEM_75S_30MPP_ADJ.TIF",
+      "pixelM": 30.0
+     },
+     {
+      "file": "LDEM_80S_80MPP_ADJ.TIF",
+      "pixelM": 80.0
+     },
+     {
+      "file": "LDEM_60S_120MPP_ADJ.TIF",
+      "pixelM": 120.0
+     },
+     {
+      "file": "LDEM_60S_240MPP_ADJ.TIF",
+      "pixelM": 240.0
+     }
+    ],
+    "horizon2mMaxDeg": 23.58,
+    "horizon2mMeanDeg": 21.34,
+    "fallbackAzimuths": 0,
+    "zone": {
+     "mastM": 2.0,
+     "points": [
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 0.0,
+       "lat": -89.67,
+       "lon": 129.78,
+       "groundHeightM": -2788.7
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 500.0,
+       "lat": -89.65351105689194,
+       "lon": 129.77999999999997,
+       "groundHeightM": -2769.2
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 500.0,
+       "lat": -89.65814167197163,
+       "lon": 131.73452439158046,
+       "groundHeightM": -2783.3
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 500.0,
+       "lat": -89.66958831401097,
+       "lon": 132.64050614098164,
+       "groundHeightM": -2774.5
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 500.0,
+       "lat": -89.6814459998049,
+       "lon": 131.87757084484676,
+       "groundHeightM": -2767.6
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 500.0,
+       "lat": -89.68648894310898,
+       "lon": 129.77999999999997,
+       "groundHeightM": -2783.7
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 500.0,
+       "lat": -89.6814459998049,
+       "lon": 127.68242915515316,
+       "groundHeightM": -2782.4
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 500.0,
+       "lat": -89.66958831401097,
+       "lon": 126.9194938590183,
+       "groundHeightM": -2790.9
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 500.0,
+       "lat": -89.65814167197163,
+       "lon": 127.82547560841954,
+       "groundHeightM": -2779.8
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 1500.0,
+       "lat": -89.62053317067405,
+       "lon": 129.77999999999997,
+       "groundHeightM": -2716.0
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 1500.0,
+       "lat": -89.6333494145943,
+       "lon": 135.25435823156582,
+       "groundHeightM": -2563.3
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 1500.0,
+       "lat": -89.66631311061681,
+       "lon": 138.30518157505466,
+       "groundHeightM": -2731.3
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 1500.0,
+       "lat": -89.7029120406819,
+       "lon": 136.54156252550894,
+       "groundHeightM": -2677.6
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 1500.0,
+       "lat": -89.71946682932472,
+       "lon": 129.77999999999997,
+       "groundHeightM": -2768.6
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 1500.0,
+       "lat": -89.7029120406819,
+       "lon": 123.01843747449107,
+       "groundHeightM": -2807.3
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 1500.0,
+       "lat": -89.66631311061681,
+       "lon": 121.25481842494531,
+       "groundHeightM": -2747.9
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 1500.0,
+       "lat": -89.6333494145943,
+       "lon": 124.30564176843411,
+       "groundHeightM": -2788.9
+      }
+     ]
+    },
+    "horizonOffset": 4,
+    "zoneOffset": 4
+   }
+  },
+  {
+   "id": "haworth",
+   "name": "Haworth crater",
+   "group": "South-polar features",
+   "kind": "crater",
+   "lat": -87.45,
+   "lon": -5.17,
+   "diameterKm": 51.42,
+   "source": {
+    "label": "USGS/IAU Gazetteer of Planetary Nomenclature, feature 14502",
+    "url": "https://planetarynames.wr.usgs.gov/Feature/14502",
+    "note": "IAU centre of the named feature (not a landing site). Crater centre (floor). Haworth is an Artemis III candidate region."
+   },
+   "terrain": {
+    "available": true,
+    "groundHeightM": -3315.7,
+    "slopeDeg": 9.51,
+    "levels": [
+     {
+      "file": "LDEM_83S_10MPP_ADJ.TIF",
+      "pixelM": 10.0
+     },
+     {
+      "file": "LDEM_80S_20MPP_ADJ.TIF",
+      "pixelM": 20.0
+     },
+     {
+      "file": "LDEM_75S_30MPP_ADJ.TIF",
+      "pixelM": 30.0
+     },
+     {
+      "file": "LDEM_80S_80MPP_ADJ.TIF",
+      "pixelM": 80.0
+     },
+     {
+      "file": "LDEM_60S_120MPP_ADJ.TIF",
+      "pixelM": 120.0
+     },
+     {
+      "file": "LDEM_60S_240MPP_ADJ.TIF",
+      "pixelM": 240.0
+     }
+    ],
+    "horizon2mMaxDeg": 10.41,
+    "horizon2mMeanDeg": 8.05,
+    "fallbackAzimuths": 0,
+    "zone": {
+     "mastM": 2.0,
+     "points": [
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 0.0,
+       "lat": -87.45,
+       "lon": -5.17,
+       "groundHeightM": -3315.7
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 500.0,
+       "lat": -87.43351105689165,
+       "lon": -5.170000000000009,
+       "groundHeightM": -3328.0
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 500.0,
+       "lat": -87.43831404007894,
+       "lon": -4.90913202881537,
+       "groundHeightM": -3338.3
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 500.0,
+       "lat": -87.44994672492776,
+       "lon": -4.799393860676466,
+       "groundHeightM": -3340.4
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 500.0,
+       "lat": -87.46163268345678,
+       "lon": -4.9067371451600055,
+       "groundHeightM": -3306.9
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 500.0,
+       "lat": -87.46648894310835,
+       "lon": -5.170000000000009,
+       "groundHeightM": -3271.1
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 500.0,
+       "lat": -87.46163268345678,
+       "lon": -5.433262854839988,
+       "groundHeightM": -3260.2
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 500.0,
+       "lat": -87.44994672492776,
+       "lon": -5.540606139323526,
+       "groundHeightM": -3282.5
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 500.0,
+       "lat": -87.43831404007894,
+       "lon": -5.430867971184623,
+       "groundHeightM": -3305.9
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 1500.0,
+       "lat": -87.40053317067475,
+       "lon": -5.170000000000009,
+       "groundHeightM": -3370.1
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 1500.0,
+       "lat": -87.41478518404755,
+       "lon": -4.3944931294838785,
+       "groundHeightM": -3381.9
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 1500.0,
+       "lat": -87.4495205644115,
+       "lon": -4.058305356562181,
+       "groundHeightM": -3383.5
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 1500.0,
+       "lat": -87.48473526762223,
+       "lon": -4.3729391752094555,
+       "groundHeightM": -3348.9
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 1500.0,
+       "lat": -87.49946682932521,
+       "lon": -5.170000000000009,
+       "groundHeightM": -3302.8
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 1500.0,
+       "lat": -87.48473526762223,
+       "lon": -5.967060824790537,
+       "groundHeightM": -3237.6
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 1500.0,
+       "lat": -87.4495205644115,
+       "lon": -6.281694643437812,
+       "groundHeightM": -3274.0
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 1500.0,
+       "lat": -87.41478518404755,
+       "lon": -5.945506870516114,
+       "groundHeightM": -3343.1
+      }
+     ]
+    },
+    "horizonOffset": 5,
+    "zoneOffset": 5
+   }
+  },
+  {
+   "id": "faustini",
+   "name": "Faustini crater",
+   "group": "South-polar features",
+   "kind": "crater",
+   "lat": -87.18,
+   "lon": 84.31,
+   "diameterKm": 42.48,
+   "source": {
+    "label": "USGS/IAU Gazetteer of Planetary Nomenclature, feature 1919",
+    "url": "https://planetarynames.wr.usgs.gov/Feature/1919",
+    "note": "IAU centre of the named feature (not a landing site). Crater centre (floor). Faustini Rim A is an Artemis III candidate region."
+   },
+   "terrain": {
+    "available": true,
+    "groundHeightM": -2755.8,
+    "slopeDeg": 8.06,
+    "levels": [
+     {
+      "file": "LDEM_83S_10MPP_ADJ.TIF",
+      "pixelM": 10.0
+     },
+     {
+      "file": "LDEM_80S_20MPP_ADJ.TIF",
+      "pixelM": 20.0
+     },
+     {
+      "file": "LDEM_75S_30MPP_ADJ.TIF",
+      "pixelM": 30.0
+     },
+     {
+      "file": "LDEM_80S_80MPP_ADJ.TIF",
+      "pixelM": 80.0
+     },
+     {
+      "file": "LDEM_60S_120MPP_ADJ.TIF",
+      "pixelM": 120.0
+     },
+     {
+      "file": "LDEM_60S_240MPP_ADJ.TIF",
+      "pixelM": 240.0
+     }
+    ],
+    "horizon2mMaxDeg": 10.22,
+    "horizon2mMeanDeg": 7.75,
+    "fallbackAzimuths": 0,
+    "zone": {
+     "mastM": 2.0,
+     "points": [
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 0.0,
+       "lat": -87.18,
+       "lon": 84.31,
+       "groundHeightM": -2755.8
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 500.0,
+       "lat": -87.16351105689166,
+       "lon": 84.31,
+       "groundHeightM": -2758.8
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 500.0,
+       "lat": -87.16831657194524,
+       "lon": 84.5460118392977,
+       "groundHeightM": -2832.8
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 500.0,
+       "lat": -87.17995183273983,
+       "lon": 84.64514809758235,
+       "groundHeightM": -2810.9
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 500.0,
+       "lat": -87.19163525976555,
+       "lon": 84.5479699377968,
+       "groundHeightM": -2710.0
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 500.0,
+       "lat": -87.19648894310835,
+       "lon": 84.31,
+       "groundHeightM": -2757.4
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 500.0,
+       "lat": -87.19163525976555,
+       "lon": 84.07203006220325,
+       "groundHeightM": -2725.7
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 500.0,
+       "lat": -87.17995183273983,
+       "lon": 83.97485190241765,
+       "groundHeightM": -2741.2
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 500.0,
+       "lat": -87.16831657194524,
+       "lon": 84.07398816070229,
+       "groundHeightM": -2733.5
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 1500.0,
+       "lat": -87.13053317067477,
+       "lon": 84.31,
+       "groundHeightM": -2702.7
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 1500.0,
+       "lat": -87.14480757865775,
+       "lon": 85.01222600155155,
+       "groundHeightM": -2698.9
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 1500.0,
+       "lat": -87.17956652427195,
+       "lon": 85.31535279122076,
+       "groundHeightM": -2709.2
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 1500.0,
+       "lat": -87.21475886226693,
+       "lon": 85.02984888944034,
+       "groundHeightM": -2717.2
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 1500.0,
+       "lat": -87.22946682932525,
+       "lon": 84.31,
+       "groundHeightM": -2709.7
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 1500.0,
+       "lat": -87.21475886226693,
+       "lon": 83.5901511105597,
+       "groundHeightM": -2732.9
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 1500.0,
+       "lat": -87.17956652427195,
+       "lon": 83.30464720877923,
+       "groundHeightM": -2722.9
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 1500.0,
+       "lat": -87.14480757865775,
+       "lon": 83.60777399844844,
+       "groundHeightM": -2706.0
+      }
+     ]
+    },
+    "horizonOffset": 6,
+    "zoneOffset": 6
+   }
+  },
+  {
+   "id": "amundsen",
+   "name": "Amundsen crater",
+   "group": "South-polar features",
+   "kind": "crater",
+   "lat": -84.44,
+   "lon": 83.07,
+   "diameterKm": 103.39,
+   "source": {
+    "label": "USGS/IAU Gazetteer of Planetary Nomenclature, feature 247",
+    "url": "https://planetarynames.wr.usgs.gov/Feature/247",
+    "note": "IAU centre of the named feature (not a landing site). Crater centre (floor). Amundsen Rim is an Artemis III candidate region."
+   },
+   "terrain": {
+    "available": true,
+    "groundHeightM": -3571.0,
+    "slopeDeg": 1.93,
+    "levels": [
+     {
+      "file": "LDEM_83S_10MPP_ADJ.TIF",
+      "pixelM": 10.0
+     },
+     {
+      "file": "LDEM_80S_20MPP_ADJ.TIF",
+      "pixelM": 20.0
+     },
+     {
+      "file": "LDEM_75S_30MPP_ADJ.TIF",
+      "pixelM": 30.0
+     },
+     {
+      "file": "LDEM_80S_80MPP_ADJ.TIF",
+      "pixelM": 80.0
+     },
+     {
+      "file": "LDEM_60S_120MPP_ADJ.TIF",
+      "pixelM": 120.0
+     },
+     {
+      "file": "LDEM_60S_240MPP_ADJ.TIF",
+      "pixelM": 240.0
+     }
+    ],
+    "horizon2mMaxDeg": 11.41,
+    "horizon2mMeanDeg": 5.88,
+    "fallbackAzimuths": 0,
+    "zone": {
+     "mastM": 2.0,
+     "points": [
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 0.0,
+       "lat": -84.44,
+       "lon": 83.07,
+       "groundHeightM": -3571.0
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 500.0,
+       "lat": -84.42351105689153,
+       "lon": 83.06999999999998,
+       "groundHeightM": -3545.9
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 500.0,
+       "lat": -84.42832839537093,
+       "lon": 83.19008809287715,
+       "groundHeightM": -3565.0
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 500.0,
+       "lat": -84.4399756267371,
+       "lon": 83.24018497747099,
+       "groundHeightM": -3569.8
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 500.0,
+       "lat": -84.45164723123224,
+       "lon": 83.19059121601796,
+       "groundHeightM": -3580.6
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 500.0,
+       "lat": -84.45648894310837,
+       "lon": 83.06999999999998,
+       "groundHeightM": -3569.7
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 500.0,
+       "lat": -84.45164723123224,
+       "lon": 82.94940878398198,
+       "groundHeightM": -3532.2
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 500.0,
+       "lat": -84.4399756267371,
+       "lon": 82.89981502252905,
+       "groundHeightM": -3512.2
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 500.0,
+       "lat": -84.42832839537093,
+       "lon": 82.94991190712285,
+       "groundHeightM": -3515.8
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 1500.0,
+       "lat": -84.39053317067476,
+       "lon": 83.06999999999998,
+       "groundHeightM": -3490.7
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 1500.0,
+       "lat": -84.40491267637415,
+       "lon": 83.42876336235965,
+       "groundHeightM": -3561.7
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 1500.0,
+       "lat": -84.43978064448056,
+       "lon": 83.58054303388509,
+       "groundHeightM": -3449.7
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 1500.0,
+       "lat": -84.4748679572613,
+       "lon": 83.43329147111797,
+       "groundHeightM": -3440.0
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 1500.0,
+       "lat": -84.48946682932521,
+       "lon": 83.06999999999998,
+       "groundHeightM": -3628.8
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 1500.0,
+       "lat": -84.4748679572613,
+       "lon": 82.70670852888198,
+       "groundHeightM": -3574.9
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 1500.0,
+       "lat": -84.43978064448056,
+       "lon": 82.55945696611485,
+       "groundHeightM": -3547.2
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 1500.0,
+       "lat": -84.40491267637415,
+       "lon": 82.71123663764035,
+       "groundHeightM": -3414.9
+      }
+     ]
+    },
+    "horizonOffset": 7,
+    "zoneOffset": 7
+   }
+  },
+  {
+   "id": "nobile",
+   "name": "Nobile crater",
+   "group": "South-polar features",
+   "kind": "crater",
+   "lat": -85.28,
+   "lon": 53.27,
+   "diameterKm": 79.27,
+   "source": {
+    "label": "USGS/IAU Gazetteer of Planetary Nomenclature, feature 4321",
+    "url": "https://planetarynames.wr.usgs.gov/Feature/4321",
+    "note": "IAU centre of the named feature (not a landing site). Crater centre (floor). Nobile Rim 1 and 2 are Artemis III candidate regions."
+   },
+   "terrain": {
+    "available": true,
+    "groundHeightM": 915.6,
+    "slopeDeg": 7.75,
+    "levels": [
+     {
+      "file": "LDEM_83S_10MPP_ADJ.TIF",
+      "pixelM": 10.0
+     },
+     {
+      "file": "LDEM_80S_20MPP_ADJ.TIF",
+      "pixelM": 20.0
+     },
+     {
+      "file": "LDEM_75S_30MPP_ADJ.TIF",
+      "pixelM": 30.0
+     },
+     {
+      "file": "LDEM_80S_80MPP_ADJ.TIF",
+      "pixelM": 80.0
+     },
+     {
+      "file": "LDEM_60S_120MPP_ADJ.TIF",
+      "pixelM": 120.0
+     },
+     {
+      "file": "LDEM_60S_240MPP_ADJ.TIF",
+      "pixelM": 240.0
+     }
+    ],
+    "horizon2mMaxDeg": 7.86,
+    "horizon2mMeanDeg": 2.81,
+    "fallbackAzimuths": 0,
+    "zone": {
+     "mastM": 2.0,
+     "points": [
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 0.0,
+       "lat": -85.28,
+       "lon": 53.27,
+       "groundHeightM": 915.6
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 500.0,
+       "lat": -85.26351105689159,
+       "lon": 53.269999999999996,
+       "groundHeightM": 877.2
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 500.0,
+       "lat": -85.26832622382975,
+       "lon": 53.411344806049,
+       "groundHeightM": 854.4
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 500.0,
+       "lat": -85.27997126386644,
+       "lon": 53.470383990492714,
+       "groundHeightM": 847.0
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 500.0,
+       "lat": -85.29164503981765,
+       "lon": 53.4120432500919,
+       "groundHeightM": 878.8
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 500.0,
+       "lat": -85.29648894310847,
+       "lon": 53.269999999999996,
+       "groundHeightM": 926.0
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 500.0,
+       "lat": -85.29164503981765,
+       "lon": 53.127956749908094,
+       "groundHeightM": 961.5
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 500.0,
+       "lat": -85.27997126386644,
+       "lon": 53.06961600950728,
+       "groundHeightM": 974.2
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 500.0,
+       "lat": -85.26832622382975,
+       "lon": 53.12865519395104,
+       "groundHeightM": 940.5
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 1500.0,
+       "lat": -85.23053317067482,
+       "lon": 53.269999999999996,
+       "groundHeightM": 829.5
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 1500.0,
+       "lat": -85.24489330952773,
+       "lon": 53.69195290287037,
+       "groundHeightM": 747.8
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 1500.0,
+       "lat": -85.2797413810957,
+       "lon": 53.87113249740919,
+       "groundHeightM": 663.6
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 1500.0,
+       "lat": -85.31484805382263,
+       "lon": 53.69823889992596,
+       "groundHeightM": 749.2
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 1500.0,
+       "lat": -85.32946682932518,
+       "lon": 53.269999999999996,
+       "groundHeightM": 889.0
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 1500.0,
+       "lat": -85.31484805382263,
+       "lon": 52.84176110007408,
+       "groundHeightM": 999.6
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 1500.0,
+       "lat": -85.2797413810957,
+       "lon": 52.6688675025908,
+       "groundHeightM": 1074.2
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 1500.0,
+       "lat": -85.24489330952773,
+       "lon": 52.848047097129616,
+       "groundHeightM": 995.9
+      }
+     ]
+    },
+    "horizonOffset": 8,
+    "zoneOffset": 8
+   }
+  },
+  {
+   "id": "de-gerlache",
+   "name": "de Gerlache crater",
+   "group": "South-polar features",
+   "kind": "crater",
+   "lat": -88.48,
+   "lon": -88.34,
+   "diameterKm": 32.71,
+   "source": {
+    "label": "USGS/IAU Gazetteer of Planetary Nomenclature, feature 1439",
+    "url": "https://planetarynames.wr.usgs.gov/Feature/1439",
+    "note": "IAU centre of the named feature (not a landing site). Crater centre (floor). de Gerlache Rim 1 and 2 are Artemis III candidate regions."
+   },
+   "terrain": {
+    "available": true,
+    "groundHeightM": -1220.9,
+    "slopeDeg": 17.19,
+    "levels": [
+     {
+      "file": "LDEM_83S_10MPP_ADJ.TIF",
+      "pixelM": 10.0
+     },
+     {
+      "file": "LDEM_80S_20MPP_ADJ.TIF",
+      "pixelM": 20.0
+     },
+     {
+      "file": "LDEM_75S_30MPP_ADJ.TIF",
+      "pixelM": 30.0
+     },
+     {
+      "file": "LDEM_80S_80MPP_ADJ.TIF",
+      "pixelM": 80.0
+     },
+     {
+      "file": "LDEM_60S_120MPP_ADJ.TIF",
+      "pixelM": 120.0
+     },
+     {
+      "file": "LDEM_60S_240MPP_ADJ.TIF",
+      "pixelM": 240.0
+     }
+    ],
+    "horizon2mMaxDeg": 15.72,
+    "horizon2mMeanDeg": 7.81,
+    "fallbackAzimuths": 0,
+    "zone": {
+     "mastM": 2.0,
+     "points": [
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 0.0,
+       "lat": -88.48,
+       "lon": -88.34,
+       "groundHeightM": -1220.9
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 500.0,
+       "lat": -88.46351105689136,
+       "lon": -88.34,
+       "groundHeightM": -1358.4
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 500.0,
+       "lat": -88.46829619000562,
+       "lon": -87.90380409778962,
+       "groundHeightM": -1247.6
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 500.0,
+       "lat": -88.47991058767617,
+       "lon": -87.71840747926547,
+       "groundHeightM": -1133.2
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 500.0,
+       "lat": -88.49161439109463,
+       "lon": -87.89706238662276,
+       "groundHeightM": -1086.4
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 500.0,
+       "lat": -88.49648894310842,
+       "lon": -88.34,
+       "groundHeightM": -1123.7
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 500.0,
+       "lat": -88.49161439109463,
+       "lon": -88.78293761337723,
+       "groundHeightM": -1215.7
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 500.0,
+       "lat": -88.47991058767617,
+       "lon": -88.96159252073453,
+       "groundHeightM": -1334.8
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 500.0,
+       "lat": -88.46829619000562,
+       "lon": -88.77619590221038,
+       "groundHeightM": -1401.1
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 1500.0,
+       "lat": -88.43053317067452,
+       "lon": -88.34,
+       "groundHeightM": -1643.4
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 1500.0,
+       "lat": -88.44462840299747,
+       "lon": -87.05122395423723,
+       "groundHeightM": -1293.8
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 1500.0,
+       "lat": -88.47919547833116,
+       "lon": -86.47580695999713,
+       "groundHeightM": -1038.9
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 1500.0,
+       "lat": -88.51456654286693,
+       "lon": -86.99054856943766,
+       "groundHeightM": -1019.7
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 1500.0,
+       "lat": -88.52946682932506,
+       "lon": -88.34,
+       "groundHeightM": -1000.0
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 1500.0,
+       "lat": -88.51456654286693,
+       "lon": -89.68945143056233,
+       "groundHeightM": -1171.9
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 1500.0,
+       "lat": -88.47919547833116,
+       "lon": -90.20419304000286,
+       "groundHeightM": -1557.3
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 1500.0,
+       "lat": -88.44462840299747,
+       "lon": -89.62877604576276,
+       "groundHeightM": -1777.6
+      }
+     ]
+    },
+    "horizonOffset": 9,
+    "zoneOffset": 9
+   }
+  },
+  {
+   "id": "cabeus",
+   "name": "Cabeus crater",
+   "group": "South-polar features",
+   "kind": "crater",
+   "lat": -85.33,
+   "lon": -42.13,
+   "diameterKm": 100.58,
+   "source": {
+    "label": "USGS/IAU Gazetteer of Planetary Nomenclature, feature 953",
+    "url": "https://planetarynames.wr.usgs.gov/Feature/953",
+    "note": "IAU centre of the named feature (not a landing site). Crater centre (floor); site of the LCROSS impact."
+   },
+   "terrain": {
+    "available": true,
+    "groundHeightM": -3735.8,
+    "slopeDeg": 20.45,
+    "levels": [
+     {
+      "file": "LDEM_83S_10MPP_ADJ.TIF",
+      "pixelM": 10.0
+     },
+     {
+      "file": "LDEM_80S_20MPP_ADJ.TIF",
+      "pixelM": 20.0
+     },
+     {
+      "file": "LDEM_75S_30MPP_ADJ.TIF",
+      "pixelM": 30.0
+     },
+     {
+      "file": "LDEM_80S_80MPP_ADJ.TIF",
+      "pixelM": 80.0
+     },
+     {
+      "file": "LDEM_60S_120MPP_ADJ.TIF",
+      "pixelM": 120.0
+     },
+     {
+      "file": "LDEM_60S_240MPP_ADJ.TIF",
+      "pixelM": 240.0
+     }
+    ],
+    "horizon2mMaxDeg": 22.12,
+    "horizon2mMeanDeg": 10.3,
+    "fallbackAzimuths": 0,
+    "zone": {
+     "mastM": 2.0,
+     "points": [
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 0.0,
+       "lat": -85.33,
+       "lon": -42.13,
+       "groundHeightM": -3735.8
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 500.0,
+       "lat": -85.31351105689156,
+       "lon": -42.13,
+       "groundHeightM": -3562.1
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 500.0,
+       "lat": -85.31832607006476,
+       "lon": -41.987149056413784,
+       "groundHeightM": -3681.2
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 500.0,
+       "lat": -85.32997095481194,
+       "lon": -41.92747541803262,
+       "groundHeightM": -3825.2
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 500.0,
+       "lat": -85.34164488452096,
+       "lon": -41.98643555922531,
+       "groundHeightM": -3901.1
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 500.0,
+       "lat": -85.34648894310837,
+       "lon": -42.13,
+       "groundHeightM": -3873.6
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 500.0,
+       "lat": -85.34164488452096,
+       "lon": -42.27356444077469,
+       "groundHeightM": -3759.7
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 500.0,
+       "lat": -85.32997095481194,
+       "lon": -42.332524581967384,
+       "groundHeightM": -3628.3
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 500.0,
+       "lat": -85.31832607006476,
+       "lon": -42.272850943586214,
+       "groundHeightM": -3547.6
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 1500.0,
+       "lat": -85.2805331706748,
+       "lon": -42.13,
+       "groundHeightM": -3200.7
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 1500.0,
+       "lat": -85.2948919392741,
+       "lon": -41.7035733954098,
+       "groundHeightM": -3511.0
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 1500.0,
+       "lat": -85.32973859981067,
+       "lon": -41.52244636180516,
+       "groundHeightM": -3920.6
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 1500.0,
+       "lat": -85.3648466422141,
+       "lon": -41.69715192003107,
+       "groundHeightM": -4115.2
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 1500.0,
+       "lat": -85.37946682932518,
+       "lon": -42.13,
+       "groundHeightM": -4020.8
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 1500.0,
+       "lat": -85.3648466422141,
+       "lon": -42.56284807996893,
+       "groundHeightM": -3827.5
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 1500.0,
+       "lat": -85.32973859981067,
+       "lon": -42.73755363819484,
+       "groundHeightM": -3505.6
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 1500.0,
+       "lat": -85.2948919392741,
+       "lon": -42.5564266045902,
+       "groundHeightM": -3181.2
+      }
+     ]
+    },
+    "horizonOffset": 10,
+    "zoneOffset": 10
+   }
+  },
+  {
+   "id": "shoemaker",
+   "name": "Shoemaker crater",
+   "group": "South-polar features",
+   "kind": "crater",
+   "lat": -88.14,
+   "lon": 45.91,
+   "diameterKm": 51.82,
+   "source": {
+    "label": "USGS/IAU Gazetteer of Planetary Nomenclature, feature 5494",
+    "url": "https://planetarynames.wr.usgs.gov/Feature/5494",
+    "note": "IAU centre of the named feature (not a landing site). Crater centre (floor)."
+   },
+   "terrain": {
+    "available": true,
+    "groundHeightM": -3929.7,
+    "slopeDeg": 0.61,
+    "levels": [
+     {
+      "file": "LDEM_83S_10MPP_ADJ.TIF",
+      "pixelM": 10.0
+     },
+     {
+      "file": "LDEM_80S_20MPP_ADJ.TIF",
+      "pixelM": 20.0
+     },
+     {
+      "file": "LDEM_75S_30MPP_ADJ.TIF",
+      "pixelM": 30.0
+     },
+     {
+      "file": "LDEM_80S_80MPP_ADJ.TIF",
+      "pixelM": 80.0
+     },
+     {
+      "file": "LDEM_60S_120MPP_ADJ.TIF",
+      "pixelM": 120.0
+     },
+     {
+      "file": "LDEM_60S_240MPP_ADJ.TIF",
+      "pixelM": 240.0
+     }
+    ],
+    "horizon2mMaxDeg": 8.36,
+    "horizon2mMeanDeg": 6.98,
+    "fallbackAzimuths": 0,
+    "zone": {
+     "mastM": 2.0,
+     "points": [
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 0.0,
+       "lat": -88.14,
+       "lon": 45.91,
+       "groundHeightM": -3929.7
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 500.0,
+       "lat": -88.12351105689174,
+       "lon": 45.91,
+       "groundHeightM": -3941.8
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 500.0,
+       "lat": -88.12830425355592,
+       "lon": 46.26698112198223,
+       "groundHeightM": -3949.0
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 500.0,
+       "lat": -88.1399269396799,
+       "lon": 46.41800433987836,
+       "groundHeightM": -3935.2
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 500.0,
+       "lat": -88.15162268253574,
+       "lon": 46.27148312801723,
+       "groundHeightM": -3943.1
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 500.0,
+       "lat": -88.15648894310843,
+       "lon": 45.91,
+       "groundHeightM": -3934.0
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 500.0,
+       "lat": -88.15162268253574,
+       "lon": 45.548516871982784,
+       "groundHeightM": -3940.3
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 500.0,
+       "lat": -88.1399269396799,
+       "lon": 45.401995660121656,
+       "groundHeightM": -3931.3
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 500.0,
+       "lat": -88.12830425355592,
+       "lon": 45.55301887801776,
+       "groundHeightM": -3948.1
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 1500.0,
+       "lat": -88.0905331706747,
+       "lon": 45.91,
+       "groundHeightM": -3954.8
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 1500.0,
+       "lat": -88.10469898784129,
+       "lon": 46.9676630494391,
+       "groundHeightM": -3927.8
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 1500.0,
+       "lat": -88.13934256039416,
+       "lon": 47.43369399907286,
+       "groundHeightM": -3851.3
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 1500.0,
+       "lat": -88.17464328196533,
+       "lon": 47.008181101557135,
+       "groundHeightM": -3910.2
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 1500.0,
+       "lat": -88.18946682932531,
+       "lon": 45.91,
+       "groundHeightM": -3929.2
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 1500.0,
+       "lat": -88.17464328196533,
+       "lon": 44.81181889844288,
+       "groundHeightM": -3929.5
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 1500.0,
+       "lat": -88.13934256039416,
+       "lon": 44.38630600092713,
+       "groundHeightM": -3950.4
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 1500.0,
+       "lat": -88.10469898784129,
+       "lon": 44.85233695056091,
+       "groundHeightM": -3932.1
+      }
+     ]
+    },
+    "horizonOffset": 11,
+    "zoneOffset": 11
+   }
+  },
+  {
+   "id": "sverdrup",
+   "name": "Sverdrup crater",
+   "group": "South-polar features",
+   "kind": "crater",
+   "lat": -88.32,
+   "lon": -153.39,
+   "diameterKm": 32.83,
+   "source": {
+    "label": "USGS/IAU Gazetteer of Planetary Nomenclature, feature 5782",
+    "url": "https://planetarynames.wr.usgs.gov/Feature/5782",
+    "note": "IAU centre of the named feature (not a landing site). Crater centre (floor)."
+   },
+   "terrain": {
+    "available": true,
+    "groundHeightM": -2888.9,
+    "slopeDeg": 4.43,
+    "levels": [
+     {
+      "file": "LDEM_83S_10MPP_ADJ.TIF",
+      "pixelM": 10.0
+     },
+     {
+      "file": "LDEM_80S_20MPP_ADJ.TIF",
+      "pixelM": 20.0
+     },
+     {
+      "file": "LDEM_75S_30MPP_ADJ.TIF",
+      "pixelM": 30.0
+     },
+     {
+      "file": "LDEM_80S_80MPP_ADJ.TIF",
+      "pixelM": 80.0
+     },
+     {
+      "file": "LDEM_60S_120MPP_ADJ.TIF",
+      "pixelM": 120.0
+     },
+     {
+      "file": "LDEM_60S_240MPP_ADJ.TIF",
+      "pixelM": 240.0
+     }
+    ],
+    "horizon2mMaxDeg": 14.4,
+    "horizon2mMeanDeg": 7.72,
+    "fallbackAzimuths": 0,
+    "zone": {
+     "mastM": 2.0,
+     "points": [
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 0.0,
+       "lat": -88.32,
+       "lon": -153.39,
+       "groundHeightM": -2888.9
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 500.0,
+       "lat": -88.30351105689171,
+       "lon": -153.39,
+       "groundHeightM": -2882.6
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 500.0,
+       "lat": -88.30830038824917,
+       "lon": -152.9950485247132,
+       "groundHeightM": -2890.8
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 500.0,
+       "lat": -88.31991910691117,
+       "lon": -152.8275881454717,
+       "groundHeightM": -2911.6
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 500.0,
+       "lat": -88.33161871379208,
+       "lon": -152.98952994324,
+       "groundHeightM": -2867.0
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 500.0,
+       "lat": -88.33648894310844,
+       "lon": -153.39,
+       "groundHeightM": -2850.9
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 500.0,
+       "lat": -88.33161871379208,
+       "lon": -153.79047005676,
+       "groundHeightM": -2839.1
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 500.0,
+       "lat": -88.31991910691117,
+       "lon": -153.9524118545283,
+       "groundHeightM": -2855.3
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 500.0,
+       "lat": -88.30830038824917,
+       "lon": -153.7849514752868,
+       "groundHeightM": -2878.0
+      },
+      {
+       "bearingDeg": 0.0,
+       "distanceM": 1500.0,
+       "lat": -88.27053317067481,
+       "lon": -153.39,
+       "groundHeightM": -2930.9
+      },
+      {
+       "bearingDeg": 45.0,
+       "distanceM": 1500.0,
+       "lat": -88.28466510357448,
+       "lon": -152.221395050286,
+       "groundHeightM": -2883.3
+      },
+      {
+       "bearingDeg": 90.0,
+       "distanceM": 1500.0,
+       "lat": -88.31927210236127,
+       "lon": -151.70319737434056,
+       "groundHeightM": -2876.3
+      },
+      {
+       "bearingDeg": 135.0,
+       "distanceM": 1500.0,
+       "lat": -88.35460660442276,
+       "lon": -152.171727823829,
+       "groundHeightM": -2785.4
+      },
+      {
+       "bearingDeg": 180.0,
+       "distanceM": 1500.0,
+       "lat": -88.36946682932539,
+       "lon": -153.39,
+       "groundHeightM": -2880.5
+      },
+      {
+       "bearingDeg": 225.0,
+       "distanceM": 1500.0,
+       "lat": -88.35460660442276,
+       "lon": -154.608272176171,
+       "groundHeightM": -2840.8
+      },
+      {
+       "bearingDeg": 270.0,
+       "distanceM": 1500.0,
+       "lat": -88.31927210236127,
+       "lon": -155.07680262565944,
+       "groundHeightM": -2870.8
+      },
+      {
+       "bearingDeg": 315.0,
+       "distanceM": 1500.0,
+       "lat": -88.28466510357448,
+       "lon": -154.558604949714,
+       "groundHeightM": -2897.9
+      }
+     ]
+    },
+    "horizonOffset": 12,
+    "zoneOffset": 12
+   }
+  }
+ ]
+}

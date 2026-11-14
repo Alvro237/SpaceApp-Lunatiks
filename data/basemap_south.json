@@ -1,0 +1,13 @@
+{
+ "file": "basemap_south.png",
+ "extentM": [
+  -931200.0,
+  -931200.0,
+  931200.0,
+  931200.0
+ ],
+ "pixels": 900,
+ "source": "https://pgda.gsfc.nasa.gov/data/LOLA_20mpp/LDEM_60S_240MPP_ADJ.TIF",
+ "credit": "NASA LRO/LOLA topography (PGDA, Barker et al.), hillshade by this project",
+ "method": "area-averaged to 900 px, hillshade azimuth 315.0 deg, altitude 32.0 deg, vertical exaggeration x2.5; masked to the 60 S circle"
+}

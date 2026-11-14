@@ -1,0 +1,23 @@
+[project]
+name = "lunarnav-pipeline"
+version = "0.1.0"
+description = "Reproducible data pipeline for the Lunar Landing Site Navigator (NASA Space Apps 2026)"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy>=2.0",
+    "spiceypy>=6.0",
+    "rasterio>=1.4",
+    "pyproj>=3.6",
+    "requests>=2.31",
+    "pillow>=10",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

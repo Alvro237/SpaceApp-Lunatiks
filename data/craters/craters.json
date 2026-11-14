@@ -1,0 +1,28 @@
+{
+ "format": 1,
+ "file": "robbins_2018.npz",
+ "count": 1296796,
+ "arrays": {
+  "lat": "deg, planetocentric, sorted ascending",
+  "lon": "deg east, -180..180",
+  "diam_km": "km"
+ },
+ "diameterKm": {
+  "min": 1.0,
+  "max": 2491.87
+ },
+ "southOf60S": 120754,
+ "southOf80S": 14406,
+ "completeness": "Global, complete for diameters above about 1-2 km; not a boulder or small-crater catalogue",
+ "frame": "Catalogue coordinates are planetocentric, east-positive; used here as MOON_ME",
+ "source": {
+  "label": "Robbins (2018) Lunar Crater Database, USGS Astrogeology Science Center",
+  "url": "https://astrogeology.usgs.gov/search/map/moon_crater_database_v1_robbins",
+  "download": "https://astrogeology.usgs.gov/ckan/dataset/f89f5478-b69a-486c-b9b5-30d7b0c5ad2b/resource/c4f25cc2-4f8a-4207-a845-5e176da3ac5a/download/lunar_crater_database_robbins_2018",
+  "zipBytes": 96227201,
+  "citation": "Robbins, S. J. (2018). A new global database of lunar impact craters >1-2 km: 1. Crater locations and sizes, comparisons with published databases, and global analysis. JGR Planets, 124. doi:10.1029/2018JE005592",
+  "instruments": "LRO LROC WAC and LOLA (NASA), Kaguya Terrain Camera (JAXA)"
+ },
+ "transformation": "Kept circle-fit latitude, longitude and diameter; longitude moved to -180..180; sorted by latitude; stored as float32",
+ "builtUtc": "2026-11-14T10:22:46+00:00"
+}

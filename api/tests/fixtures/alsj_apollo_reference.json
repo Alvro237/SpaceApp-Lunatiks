@@ -1,0 +1,565 @@
+{
+ "source": "https://www.nasa.gov/wp-content/uploads/static/history/alsj/Scotti_AltAz.txt",
+ "description": "Apollo Lunar Surface Journal (NASA): Earth and Sun altitude/azimuth at each Apollo landing site, derived from Nautical Almanac lunar ephemeris data (Scotti). Site coordinates are the ones the table itself was computed for (header of each block).",
+ "retrieved_utc": "2026-11-13T22:33:48+00:00",
+ "missions": [
+  {
+   "apollo": 11,
+   "lon": 23.4333,
+   "lat": 0.6875,
+   "events": [
+    {
+     "label": "Landing",
+     "utc": "1969-07-20T20:17:39Z",
+     "earth": {
+      "alt": 59.43,
+      "az": 272.16
+     },
+     "sun": {
+      "alt": 10.65,
+      "az": 88.81
+     }
+    },
+    {
+     "label": "EVA st",
+     "utc": "1969-07-21T02:39:33Z",
+     "earth": {
+      "alt": 59.3,
+      "az": 272.88
+     },
+     "sun": {
+      "alt": 13.84,
+      "az": 88.84
+     }
+    },
+    {
+     "label": "1SSfM1GLfM",
+     "utc": "1969-07-21T02:56:15Z",
+     "earth": {
+      "alt": 59.3,
+      "az": 272.92
+     },
+     "sun": {
+      "alt": 14.03,
+      "az": 88.84
+     }
+    },
+    {
+     "label": "EVA end",
+     "utc": "1969-07-21T05:11:13Z",
+     "earth": {
+      "alt": 59.27,
+      "az": 273.17
+     },
+     "sun": {
+      "alt": 15.17,
+      "az": 88.85
+     }
+    },
+    {
+     "label": "Liftoff",
+     "utc": "1969-07-21T17:54:00Z",
+     "earth": {
+      "alt": 59.09,
+      "az": 274.58
+     },
+     "sun": {
+      "alt": 21.65,
+      "az": 88.91
+     }
+    }
+   ]
+  },
+  {
+   "apollo": 12,
+   "lon": -23.3856,
+   "lat": -3.1975,
+   "events": [
+    {
+     "label": "Landing",
+     "utc": "1969-11-19T06:54:36Z",
+     "earth": {
+      "alt": 61.56,
+      "az": 86.95
+     },
+     "sun": {
+      "alt": 5.19,
+      "az": 91.16
+     }
+    },
+    {
+     "label": "EVA1 st",
+     "utc": "1969-11-19T11:32:35Z",
+     "earth": {
+      "alt": 61.54,
+      "az": 87.56
+     },
+     "sun": {
+      "alt": 7.52,
+      "az": 91.03
+     }
+    },
+    {
+     "label": "EVA1 end",
+     "utc": "1969-11-19T15:28:38Z",
+     "earth": {
+      "alt": 61.52,
+      "az": 88.07
+     },
+     "sun": {
+      "alt": 9.51,
+      "az": 90.53
+     }
+    },
+    {
+     "label": "EVA2 st",
+     "utc": "1969-11-20T03:54:45Z",
+     "earth": {
+      "alt": 61.48,
+      "az": 89.65
+     },
+     "sun": {
+      "alt": 15.79,
+      "az": 90.6
+     }
+    },
+    {
+     "label": "EVA2 end",
+     "utc": "1969-11-20T07:44:00Z",
+     "earth": {
+      "alt": 61.48,
+      "az": 90.09
+     },
+     "sun": {
+      "alt": 17.72,
+      "az": 90.51
+     }
+    },
+    {
+     "label": "Liftoff",
+     "utc": "1969-11-20T14:25:47Z",
+     "earth": {
+      "alt": 61.48,
+      "az": 90.88
+     },
+     "sun": {
+      "alt": 21.11,
+      "az": 90.33
+     }
+    }
+   ]
+  },
+  {
+   "apollo": 14,
+   "lon": -17.4653,
+   "lat": -3.6733,
+   "events": [
+    {
+     "label": "Landing",
+     "utc": "1971-02-05T09:18:13Z",
+     "earth": {
+      "alt": 66.1,
+      "az": 96.7
+     },
+     "sun": {
+      "alt": 10.36,
+      "az": 89.54
+     }
+    },
+    {
+     "label": "EVA1 st",
+     "utc": "1971-02-05T14:42:13Z",
+     "earth": {
+      "alt": 66.19,
+      "az": 96.35
+     },
+     "sun": {
+      "alt": 13.08,
+      "az": 89.35
+     }
+    },
+    {
+     "label": "EVA1 end",
+     "utc": "1971-02-05T19:30:03Z",
+     "earth": {
+      "alt": 66.26,
+      "az": 95.99
+     },
+     "sun": {
+      "alt": 15.51,
+      "az": 89.19
+     }
+    },
+    {
+     "label": "EVA2 st",
+     "utc": "1971-02-06T08:11:15Z",
+     "earth": {
+      "alt": 66.55,
+      "az": 94.88
+     },
+     "sun": {
+      "alt": 21.91,
+      "az": 88.71
+     }
+    },
+    {
+     "label": "EVA2 end",
+     "utc": "1971-02-06T12:45:56Z",
+     "earth": {
+      "alt": 66.67,
+      "az": 94.41
+     },
+     "sun": {
+      "alt": 24.22,
+      "az": 88.53
+     }
+    },
+    {
+     "label": "Liftoff",
+     "utc": "1971-02-06T18:48:42Z",
+     "earth": {
+      "alt": 66.82,
+      "az": 93.82
+     },
+     "sun": {
+      "alt": 27.28,
+      "az": 88.29
+     }
+    }
+   ]
+  },
+  {
+   "apollo": 15,
+   "lon": 3.6528,
+   "lat": 26.1008,
+   "events": [
+    {
+     "label": "Landing",
+     "utc": "1971-07-30T22:16:29Z",
+     "earth": {
+      "alt": 69.28,
+      "az": 203.0
+     },
+     "sun": {
+      "alt": 12.05,
+      "az": 95.73
+     }
+    },
+    {
+     "label": "SEVA st",
+     "utc": "1971-07-31T00:16:49Z",
+     "earth": {
+      "alt": 69.26,
+      "az": 203.25
+     },
+     "sun": {
+      "alt": 12.96,
+      "az": 96.2
+     }
+    },
+    {
+     "label": "SEVA end",
+     "utc": "1971-07-31T00:49:56Z",
+     "earth": {
+      "alt": 69.25,
+      "az": 203.3
+     },
+     "sun": {
+      "alt": 13.21,
+      "az": 96.33
+     }
+    },
+    {
+     "label": "EVA1 st",
+     "utc": "1971-07-31T13:13:17Z",
+     "earth": {
+      "alt": 69.03,
+      "az": 204.4
+     },
+     "sun": {
+      "alt": 18.82,
+      "az": 99.34
+     }
+    },
+    {
+     "label": "EVA1 end",
+     "utc": "1971-07-31T19:45:59Z",
+     "earth": {
+      "alt": 68.91,
+      "az": 204.98
+     },
+     "sun": {
+      "alt": 21.76,
+      "az": 101.01
+     }
+    },
+    {
+     "label": "EVA2 st",
+     "utc": "1971-08-01T11:48:49Z",
+     "earth": {
+      "alt": 68.52,
+      "az": 205.83
+     },
+     "sun": {
+      "alt": 28.89,
+      "az": 105.41
+     }
+    },
+    {
+     "label": "EVA2 end",
+     "utc": "1971-08-01T19:01:02Z",
+     "earth": {
+      "alt": 68.33,
+      "az": 206.12
+     },
+     "sun": {
+      "alt": 32.05,
+      "az": 107.57
+     }
+    },
+    {
+     "label": "EVA3 st",
+     "utc": "1971-08-02T08:52:14Z",
+     "earth": {
+      "alt": 67.91,
+      "az": 206.23
+     },
+     "sun": {
+      "alt": 37.98,
+      "az": 112.2
+     }
+    },
+    {
+     "label": "EVA3 end",
+     "utc": "1971-08-02T13:42:04Z",
+     "earth": {
+      "alt": 67.75,
+      "az": 206.2
+     },
+     "sun": {
+      "alt": 40.0,
+      "az": 113.99
+     }
+    },
+    {
+     "label": "Liftoff",
+     "utc": "1971-08-02T17:11:23Z",
+     "earth": {
+      "alt": 67.63,
+      "az": 206.18
+     },
+     "sun": {
+      "alt": 41.45,
+      "az": 115.34
+     }
+    }
+   ]
+  },
+  {
+   "apollo": 16,
+   "lon": 15.5144,
+   "lat": -8.9914,
+   "events": [
+    {
+     "label": "Landing",
+     "utc": "1972-04-21T02:23:35Z",
+     "earth": {
+      "alt": 77.16,
+      "az": 319.7
+     },
+     "sun": {
+      "alt": 14.76,
+      "az": 86.01
+     }
+    },
+    {
+     "label": "EVA1 st",
+     "utc": "1972-04-21T16:47:38Z",
+     "earth": {
+      "alt": 76.32,
+      "az": 321.15
+     },
+     "sun": {
+      "alt": 21.96,
+      "az": 84.65
+     }
+    },
+    {
+     "label": "EVA1 end",
+     "utc": "1972-04-21T23:58:40Z",
+     "earth": {
+      "alt": 75.9,
+      "az": 321.79
+     },
+     "sun": {
+      "alt": 25.55,
+      "az": 83.93
+     }
+    },
+    {
+     "label": "EVA2 st",
+     "utc": "1972-04-22T16:33:35Z",
+     "earth": {
+      "alt": 74.89,
+      "az": 322.36
+     },
+     "sun": {
+      "alt": 33.8,
+      "az": 82.02
+     }
+    },
+    {
+     "label": "EVA2 end",
+     "utc": "1972-04-22T23:56:44Z",
+     "earth": {
+      "alt": 74.43,
+      "az": 322.58
+     },
+     "sun": {
+      "alt": 37.47,
+      "az": 81.04
+     }
+    },
+    {
+     "label": "EVA3 st",
+     "utc": "1972-04-23T15:25:28Z",
+     "earth": {
+      "alt": 73.49,
+      "az": 322.42
+     },
+     "sun": {
+      "alt": 45.11,
+      "az": 78.59
+     }
+    },
+    {
+     "label": "EVA3 end",
+     "utc": "1972-04-23T21:05:31Z",
+     "earth": {
+      "alt": 73.15,
+      "az": 322.36
+     },
+     "sun": {
+      "alt": 47.89,
+      "az": 77.52
+     }
+    },
+    {
+     "label": "Liftoff",
+     "utc": "1972-04-24T01:25:47Z",
+     "earth": {
+      "alt": 72.9,
+      "az": 322.29
+     },
+     "sun": {
+      "alt": 50.02,
+      "az": 76.61
+     }
+    }
+   ]
+  },
+  {
+   "apollo": 17,
+   "lon": 30.7658,
+   "lat": 20.1653,
+   "events": [
+    {
+     "label": "Landing",
+     "utc": "1972-12-11T19:54:58Z",
+     "earth": {
+      "alt": 45.52,
+      "az": 240.88
+     },
+     "sun": {
+      "alt": 13.33,
+      "az": 95.83
+     }
+    },
+    {
+     "label": "EVA1 st",
+     "utc": "1972-12-11T23:54:49Z",
+     "earth": {
+      "alt": 45.32,
+      "az": 240.72
+     },
+     "sun": {
+      "alt": 15.22,
+      "az": 96.58
+     }
+    },
+    {
+     "label": "EVA1 end",
+     "utc": "1972-12-12T07:06:42Z",
+     "earth": {
+      "alt": 45.09,
+      "az": 240.42
+     },
+     "sun": {
+      "alt": 18.63,
+      "az": 97.96
+     }
+    },
+    {
+     "label": "EVA2 st",
+     "utc": "1972-12-12T23:28:06Z",
+     "earth": {
+      "alt": 44.56,
+      "az": 239.74
+     },
+     "sun": {
+      "alt": 26.3,
+      "az": 101.34
+     }
+    },
+    {
+     "label": "EVA2 end",
+     "utc": "1972-12-13T07:05:02Z",
+     "earth": {
+      "alt": 44.46,
+      "az": 239.41
+     },
+     "sun": {
+      "alt": 29.85,
+      "az": 103.07
+     }
+    },
+    {
+     "label": "EVA3 st",
+     "utc": "1972-12-13T22:25:48Z",
+     "earth": {
+      "alt": 44.25,
+      "az": 238.78
+     },
+     "sun": {
+      "alt": 36.9,
+      "az": 106.98
+     }
+    },
+    {
+     "label": "EVA3 end",
+     "utc": "1972-12-14T05:40:56Z",
+     "earth": {
+      "alt": 44.28,
+      "az": 238.48
+     },
+     "sun": {
+      "alt": 40.19,
+      "az": 109.09
+     }
+    },
+    {
+     "label": "Liftoff",
+     "utc": "1972-12-14T22:54:37Z",
+     "earth": {
+      "alt": 44.42,
+      "az": 237.8
+     },
+     "sun": {
+      "alt": 47.79,
+      "az": 115.05
+     }
+    }
+   ]
+  }
+ ]
+}

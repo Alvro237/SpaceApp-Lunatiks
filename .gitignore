@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Raw downloads and caches (rebuild with the pipeline, see data/README.md)
+data/raw/
+
+# Node (frontend, when it exists)
+node_modules/
+dist/
+*.tsbuildinfo
+.vite/
+
+# Local tooling and secrets
+.env
+.env.*
+.vercel/
+.claude/settings.local.json
+*.log

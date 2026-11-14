@@ -1,0 +1,5 @@
+* text=auto
+*.f32 binary
+*.i16 binary
+*.npz binary
+*.png binary
