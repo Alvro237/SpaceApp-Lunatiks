@@ -146,46 +146,48 @@ export function groundBlocks(grid: HeightGrid, exaggeration = GROUND_EXAGGERATIO
 }
 
 /**
- * A sphere of cubes, `size` cubes across, from a global height grid (simple cylindrical, row 0 = 90 N, column 0 =
- * longitude 0, east-positive). Only the outer shell is made. Scene axes as the globe (orbit.ts): x toward
- * longitude 0, y north, z = −(toward 90 E).
+ * The outer shell of a ball of cubes, `size` cubes across. `scaleAt(lat, lon)` stretches the radius there (1 = a
+ * plain sphere); only cubes within `band` of the radius are tested, so a 200-cube ball builds in a fraction of a
+ * second. Scene axes as the globe (orbit.ts): x toward longitude 0, y north, z = −(toward 90 E).
  */
-export function moonBlocks(heights: Float32Array, width: number, height: number, size: number, exaggeration: number): Blocks & { radius: number } {
+export function sphereBlocks(
+  size: number,
+  scaleAt: (lat: number, lon: number) => number,
+  colorAt: (lat: number, lon: number, i: number, j: number, k: number) => [number, number, number],
+  delayAt: (lat: number, lon: number) => number,
+  band = 0.12,
+): Blocks & { radius: number } {
   const radius = size / 2 - 1
-  const lookup = (lat: number, lon: number) => {
-    const col = Math.floor((((lon % 360) + 360) % 360) / 360 * width) % width
-    const row = Math.min(height - 1, Math.max(0, Math.floor(((90 - lat) / 180) * height)))
-    return heights[row * width + col]
-  }
-  const N = size + 2
-  const inside = new Uint8Array(N * N * N)
-  const hAt = new Float32Array(N * N * N)
-  const idx = (i: number, j: number, k: number) => (k * N + j) * N + i
+  const inner = radius * (1 - band)
+  const outer = radius * (1 + band)
+  // the grid must hold the highest relief plus one empty cell all round, or the peaks are cut off (holes)
+  const N = 2 * Math.ceil(outer) + 4
   const c = (N - 1) / 2
-  for (let k = 0; k < N; k++)
-    for (let j = 0; j < N; j++)
+  const inside = new Uint8Array(N * N * N)
+  const idx = (i: number, j: number, k: number) => (k * N + j) * N + i
+  for (let k = 0; k < N; k++) {
+    const z = k - c
+    for (let j = 0; j < N; j++) {
+      const y = j - c
       for (let i = 0; i < N; i++) {
         const x = i - c
-        const y = j - c
-        const z = k - c
-        const r = Math.hypot(x, y, z)
-        if (r > radius * 1.2 || r < radius * 0.8) {
-          inside[idx(i, j, k)] = r < radius ? 1 : 0
-          continue
+        const r = Math.sqrt(x * x + y * y + z * z)
+        if (r < inner) inside[idx(i, j, k)] = 1
+        else if (r <= outer) {
+          const lat = Math.asin(y / r) / DEG
+          const lon = Math.atan2(-z, x) / DEG
+          inside[idx(i, j, k)] = r <= radius * scaleAt(lat, lon) ? 1 : 0
         }
-        const lat = Math.asin(y / r) / DEG
-        const lon = Math.atan2(-z, x) / DEG
-        const h = lookup(lat, lon)
-        hAt[idx(i, j, k)] = h
-        inside[idx(i, j, k)] = r <= radius * (1 + (exaggeration * h) / MOON_R_M) ? 1 : 0
       }
+    }
+  }
   const shell: number[] = []
   for (let k = 1; k < N - 1; k++)
     for (let j = 1; j < N - 1; j++)
       for (let i = 1; i < N - 1; i++) {
-        if (!inside[idx(i, j, k)]) continue
-        if (inside[idx(i - 1, j, k)] && inside[idx(i + 1, j, k)] && inside[idx(i, j - 1, k)] && inside[idx(i, j + 1, k)] && inside[idx(i, j, k - 1)] && inside[idx(i, j, k + 1)])
-          continue
+        const at = idx(i, j, k)
+        if (!inside[at]) continue
+        if (inside[at - 1] && inside[at + 1] && inside[at - N] && inside[at + N] && inside[at - N * N] && inside[at + N * N]) continue
         shell.push(i, j, k)
       }
   const out = blocks(shell.length / 3)
@@ -196,16 +198,107 @@ export function moonBlocks(heights: Float32Array, width: number, height: number,
     const x = i - c
     const y = j - c
     const z = k - c
+    const r = Math.max(1e-6, Math.sqrt(x * x + y * y + z * z))
+    const lat = Math.asin(y / r) / DEG
+    const lon = Math.atan2(-z, x) / DEG
     out.pos.set([x, y, z], s * 3)
-    // low ground (the maria and the big basins) darker, highlands lighter
-    const h = hAt[idx(i, j, k)]
-    const t = Math.max(0, Math.min(1, (h + 6000) / 12000))
-    out.rgb.set(grey(0.3 + 0.45 * t + (hash2(i * 7 + k, j) - 0.5) * 0.08), s * 3)
-    // the Moon turns to blocks from the south pole upwards
-    const lat = Math.asin(y / Math.max(1e-6, Math.hypot(x, y, z))) / DEG
-    out.delay[s] = ((lat + 90) / 180) * 1.6
+    out.rgb.set(colorAt(lat, lon, i, j, k), s * 3)
+    out.delay[s] = delayAt(lat, lon)
   }
   return { ...out, radius }
+}
+
+/** Height (m) of a simple cylindrical grid (row 0 = 90 N, column 0 = longitude 0, east-positive), nearest sample. */
+export function gridHeight(heights: Float32Array, width: number, height: number, lat: number, lon: number): number {
+  const col = Math.floor(((((lon % 360) + 360) % 360) / 360) * width) % width
+  const row = Math.min(height - 1, Math.max(0, Math.floor(((90 - lat) / 180) * height)))
+  return heights[row * width + col]
+}
+
+/**
+ * The Moon as a ball of cubes from the global LOLA heights, relief stretched by `exaggeration`. Shade comes from
+ * height (the low maria and basins darker, the highlands lighter): a reading aid, not the Moon's real albedo.
+ */
+export function moonBlocks(heights: Float32Array, width: number, height: number, size: number, exaggeration: number): Blocks & { radius: number } {
+  const h = (lat: number, lon: number) => gridHeight(heights, width, height, lat, lon)
+  return sphereBlocks(
+    size,
+    (lat, lon) => 1 + (exaggeration * h(lat, lon)) / MOON_R_M,
+    (lat, lon, i, j, k) => {
+      const t = Math.max(0, Math.min(1, (h(lat, lon) + 4500) / 9000))
+      return grey(0.36 + 0.42 * t + (hash2(i * 7 + k, j) - 0.5) * 0.07)
+    },
+    // the Moon turns to blocks from the south pole upwards
+    (lat) => ((lat + 90) / 180) * 1.6,
+    // test only the shell the relief can reach: the largest |height| sets the band
+    Math.min(0.9, (exaggeration * heights.reduce((m, v) => Math.max(m, Math.abs(v)), 0)) / MOON_R_M + 0.03),
+  )
+}
+
+const hex = (s: string): [number, number, number] => {
+  const v = Number.parseInt(s.slice(1), 16)
+  return [srgbToLinear(((v >> 16) & 255) / 255), srgbToLinear(((v >> 8) & 255) / 255), srgbToLinear((v & 255) / 255)]
+}
+
+/** The Sun as a ball of cubes: hot yellow and orange cells, no relief. */
+export function sunBlocks(size: number): Blocks & { radius: number } {
+  const tones = ['#fff1b8', '#ffd27a', '#ffb547', '#ff9f2e'].map(hex)
+  return sphereBlocks(
+    size,
+    () => 1,
+    (_lat, _lon, i, j, k) => tones[Math.floor(hash2(i * 13 + k * 7, j) * tones.length)],
+    () => 0,
+  )
+}
+
+/**
+ * Land on the Earth, drawn by hand in 10-degree bands (a picture, not a dataset): for each band, its north edge and
+ * the longitude spans of land in it. "ice" for Greenland and the poles.
+ */
+const LAND: [number, [number, number][]][] = [
+  [80, [[-125, -60], [55, 140]]],
+  [70, [[-165, -60], [5, 180]]],
+  [60, [[-135, -58], [-10, 2], [5, 160]]],
+  [50, [[-125, -60], [-10, 145]]],
+  [40, [[-122, -76], [-10, 122], [130, 141]]],
+  [30, [[-112, -97], [-17, 92], [100, 120]]],
+  [20, [[-105, -83], [-17, 52], [73, 80], [95, 108], [120, 125]]],
+  [10, [[-80, -50], [-10, 45], [95, 120]]],
+  [0, [[-80, -35], [10, 40], [100, 150]]],
+  [-10, [[-77, -38], [12, 40], [44, 50], [123, 146]]],
+  [-20, [[-70, -42], [15, 33], [114, 153]]],
+  [-30, [[-72, -55], [18, 26], [116, 150], [172, 178]]],
+  [-40, [[-74, -65], [166, 175]]],
+  [-50, [[-75, -66]]],
+]
+const GREENLAND: [number, number] = [-55, -20]
+
+export function earthSurface(lat: number, lon: number): 'ocean' | 'land' | 'desert' | 'ice' {
+  if (lat > 80 || lat < -62) return 'ice'
+  if (lat > 60 && lon >= GREENLAND[0] && lon <= GREENLAND[1]) return 'ice'
+  const band = LAND.find(([north]) => lat <= north && lat > north - 10)
+  if (!band || !band[1].some(([a, b]) => lon >= a && lon <= b)) return 'ocean'
+  const sahara = lat > 12 && lat < 35 && lon > -17 && lon < 60
+  const outback = lat < -18 && lat > -32 && lon > 118 && lon < 145
+  return sahara || outback ? 'desert' : 'land'
+}
+
+/** The Earth as a ball of cubes: oceans, land, deserts, ice and a few clouds (hand-drawn, see LAND). */
+export function earthBlocks(size: number): Blocks & { radius: number } {
+  const tone = { ocean: hex('#1f5fae'), land: hex('#4f8a4a'), desert: hex('#c9a66b'), ice: hex('#eef3f7') }
+  const cloud = hex('#f4f7fb')
+  const deep = hex('#1a4f94')
+  return sphereBlocks(
+    size,
+    () => 1,
+    (lat, lon, i, j, k) => {
+      const n = hash2(i * 3 + k * 11, j * 5)
+      if (n > 0.88) return cloud
+      const kind = earthSurface(lat, lon)
+      return kind === 'ocean' && n < 0.4 ? deep : tone[kind]
+    },
+    () => 0,
+  )
 }
 
 /**

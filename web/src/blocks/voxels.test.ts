@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { polarXY } from '../terrain/tileset'
-import { dayBlocks, groundBlocks, moonBlocks, sampleGround, simpleDuration, skyVector } from './voxels'
+import { dayBlocks, earthBlocks, earthSurface, groundBlocks, moonBlocks, sampleGround, simpleDuration, skyVector, sunBlocks } from './voxels'
 
 describe('skyVector', () => {
   it('points north, east, south and up as the scene axes say', () => {
@@ -72,6 +72,49 @@ describe('moonBlocks', () => {
       expect(r).toBeGreaterThan(b.radius - 2)
       expect(r).toBeLessThanOrEqual(b.radius + 0.01)
     }
+  })
+})
+
+describe('sphereBlocks', () => {
+  it('keeps peaks that rise above the plain radius (no cut-off, no holes)', () => {
+    // a 20 % bulge everywhere: the shell must sit at 1.2 × the radius, not be clipped by the grid
+    const b = moonBlocks(new Float32Array(8 * 4).fill(0.2 * 1_737_400), 8, 4, 30, 1)
+    let max = 0
+    for (let k = 0; k < b.count; k++) max = Math.max(max, Math.hypot(b.pos[k * 3], b.pos[k * 3 + 1], b.pos[k * 3 + 2]))
+    expect(max).toBeGreaterThan(b.radius * 1.15)
+    // a closed shell: every direction meets a cube
+    const dirs = [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1], [0.6, 0.64, -0.48]]
+    for (const [x, y, z] of dirs) {
+      let hit = false
+      for (let k = 0; k < b.count && !hit; k++) {
+        const px = b.pos[k * 3], py = b.pos[k * 3 + 1], pz = b.pos[k * 3 + 2]
+        const t = px * x + py * y + pz * z
+        if (t > 0 && Math.hypot(px - t * x, py - t * y, pz - t * z) < 0.9) hit = true
+      }
+      expect(hit).toBe(true)
+    }
+  })
+})
+
+describe('sun and earth balls', () => {
+  it('builds round shells of the asked size', () => {
+    const sun = sunBlocks(14)
+    expect(sun.radius).toBe(6)
+    let max = 0
+    for (let k = 0; k < sun.count; k++) max = Math.max(max, Math.hypot(sun.pos[k * 3], sun.pos[k * 3 + 1], sun.pos[k * 3 + 2]))
+    expect(max).toBeLessThanOrEqual(6.01)
+    expect(earthBlocks(20).count).toBeGreaterThan(sun.count)
+  })
+
+  it('draws the continents where they are, roughly', () => {
+    expect(earthSurface(48, 2)).toBe('land') // France
+    expect(earthSurface(40, -100)).toBe('land') // United States
+    expect(earthSurface(-25, 134)).toBe('desert') // Australia
+    expect(earthSurface(23, 10)).toBe('desert') // Sahara
+    expect(earthSurface(0, -150)).toBe('ocean') // Pacific
+    expect(earthSurface(30, -40)).toBe('ocean') // Atlantic
+    expect(earthSurface(-80, 0)).toBe('ice') // Antarctica
+    expect(earthSurface(72, -40)).toBe('ice') // Greenland
   })
 })
 

@@ -19,18 +19,28 @@ import { TileLoader } from '../terrain/loader'
 import { TILES_BASE, loadTileset } from '../terrain/TerrainView'
 import { type Tileset, polarXY } from '../terrain/tileset'
 import { useEphemeris, useMasks } from '../time/hooks'
-import { type Blocks, GROUND_EXAGGERATION, type GroundBlocks, groundBlocks, moonBlocks, sampleGround, skyVector } from './voxels'
+import { voxelBodyMaterial } from './voxelMaterial'
+import { type Blocks, GROUND_EXAGGERATION, type GroundBlocks, earthBlocks, groundBlocks, moonBlocks, sampleGround, skyVector, sunBlocks } from './voxels'
 
 const FOV = 40
 /** Cubes per side of the ground world (odd, so the chosen place is the centre cube). */
 const GROUND_N = 97
 /** Cubes across the whole Moon, and how much its relief is stretched so it shows at that size. */
-const MOON_SIZE = 84
+const MOON_SIZE = 180
 const MOON_EXAGGERATION = 12
-/** The Sun and Earth cubes stand beyond the edge of the ground world and beyond the farthest camera. */
+const MOON_R = MOON_SIZE / 2 - 1
+/** The Sun and Earth balls stand beyond the edge of the ground world and beyond the farthest camera. */
 const SKY_DIST = 150
-/** The Earth cube is 3.6 times the Sun cube, as the Earth (1.9°) and the Sun (0.53°) look from the Moon. */
-const SUN_CUBE = 3
+/**
+ * Sizes on screen. The Earth looks 3.6 times as wide as the Sun from the Moon (1.9° against 0.53°); both are drawn
+ * larger than that so their cubes show, keeping that ratio.
+ */
+const SUN_D = 12
+const EARTH_D = SUN_D * 3.6
+/** Cubes across the Sun and the Earth balls. */
+const SUN_CELLS = 14
+const EARTH_CELLS = 36
+const SIDEREAL_DAY_MS = 86_164_091
 const forever = { staleTime: Infinity, gcTime: Infinity, retry: 1 } as const
 
 const reducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
@@ -139,17 +149,24 @@ function aimCamera(cam: THREE.PerspectiveCamera, pos: [number, number, number], 
 }
 
 /** One InstancedMesh of unit cubes; matrices are written by `buildIn`. */
-function useCubes(b: Blocks): THREE.InstancedMesh {
+function useCubes(b: Blocks, material: 'lambert' | 'body' | 'glow' = 'lambert'): THREE.InstancedMesh {
   const mesh = useMemo(() => {
     const geo = new THREE.BoxGeometry(1, 1, 1)
-    const mat = new THREE.MeshLambertMaterial({ color: 0xffffff })
+    const mat =
+      material === 'body'
+        ? voxelBodyMaterial()
+        : material === 'glow'
+          ? new THREE.MeshBasicMaterial({ color: 0xffffff, toneMapped: false })
+          : new THREE.MeshLambertMaterial({ color: 0xffffff })
     const m = new THREE.InstancedMesh(geo, mat, b.count)
     m.instanceColor = new THREE.InstancedBufferAttribute(b.rgb, 3)
     m.frustumCulled = false
-    m.castShadow = true
-    m.receiveShadow = true
+    m.castShadow = material === 'lambert'
+    m.receiveShadow = material === 'lambert'
+    // bodies that do not build in are placed at once
+    if (material !== 'lambert' || b.delay.every((d) => d === 0)) buildIn(m, b, 1e9, [0, 0, 0])
     return m
-  }, [b])
+  }, [b, material])
   useEffect(
     () => () => {
       mesh.geometry.dispose()
@@ -224,22 +241,64 @@ function Stars({ radius }: { radius: number }) {
   return <primitive object={points} />
 }
 
-/** An 8 × 8 picture of the Earth (oceans, land, clouds) for the Earth cube, drawn once. */
-function earthTexture(): THREE.CanvasTexture {
-  const c = document.createElement('canvas')
-  c.width = c.height = 8
-  const g = c.getContext('2d')!
-  const land = new Set(['1,2', '2,2', '2,3', '3,3', '5,1', '5,2', '6,2', '4,5', '5,5', '5,6', '1,6'])
-  for (let y = 0; y < 8; y++)
-    for (let x = 0; x < 8; x++) {
-      const cloud = (x * 3 + y * 5) % 11 === 0
-      g.fillStyle = cloud ? '#f2f6fb' : land.has(`${x},${y}`) ? '#4f8a5c' : '#2f7fd8'
-      g.fillRect(x, y, 1, 1)
+/** A soft round glow behind the Sun ball (a canvas gradient on a sprite). */
+function useGlow(): THREE.SpriteMaterial {
+  const mat = useMemo(() => {
+    const c = document.createElement('canvas')
+    c.width = c.height = 64
+    const g = c.getContext('2d')
+    if (g) {
+      const grad = g.createRadialGradient(32, 32, 4, 32, 32, 32)
+      grad.addColorStop(0, 'rgba(255, 210, 122, 0.55)')
+      grad.addColorStop(1, 'rgba(255, 181, 71, 0)')
+      g.fillStyle = grad
+      g.fillRect(0, 0, 64, 64)
     }
-  const t = new THREE.CanvasTexture(c)
-  t.magFilter = t.minFilter = THREE.NearestFilter
-  t.colorSpace = THREE.SRGBColorSpace
-  return t
+    const tex = new THREE.CanvasTexture(c)
+    return new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false })
+  }, [])
+  useEffect(() => () => {
+    mat.map?.dispose()
+    mat.dispose()
+  }, [mat])
+  return mat
+}
+
+/** The Sun as a ball of glowing cubes, `diameter` scene units wide, with a glow around it. */
+function SunBall({ diameter, ballRef }: { diameter: number; ballRef: { current: THREE.Group | null } }) {
+  const blocks = useMemo(() => sunBlocks(SUN_CELLS), [])
+  const cubes = useCubes(blocks, 'glow')
+  const glow = useGlow()
+  const cell = diameter / (2 * blocks.radius + 1)
+  return (
+    <group ref={ballRef}>
+      <primitive object={cubes} scale={cell} />
+      <sprite material={glow} scale={diameter * 3.2} />
+    </group>
+  )
+}
+
+/**
+ * The Earth as a ball of cubes, lit by the Sun so it shows its real phase from the Moon, turning once a sidereal
+ * day. Its continents are hand-drawn (voxels.ts, LAND); the phase is computed.
+ */
+function EarthBall({ diameter, ballRef, sunDir }: { diameter: number; ballRef: { current: THREE.Group | null }; sunDir: () => THREE.Vector3 | null }) {
+  const blocks = useMemo(() => earthBlocks(EARTH_CELLS), [])
+  const cubes = useCubes(blocks, 'body')
+  const cell = diameter / (2 * blocks.radius + 1)
+  const spin = useRef<THREE.Group>(null)
+  useFrame(() => {
+    const d = sunDir()
+    if (d) (cubes.material as THREE.ShaderMaterial).uniforms.uSun.value.copy(d)
+    if (spin.current) spin.current.rotation.y = ((useApp.getState().tMs % SIDEREAL_DAY_MS) / SIDEREAL_DAY_MS) * Math.PI * 2
+  })
+  return (
+    <group ref={ballRef}>
+      <group ref={spin}>
+        <primitive object={cubes} scale={cell} />
+      </group>
+    </group>
+  )
 }
 
 // --------------------------------------------------------------------------------------------- ground world
@@ -249,10 +308,11 @@ function GroundScene({ blocks, sun, earth, cam }: { blocks: GroundBlocks; sun: B
   const cubes = useCubes(blocks)
   useBuildIn(cubes, blocks, [0, 30, 0])
   const light = useRef<THREE.DirectionalLight>(null)
-  const sunCube = useRef<THREE.Group>(null)
-  const earthCube = useRef<THREE.Mesh>(null)
-  const earthMap = useMemo(() => earthTexture(), [])
-  useEffect(() => () => earthMap.dispose(), [earthMap])
+  const sunBall = useRef<THREE.Group>(null)
+  const earthBall = useRef<THREE.Group>(null)
+  // the Sun's true direction (not stretched) lights the Earth's phase
+  const sunTrue = useMemo(() => new THREE.Vector3(), [])
+  const sunDir = () => (sun ? sunTrue.set(...skyVector(sun.az, sun.el, 1)) : null)
   const top = blocks.centreTop
   const target = useMemo(() => new THREE.Vector3(0, top, 0), [top])
   const instant = useRef(true)
@@ -286,7 +346,7 @@ function GroundScene({ blocks, sun, earth, cam }: { blocks: GroundBlocks; sun: B
       size.height,
     )
 
-    if (sun && light.current && sunCube.current) {
+    if (sun && light.current && sunBall.current) {
       const d = skyVector(sun.az, sun.el)
       light.current.position.set(d[0] * 300, top + d[1] * 300, d[2] * 300)
       light.current.target.position.set(0, top, 0)
@@ -294,13 +354,12 @@ function GroundScene({ blocks, sun, earth, cam }: { blocks: GroundBlocks; sun: B
       // fades out as the Sun sinks below the horizontal (stretched angles)
       const elS = Math.asin(d[1]) * (180 / Math.PI)
       light.current.intensity = 3.2 * Math.max(0, Math.min(1, (elS + 4) / 4))
-      sunCube.current.position.set(d[0] * SKY_DIST, top + d[1] * SKY_DIST, d[2] * SKY_DIST)
-      sunCube.current.visible = elS > -6
+      sunBall.current.position.set(d[0] * SKY_DIST, top + d[1] * SKY_DIST, d[2] * SKY_DIST)
+      sunBall.current.visible = elS > -6
     }
-    if (earth && earthCube.current) {
+    if (earth && earthBall.current) {
       const d = skyVector(earth.az, earth.el)
-      earthCube.current.position.set(d[0] * SKY_DIST, top + d[1] * SKY_DIST, d[2] * SKY_DIST)
-      earthCube.current.lookAt(target)
+      earthBall.current.position.set(d[0] * SKY_DIST, top + d[1] * SKY_DIST, d[2] * SKY_DIST)
     }
   })
 
@@ -311,20 +370,8 @@ function GroundScene({ blocks, sun, earth, cam }: { blocks: GroundBlocks; sun: B
       <directionalLight ref={light} castShadow color="#fff6e8" />
       <primitive object={cubes} />
       <Lander top={top} />
-      <group ref={sunCube}>
-        <mesh>
-          <boxGeometry args={[SUN_CUBE, SUN_CUBE, SUN_CUBE]} />
-          <meshBasicMaterial color="#ffd27a" toneMapped={false} />
-        </mesh>
-        <mesh>
-          <boxGeometry args={[SUN_CUBE * 1.8, SUN_CUBE * 1.8, SUN_CUBE * 1.8]} />
-          <meshBasicMaterial color="#ffb547" transparent opacity={0.22} depthWrite={false} toneMapped={false} />
-        </mesh>
-      </group>
-      <mesh ref={earthCube}>
-        <boxGeometry args={[SUN_CUBE * 3.6, SUN_CUBE * 3.6, SUN_CUBE * 3.6]} />
-        <meshLambertMaterial map={earthMap} emissive="#0d2140" />
-      </mesh>
+      <SunBall diameter={SUN_D} ballRef={sunBall} />
+      <EarthBall diameter={EARTH_D} ballRef={earthBall} sunDir={sunDir} />
       <Stars radius={900} />
     </>
   )
@@ -358,9 +405,11 @@ function Lander({ top }: { top: number }) {
 
 function MoonScene({ blocks, cam, site }: { blocks: Blocks & { radius: number }; cam: BlockCam; site: [number, number] | null }) {
   const { camera, size } = useThree()
-  const cubes = useCubes(blocks)
+  const cubes = useCubes(blocks, 'body')
   const eph = useEphemeris().data
-  const light = useRef<THREE.DirectionalLight>(null)
+  const sunBall = useRef<THREE.Group>(null)
+  const earthBall = useRef<THREE.Group>(null)
+  const sun = useMemo(() => new THREE.Vector3(1, 0, 0), [])
   const instant = useRef(true)
   const origin = useMemo(() => new THREE.Vector3(), [])
   useBuildIn(cubes, blocks, [0, -20, 0])
@@ -370,35 +419,40 @@ function MoonScene({ blocks, cam, site }: { blocks: Blocks & { radius: number };
     if (!site) return []
     const n = latLonToScene(site[0], site[1], 1)
     const len = Math.hypot(n[0], n[1], n[2])
-    return [1, 2, 3, 4].map((k) => n.map((v) => Math.round((v / len) * (blocks.radius + k))) as [number, number, number])
+    return [1, 2, 3, 4, 5, 6].map((k) => n.map((v) => (v / len) * (blocks.radius + k * 1.6)) as [number, number, number])
   }, [site, blocks.radius])
 
   useFrame((_, dt) => {
     cam.step(dt, reducedMotion() || instant.current)
     instant.current = false
-    aimCamera(camera as THREE.PerspectiveCamera, latLonToScene(cam.pitch, cam.yaw, cam.dist), origin, 4000, size.width, size.height)
+    aimCamera(camera as THREE.PerspectiveCamera, latLonToScene(cam.pitch, cam.yaw, cam.dist), origin, 8000, size.width, size.height)
     const { tMs } = useApp.getState()
-    if (eph?.table.covers(tMs) && light.current) {
-      const s = eph.table.positions(tMs)
-      const v = meToScene(s[0], s[1], s[2])
-      const len = Math.hypot(v[0], v[1], v[2])
-      light.current.position.set((v[0] / len) * 300, (v[1] / len) * 300, (v[2] / len) * 300)
+    if (eph?.table.covers(tMs)) {
+      const p = eph.table.positions(tMs)
+      sun.set(...meToScene(p[0], p[1], p[2])).normalize()
+      ;(cubes.material as THREE.ShaderMaterial).uniforms.uSun.value.copy(sun)
+      // real directions, not real distances: the Sun 20 and the Earth 12 Moon radii out
+      sunBall.current?.position.copy(sun).multiplyScalar(MOON_R * 20)
+      const e = meToScene(p[3], p[4], p[5])
+      const el = Math.hypot(e[0], e[1], e[2])
+      earthBall.current?.position.set((e[0] / el) * MOON_R * 12, (e[1] / el) * MOON_R * 12, (e[2] / el) * MOON_R * 12)
     }
   })
 
   return (
     <>
       <color attach="background" args={['#05060a']} />
-      <ambientLight intensity={0.14} color="#9aa6c4" />
-      <directionalLight ref={light} intensity={3.2} color="#fff6e8" />
       <primitive object={cubes} />
+      {/* as seen from the Moon's centre: Sun about 2°, Earth about 7° (3.6 times wider, as in the real sky) */}
+      <SunBall diameter={MOON_R * 20 * 0.035} ballRef={sunBall} />
+      <EarthBall diameter={MOON_R * 12 * 0.035 * 3.6} ballRef={earthBall} sunDir={() => sun} />
       {marker.map((p, i) => (
         <mesh key={i} position={p}>
-          <boxGeometry args={[1, 1, 1]} />
+          <boxGeometry args={[1.6, 1.6, 1.6]} />
           <meshBasicMaterial color="#ffb547" toneMapped={false} />
         </mesh>
       ))}
-      <Stars radius={1500} />
+      <Stars radius={MOON_R * 40} />
     </>
   )
 }
@@ -427,7 +481,7 @@ export function BlockWorld() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [groundKey],
   )
-  const moonCam = useMemo(() => new BlockCam(ll?.[1] ?? 0, -50, MOON_SIZE * 2.7, { pitch: [-85, 85], dist: [MOON_SIZE * 0.75, MOON_SIZE * 5] }), [ll])
+  const moonCam = useMemo(() => new BlockCam(ll?.[1] ?? 0, -50, MOON_R * 4.2, { pitch: [-85, 85], dist: [MOON_R * 1.6, MOON_R * 9] }), [ll])
   const cam = showGround ? groundCam : moonCam
   const drag = useRef<{ x: number; y: number } | null>(null)
 
