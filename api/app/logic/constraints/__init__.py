@@ -6,4 +6,4 @@ To add a constraint: create ``<name>.py`` next to these, decorate the function w
 """
 from .base import (REGISTRY, ConstraintContext, ConstraintResult, all_pass, evaluate_constraints,  # noqa: F401
                    register)
-from . import light, power, radiation, slope, temperature  # noqa: F401  (registration side effect)
+from . import comms, light, power, radiation, slope, temperature  # noqa: F401  (registration side effect)
