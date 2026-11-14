@@ -59,7 +59,8 @@ export interface StoryState extends Saved {
   memory: StoryMemory
   stage: SetupStage
   open: boolean
-  begin: () => void
+  /** Start the story, at the saved chapter or at the one picked on the start screen. */
+  begin: (chapter?: number) => void
   goTo: (chapter: number) => void
   markDone: (id: string) => void
   remember: (patch: Partial<StoryMemory>) => void
@@ -82,8 +83,8 @@ export const useStory = create<StoryState>()((set, get) => {
     // a story resumed from an earlier visit sets its chapter's scene again
     stage: saved.started ? 'apply' : null,
     open: true,
-    begin: () => {
-      set({ started: true, open: true, memory: fresh(), stage: 'apply' })
+    begin: (chapter) => {
+      set({ ...(chapter === undefined ? {} : { chapter }), started: true, open: true, memory: fresh(), stage: 'apply' })
       persist()
     },
     goTo: (chapter) => {

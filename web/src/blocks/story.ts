@@ -109,6 +109,8 @@ export interface Chapter {
   /** Year or programme, shown above the title. */
   tag: string
   title: string
+  /** One or two words under the mission's icon in the mission picker. */
+  short: string
   /** Where and when, shown as two short labels. */
   where: string
   when: string
@@ -162,6 +164,7 @@ export const CHAPTERS: Chapter[] = [
     id: 'apollo-11',
     tag: '1969 · Apollo 11',
     title: 'Land in the morning',
+    short: 'Apollo 11',
     where: 'Sea of Tranquillity',
     when: '20 July 1969',
     story: [
@@ -194,6 +197,7 @@ export const CHAPTERS: Chapter[] = [
     id: 'chandrayaan-3',
     tag: '2023 · Chandrayaan-3',
     title: 'A very long day',
+    short: 'Long day',
     where: 'Near the South Pole',
     when: '23 August 2023',
     story: ['India’s robot lander touched down here at sunrise.', 'It worked hard while the Sun was shining.', 'When night came it went to sleep, and never woke up.'],
@@ -218,6 +222,7 @@ export const CHAPTERS: Chapter[] = [
     id: 'im-2',
     tag: '2025 · IM-2 Athena',
     title: 'The Sun that stays low',
+    short: 'Low Sun',
     where: 'Mons Mouton, near the South Pole',
     when: '6 March 2025',
     story: ['The lander Athena landed here, but it tipped over.', 'Here the Sun is always low, and its solar panels faced away.', 'Its batteries could not charge, so it stopped the next day.'],
@@ -252,6 +257,7 @@ export const CHAPTERS: Chapter[] = [
     id: 'light-ice',
     tag: 'Artemis · South Pole',
     title: 'Sunny mountains, icy craters',
+    short: 'Ice',
     where: 'Mons Malapert and Shackleton crater',
     when: 'Today',
     story: [
@@ -296,6 +302,7 @@ export const CHAPTERS: Chapter[] = [
     id: 'call-home',
     tag: 'Every mission',
     title: 'Phone home',
+    short: 'Call home',
     where: 'Nobile crater, near the South Pole',
     when: '12 February 2027',
     story: ['Every lander needs to talk to Earth.', 'Radio only works if the Earth is above the hills.', 'The Earth wobbles a little in the sky, so hills can hide it.'],
@@ -328,6 +335,7 @@ export const CHAPTERS: Chapter[] = [
     id: 'yours',
     tag: 'Your mission',
     title: 'Your turn: plan a landing',
+    short: 'Your turn',
     where: 'Anywhere you like',
     when: 'You choose',
     story: ['Now you are the mission planner!', 'Find a place and a time with the Sun up and the Earth in view.'],

@@ -25,6 +25,9 @@ describe('mission log', () => {
   it('has six chapters, each with a place, a date, short facts, a source, a task, a hint and a short lesson', () => {
     expect(CHAPTERS).toHaveLength(6)
     for (const c of CHAPTERS) {
+      // the short name fits under its icon in the mission picker
+      expect(c.short.length).toBeGreaterThan(1)
+      expect(c.short.length).toBeLessThanOrEqual(10)
       expect(c.where.length).toBeGreaterThan(2)
       expect(c.when.length).toBeGreaterThan(2)
       expect(c.story.length).toBeGreaterThanOrEqual(2)

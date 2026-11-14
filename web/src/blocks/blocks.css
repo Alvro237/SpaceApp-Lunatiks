@@ -137,13 +137,28 @@
 .blk-kicker { margin: 0; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; }
 .blk-title { margin: 2px 0 0; font-size: 1.2rem; line-height: 1.2; }
 .blk-meta { margin: 4px 0 0; font-family: var(--mono); font-size: 0.74rem; color: var(--muted); }
-.blk-chapters { display: flex; gap: 4px; margin: 10px 0 2px; flex-wrap: wrap; }
-.blk-chapter {
-  min-width: 30px; min-height: 30px; padding: 0 6px; border-radius: 8px; font-family: var(--mono); font-size: 0.8rem; font-weight: 600;
-  background: var(--surface-2); color: var(--text); border: 1px solid var(--border);
+/* the mission picker: each mission's picture and short name, a tick when done, the current one in the accent */
+.blk-missions { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin: 10px 0 2px; padding: 0; list-style: none; }
+.blk-missions.is-large { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 8px; }
+.blk-mission {
+  width: 100%; height: 100%; min-height: 54px; padding: 5px 2px 4px; border-radius: 10px;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  background: var(--surface-2); color: var(--text); border: 1px solid var(--border); font-weight: 600;
 }
-.blk-chapter.is-done { background: rgba(126, 226, 168, 0.16); border-color: var(--pass); color: var(--pass); }
-.blk-chapter[aria-current='step'] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.blk-missions.is-large .blk-mission { flex-direction: row; justify-content: flex-start; gap: 8px; min-height: 48px; padding: 6px 8px; text-align: left; }
+.blk-mission:hover { border-color: var(--accent); }
+.blk-mission.is-done { border-color: var(--pass); }
+.blk-mission[aria-current='step'] { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+.blk-mission-icon { position: relative; display: grid; place-items: center; flex: none; }
+.blk-mission-tick {
+  position: absolute; right: -7px; top: -6px; width: 14px; height: 14px; border-radius: 50%;
+  display: grid; place-items: center; background: var(--pass); color: #0b0c0e; font-size: 0.6rem; font-weight: 800;
+}
+.blk-mission-text { display: flex; flex-direction: column; min-width: 0; }
+.blk-mission-name { font-size: 0.66rem; line-height: 1.1; text-align: center; }
+.blk-missions.is-large .blk-mission-name { font-size: 0.86rem; text-align: left; }
+.blk-mission-tag { font-size: 0.7rem; font-weight: 500; color: var(--muted); }
+.blk-pick-h { margin: 12px 0 0; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-weight: 600; }
 .blk-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 0; }
 .blk-chips > div { display: flex; gap: 6px; align-items: baseline; padding: 3px 9px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); font-size: 0.8rem; }
 .blk-chips dt { font-size: 0.64rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
@@ -184,8 +199,6 @@
 .blk-hint-text { margin: 4px 0 0; padding: 8px 10px; background: var(--warn-bg); border: 1px solid var(--sun); border-radius: 10px; font-size: 0.86rem; }
 .blk-badge { flex: none; width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; background: var(--surface-2); border: 1px solid var(--border); }
 .blk-intro { margin: 8px 0 0; font-size: 0.92rem; line-height: 1.5; }
-.blk-intro-list { margin: 8px 0 0; padding-left: 18px; font-size: 0.86rem; line-height: 1.5; }
-.blk-intro-tag { color: var(--muted); font-size: 0.78rem; }
 
 /* ---------------------------------------------------------------- the switch in the top bar */
 .block-toggle {
