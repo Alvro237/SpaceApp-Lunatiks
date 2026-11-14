@@ -209,6 +209,17 @@ elevation span over the window). Geometry only: the link budget is a separate mo
 sees the Earth, 180° E never; Malapert 100 %, Shackleton floor 0 % in March 2027.
 **Files:** `logic/earth.py`, `routers/earth.py`, `schemas/earth.py`, `tests/test_earth.py`.
 
+## MECH · Replanning sweep
+
+**Status:** done on `feat/mech-power`. `POST /api/v1/sweep`: up to 25 places (`site_id` or `lat`/`lon`) x up to
+2000 landing times (`first_landing`, `landings`, `landing_step_h`) for one `stay_h`. One series per place;
+prefix sums for fractions, windows processed as a matrix for longest runs and the battery. Per landing:
+sunlight, comms and both fractions, longest dark and blackout, eclipse hours, mean power per m2 (eclipses
+included); with `array` the mean array power; with `battery` and `load` survival, minimum SoC and unserved energy.
+GCR dose per stay (CRaTER climatology). Every window equals the single-window endpoints (tests). Measured:
+21 sites x 365 landings x 14-day stay with battery in about 1 s.
+**Files:** `logic/sweep.py`, `routers/sweep.py`, `schemas/sweep.py`, `tests/test_sweep.py`.
+
 ## MECH · Thermal model and maximum temperature
 
 **Status:** to do. **Files:** `logic/thermal.py`, `logic/constraints/temperature.py`.
