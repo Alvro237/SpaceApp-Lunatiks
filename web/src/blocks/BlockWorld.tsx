@@ -19,6 +19,9 @@ import { TileLoader } from '../terrain/loader'
 import { TILES_BASE, loadTileset } from '../terrain/TerrainView'
 import { type Tileset, polarXY } from '../terrain/tileset'
 import { useEphemeris, useMasks } from '../time/hooks'
+import { IconGlobe, IconInfo, IconMinus, IconMountain, IconPlus } from '../ui/icons'
+import { Popover } from '../ui/Popover'
+import { ToolPortal } from '../ui/ToolSlot'
 import { useHud } from './useStory'
 import { voxelBodyMaterial } from './voxelMaterial'
 import {
@@ -37,18 +40,18 @@ import {
 
 const FOV = 40
 /** Cubes per side of the ground world (odd, so the chosen place is the centre cube). */
-const GROUND_N = 97
+const GROUND_N = 161
 /** Cubes across the whole Moon, and how much its relief is stretched so it shows at that size. */
 const MOON_SIZE = 180
 const MOON_EXAGGERATION = 12
 const MOON_R = MOON_SIZE / 2 - 1
 /** The Sun and Earth balls stand beyond the edge of the ground world and beyond the farthest camera. */
-const SKY_DIST = 150
+const SKY_DIST = 420
 /**
  * Sizes on screen. The Earth looks 3.6 times as wide as the Sun from the Moon (1.9° against 0.53°); both are drawn
  * larger than that so their cubes show, keeping that ratio.
  */
-const SUN_D = 12
+const SUN_D = 30
 const EARTH_D = SUN_D * 3.6
 /** Cubes across the Sun and the Earth balls. */
 const SUN_CELLS = 14
@@ -97,8 +100,8 @@ function useSelectedLatLon(): [number, number] | null {
   }, [sel, masks])
 }
 
-/** Cell of the ground world away from the polar map: a quarter of the global grid's 7.6 km pixel. */
-const GLOBAL_CELL_M = 1920
+/** Cell of the ground world away from the polar map, as the polar map's (the global grid's 7.6 km pixels are interpolated). */
+const GLOBAL_CELL_M = 960
 
 export interface GroundWorld {
   blocks: GroundBlocks | null
@@ -110,7 +113,7 @@ export interface GroundWorld {
 
 /**
  * The ground world for the selection, anywhere on the Moon: from the LOLA polar map (960 m) where it reaches, and
- * from the global LOLA grid (7.6 km pixels, sampled every 1.92 km) everywhere else.
+ * from the global LOLA grid (7.6 km pixels, sampled every 960 m) everywhere else.
  */
 function useGroundBlocks(): GroundWorld {
   const ll = useSelectedLatLon()
@@ -130,13 +133,13 @@ function useGroundBlocks(): GroundWorld {
       const ts = tileset.data
       const ov = overview.data
       const cellM = (ts.extentM[2] - ts.extentM[0]) / (ov.samples - 1)
-      const grid = sampleGround((x, y) => overviewHeight(ts, ov, x, y), polarXY, ll[0], ll[1], GROUND_N, cellM)
+      const grid = sampleGround((x, y) => overviewHeight(ts, ov, x, y), polarXY, ll[0], ll[1], GROUND_N, cellM, 1 / GROUND_EXAGGERATION)
       if (grid) return { blocks: groundBlocks(grid), loading: false, source: 'polar', cellM }
     } else if (polar && !tileset.isError && !overview.isError) return { ...none, loading: true }
     // the global grid: anywhere the polar map does not reach (or could not load)
     if (!globe.data) return { ...none, loading: !globe.isError }
     const g = globe.data
-    const grid = sampleGlobal((la, lo) => gridHeightBilinear(g.heights, g.meta.width, g.meta.height, la, lo), ll[0], ll[1], GROUND_N, GLOBAL_CELL_M)
+    const grid = sampleGlobal((la, lo) => gridHeightBilinear(g.heights, g.meta.width, g.meta.height, la, lo), ll[0], ll[1], GROUND_N, GLOBAL_CELL_M, 1 / GROUND_EXAGGERATION)
     return { blocks: groundBlocks(grid), loading: false, source: 'global', cellM: GLOBAL_CELL_M }
   }, [ll, polar, tileset.data, tileset.isError, overview.data, overview.isError, globe.data, globe.isError])
 }
@@ -366,6 +369,7 @@ function GroundScene({ blocks, sun, earth, cam }: { blocks: GroundBlocks; sun: B
   const cubes = useCubes(blocks)
   useBuildIn(cubes, blocks, [0, 30, 0])
   const light = useRef<THREE.DirectionalLight>(null)
+  const earthLight = useRef<THREE.DirectionalLight>(null)
   const sunBall = useRef<THREE.Group>(null)
   const earthBall = useRef<THREE.Group>(null)
   // the Sun's true direction (not stretched) lights the Earth's phase
@@ -382,7 +386,7 @@ function GroundScene({ blocks, sun, earth, cam }: { blocks: GroundBlocks; sun: B
     if (!l) return
     l.shadow.mapSize.set(2048, 2048)
     const half = GROUND_N / 2 + 6
-    Object.assign(l.shadow.camera, { left: -half, right: half, top: half, bottom: -half, near: 1, far: 600 })
+    Object.assign(l.shadow.camera, { left: -half, right: half, top: half, bottom: -half, near: 1, far: 1400 })
     l.shadow.camera.updateProjectionMatrix()
     l.shadow.bias = -0.0008
     l.shadow.normalBias = 0.03
@@ -408,7 +412,7 @@ function GroundScene({ blocks, sun, earth, cam }: { blocks: GroundBlocks; sun: B
 
     if (sun && light.current && sunBall.current) {
       const d = skyVector(sun.az, sun.el)
-      light.current.position.set(d[0] * 300, top + d[1] * 300, d[2] * 300)
+      light.current.position.set(d[0] * 600, top + d[1] * 600, d[2] * 600)
       light.current.target.position.set(0, top, 0)
       light.current.target.updateMatrixWorld()
       // fades out as the Sun sinks below the horizontal (stretched angles)
@@ -420,6 +424,13 @@ function GroundScene({ blocks, sun, earth, cam }: { blocks: GroundBlocks; sun: B
     if (earth && earthBall.current) {
       const d = skyVector(earth.az, earth.el)
       earthBall.current.position.set(d[0] * SKY_DIST, top + d[1] * SKY_DIST, d[2] * SKY_DIST)
+      if (earthLight.current) {
+        earthLight.current.intensity = earth.fraction > 0 ? 0.8 : 0
+        // from the Earth's side, but never from below the ground (a low Earth still grazes the slopes facing it)
+        earthLight.current.position.set(d[0] * 300, top + Math.max(d[1], 0.25) * 300, d[2] * 300)
+        earthLight.current.target.position.set(0, top, 0)
+        earthLight.current.target.updateMatrixWorld()
+      }
     }
     // tell the story whether the Sun and the Earth are on screen (only when that changes)
     const hud = {
@@ -433,7 +444,10 @@ function GroundScene({ blocks, sun, earth, cam }: { blocks: GroundBlocks; sun: B
   return (
     <>
       <color attach="background" args={['#05060a']} />
-      <ambientLight intensity={0.5} color="#9aa6c4" />
+      {/* a dim sky-above, ground-below fill so tops and sides of the cubes differ even with no light in the sky */}
+      <hemisphereLight args={['#aab4cc', '#1a1c22', 0.7]} />
+      {/* earthshine: sunlight reflected by the Earth, so the relief still reads during the long night */}
+      <directionalLight ref={earthLight} color="#8fb8ff" intensity={0.75} />
       <directionalLight ref={light} castShadow color="#fff6e8" />
       <primitive object={cubes} />
       <Lander top={top} />
@@ -560,7 +574,7 @@ export function BlockWorld() {
   // a new camera for each world and each place, looking across the place toward the Sun
   const groundKey = `${ll?.[0]},${ll?.[1]}`
   const groundCam = useMemo(
-    () => new BlockCam(sunAz + 180, 14, 120, { pitch: [2, 85], dist: [20, 140] }),
+    () => new BlockCam(sunAz + 180, 16, 85, { pitch: [2, 85], dist: [6, 260] }),
     // the Sun's azimuth only sets the first view of each place
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [groundKey],
@@ -578,7 +592,6 @@ export function BlockWorld() {
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null)
   const pickRef = useRef<Picker | null>(null)
   const clicked = useRef(false)
-  const [about, setAbout] = useState(false)
 
   // a place picked in the panels turns the Moon toward it (a click on the Moon is already in view)
   useEffect(() => {
@@ -678,37 +691,34 @@ export function BlockWorld() {
           Earth can be seen from the chosen place.
         </p>
       </div>
-      <div className="map-controls block-controls" role="group" aria-label="Block world view">
-        <div className="block-seg" role="radiogroup" aria-label="What to show">
-          <button type="button" role="radio" aria-checked={!showGround} onClick={() => pick('moon')}>
-            Whole Moon
-          </button>
-          <button
-            type="button"
-            role="radio"
-            aria-checked={showGround}
-            onClick={() => pick('ground')}
-          >
-            Stand here
-          </button>
+      <ToolPortal>
+        <div className="map-controls block-controls" role="group" aria-label="Block world view">
+          <div className="blk-seg" role="radiogroup" aria-label="What to show">
+            <button type="button" role="radio" aria-checked={!showGround} onClick={() => pick('moon')}>
+              <IconGlobe size={18} /> Whole Moon
+            </button>
+            <button type="button" role="radio" aria-checked={showGround} onClick={() => pick('ground')}>
+              <IconMountain size={18} /> Stand here
+            </button>
+          </div>
+          <div className="tool-group">
+            <button type="button" onClick={() => cam.zoom(0.75)} aria-label="Zoom in" title="Zoom in (+)">
+              <IconPlus />
+            </button>
+            <button type="button" onClick={() => cam.zoom(1 / 0.75)} aria-label="Zoom out" title="Zoom out (−)">
+              <IconMinus />
+            </button>
+          </div>
+          <Popover label="What am I looking at?" button={<IconInfo size={18} />} buttonClass="tool-btn" align="left">
+            <p className="block-about">
+              {showGround
+                ? `Each cube is ${Math.round(ground.cellM)} m wide and ${Math.round(ground.cellM / GROUND_EXAGGERATION)} m tall: heights and sky angles are both stretched ×${GROUND_EXAGGERATION}, so the shadows fall as on the real ground. Heights: ${ground.source === 'global' ? 'the global LOLA grid (NASA LRO), whose 7.6 km pixels smooth out small hills' : 'the LOLA polar map (NASA PGDA)'}. When the Earth is up, a faint blue light comes from it (earthshine). Sun and Earth: where the engine puts them, drawn larger than life.`
+                : `Global LOLA heights (NASA LRO), relief stretched ×${MOON_EXAGGERATION}, lit by the Sun at the chosen time. The gold column is your place; click anywhere to choose a spot of your own. Sun and Earth: real directions, not real distances.`}
+            </p>
+            <p className="block-about">Drag to turn the view, scroll or use + and − to zoom. The answers in the panels come from the engine, not from the cubes.</p>
+          </Popover>
         </div>
-        <button type="button" onClick={() => cam.zoom(0.75)} aria-label="Zoom in">
-          +
-        </button>
-        <button type="button" onClick={() => cam.zoom(1 / 0.75)} aria-label="Zoom out">
-          −
-        </button>
-        <button type="button" aria-expanded={about} aria-controls="block-about" aria-label="What am I looking at?" onClick={() => setAbout(!about)}>
-          ?
-        </button>
-        {about && (
-          <p id="block-about" className="block-about">
-            {showGround
-              ? `Each cube is ${Math.round(ground.cellM)} m wide and ${Math.round(ground.cellM / GROUND_EXAGGERATION)} m tall: heights and sky angles are both stretched ×${GROUND_EXAGGERATION}, so the shadows fall as on the real ground. Heights: ${ground.source === 'global' ? 'the global LOLA grid (NASA LRO), whose 7.6 km pixels smooth out small hills' : 'the LOLA polar map (NASA PGDA)'}. Sun and Earth: where the engine puts them, drawn larger than life.`
-              : `Global LOLA heights (NASA LRO), relief stretched ×${MOON_EXAGGERATION}, lit by the Sun at the chosen time. The gold column is your place; click anywhere to choose a spot of your own. Sun and Earth: real directions, not real distances.`}
-          </p>
-        )}
-      </div>
+      </ToolPortal>
     </>
   )
 }

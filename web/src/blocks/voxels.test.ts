@@ -31,6 +31,13 @@ describe('sampleGround', () => {
     expect(g.heightsM[2 * 5 + 2]).toBeCloseTo(0, 6)
   })
 
+  it('scales the curvature drop when asked (Block Moon draws it at true size under stretched relief)', () => {
+    const full = sampleGround(() => 0, polarXY, -85, 30, 5, 1000)!
+    const quarter = sampleGround(() => 0, polarXY, -85, 30, 5, 1000, 0.25)!
+    expect(quarter.heightsM[0]).toBeCloseTo(full.heightsM[0] * 0.25, 6)
+    expect(sampleGlobal(() => 0, 10, 20, 5, 2000, 0.25).heightsM[0]).toBeCloseTo(sampleGlobal(() => 0, 10, 20, 5, 2000).heightsM[0] * 0.25, 6)
+  })
+
   it('subtracts the curvature drop d² / 2R', () => {
     const g = sampleGround(() => 0, polarXY, -85, 30, 5, 1000)!
     // corner: 2 km east and 2 km north of the centre

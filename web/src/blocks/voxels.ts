@@ -33,6 +33,8 @@ export interface HeightGrid {
 /**
  * Samples a square of n × n cells centred on (lat, lon), axes east and north at that point, on the south polar
  * stereographic map (x = r sin lon, y = r cos lon). Returns null when any sample falls outside the map.
+ * `curvature` scales the curvature drop: 1 is the true drop; Block Moon passes 1 / exaggeration so the stretched
+ * relief does not turn a 150 km world into a dome that hides its own horizon.
  */
 export function sampleGround(
   heightAt: (x: number, y: number) => number | null,
@@ -41,6 +43,7 @@ export function sampleGround(
   lon: number,
   n: number,
   cellM: number,
+  curvature = 1,
 ): HeightGrid | null {
   const [sx, sy] = polarXY(lat, lon)
   // North on the map is away from the pole (r grows with latitude), east is a quarter turn clockwise from it.
@@ -56,7 +59,7 @@ export function sampleGround(
       const north = (half - j) * cellM
       const h = heightAt(sx + east * ex + north * nx, sy + east * ey + north * ny)
       if (h === null || !Number.isFinite(h)) return null
-      heightsM[j * n + i] = h - (east * east + north * north) / (2 * MOON_R_M)
+      heightsM[j * n + i] = h - (curvature * (east * east + north * north)) / (2 * MOON_R_M)
     }
   }
   return { n, cellM, heightsM }
@@ -89,9 +92,9 @@ export function gridHeightBilinear(heights: Float32Array, width: number, height:
 
 /**
  * Like sampleGround, anywhere on the Moon: n × n cells centred on (lat, lon), east and north at that point, heights
- * from `heightAt(lat, lon)` (the global LOLA grid), curvature drop subtracted.
+ * from `heightAt(lat, lon)` (the global LOLA grid), curvature drop (scaled by `curvature`) subtracted.
  */
-export function sampleGlobal(heightAt: (lat: number, lon: number) => number, lat: number, lon: number, n: number, cellM: number): HeightGrid {
+export function sampleGlobal(heightAt: (lat: number, lon: number) => number, lat: number, lon: number, n: number, cellM: number, curvature = 1): HeightGrid {
   const half = (n - 1) / 2
   const heightsM = new Float32Array(n * n)
   for (let j = 0; j < n; j++) {
@@ -99,7 +102,7 @@ export function sampleGlobal(heightAt: (lat: number, lon: number) => number, lat
       const east = (i - half) * cellM
       const north = (half - j) * cellM
       const [la, lo] = offsetLatLon(lat, lon, east, north)
-      heightsM[j * n + i] = heightAt(la, lo) - (east * east + north * north) / (2 * MOON_R_M)
+      heightsM[j * n + i] = heightAt(la, lo) - (curvature * (east * east + north * north)) / (2 * MOON_R_M)
     }
   }
   return { n, cellM, heightsM }
