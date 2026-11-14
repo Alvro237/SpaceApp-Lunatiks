@@ -14,10 +14,22 @@ import { SHADOW_FRAG, SHADOW_VERT } from './shadow'
 import { type TileKey, type Tileset, keyOf, parent, tileBounds, tileUrl } from './tileset'
 
 export const GPU_TILE_CAPACITY = 300
-/** Shadow texture: one texel per 960 m cell of the preview over the 60 S disc. */
-const SHADOW_SIZE = 2048
+/** Shadow texture at rest: one texel per 960 m cell of the preview over the 60 S disc (the overview is 2049²). */
+export const SHADOW_SIZE = 2048
+/**
+ * Shadow texture during playback: one texel per 1 920 m. The pass costs one 72-step ray per texel, so halving
+ * the side divides its cost by about four; measured on an Intel UHD (integrated) GPU, 25-44 ms per pass at 2048²
+ * against 8-16 ms at 1024², with a whole frame budget of 16.7 ms at 60 fps. When playback stops the texture is
+ * recomputed at full size, so a paused view always shows the full-resolution shadows.
+ */
+export const SHADOW_PLAY_SIZE = 1024
 /** During playback the shadow pass runs at most this often (the panels update at 10 Hz). */
 const SHADOW_MIN_INTERVAL_MS = 60
+
+/** Side of the shadow texture for the current playback state. */
+export function shadowSize(playing: boolean): number {
+  return playing ? SHADOW_PLAY_SIZE : SHADOW_SIZE
+}
 
 export type LayerMode = { kind: 'none' } | { kind: 'elevation' } | { kind: 'data'; id: string; colormap: ColormapId; levels: number }
 
@@ -262,8 +274,19 @@ export class TerrainEngine {
 
   private lastShadowAt = 0
 
-  /** Recompute the shadow texture if the Sun moved; call before rendering the frame. */
+  /**
+   * Recompute the shadow texture if the Sun moved or the playback state changed its resolution; call before
+   * rendering the frame.
+   */
   renderShadows(renderer: THREE.WebGLRenderer, playing = false): void {
+    const size = shadowSize(playing)
+    if (this.shadowTarget.width !== size) {
+      // resizing discards the texture contents, so the pass runs now, skipping the playback interval; both
+      // shaders address the texture in normalised coordinates, so nothing else depends on its size
+      this.shadowTarget.setSize(size, size)
+      this.shadowDirty = true
+      this.lastShadowAt = 0
+    }
     if (!this.shadowDirty || !this.shadowMaterial.uniforms.uHeight.value) return
     const now = performance.now()
     if (playing && now - this.lastShadowAt < SHADOW_MIN_INTERVAL_MS) return
