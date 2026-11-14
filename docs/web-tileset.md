@@ -5,8 +5,9 @@ horizon maps (AERO-2) can be produced independently. The preview tileset built t
 `web/scripts/build_preview_tiles.py` from the 960 m grids in `data/grids` follows this contract; the full tileset
 only adds finer levels and the horizon maps.
 
-Files are static, served next to the web app under `tiles/` and kept out of git (`npm run tiles` rebuilds the
-preview in about 3 seconds).
+Files are static, served next to the web app under `tiles/` and kept out of git. `npm run tiles` rebuilds them in
+the pipeline environment (rasterio): about 100 s and 1.2 GB of memory with the LOLA 80 m DEM in
+`data/raw/dem_full/`, a few seconds without it (then only the 960 m levels are written).
 
 ## Projection and frame
 
@@ -39,7 +40,9 @@ of the extent (for example 20 m only around the catalogue sites).
 
 Lossless RGB PNG, 8 bits per channel, no gamma or colour-space chunk. The 16-bit value `v = R × 256 + G` maps to
 `height = min + v / 65535 × (max − min)` with the tile's own `[min, max]`. Quantisation is at most
-`(max − min) / 65535` (0.21 m in the preview; about 0.1 m for a tile with 6 km of relief).
+`(max − min) / 65535` (0.226 m measured in the build of 2026-11-14). Rows use the PNG standard's adaptive scanline
+filters (None, Sub, Up, Average, Paeth per row): still lossless, and the 60 m tiles are about 40 % smaller than
+unfiltered, because the low byte is near-random but its difference from the neighbouring sample is small.
 
 ## Layer tiles
 
@@ -60,10 +63,38 @@ Colour maps: `inferno` (light), `viridis` (Earth), `magma` (slope), `cividis` (e
 7. Validation written into `tileset.json`: tile height at each catalogue site with terrain against its
    `groundHeightM`; equality of shared edges between neighbours.
 
-Preview build of 2026-11-14: the disc south of 60° S (`discLatDeg`, `discRadiusM`; the square's corners repeat the
-nearest edge value and are never drawn), 85 height tiles in 4 levels (7 680, 3 840, 1 920, 960 m), 4 layers,
-30 MB; shared-edge mismatches 0; site heights within 52 m of the catalogue (960 m cell means against the finest
-DEM at each site).
+## Levels and coverage (build of 2026-11-14)
+
+The disc south of 60° S (`discLatDeg`, `discRadiusM`; the square's corners repeat the nearest edge value and are
+never drawn). Levels 0-3 come from the 960 m elevation grid in `data/grids` (`lola_elevation_60s`); levels 4-7
+from the LOLA 80 m south-pole DEM `LDEM_80S_80MPP_ADJ` (PGDA product 90, float32 metres above the 1737.4 km sphere,
+7 600 × 7 600 pixels, CRS `+proj=stere +lat_0=-90 +lat_ts=-90 +lon_0=0 +x_0=0 +y_0=0 +R=1737400 +units=m`,
+checked by the build). The DEM is a square of ±304 km around the pole: it reaches 80° S on the map's axes and about
+77.5° S in its corners. A fine level is written as the four children of every parent tile that holds DEM pixels;
+where a child reaches past the DEM, the 960 m level fills it.
+
+| z | Cell | Source | Tiles written | Size |
+| --- | --- | --- | --- | --- |
+| 0-3 | 7 680, 3 840, 1 920, 960 m | 960 m grid | 1, 4, 16, 64 (whole extent) | 9.3 MB |
+| 4 | 480 m | 80 m DEM, 6 × 6 pixel means | 64 (36 with DEM data) | 7.1 MB |
+| 5 | 240 m | 80 m DEM, 3 × 3 pixel means | 144 (100 with DEM data) | 15.0 MB |
+| 6 | 120 m | 80 m DEM, 2 × 2 pixel means | 400 | 41.5 MB |
+| 7 | 60 m | 80 m DEM pixels, bilinear | 1 600 | 161.4 MB |
+
+Sizes are the sum of file sizes (1 MB = 10^6 bytes). With the layers (9.5 MB), the overview (6.2 MB) and
+`tileset.json` (0.1 MB): 2 293 height tiles and 250.1 MB in 2 635 files, the top of the plan's 150-250 MB budget, so the 60 m level is kept. The 60 m level samples the
+80 m pixels and adds no information below 80 m; it exists so that the quadtree's 2 px refinement rule shows each
+DEM pixel at full size.
+
+Validation of this build (`validation` in `tileset.json`): shared-edge mismatches 0 in every level; quantisation
+at most 0.226 m. Site heights against the catalogue `groundHeightM` (which comes from the finest DEM at each
+site), read from the decoded 60 m tile: IM-1 −0.1 m, IM-2 −0.1, Mons Malapert +3.3, Shackleton +0.6,
+Haworth +3.6, Faustini −2.2, Amundsen +2.1, Nobile −0.3, de Gerlache −1.4, Cabeus +0.8, Shoemaker −2.7,
+Sverdrup +0.8. Chandrayaan-3 (69.4° S) is outside the 80 m DEM and differs by +3.5 m on the 960 m level.
+Before the 80 m levels the sites differed by up to 52 m.
+
+The CI job (`.github/workflows/web.yml`) has no copy of the DEM, so it builds and checks the 960 m levels only; a
+deploy that should show the 80 m detail needs the DEM (189 MB) downloaded before `npm run tiles`.
 
 ## Shadows and horizon maps
 
