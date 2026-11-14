@@ -59,6 +59,38 @@ KERNELS: dict[str, dict[str, str]] = {
     },
 }
 
+# Kernels for the ground-station (radio link) dataset. They are NOT used by the Sun/Earth ephemeris build,
+# so they live apart from KERNELS and write their own manifest. File names and sizes were read from the NAIF
+# directory listings on 2026-11-14. Dated names are used instead of the moving `earth_latest_high_prec.bpc`
+# so that a rebuild is reproducible (the manifest records the SHA-256).
+#   station SPK: position of the DSN antennas in the Earth-fixed frame ITRF93 (DSS-14/15/24/25/26 Goldstone,
+#                DSS-34/35/36/43/45 Canberra, DSS-54/55/63/65 Madrid; read from the kernel's comment file).
+#   topocentric FK: local east/north/up frame of every station.
+#   Earth PCKs: orientation of the Earth (rotation and polar motion). The high-precision file ends in 2027-02;
+#               the predict file continues to 2126 at lower accuracy.
+STATION_KERNELS: dict[str, dict[str, str]] = {
+    "station_spk": {
+        "file": "earthstns_itrf93_260814.bsp",
+        "url": f"{NAIF_BASE}/spk/stations/earthstns_itrf93_260814.bsp",
+        "description": "DSN station positions in ITRF93 (NAIF, 2026-08-14)",
+    },
+    "station_fk": {
+        "file": "earth_topo_260814.tf",
+        "url": f"{NAIF_BASE}/fk/stations/earth_topo_260814.tf",
+        "description": "Topocentric (east/north/up) frames of the DSN stations (NAIF, 2026-08-14)",
+    },
+    "earth_pck_high_precision": {
+        "file": "earth_000101_270208_261113.bpc",
+        "url": f"{NAIF_BASE}/pck/earth_000101_270208_261113.bpc",
+        "description": "High-precision Earth orientation, 2000-01-01 to 2027-02-08 (NAIF, 2026-11-13)",
+    },
+    "earth_pck_predict": {
+        "file": "earth_2026_260806_2126_predict.bpc",
+        "url": f"{NAIF_BASE}/pck/earth_2026_260806_2126_predict.bpc",
+        "description": "Predicted Earth orientation, 2026 to 2126, lower accuracy (NAIF, 2026-08-08)",
+    },
+}
+
 # NASA PGDA LOLA south pole products (Barker et al.). Cloud-Optimized GeoTIFFs that answer HTTP
 # range requests, so windows are read without downloading the multi-gigabyte files.
 PGDA_LOLA_BASE = "https://pgda.gsfc.nasa.gov/data/LOLA_20mpp"
