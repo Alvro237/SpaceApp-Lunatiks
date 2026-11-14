@@ -1,6 +1,6 @@
 /**
  * CORS proxy for the live terrain levels: a Cloudflare Worker (web/proxy/wrangler.toml) that forwards byte-range
- * reads of the LOLA DEMs to NASA PGDA and adds the CORS headers PGDA does not send, so the browser can read the
+ * reads of the LOLA DEMs and layer products to NASA PGDA and adds the CORS headers PGDA does not send, so the browser can read the
  * Cloud Optimized GeoTIFFs directly. It stores nothing of its own beyond the edge cache.
  *
  * Deliberately narrow, so it is not an open proxy:
@@ -13,7 +13,21 @@
  */
 
 export const UPSTREAM = 'https://pgda.gsfc.nasa.gov/data/'
-export const ALLOWED_FILES = new Set(['LOLA_20mpp/LDEM_80S_20MPP_ADJ.TIF', 'LOLA_20mpp/LDEM_83S_10MPP_ADJ.TIF'])
+/**
+ * Every PGDA file the web app reads: the live terrain DEMs (src/terrain/live/config.ts) and the live colour layers
+ * (src/terrain/live/layers.ts). pgdaProxy.test.ts checks that the app asks for nothing outside this list: the first
+ * deployment listed only the two DEMs, so every live layer tile got a 404 and the layers stayed at 960 m.
+ */
+export const ALLOWED_FILES = new Set([
+  'LOLA_20mpp/LDEM_80S_20MPP_ADJ.TIF',
+  'LOLA_20mpp/LDEM_83S_10MPP_ADJ.TIF',
+  'LOLA_20mpp/LDSM_83S_10MPP_ADJ.TIF',
+  'LOLA_20mpp/LDSM_80S_80MPP_ADJ.TIF',
+  'LOLA_20mpp/LDSM_60S_240MPP_ADJ.TIF',
+  'MoonIllumination/AVGVISIB_65S_240M_201608.TIF',
+  'MoonIllumination/AVGVISIB_65S_240M_201608_EARTH.TIF',
+  'MoonIllumination/LPSR_65S_240M_201608.TIF',
+])
 export const MAX_RANGE_BYTES = 16 * 1024 * 1024
 const EDGE_MAX_AGE_S = 30 * 24 * 3600
 
