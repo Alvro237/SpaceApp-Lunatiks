@@ -290,9 +290,15 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
     }
   }, [scene, markersSet])
 
-  // Places on the globe, just above the (exaggerated) relief; crater outlines as small circles on the sphere.
+  // Places on the globe, just above the (exaggerated) relief; crater outlines as small circles on the sphere. `exag`
+  // is the mesh's exaggeration to half a unit (the mesh's own is within ±0.25 of it, and the places are rebuilt only
+  // when the half unit changes), so places above the sphere use the most the mesh can have and places below it the
+  // least: they never sink under the surface between rebuilds.
   useEffect(() => {
-    const radius = (lat: number, lon: number) => MOON_R_KM + ((globeHeight(data, lat, lon) + 300) / 1000) * exag
+    const radius = (lat: number, lon: number) => {
+      const h = globeHeight(data, lat, lon)
+      return MOON_R_KM + ((h + 300) / 1000) * (h >= 0 ? exag + 0.25 : exag - 0.25)
+    }
     markersSet.set(sites, markerStyle, {
       anchor: (s) => new THREE.Vector3(...latLonToScene(s.lat, s.lon, radius(s.lat, s.lon))),
       ring: (s) => {
