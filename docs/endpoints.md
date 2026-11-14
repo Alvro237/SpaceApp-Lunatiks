@@ -33,7 +33,7 @@ Numbers given as defaults below are placeholders for the owner to set with a cit
 
 ## SW-1 · Site state at a date and time
 
-**Status:** to do. **Files:** `routers/state.py`, `schemas/state.py`, `tests/test_state.py`.
+**Status:** done in branch `seryitron-branchito`, validated (output format: `docs/sw1-output-format.md`). **Files:** `routers/state.py`, `schemas/state.py`, `tests/test_state.py`.
 
 - `GET /api/v1/sites/{site_id}/state?t=&mast_m=&panel=&comms_min_fraction=`
 - Response: Sun and Earth `az`, `el`, `visible_fraction`, `angular_radius_deg`, `distance_km`; `eclipse`;

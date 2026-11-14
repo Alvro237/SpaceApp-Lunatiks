@@ -5,13 +5,14 @@ If two routers need the same combination of data and logic, it belongs in this m
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 
 from .db.sites import Site
 from .db.store import DataStore
 from .logic.constraints import ConstraintContext
-from .logic.engine import (DEFAULT_PARAMS, AnalysisParams, Series, SiteModel, compute_metrics, evaluate,
-                           make_model, time_grid)
+from .logic.engine import (DEFAULT_PARAMS, AnalysisParams, Series, SiteModel, Transition, compute_metrics,
+                           evaluate, make_model, next_transition, time_grid)
 
 
 def to_ms(utc: datetime) -> float:
@@ -85,3 +86,32 @@ def constraint_context(store: DataStore, model: SiteModel, start_ms: float, dura
                              duration_h=duration_h, series=series, metrics=compute_metrics(series, params),
                              params=params, horizon_kind=model.horizon.kind,
                              lookups=point_lookups(store, model.lat, model.lon, site))
+
+
+# ---------------------------------------------------------------------------- SW-1: state at one instant
+
+TRANSITION_SEARCH_DAYS = 45.0   # engine.next_transition default; reported in the response
+
+
+@dataclass(frozen=True)
+class InstantState:
+    """One-sample series plus the next sunset/sunrise and Earthset/Earthrise from that instant."""
+    series: Series
+    sun_horizon_el: float
+    earth_horizon_el: float
+    next_sun: Transition | None
+    next_earth: Transition | None
+
+
+def state_at(store: DataStore, model: SiteModel, t_ms: float,
+             params: AnalysisParams = DEFAULT_PARAMS) -> InstantState:
+    """Sun and Earth over the model's horizon at ``t_ms``. Raises ``OutOfCoverage`` outside the tables."""
+    series = evaluate(store.ephemeris, model, t_ms, params)
+    h = model.horizon
+    return InstantState(
+        series=series,
+        sun_horizon_el=float(h.at(series.sun_az)[0]),
+        earth_horizon_el=float(h.at(series.earth_az)[0]),
+        next_sun=next_transition(store.ephemeris, model, t_ms, "sun", params, TRANSITION_SEARCH_DAYS),
+        next_earth=next_transition(store.ephemeris, model, t_ms, "earth", params, TRANSITION_SEARCH_DAYS),
+    )

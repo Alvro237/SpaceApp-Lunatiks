@@ -1,0 +1,108 @@
+"""GET /api/v1/sites/{site_id}/state: contract, errors and numerical validation (see tests/sw1_validation.py)."""
+from __future__ import annotations
+
+import copy
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.main import app
+from app.schemas.state import StateResponse
+from tests import sw1_validation as v
+
+client = TestClient(app)
+URL = "/api/v1/sites/{}/state"
+T = "2026-11-20T12:00:00Z"
+
+
+def get(site="im-2", **params):
+    return client.get(URL.format(site), params={"t": T, **params})
+
+
+def test_happy_path_matches_the_contract():
+    r = get()
+    assert r.status_code == 200
+    body = StateResponse.model_validate(r.json())
+    assert body.site_id == "im-2" and body.horizon_kind == "terrain" and body.t == T
+    assert body.panel == "vertical" and body.comms_min_fraction == 0.5 and body.mast_used_m == 2.0
+    assert v.state_invariants(r.json()) == []
+
+
+def test_smooth_sphere_site_says_so():
+    r = get("apollo-11", mast_m=3.0).json()
+    assert r["horizon_kind"] == "smooth_sphere"
+    assert r["mast_used_m"] == 3.0          # no stored masks: the requested mast is used as is
+    assert r["sun"]["horizon_el"] < 0       # geometric dip of the smooth sphere
+
+
+def test_mast_snaps_to_the_nearest_terrain_mask():
+    assert get(mast_m=3.0).json()["mast_used_m"] == 2.0
+    assert get(mast_m=8.0).json()["mast_used_m"] == 10.0
+
+
+def test_panel_models_change_only_the_power():
+    a, b, c = (get(panel=p).json() for p in ("tracking", "vertical", "horizontal"))
+    assert a["sun"] == b["sun"] == c["sun"]
+    assert a["power_w_m2"] == pytest.approx(a["irradiance_w_m2"] * a["sun"]["visible_fraction"])
+    assert a["power_w_m2"] >= b["power_w_m2"] >= c["power_w_m2"]   # Sun low over the pole
+
+
+def test_unknown_site_is_404():
+    assert get("atlantis").status_code == 404
+
+
+@pytest.mark.parametrize("params", [{"t": "not-a-date"}, {"mast_m": -1}, {"mast_m": 21}, {"panel": "diagonal"},
+                                    {"comms_min_fraction": 1.5}])
+def test_invalid_input_is_422(params):
+    assert get(**params).status_code == 422
+
+
+def test_missing_t_is_422():
+    assert client.get(URL.format("im-2")).status_code == 422
+
+
+def test_date_outside_the_tables_is_400():
+    r = get(t="2040-01-01T00:00:00Z")
+    assert r.status_code == 400 and "outside the ephemeris tables" in r.json()["detail"]
+
+
+def test_offset_times_are_converted_to_utc():
+    assert get(t="2026-11-20T13:00:00+01:00").json() == get().json()
+
+
+def test_matches_jpl_horizons_through_http():
+    rows = v.horizons_comparisons(client)
+    assert len(rows) >= 30, "the fixture case for IM-1 did not run"
+    worst = max(r["error_deg"] for r in rows)
+    assert worst < v.HORIZONS_TOL_DEG, f"worst {worst:.6f} deg"
+
+
+def test_invariants_on_every_site_date_and_panel():
+    assert v.sweep_invariants(client) == []
+
+
+@pytest.mark.parametrize("site,body", [("im-2", "sun"), ("im-2", "earth"), ("apollo-11", "sun")])
+def test_next_transition_flips_the_state(site, body):
+    assert get(site).json()[f"next_{body}_transition"] is not None
+    assert v.transition_flips(client, URL.format(site), T, body) == []
+
+
+def test_earth_never_sets_near_the_sub_earth_point():
+    """Apollo 11 (0.67 N, 23.5 E, near side): libration moves the Earth by ~8 deg around ~66 deg elevation,
+    so it never sets and the transition is null rather than invented."""
+    r = get("apollo-11").json()
+    assert r["earth"]["visible"] and r["earth"]["el"] > 50
+    assert r["next_earth_transition"] is None
+
+
+def test_the_validator_catches_wrong_numbers():
+    """Guard against a validator that always passes."""
+    good = get().json()
+    for path, value in ((("power_w_m2",), 999.0), (("sun", "angular_radius_deg"), 0.5),
+                        (("irradiance_w_m2",), 1300.0), (("earth", "visible"), False)):
+        bad = copy.deepcopy(good)
+        target = bad
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = value
+        assert v.state_invariants(bad), f"tampered {path} not detected"
