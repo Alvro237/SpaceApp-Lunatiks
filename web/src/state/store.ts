@@ -17,6 +17,19 @@ export type LayerId = 'none' | 'elevation' | 'slope' | 'sun_illumination' | 'ear
 export type Lighting = 'sun' | 'relief'
 
 export const MASTS_M = [0, 2, 5, 10] as const
+
+/** How places are drawn on the map and globe (three mock-ups to choose from). */
+export type MarkerStyle = 'pin' | 'crater' | 'cross'
+
+/** Site screening by the browser engine over the analysis window; null = not used. */
+export interface Screen {
+  minSunPct: number | null
+  minEarthPct: number | null
+  maxSlopeDeg: number | null
+}
+
+export const NO_SCREEN: Screen = { minSunPct: null, minEarthPct: null, maxSlopeDeg: null }
+export const screenActive = (s: Screen) => s.minSunPct !== null || s.minEarthPct !== null || s.maxSlopeDeg !== null
 export const MAX_COMPARE = 4
 
 
@@ -41,7 +54,15 @@ export interface Scene {
   compare: Selection[]
 }
 
-export interface AppState extends Scene {
+/** View preferences that are not part of a shared scenario. */
+export interface Prefs {
+  markerStyle: MarkerStyle
+  /** Text typed in the site search; the map shows the sites that match it. */
+  siteQuery: string
+  screen: Screen
+}
+
+export interface AppState extends Scene, Prefs {
   /** While on, every place the user picks is also added to the comparison. */
   compareMode: boolean
   /** Where the map should open when entered from the globe (a navigation target, not a selection). */
@@ -51,7 +72,7 @@ export interface AppState extends Scene {
   speed: SpeedId
   /** Map viewport request: bumped when the user picks a place so the camera flies there. */
   focusSeq: number
-  set: (patch: Partial<Scene>) => void
+  set: (patch: Partial<Scene & Prefs>) => void
   select: (s: Selection) => void
   setTime: (tMs: number) => void
   setStart: (startMs: number) => void
@@ -96,6 +117,9 @@ export const useApp = create<AppState>()((set, get) => ({
   speed: '6h',
   focusSeq: 0,
   compareMode: false,
+  markerStyle: 'pin',
+  siteQuery: '',
+  screen: NO_SCREEN,
   mapEntry: null,
   enterMap: (lat, lon) =>
     set((s) => ({

@@ -45,6 +45,7 @@ the dev proxy elsewhere; in production set `VITE_API_URL` to the API's public UR
 | `src/app` | Router (hash, for static hosting), header, the navigator screen |
 | `src/state` | Zustand store (mode, view, instant, layers, place, comparison) and the shareable URL (`?s=`) |
 | `src/api` | Client generated from `/openapi.json` (`schema.gen.ts`), hand-typed pending endpoints, query hooks |
+| `src/map` | Places on the map and globe: which ones (search and screening filters), drawn in WebGL as pins, crater outlines (IAU diameter) or crosses |
 | `src/globe` | The whole Moon: orbit controller, globe shaders, entry into the polar map |
 | `src/terrain` | Engine: tileset, quadtree LOD, decode worker, GPU cache, shaders, shadow pass, camera, map |
 | `src/time` | Browser engine (ephemeris, horizon, disc fractions), playback clock, static data loaders |

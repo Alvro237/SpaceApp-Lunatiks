@@ -33,6 +33,7 @@ export function LayersControl({ tileset, exaggeration, onExaggeration, craterErr
   const layer = useApp((s) => s.layer)
   const lighting = useApp((s) => s.lighting)
   const craters = useApp((s) => s.craters)
+  const markerStyle = useApp((s) => s.markerStyle)
   const set = useApp((s) => s.set)
   const options: { id: LayerId; name: string }[] = [
     { id: 'none', name: 'Relief only' },
@@ -65,6 +66,20 @@ export function LayersControl({ tileset, exaggeration, onExaggeration, craterErr
             {options.map((o) => (
               <label key={o.id}>
                 <input type="radio" name={`${id}-layer`} checked={layer === o.id} onChange={() => set({ layer: o.id })} /> {o.name}
+              </label>
+            ))}
+          </fieldset>
+          <fieldset>
+            <legend>Places</legend>
+            {(
+              [
+                ['pin', 'Pins'],
+                ['crater', 'Crater outlines (real diameter)'],
+                ['cross', 'Crosses'],
+              ] as const
+            ).map(([k, label]) => (
+              <label key={k}>
+                <input type="radio" name={`${id}-marker`} checked={markerStyle === k} onChange={() => set({ markerStyle: k })} /> {label}
               </label>
             ))}
           </fieldset>
