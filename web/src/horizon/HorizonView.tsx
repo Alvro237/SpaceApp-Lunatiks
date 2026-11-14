@@ -14,6 +14,7 @@
  * Sun and the Earth do not move (they are far away). The last frame is the exact view. Skipped with reduced motion.
  */
 import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { useHorizonPlanes } from '../api/hooks'
 import { useNow } from '../panels/useNow'
 import { useInsets } from '../state/layout'
 import { usePanels } from '../state/panels'
@@ -22,6 +23,7 @@ import { useApp } from '../state/store'
 import { IconBack, IconMinus, IconPlus } from '../ui/icons'
 import { ToolPortal } from '../ui/ToolSlot'
 import { drawHorizon } from './draw'
+import { planesFromApi } from './terrain2d'
 import { cameraFor, compass16, wrap180 } from './project'
 import { MOON_R_KM } from '../globe/orbit'
 import { useEffectiveCamera } from './useEffectiveCamera'
@@ -45,7 +47,13 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
   const cam = useEffectiveCamera()
   // read once: where the map camera was when the view opened
   const [from] = useState(() => DESCENT_FROM[useApp.getState().scale === 'globe' ? 'globe' : 'map'])
-  const { look, zoom, setMode } = useHorizonCam.getState()
+  const { look, zoom, setMode, setStyle } = useHorizonCam.getState()
+  const style = useHorizonCam((s) => s.style)
+  const selection = useApp((s) => s.selection)
+  const mastM = useApp((s) => s.mastM)
+  // layers of the landscape from the API (visible crests near to far); until they arrive, the skyline layer alone
+  const apiPlanes = useHorizonPlanes(selection, mastM)
+  const planes = useMemo(() => planesFromApi(apiPlanes), [apiPlanes])
   const wrap = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const drag = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null)
@@ -119,8 +127,11 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
       earthTrack: tracks.earth,
       free,
       showLabels: arrival >= 1,
+      style,
+      planes,
+      planeShape: arrival < 1 ? (el) => dip * (1 - k) + el * k : undefined,
     })
-  }, [camera, view, info, size, tracks, free, arrival])
+  }, [camera, view, info, size, tracks, free, arrival, style, planes])
 
   const turn = (dYaw: number, dPitch: number) => look(cam.yaw + dYaw, cam.pitch + dPitch)
 
@@ -164,7 +175,8 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
     view && info
       ? `Horizon view from ${info.name}, facing ${compass16(cam.yaw)} (${cam.yaw.toFixed(0)}°) at ${cam.pitch.toFixed(1)}° up, field of view ${cam.fov.toFixed(0)}°. ` +
         `Sun at azimuth ${view.sun.az.toFixed(0)}°, elevation ${view.sun.el.toFixed(1)}°, ${state(view.sun.fraction)}, ${describe(view.sun.az, cam)}. ` +
-        `Earth at azimuth ${view.earth.az.toFixed(0)}°, elevation ${view.earth.el.toFixed(1)}°, ${state(view.earth.fraction)}, ${describe(view.earth.az, cam)}.`
+        `Earth at azimuth ${view.earth.az.toFixed(0)}°, elevation ${view.earth.el.toFixed(1)}°, ${state(view.earth.fraction)}, ${describe(view.earth.az, cam)}. ` +
+        (view.sun.fraction > 0 ? `The ground is lit from the ${compass16(view.sun.az)}.` : 'The ground is in shadow.')
       : 'Horizon view, loading'
 
   return (
@@ -198,6 +210,14 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
             </button>
             <button type="button" className="tool-btn" onClick={() => zoom(1.25)} aria-label="Zoom out" title="Zoom out (−)">
               <IconMinus />
+            </button>
+          </div>
+          <div className="tool-group" role="group" aria-label="Ground style">
+            <button type="button" className={`tool-btn${style === 'landscape' ? ' is-set' : ''}`} aria-pressed={style === 'landscape'} onClick={() => setStyle('landscape')} title="Lit ground at its real distances">
+              Landscape
+            </button>
+            <button type="button" className={`tool-btn${style === 'diagram' ? ' is-set' : ''}`} aria-pressed={style === 'diagram'} onClick={() => setStyle('diagram')} title="Plain skyline">
+              Diagram
             </button>
           </div>
           <button type="button" className="tool-btn" onClick={() => usePanels.getState().setSection(null)} aria-label="Back to the map" title="Back to the map (Esc)">

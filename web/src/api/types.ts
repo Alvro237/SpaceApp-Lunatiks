@@ -43,8 +43,18 @@ export type TerrainReference = S['TerrainReference']
 export type SiteState = S['StateResponse'] & { terrain_reference?: TerrainReference | null }
 /** GET /sites/{id}/series, or /points/series (same shape plus `terrain_reference`). */
 export type SiteSeries = S['SeriesResponse'] & { terrain_reference?: TerrainReference | null }
-/** GET /sites/{id}/horizon */
-export type SiteHorizon = S['HorizonResponse']
+/** One layer of the landscape: the visible crest at each azimuth of the response's `az` (null where it has none). */
+export interface HorizonPlane {
+  distance_km: (number | null)[]
+  elevation_deg: (number | null)[]
+}
+/** Layers of the landscape near to far, the skyline last, and the skyline's distance (docs/horizon-view-plan.md A1). */
+export interface HorizonPlanes {
+  planes?: HorizonPlane[] | null
+  skyline_distance_km?: (number | null)[] | null
+}
+/** GET /sites/{id}/horizon (the generated type predates the ridge planes). */
+export type SiteHorizon = S['HorizonResponse'] & HorizonPlanes
 
 /** Any time range; SW-1 ranges also carry duration_h and the two window flags. */
 export interface TimeRange {
@@ -298,7 +308,7 @@ export interface CraterList {
 }
 
 /** GET /api/v1/points/horizon: skyline of any point, ray-traced over the LOLA elevation grids where they cover it. */
-export interface PointHorizon {
+export interface PointHorizon extends HorizonPlanes {
   lat: number
   lon: number
   ground_m: number

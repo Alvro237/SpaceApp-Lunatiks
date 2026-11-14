@@ -21,6 +21,7 @@ import type {
   RadiationRequest,
   RadiationResponse,
   SiteDetail,
+  SiteHorizon,
   SiteList,
   SiteSeries,
   SiteState,
@@ -107,6 +108,8 @@ export const api = {
   siteState: (id: string, p: StateParams, signal?: AbortSignal) =>
     request<SiteState>('GET', `/api/v1/sites/${encodeURIComponent(id)}/state?${q({ ...p })}`, undefined, signal),
   // Manual coordinates ask for the skyline ray-traced over LOLA terrain, the same one the browser engine uses.
+  siteHorizon: (id: string, mast_m: number, signal?: AbortSignal) =>
+    request<SiteHorizon>('GET', `/api/v1/sites/${encodeURIComponent(id)}/horizon?${q({ mast_m })}`, undefined, signal),
   pointHorizon: (lat: number, lon: number, mast_m: number, signal?: AbortSignal) =>
     request<PointHorizon>('GET', `/api/v1/points/horizon?${q({ lat, lon, mast_m })}`, undefined, signal),
   pointState: (lat: number, lon: number, p: StateParams, signal?: AbortSignal) =>
