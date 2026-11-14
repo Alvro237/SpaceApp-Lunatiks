@@ -153,6 +153,8 @@ one) as tests with the source of each date in `docs/references.md`.
      Eb/N0, margin, achievable data rate. Every parameter has a unit and a source.
 - `logic/link.py` is pure: inputs are arrays and parameter dataclasses, outputs are arrays.
 
+MECH integration guide (requests, fields to show, conventions, errors): `docs/api-guide-mech.md`.
+
 ## MECH · Radiation (moved from AERO-2, team decision 2026-11-14)
 
 **Status:** done on `feat/mech-power`. **Files:** `logic/radiation.py`, `logic/constraints/radiation.py`,
@@ -177,7 +179,7 @@ one) as tests with the source of each date in `docs/references.md`.
 
 ## MECH · Power levels
 
-**Status:** in review (`feat/mech-power`). `site_id` or `lat`/`lon`. Every panel and battery parameter is a
+**Status:** done on `feat/mech-power`. `site_id` or `lat`/`lon`. Every panel and battery parameter is a
 required input (no cited default yet); `night_load_w` defaults to `load_w`. No educational/advanced switch in the
 API: the frontend chooses what to show. Max 20 000 samples. Eclipses: array power x (1 - obscuration), where
 obscuration is the fraction of the solar disc covered by the Earth (`logic/eclipse.py`); the engine's

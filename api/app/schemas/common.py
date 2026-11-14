@@ -44,7 +44,9 @@ class WindowResponse(BaseModel):
     site_id: str | None
     lat: float
     lon: float
-    horizon_kind: str = Field(description="terrain (LOLA mask) or smooth_sphere (no terrain: light and comms can only be shorter)")
+    horizon_kind: str = Field(description=(
+        "terrain (LOLA mask) or smooth_sphere (no terrain mask: an estimate, not a bound; real terrain shortens light "
+        "and comms in craters and lengthens them on peaks)"))
     mast_m_used: float = Field(description="Mast height of the horizon mask actually used, m")
     start: str
     duration_h: float
