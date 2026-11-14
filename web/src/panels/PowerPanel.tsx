@@ -6,7 +6,7 @@
  *      (horizon, window, panel). All but the dose come from the same engine as the map and timeline; the dose
  *      comes from POST /api/v1/radiation (MECH, LRO CRaTER).
  *   2. Result: what the power model answered, verdict first, when it has been computed for this scenario.
- *   3. Options: panel orientation, the model (Solar array = API level 2, Battery balance = level 3, Colony =
+ *   3. Options: the model (Solar array = API level 2, with the panel orientation inside it; Battery balance = level 3; Colony =
  *      level 4; docs/api-guide-mech.md, flat fields) and its inputs in collapsible panels that say how many of
  *      their fields are filled, then the radiation risk factor. No panel, battery, load or habitat value is
  *      pre-filled: none has a cited source yet; the example button fills the guide's / test suite's values and
@@ -35,10 +35,9 @@ import {
   IconPanel,
   IconRadiation,
   IconSliders,
-  IconThermo,
 } from '../ui/icons'
 import { ColonyResult } from './ColonyResult'
-import { ALL_FIELDS, ARRAY, BATTERY, COLONY_LOADS, EXAMPLE, EXAMPLE_COLONY, type FieldSpec, HABITAT, LOAD, REGOLITH, SYNODIC_MONTH_H } from './powerSpecs'
+import { ALL_FIELDS, ARRAY, BATTERY, COLONY_LOADS, EXAMPLE, EXAMPLE_COLONY, type FieldSpec, HABITAT, LOAD, SYNODIC_MONTH_H } from './powerSpecs'
 import { PanelSetting } from './Settings'
 import { useNow } from './useNow'
 
@@ -257,14 +256,6 @@ function Model() {
             air_pressure_pa: req('air_pressure_pa'),
             ...(f.metabolic_w_per_crew?.trim() ? { metabolic_w_per_crew: req('metabolic_w_per_crew') } : {}),
           },
-          regolith: {
-            albedo: req('reg_albedo'),
-            emissivity: req('reg_emissivity'),
-            conductivity_w_mk: req('reg_conductivity_w_mk'),
-            density_kg_m3: req('reg_density_kg_m3'),
-            heat_capacity_j_kgk: req('reg_heat_capacity_j_kgk'),
-            geothermal_flux_w_m2: req('reg_geothermal_flux_w_m2'),
-          },
         }
       }
       const body: PowerRequest = {
@@ -316,8 +307,9 @@ function Model() {
     </div>
   )
 
-  const groups: { key: string; title: string; icon: ReactNode; tone: string; fields: FieldSpec[]; extra?: ReactNode }[] = [
-    { key: 'array', title: 'Solar array', icon: <IconPanel size={16} />, tone: 'yellow', fields: ARRAY },
+  const groups: { key: string; title: string; icon: ReactNode; tone: string; fields: FieldSpec[]; lead?: ReactNode; extra?: ReactNode }[] = [
+    // panel shape (vertical, tracking, flat) lives inside the Solar array group, before its numbers
+    { key: 'array', title: 'Solar array', icon: <IconPanel size={16} />, tone: 'yellow', fields: ARRAY, lead: <PanelSetting /> },
     ...(model !== 'array' ? [{ key: 'battery', title: 'Battery', icon: <IconBattery size={16} />, tone: 'green', fields: BATTERY }] : []),
     ...(model === 'battery' ? [{ key: 'load', title: 'Load', icon: <IconBolt size={16} />, tone: 'orange', fields: LOAD }] : []),
     ...(model === 'colony'
@@ -337,7 +329,6 @@ function Model() {
             ),
           },
           { key: 'habitat', title: 'Habitat', icon: <IconHabitat size={16} />, tone: 'blue', fields: HABITAT },
-          { key: 'ground', title: 'Ground', icon: <IconThermo size={16} />, tone: 'gray', fields: REGOLITH },
         ]
       : []),
   ]
@@ -366,7 +357,6 @@ function Model() {
         </div>
 
         <div className="opt-top">
-          <PanelSetting />
           <div className="ios-list setting">
             <div className="ios-row stack">
               <div className="ios-row-top">
@@ -411,6 +401,7 @@ function Model() {
                     </span>
                   </summary>
                   <div className="opt-body">
+                    {g.lead}
                     {g.fields.map(input)}
                     {g.extra}
                   </div>
