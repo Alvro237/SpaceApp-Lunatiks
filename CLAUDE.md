@@ -149,6 +149,8 @@ work: merged, tested, called on a running server. Not before.
 | Endpoint | `POST /api/v1/power` | `routers/power.py`, `logic/power.py` | MECH | Levels 1-3 (Sun fraction, array W, battery SoC); every parameter an input, no unsourced defaults |
 | Endpoint | `POST /api/v1/sun` | `routers/sun.py`, `logic/sun.py` | MECH | Solar elevation, sunlight hours and ranges, next sunset/sunrise, eclipses |
 | Endpoint | `POST /api/v1/earth` | `routers/earth.py`, `logic/earth.py` | MECH | Earth visibility windows, longest blackout, next Earthset/rise, libration wander |
+| Endpoint | `POST /api/v1/radiation` | `routers/radiation.py`, `logic/radiation.py`, `db/radiation.py` | MECH | GCR dose from LRO CRaTER x open sky / 4π; climatology; mSv only with given factors |
+| Hard filter | `max_dose` | `logic/constraints/radiation.py` | MECH | Mission GCR dose in mGy(Si) at the point |
 
 Also in place and verified: the engine in `app/logic` (ephemeris, geometry, horizon, disc-visible fraction,
 series, metrics, time ranges, next sunset/Earthset; reproduces JPL Horizons to better than 0.01 degrees) and the

@@ -16,6 +16,9 @@ asks for this list; keep it current when something is added.
 | Apollo Lunar Surface Journal, Earth and Sun altitude/azimuth tables (E. Scotti) | Historical validation, 43 events | https://www.nasa.gov/wp-content/uploads/static/history/alsj/Scotti_AltAz.txt |
 | LROC featured images: IM-1 (1360), IM-2 (1401), Blue Ghost (1400), Chandrayaan-3 (1314), SLIM (1358) | Landing coordinates and reference elevations | https://www.lroc.asu.edu/images/ |
 | NASA GSFC Eclipse Web Site, total lunar eclipse of 2025-03-14 (F. Espenak) | Validation case for the eclipse detection at Blue Ghost 1 (`tests/test_sun.py`) | https://eclipse.gsfc.nasa.gov/LEplot/LEplot2001/LE2025Mar14T.pdf |
+| LRO CRaTER dosimeter daily dose rate, as measured and corrected for lunar shielding (CRaTER Legacy Data Products, University of New Hampshire) | Galactic-cosmic-ray dose for `/radiation` and `max_dose` (`data/radiation`) | https://crater-products.sr.unh.edu/data/inst/dosim/table_dosimdrate.php |
+| LRO CRaTER Level 2 archive, PDS PPI node | Longer record (2009-2026), not yet used | https://pds-ppi.igpp.ucla.edu/data/lro-crater/ |
+| NASA OCHMO, Radiation Protection technical brief (NASA-STD-3001) | Career effective dose limit 600 mSv | https://www.nasa.gov/wp-content/uploads/2023/03/radiation-protection-technical-brief-ochmo.pdf |
 | Moon Trek, QuickMap | Context and cross-checks while designing | https://trek.nasa.gov/moon/ , https://quickmap.lroc.asu.edu/ |
 | VIPER lunar operations, Artemis III candidate regions | Lessons on what real missions plan for | https://science.nasa.gov/mission/viper/lunar-operations/ , https://www.nasa.gov/news-release/nasa-identifies-candidate-regions-for-landing-next-americans-on-moon/ |
 

@@ -153,14 +153,20 @@ one) as tests with the source of each date in `docs/references.md`.
      Eb/N0, margin, achievable data rate. Every parameter has a unit and a source.
 - `logic/link.py` is pure: inputs are arrays and parameter dataclasses, outputs are arrays.
 
-## AERO-2 · Radiation
+## MECH · Radiation (moved from AERO-2, team decision 2026-11-14)
 
-**Status:** to do. **Files:** `logic/radiation.py`, `logic/constraints/radiation.py`.
+**Status:** done on `feat/mech-power`. **Files:** `logic/radiation.py`, `logic/constraints/radiation.py`,
+`db/radiation.py`, `routers/radiation.py`, `schemas/radiation.py`, `tests/test_radiation.py`,
+`pipeline/lunarnav/crater_dose.py`, `data/radiation/crater_dosimeter_daily.json`.
 
-- No dose dataset is loaded. Proposal to evaluate: an open-sky dose rate from a cited NASA source scaled by the
-  sky solid angle at the point (`ctx.lookups["sky_visibility_sr"]`, a flat plain sees 2π sr), integrated over
-  the mission duration; threshold `{ "max_dose": float, "unit": str }`.
-- If no defensible reference value is found, register the filter and return `basis="unavailable"`.
+- Data: LRO CRaTER dosimeter daily dose rate (2009-06-19 to 2013-04-30), free-space GCR equivalent, mGy(Si)/day.
+- `POST /api/v1/radiation`: surface GCR dose = free-space x (open sky / 4π), sky from PGDA 69 (south of 65° S) or
+  2π on a smooth sphere; mission dose as low / mean / high (5th, mean, 95th percentile daily rate);
+  `basis="climatology"` (mission dates are outside the record). Effective dose in mSv and the share of the
+  NASA-STD-3001 career limit (600 mSv) only when the caller gives `si_to_tissue_factor` and `quality_factor`
+  (no cited value yet). Largest SPE day of the record reported for context (2012-03-08, 84 mGy in orbit).
+- Hard filter `max_dose`: threshold `{ "max_mgy_si": float }`, GCR only.
+- Not modelled: albedo particles from the regolith (surface value is a lower bound), habitat shielding, SPE forecasts.
 
 ---
 

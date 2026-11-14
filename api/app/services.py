@@ -67,6 +67,7 @@ def point_lookups(store: DataStore, lat: float, lon: float, site: Site | None = 
         "permanent_shadow_fraction": g.sample("permanent_shadow_65s", lat, lon),
         "sky_visibility_sr": g.sample("sky_visibility_65s", lat, lon),
         "crater_density_per_km2": store.craters.density_per_km2(lat, lon) if store.craters.available else None,
+        "gcr_free_space_mgy_si_per_day": store.radiation.gcr_free_space_mean() if store.radiation else None,
     }
 
 

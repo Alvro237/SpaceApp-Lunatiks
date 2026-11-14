@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import config
 from .db.store import get_store
-from .routers import earth, meta, power, sites, sun
+from .routers import earth, meta, power, radiation, sites, sun
 
 
 @asynccontextmanager
@@ -38,6 +38,7 @@ def create_app() -> FastAPI:
     app.include_router(power.router, prefix=config.API_PREFIX)
     app.include_router(sun.router, prefix=config.API_PREFIX)
     app.include_router(earth.router, prefix=config.API_PREFIX)
+    app.include_router(radiation.router, prefix=config.API_PREFIX)
     return app
 
 
