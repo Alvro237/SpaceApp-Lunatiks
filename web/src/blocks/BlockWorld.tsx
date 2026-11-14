@@ -7,10 +7,10 @@
  */
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { useQuery } from '@tanstack/react-query'
-import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useMemo, useRef } from 'react'
+import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { loadGlobe } from '../globe/GlobeView'
-import { latLonToScene, meToScene } from '../globe/orbit'
+import { latLonToScene, meToScene, raySphere, sceneToLatLon } from '../globe/orbit'
 import type { BodyView } from '../panels/useNow'
 import { useNow } from '../panels/useNow'
 import { useInsets } from '../state/layout'
@@ -19,6 +19,7 @@ import { TileLoader } from '../terrain/loader'
 import { TILES_BASE, loadTileset } from '../terrain/TerrainView'
 import { type Tileset, polarXY } from '../terrain/tileset'
 import { useEphemeris, useMasks } from '../time/hooks'
+import { useHud } from './useStory'
 import { voxelBodyMaterial } from './voxelMaterial'
 import { type Blocks, GROUND_EXAGGERATION, type GroundBlocks, earthBlocks, groundBlocks, moonBlocks, sampleGround, skyVector, sunBlocks } from './voxels'
 
@@ -303,6 +304,20 @@ function EarthBall({ diameter, ballRef, sunDir }: { diameter: number; ballRef: {
 
 // --------------------------------------------------------------------------------------------- ground world
 
+/** True when a ball is drawn inside the part of the window the panels leave free. */
+function inFreeArea(obj: THREE.Object3D | null, camera: THREE.Camera, w: number, h: number, tmp: THREE.Vector3): boolean {
+  if (!obj?.visible) return false
+  obj.getWorldPosition(tmp).project(camera)
+  if (tmp.z > 1) return false
+  const x = ((tmp.x + 1) / 2) * w
+  const y = ((1 - tmp.y) / 2) * h
+  const ins = useInsets.getState()
+  if (!(x > ins.left && x < w - ins.right && y > ins.top && y < h - ins.bottom)) return false
+  // the story card floats over the map too
+  const card = typeof document === 'undefined' ? null : document.querySelector('.blk-story')?.getBoundingClientRect()
+  return !card || !(x > card.left && x < card.right && y > card.top && y < card.bottom)
+}
+
 function GroundScene({ blocks, sun, earth, cam }: { blocks: GroundBlocks; sun: BodyView | null; earth: BodyView | null; cam: BlockCam }) {
   const { camera, size } = useThree()
   const cubes = useCubes(blocks)
@@ -316,6 +331,8 @@ function GroundScene({ blocks, sun, earth, cam }: { blocks: GroundBlocks; sun: B
   const top = blocks.centreTop
   const target = useMemo(() => new THREE.Vector3(0, top, 0), [top])
   const instant = useRef(true)
+  const tmp = useMemo(() => new THREE.Vector3(), [])
+  useEffect(() => () => useHud.setState({ sunOnScreen: false, earthOnScreen: false }), [])
 
   useEffect(() => {
     const l = light.current
@@ -361,6 +378,13 @@ function GroundScene({ blocks, sun, earth, cam }: { blocks: GroundBlocks; sun: B
       const d = skyVector(earth.az, earth.el)
       earthBall.current.position.set(d[0] * SKY_DIST, top + d[1] * SKY_DIST, d[2] * SKY_DIST)
     }
+    // tell the story whether the Sun and the Earth are on screen (only when that changes)
+    const hud = {
+      sunOnScreen: inFreeArea(sunBall.current, camera, size.width, size.height, tmp),
+      earthOnScreen: inFreeArea(earthBall.current, camera, size.width, size.height, tmp),
+    }
+    const was = useHud.getState()
+    if (was.sunOnScreen !== hud.sunOnScreen || was.earthOnScreen !== hud.earthOnScreen) useHud.setState(hud)
   })
 
   return (
@@ -403,7 +427,9 @@ function Lander({ top }: { top: number }) {
 
 // ----------------------------------------------------------------------------------------------- whole Moon
 
-function MoonScene({ blocks, cam, site }: { blocks: Blocks & { radius: number }; cam: BlockCam; site: [number, number] | null }) {
+type Picker = (ndcX: number, ndcY: number) => [number, number] | null
+
+function MoonScene({ blocks, cam, site, pickRef }: { blocks: Blocks & { radius: number }; cam: BlockCam; site: [number, number] | null; pickRef: { current: Picker | null } }) {
   const { camera, size } = useThree()
   const cubes = useCubes(blocks, 'body')
   const eph = useEphemeris().data
@@ -413,6 +439,21 @@ function MoonScene({ blocks, cam, site }: { blocks: Blocks & { radius: number };
   const instant = useRef(true)
   const origin = useMemo(() => new THREE.Vector3(), [])
   useBuildIn(cubes, blocks, [0, -20, 0])
+
+  // a click on the Moon: the point where the view ray meets the sphere (relief ignored, a fraction of a degree)
+  useEffect(() => {
+    const ray = new THREE.Raycaster()
+    pickRef.current = (x, y) => {
+      ray.setFromCamera(new THREE.Vector2(x, y), camera)
+      const o = ray.ray.origin
+      const d = ray.ray.direction
+      const hit = raySphere([o.x, o.y, o.z], [d.x, d.y, d.z], blocks.radius)
+      return hit ? sceneToLatLon(hit) : null
+    }
+    return () => {
+      pickRef.current = null
+    }
+  }, [camera, pickRef, blocks.radius])
 
   // the chosen place: a column of gold cubes standing out of the surface
   const marker = useMemo(() => {
@@ -481,22 +522,53 @@ export function BlockWorld() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [groundKey],
   )
-  const moonCam = useMemo(() => new BlockCam(ll?.[1] ?? 0, -50, MOON_R * 4.2, { pitch: [-85, 85], dist: [MOON_R * 1.6, MOON_R * 9] }), [ll])
+  // the story can ask the ground camera to look from a given azimuth
+  useEffect(
+    () =>
+      useHud.subscribe((h, was) => {
+        if (h.lookSeq !== was.lookSeq) groundCam.yaw = groundCam.goal.yaw = h.lookFromAz
+      }),
+    [groundCam],
+  )
+  const [moonCam] = useState(() => new BlockCam(ll?.[1] ?? 0, -50, MOON_R * 4.2, { pitch: [-85, 85], dist: [MOON_R * 1.6, MOON_R * 9] }))
   const cam = showGround ? groundCam : moonCam
-  const drag = useRef<{ x: number; y: number } | null>(null)
+  const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null)
+  const pickRef = useRef<Picker | null>(null)
+  const clicked = useRef(false)
+  const [about, setAbout] = useState(false)
+
+  // a place picked in the panels turns the Moon toward it (a click on the Moon is already in view)
+  useEffect(() => {
+    if (!ll) return
+    if (clicked.current) clicked.current = false
+    else moonCam.goal.yaw = ll[1]
+  }, [ll, moonCam])
 
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if ((e.target as HTMLElement).closest('button, a')) return
-    drag.current = { x: e.clientX, y: e.clientY }
+    drag.current = { x: e.clientX, y: e.clientY, moved: false }
     e.currentTarget.setPointerCapture(e.pointerId)
   }
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
-    if (!drag.current) return
-    cam.drag(e.clientX - drag.current.x, e.clientY - drag.current.y)
-    drag.current = { x: e.clientX, y: e.clientY }
+    const d = drag.current
+    if (!d) return
+    const dx = e.clientX - d.x
+    const dy = e.clientY - d.y
+    if (Math.abs(dx) + Math.abs(dy) > 2) d.moved = true
+    cam.drag(dx, dy)
+    d.x = e.clientX
+    d.y = e.clientY
   }
-  const onPointerUp = () => {
+  const onPointerUp = (e: PointerEvent<HTMLDivElement>) => {
+    const d = drag.current
     drag.current = null
+    if (!d || d.moved || showGround || !pickRef.current) return
+    // a click (not a drag) on the Moon chooses that spot
+    const r = e.currentTarget.getBoundingClientRect()
+    const ll2 = pickRef.current(((e.clientX - r.left) / r.width) * 2 - 1, -(((e.clientY - r.top) / r.height) * 2 - 1))
+    if (!ll2) return
+    clicked.current = true
+    useApp.getState().select({ kind: 'point', lat: Math.round(ll2[0] * 1000) / 1000, lon: Math.round(ll2[1] * 1000) / 1000 })
   }
   const onWheel = (e: WheelEvent<HTMLDivElement>) => cam.zoom(Math.exp(e.deltaY * 0.0012))
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
@@ -554,12 +626,13 @@ export function BlockWorld() {
             {showGround && ground.blocks ? (
               <GroundScene blocks={ground.blocks} sun={now?.sun ?? null} earth={now?.earth ?? null} cam={groundCam} />
             ) : moon ? (
-              <MoonScene blocks={moon} cam={moonCam} site={ll} />
+              <MoonScene blocks={moon} cam={moonCam} site={ll} pickRef={pickRef} />
             ) : null}
           </Canvas>
         )}
         <p id="block-help" className="sr-only">
-          Arrow keys turn the view, plus and minus zoom. The panels say, in words, whether the Sun and the Earth can be seen from the chosen place.
+          Arrow keys turn the view, plus and minus zoom. On the whole Moon, a click chooses that spot. The panels say, in words, whether the Sun and the
+          Earth can be seen from the chosen place.
         </p>
       </div>
       <div className="map-controls block-controls" role="group" aria-label="Block world view">
@@ -584,12 +657,17 @@ export function BlockWorld() {
         <button type="button" onClick={() => cam.zoom(1 / 0.75)} aria-label="Zoom out">
           −
         </button>
+        <button type="button" aria-expanded={about} aria-controls="block-about" aria-label="What am I looking at?" onClick={() => setAbout(!about)}>
+          ?
+        </button>
+        {about && (
+          <p id="block-about" className="block-about">
+            {showGround
+              ? `Each cube is 960 m wide and ${960 / GROUND_EXAGGERATION} m tall: heights and sky angles are both stretched ×${GROUND_EXAGGERATION}, so the shadows fall as on the real ground. Heights: LOLA polar DEM (NASA PGDA). Sun and Earth: where the engine puts them, drawn larger than life.`
+              : `Global LOLA heights (NASA LRO), relief stretched ×${MOON_EXAGGERATION}, lit by the Sun at the chosen time. The gold column is your place; click anywhere to choose a spot of your own. Sun and Earth: real directions, not real distances.`}
+          </p>
+        )}
       </div>
-      <p className="globe-caption block-caption">
-        {showGround
-          ? `Each cube is 960 m wide and ${960 / GROUND_EXAGGERATION} m tall: heights and sky angles are stretched ×${GROUND_EXAGGERATION}, so the cubes' shadows fall as on the real ground. LOLA polar DEM (NASA PGDA).`
-          : `Global LOLA heights (NASA LRO), relief stretched ×${MOON_EXAGGERATION}, lit by the Sun at the chosen time. The gold column is your place.`}
-      </p>
     </>
   )
 }

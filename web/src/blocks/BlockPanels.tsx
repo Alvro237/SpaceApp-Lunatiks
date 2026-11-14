@@ -1,100 +1,138 @@
 /**
- * Block Moon's panels: three simple steps for learners (pick a place, look at the sky, the next days). Every
- * answer comes from the same engine and data as the planner's panels; "Show the real numbers" opens them.
+ * Block Moon's panels: places on the left, the sky now on the right, the next days along the bottom, and Pip's
+ * story over the map. Every answer comes from the same engine and data as the planner's panels; "Show the real
+ * numbers" opens them.
  */
-import { Link } from 'react-router-dom'
 import { useNow } from '../panels/useNow'
 import { sameSelection, useApp } from '../state/store'
-import { MS_PER_DAY, MS_PER_HOUR } from '../time/engine'
-import { hasComms, isSunlit } from '../time/engine'
+import { MS_PER_DAY, MS_PER_HOUR, hasComms, isSunlit } from '../time/engine'
+import { formatUtc } from '../time/clock'
 import { useMasks, useParams } from '../time/hooks'
 import type { StaticSite } from '../time/staticData'
+import { StoryCard } from './StoryCard'
 import { dayBlocks, simpleDuration } from './voxels'
 import './blocks.css'
 
-/** Places the ground view can show: catalogue sites south of 60° S. */
-function kindOf(s: StaticSite): 'mountain' | 'lander' | 'crater' {
+type Kind = 'mountain' | 'lander' | 'crater' | 'point'
+
+function kindOf(s: StaticSite): Kind {
   if (/^mons /i.test(s.name)) return 'mountain'
   if (s.group === 'Recent landers') return 'lander'
   return 'crater'
 }
 
-const ICONS = {
+const ICONS: Record<Kind, string> = {
   mountain: 'M3 2h2v1H3zM2 3h4v1H2zM1 4h6v3H1z',
   crater: 'M0 2h2v5H0zM6 2h2v5H6zM2 5h4v2H2z',
   lander: 'M2 2h4v3H2zM1 5h1v2H1zM6 5h1v2H6z',
+  point: 'M3 1h2v1H3zM2 2h4v2H2zM3 4h2v1H3zM3.5 5h1v2h-1z',
 }
-const KIND_TEXT = { mountain: 'A mountain', crater: 'A crater', lander: 'Where a lander went' }
 
-function PixelIcon({ path, color }: { path: string; color: string }) {
+function PixelIcon({ kind }: { kind: Kind }) {
+  const color = kind === 'lander' ? '#ffb547' : kind === 'point' ? '#7ee2a8' : '#b2b3b7'
   return (
-    <svg width="28" height="28" viewBox="0 0 8 8" aria-hidden="true" shapeRendering="crispEdges">
+    <svg width="24" height="24" viewBox="0 0 8 8" aria-hidden="true" shapeRendering="crispEdges">
       <rect width="8" height="8" fill="#0b0c0e" />
-      <path d={path} fill={color} />
+      <path d={ICONS[kind]} fill={color} />
     </svg>
   )
 }
 
-function PickPlace() {
+/** Short names for the tiles ("Shackleton" rather than "Shackleton crater"); the full name stays in the label. */
+const shortName = (name: string) =>
+  name
+    .replace(/ \(intended site\)$/, '')
+    .replace(/ crater$/, '')
+    .replace(/ \(Shiv Shakti\)$/, '')
+
+const fmtLat = (v: number) => `${Math.abs(v).toFixed(2)}° ${v < 0 ? 'S' : 'N'}`
+const fmtLon = (v: number) => `${Math.abs(v).toFixed(2)}° ${v < 0 ? 'W' : 'E'}`
+
+function Places() {
   const masks = useMasks().data
   const selection = useApp((s) => s.selection)
   const select = useApp((s) => s.select)
   const sites = masks?.doc.sites.filter((s) => s.lat <= -60) ?? []
+  const groups: { title: string; items: StaticSite[] }[] = [
+    { title: 'Landers', items: sites.filter((s) => kindOf(s) === 'lander') },
+    { title: 'Mountains and craters', items: sites.filter((s) => kindOf(s) !== 'lander') },
+  ]
   return (
-    <section className="float float-left blk-panel" aria-labelledby="blk-pick">
-      <h2 id="blk-pick" className="blk-h">
-        <span aria-hidden="true">1</span> Pick a place
+    <section className="float float-left blk-panel" aria-labelledby="blk-places">
+      <h2 id="blk-places" className="blk-h">
+        Places
       </h2>
-      <p className="blk-sub">Real places near the Moon's south pole.</p>
-      <div className="blk-places">
-        {sites.map((s) => {
-          const k = kindOf(s)
-          const on = sameSelection(selection, { kind: 'site', id: s.id })
-          return (
-            <button key={s.id} type="button" className="blk-place" aria-pressed={on} onClick={() => select({ kind: 'site', id: s.id })}>
-              <PixelIcon path={ICONS[k]} color={k === 'lander' ? '#ffb547' : '#b2b3b7'} />
-              <span>
-                <span className="blk-place-name">{s.name}</span>
-                <span className="blk-place-kind">{KIND_TEXT[k]}</span>
-              </span>
-            </button>
-          )
-        })}
-      </div>
-      <div className="blk-fact">
-        <p className="blk-fact-h">Why the south pole?</p>
-        <p>
-          Here the Sun never climbs high. It slides along the edge of the sky, so hilltops can stay sunny for days while some crater floors stay
-          in shadow.
-        </p>
+      <p className="blk-sub">Near the Moon’s south pole.</p>
+      {groups.map((g) => (
+        <div key={g.title} className="blk-group">
+          <h3>{g.title}</h3>
+          <div className="blk-tiles">
+            {g.items.map((s) => {
+              const on = sameSelection(selection, { kind: 'site', id: s.id })
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  className="blk-tile"
+                  aria-pressed={on}
+                  aria-label={s.name}
+                  title={s.name}
+                  onClick={() => select({ kind: 'site', id: s.id })}
+                >
+                  <PixelIcon kind={kindOf(s)} />
+                  <span>{shortName(s.name)}</span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+      <div className="blk-group">
+        <h3>Your own spot</h3>
+        {selection.kind === 'point' ? (
+          <div className="blk-tile blk-tile-wide" aria-current="true">
+            <PixelIcon kind="point" />
+            <span>
+              {fmtLat(selection.lat)}, {fmtLon(selection.lon)}
+            </span>
+          </div>
+        ) : (
+          <p className="blk-hint">Choose “Whole Moon” and click anywhere on it.</p>
+        )}
       </div>
     </section>
   )
 }
 
-function sunWhy(el: number, fraction: number): string {
-  if (fraction >= 1) return 'The whole Sun is above the hills.'
-  if (fraction > 0) return 'Only part of the Sun peeks over the hills.'
-  if (el > 0) return 'The Sun is a little above flat ground, but the hills around are taller, so they hide it.'
+function sunWhy(el: number, fraction: number, terrain: boolean): string {
+  if (fraction >= 1) return terrain ? 'The whole Sun is above the hills.' : 'The whole Sun is above the horizon.'
+  if (fraction > 0) return terrain ? 'Only part of the Sun peeks over the hills.' : 'Only part of the Sun is above the horizon.'
+  if (el > 0 && terrain) return 'The Sun is a little above flat ground, but the hills around are taller, so they hide it.'
   return 'The Sun is below the horizon.'
 }
 
-function earthWhy(el: number, contact: boolean): string {
-  if (contact) return 'Earth is above the hills, so a lander here could radio home directly.'
-  if (el > 0) return 'Earth is up there, but behind the hills. Radio goes in straight lines, so the lander has to wait.'
-  return 'Earth is below the horizon. No direct radio call until it comes back.'
+function earthWhy(el: number, contact: boolean, terrain: boolean): string {
+  if (contact) return 'Earth is in the sky, so a lander here could radio home directly.'
+  if (el > 0 && terrain) return 'Earth is up there, but behind the hills. Radio goes in straight lines, so a lander has to wait.'
+  return 'Earth is below the horizon: no direct radio call until it comes back.'
 }
 
-function LookAtSky() {
+function Sky() {
   const { view, info, outOfRange } = useNow()
   const params = useParams()
   const deg = (v: number) => `${v.toFixed(2)}°`
+  const terrain = view?.horizonKind === 'terrain'
   return (
     <section className="float float-right blk-panel" aria-labelledby="blk-sky">
       <h2 id="blk-sky" className="blk-h">
-        <span aria-hidden="true">2</span> Look at the sky
+        The sky now
       </h2>
-      {info && <p className="blk-sub">At {info.name}</p>}
+      {info && (
+        <p className="blk-sub">
+          {info.name}
+          {view && <span className="blk-time"> · {formatUtc(view.tMs)}</span>}
+        </p>
+      )}
       {outOfRange && (
         <p className="error" role="alert">
           This date is outside the Sun and Earth tables (2025–2035).
@@ -122,11 +160,17 @@ function LookAtSky() {
               )}
             </div>
           </div>
-          <p className="blk-why">{sunWhy(view.sun.el, view.sun.fraction)}</p>
-          <p className="blk-why">{earthWhy(view.earth.el, view.earth.fraction >= params.commsMinFraction)}</p>
-          <p className="blk-tip">
-            In the world of cubes, the <span className="blk-sun-t">gold cube</span> is the Sun and the <span className="blk-earth-t">blue cube</span> is the
-            Earth. Choose “Stand here” and turn the view to find them.
+          <p className="blk-why">{sunWhy(view.sun.el, view.sun.fraction, terrain)}</p>
+          <p className="blk-why">{earthWhy(view.earth.el, view.earth.fraction >= params.commsMinFraction, terrain)}</p>
+          {!terrain && (
+            <p className="blk-note">
+              No measured skyline for this spot: these answers treat the Moon as smooth. Real hills, like the cubes you see, could hide the Sun or
+              the Earth, or lift you above the shadows.
+            </p>
+          )}
+          <p className="blk-legend-sky">
+            <span className="blk-dot blk-dot-sun" aria-hidden="true" /> Gold ball: the Sun
+            <span className="blk-dot blk-dot-earth" aria-hidden="true" /> Blue ball: the Earth
           </p>
           <details className="blk-real">
             <summary>Show the real numbers</summary>
@@ -141,20 +185,18 @@ function LookAtSky() {
               </dd>
               <dt>Horizon</dt>
               <dd>
-                {view.horizonKind === 'terrain' ? `LOLA terrain horizon, ${view.mastUsedM} m mast` : `smooth sphere (no terrain mask here), ${view.mastUsedM} m mast`} ·{' '}
+                {terrain ? `LOLA terrain horizon, ${view.mastUsedM} m mast` : `smooth sphere (no terrain mask here), ${view.mastUsedM} m mast`} ·{' '}
                 {view.source === 'api' ? 'API' : 'browser engine'}
               </dd>
             </dl>
           </details>
         </>
       )}
-      <Link className="blk-quest" to="/learn">
-        <span className="blk-quest-h">Try a challenge</span>
-        <span>Which place gets more sunlight? Find out with the tool.</span>
-      </Link>
     </section>
   )
 }
+
+const fmtDay = (ms: number) => new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
 
 function NextDays() {
   const { series } = useNow()
@@ -171,14 +213,14 @@ function NextDays() {
   const sunDays = blocks.filter((b) => b.sun > 0).length
   const earthDays = blocks.filter((b) => b.earth > 0).length
   const label = (b: (typeof blocks)[number], d: number) =>
-    `Day ${d + 1}: Sun ${Number.isNaN(b.sun) ? 'unknown' : `${Math.round(b.sun * 100)} %`} of the day, Earth ${Number.isNaN(b.earth) ? 'unknown' : `${Math.round(b.earth * 100)} %`}`
+    `${fmtDay(b.startMs)}: Sun ${Number.isNaN(b.sun) ? 'unknown' : `${Math.round(b.sun * 100)} %`} of the day, Earth ${Number.isNaN(b.earth) ? 'unknown' : `${Math.round(b.earth * 100)} %`}${d === today ? ' (now)' : ''}`
 
   return (
     <div className="float float-bottom blk-bottom">
       <section className="blk-panel" aria-labelledby="blk-days">
         <div className="blk-days-head">
           <h2 id="blk-days" className="blk-h">
-            <span aria-hidden="true">3</span> The next {days} days
+            The next {days} days
           </h2>
           <div className="blk-play">
             <button type="button" onClick={() => setTime(tMs - MS_PER_DAY)} aria-label="One day back">
@@ -211,10 +253,16 @@ function NextDays() {
                 </div>
               </div>
             ))}
+            <div className="blk-row blk-dates" aria-hidden="true">
+              <span className="blk-row-name" />
+              <span>{fmtDay(startMs)}</span>
+              <span>{fmtDay(startMs + (days - 1) * MS_PER_DAY)}</span>
+            </div>
           </div>
         )}
         <p className="blk-legend">
-          One block = one Earth day (full colour: all day, light: part of the day). Sun seen on {sunDays} of {days} days, Earth on {earthDays}.
+          One block = one Earth day: full colour all day, striped part of the day, grey none. Click a block to jump there. Sun on {sunDays} of{' '}
+          {days} days, Earth on {earthDays}.
         </p>
       </section>
     </div>
@@ -224,8 +272,9 @@ function NextDays() {
 export function BlockPanels() {
   return (
     <>
-      <PickPlace />
-      <LookAtSky />
+      <Places />
+      <Sky />
+      <StoryCard />
       <NextDays />
     </>
   )
