@@ -1,17 +1,19 @@
 /**
- * Power and environment for the chosen place and window, in two layers so the planner is not flooded:
+ * Power and environment for the chosen place and window, in three bands from fixed data to options:
  *
- *   At a glance (always shown, no input needed): power reaching 1 m² of panel, solar elevation, sunlight
- *   duration, Earth visibility windows and the cosmic-ray dose. All but the dose come from the same engine as the
- *   map and timeline; the dose comes from POST /api/v1/radiation (MECH, LRO CRaTER).
+ *   1. At a glance (always there, no input): power reaching 1 m² of panel, solar elevation, sunlight duration,
+ *      Earth visibility windows and the cosmic-ray dose, as a strip of stat cards with the context they assume
+ *      (horizon, window, panel). All but the dose come from the same engine as the map and timeline; the dose
+ *      comes from POST /api/v1/radiation (MECH, LRO CRaTER).
+ *   2. Result: what the power model answered, verdict first, when it has been computed for this scenario.
+ *   3. Options: panel orientation, the model (Solar array = API level 2, Battery balance = level 3, Colony =
+ *      level 4; docs/api-guide-mech.md, flat fields) and its inputs in collapsible panels that say how many of
+ *      their fields are filled, then the radiation risk factor. No panel, battery, load or habitat value is
+ *      pre-filled: none has a cited source yet; the example button fills the guide's / test suite's values and
+ *      says so. The battery and inside-temperature curves are drawn in the timeline at the bottom.
  *
- *   Advanced options: the MECH /power model (docs/api-guide-mech.md, flat fields), offered as three concepts
- *   instead of numbered levels: "Solar array" (API level 2: area, efficiency, losses -> watts and energy),
- *   "Battery balance" (level 3: the array feeding a battery and a load -> does it last the longest night) and
- *   "Colony" (level 4: a heated habitat with essential and optional loads -> survives on its own, drains or
- *   fails, and the size it would need). The battery and inside-temperature curves are drawn in the timeline at
- *   the bottom. No panel, battery, load or habitat value is pre-filled: none has a cited source yet. The example
- *   button fills the guide's / test suite's values and says so.
+ * Headings give the bands a structure for screen readers; every panel is a native <details>; every explanation
+ * sits behind an ⓘ button.
  */
 import { type FormEvent, type ReactNode, useId, useMemo, useState } from 'react'
 import { isMissing } from '../api/client'
@@ -23,7 +25,18 @@ import { formatDuration, formatUtc, isoMinute } from '../time/clock'
 import { useParams } from '../time/hooks'
 import { ApiStatus, SourceTag } from '../ui/ApiStatus'
 import { Tip } from '../ui/Tip'
-import { IconAntenna, IconBattery, IconBolt, IconClock, IconElevation, IconHabitat, IconPanel, IconRadiation, IconSliders, IconThermo } from '../ui/icons'
+import {
+  IconAntenna,
+  IconBattery,
+  IconBolt,
+  IconClock,
+  IconElevation,
+  IconHabitat,
+  IconPanel,
+  IconRadiation,
+  IconSliders,
+  IconThermo,
+} from '../ui/icons'
 import { ColonyResult } from './ColonyResult'
 import { ALL_FIELDS, ARRAY, BATTERY, COLONY_LOADS, EXAMPLE, EXAMPLE_COLONY, type FieldSpec, HABITAT, LOAD, REGOLITH, SYNODIC_MONTH_H } from './powerSpecs'
 import { PanelSetting } from './Settings'
@@ -33,21 +46,30 @@ const K = 273.15
 const fmt = (v: number | null | undefined, digits = 0, unit = '') => (v === null || v === undefined ? '—' : `${v.toFixed(digits)}${unit}`)
 const pct = (v: number | null | undefined) => (v === null || v === undefined ? '—' : `${(v * 100).toFixed(0)} %`)
 const stepFor = (durationH: number) => Math.max(60, Math.ceil((durationH * 60) / 19_000))
+const PANEL_WORD: Record<string, string> = { vertical: 'Vertical panel', tracking: 'Sun-tracking panel', horizontal: 'Flat panel' }
+
+const MODELS: { id: PowerModel; level: 2 | 3 | 4; title: string; icon: (s: number) => ReactNode }[] = [
+  { id: 'array', level: 2, title: 'Solar array', icon: (s) => <IconPanel size={s} /> },
+  { id: 'battery', level: 3, title: 'Battery', icon: (s) => <IconBattery size={s} /> },
+  { id: 'colony', level: 4, title: 'Colony', icon: (s) => <IconHabitat size={s} /> },
+]
 
 export function PowerPanel() {
   return (
-    <div className="panel-section power">
-      <Essentials />
-      <Advanced />
+    <div className="panel-section power2">
+      <Summary />
+      <Model />
     </div>
   )
 }
 
-/* ------------------------------------------------------------------ at a glance */
+/* ------------------------------------------------------------------ 1. at a glance */
 
-function Essentials() {
+function Summary() {
+  const id = useId()
   const { series: local, view } = useNow()
   const durationH = useApp((s) => s.durationH)
+  const params = useParams()
 
   if (!local || !view) return <p className="muted">Loading…</p>
   const m = local.metrics
@@ -55,57 +77,65 @@ function Essentials() {
   const windows = local.comms.length
 
   return (
-    <div className="power-col">
-      <PanelSetting />
-      <h3 className="sub-head">
-        At a glance
+    <section className="band" aria-labelledby={`${id}-h`}>
+      <div className="band-head">
+        <h3 id={`${id}-h`} className="band-title">
+          At a glance
+        </h3>
         <Tip label="the summary">
           Computed with the browser engine over the {view.horizonKind === 'terrain' ? 'LOLA terrain' : 'smooth-sphere'} horizon for the whole window. The
           radiation dose comes from the API. The time ranges are in the timeline below.
         </Tip>
-      </h3>
-      <ul className="metric-grid">
-        <Metric
-          icon={<IconBolt />}
-          tone="sun"
-          label="Power per m²"
-          value={`${m.meanPowerWm2.toFixed(0)} W/m²`}
-          sub={`Mean · now ${view.power.toFixed(0)} W/m²`}
-        />
-        <Metric
-          icon={<IconElevation />}
+        <ul className="context-chips" aria-label="Assumed">
+          <li>{view.horizonKind === 'terrain' ? 'Real terrain' : 'Estimated horizon'}</li>
+          <li>{Math.round(durationH / 24)} days</li>
+          <li>{PANEL_WORD[params.panel] ?? params.panel}</li>
+        </ul>
+      </div>
+      <ul className="stat-strip">
+        <Stat icon={<IconBolt size={18} />} tone="sun" label="Power per m²" value={`${m.meanPowerWm2.toFixed(0)}`} unit="W/m²" sub={`mean · now ${view.power.toFixed(0)}`} />
+        <Stat
+          icon={<IconElevation size={18} />}
           tone="sun"
           label="Solar elevation"
-          value={`${view.sun.el.toFixed(1)}°`}
-          sub={`Now · range ${m.minSunElDeg.toFixed(1)}° to ${m.maxSunElDeg.toFixed(1)}°`}
+          value={view.sun.el.toFixed(1)}
+          unit="°"
+          sub={`now · ${m.minSunElDeg.toFixed(1)}° to ${m.maxSunElDeg.toFixed(1)}°`}
         />
-        <Metric
-          icon={<IconClock />}
+        <Stat
+          icon={<IconClock size={18} />}
           tone="sun"
           label="Sunlight duration"
-          value={`${sunlitH.toFixed(0)} h`}
+          value={sunlitH.toFixed(0)}
+          unit="h"
           sub={`${m.sunlightPct.toFixed(0)} % · longest night ${m.longestDarkH.toFixed(0)} h`}
         />
-        <Metric
-          icon={<IconAntenna />}
+        <Stat
+          icon={<IconAntenna size={18} />}
           tone="earth"
           label="Earth visibility windows"
-          value={windows === 0 ? 'None' : `${windows} ${windows === 1 ? 'window' : 'windows'}`}
+          value={String(windows)}
+          unit={windows === 1 ? 'window' : 'windows'}
           sub={`${m.commsPct.toFixed(0)} % in contact${view.nextEarth ? ` · ${view.nextEarth.kind === 'rise' ? 'rise' : 'set'} in ${formatDuration(view.nextEarth.inMs)}` : ''}`}
         />
-        <RadiationMetric />
+        <RadiationStat />
       </ul>
-    </div>
+    </section>
   )
 }
 
-function Metric({ icon, tone, label, value, sub }: { icon?: ReactNode; tone: 'sun' | 'earth' | 'neutral'; label: string; value: string; sub: ReactNode }) {
+function Stat({ icon, tone, label, value, unit, sub }: { icon?: ReactNode; tone: 'sun' | 'earth' | 'neutral'; label: string; value: string; unit?: string; sub: ReactNode }) {
   return (
-    <li className={`metric metric-${tone}`}>
-      {icon && <span className="metric-icon">{icon}</span>}
-      <span className="metric-label">{label}</span>
-      <span className="metric-value">{value}</span>
-      <span className="metric-sub">{sub}</span>
+    <li className={`stat stat-${tone}`}>
+      <span className="stat-top">
+        {icon && <span className="stat-icon">{icon}</span>}
+        <span className="stat-label">{label}</span>
+      </span>
+      <span className="stat-value">
+        {value}
+        {unit && <span className="stat-unit"> {unit}</span>}
+      </span>
+      <span className="stat-sub">{sub}</span>
     </li>
   )
 }
@@ -129,28 +159,28 @@ function useRadiationRequest(): RadiationRequest {
   }, [selection, startMs, durationH, mastM, qf])
 }
 
-function RadiationMetric() {
+function RadiationStat() {
   const rad = useRadiation(useRadiationRequest())
   const r = rad.data
   let value = '…'
-  let sub: ReactNode = 'Asking the API…'
+  let unit: string | undefined
+  let sub: ReactNode = 'asking the API…'
   if (rad.error) {
-    value = 'Unavailable'
-    sub = isMissing(rad.error) ? 'Endpoint not deployed' : 'No answer from the API'
+    value = '—'
+    sub = isMissing(rad.error) ? 'endpoint not deployed' : 'no answer from the API'
   } else if (r) {
     const d = r.mission_gcr_dose_mgy_si
-    value = d ? `${d.mean.toFixed(1)} mGy` : '—'
-    sub = d ? `Cosmic rays · ${d.low.toFixed(1)}–${d.high.toFixed(1)}` : 'No sky data here'
+    value = d ? d.mean.toFixed(1) : '—'
+    unit = d ? 'mGy' : undefined
+    sub = d ? `cosmic rays · ${d.low.toFixed(1)}–${d.high.toFixed(1)}` : 'no sky data here'
     if (r.risk) sub = `${sub} · risk ${r.risk.index.toFixed(1)}/10`
   }
-  return <Metric icon={<IconRadiation />} tone="neutral" label="Radiation" value={value} sub={sub} />
+  return <Stat icon={<IconRadiation size={18} />} tone="neutral" label="Radiation" value={value} unit={unit} sub={sub} />
 }
 
-/* ------------------------------------------------------------------ advanced */
+/* ------------------------------------------------------------------ 2 and 3. result and options */
 
-const LEVEL: Record<PowerModel, 2 | 3 | 4> = { array: 2, battery: 3, colony: 4 }
-
-function Advanced() {
+function Model() {
   const id = useId()
   const selection = useApp((s) => s.selection)
   const mastM = useApp((s) => s.mastM)
@@ -168,7 +198,8 @@ function Advanced() {
   const sid = useScenarioId()
   const [error, setError] = useState<string | null>(null)
   const power = usePower()
-  const level = LEVEL[model]
+  const active = MODELS.find((m) => m.id === model)!
+  const level = active.level
   const tooShort = model === 'colony' && durationH < SYNODIC_MONTH_H
 
   const submit = (e: FormEvent) => {
@@ -197,13 +228,13 @@ function Advanced() {
               discharge_efficiency: num('discharge_efficiency'),
             }
           : {}
-      let colony: Partial<PowerRequest> = {}
-      if (level === 3) colony = { load_w: num('load_w'), night_load_w: num('night_load_w') }
+      let extra: Partial<PowerRequest> = {}
+      if (level === 3) extra = { load_w: num('load_w'), night_load_w: num('night_load_w') }
       if (level === 4) {
         const tSet = req('t_set_c') + K
         const tMin = req('t_min_c') + K
         if (tMin >= tSet) throw new Error('Inside minimum must be below the inside target')
-        colony = {
+        extra = {
           critical_load_w: num('critical_load_w'),
           deferrable_load_w: num('deferrable_load_w'),
           comms_load_w: num('comms_load_w'),
@@ -249,7 +280,7 @@ function Advanced() {
         cell_efficiency: num('cell_efficiency'),
         derating: num('derating'),
         ...battery,
-        ...colony,
+        ...extra,
       }
       setError(null)
       const forScenario = sid
@@ -285,130 +316,154 @@ function Advanced() {
     </div>
   )
 
-  const models: { id: PowerModel; icon: ReactNode; title: string }[] = [
-    { id: 'array', icon: <IconPanel size={22} />, title: 'Solar array' },
-    { id: 'battery', icon: <IconBattery size={22} />, title: 'Battery balance' },
-    { id: 'colony', icon: <IconHabitat size={22} />, title: 'Colony' },
-  ]
-  const submitLabel = model === 'colony' ? 'Analyse the colony' : model === 'battery' ? 'Compute battery balance' : 'Compute array output'
-
-  return (
-    <details className="advanced">
-      <summary>
-        <IconSliders size={18} /> Advanced options
-      </summary>
-
-      <form onSubmit={submit} noValidate className="power-form" aria-label="Power model">
-        <fieldset className="model-cards three">
-          <legend>
-            What to compute
-            <Tip label="the model">
-              Solar array: watts and energy from a panel you size. Battery balance: the array feeding a battery and a load. Colony: a heated habitat with essential
-              and optional loads, and whether it survives on its own.
-            </Tip>
-          </legend>
-          {models.map((mo) => (
-            <label key={mo.id} className={`model-card${model === mo.id ? ' is-on' : ''}`}>
-              <input type="radio" className="sr-only" name={`${id}-model`} checked={model === mo.id} onChange={() => setModel(mo.id)} />
-              <span className="model-icon">{mo.icon}</span>
-              <span className="model-title">{mo.title}</span>
-            </label>
-          ))}
-        </fieldset>
-
-        <fieldset className="pgroup">
-          <legend>
-            <IconPanel size={16} /> Solar array
-          </legend>
-          {ARRAY.map(input)}
-        </fieldset>
-        {model !== 'array' && (
-          <fieldset className="pgroup">
-            <legend>
-              <IconBattery size={16} /> Battery
-            </legend>
-            {BATTERY.map(input)}
-          </fieldset>
-        )}
-        {model === 'battery' && (
-          <fieldset className="pgroup">
-            <legend>
-              <IconBolt size={16} /> Load
-            </legend>
-            {LOAD.map(input)}
-          </fieldset>
-        )}
-        {model === 'colony' && (
-          <>
-            <fieldset className="pgroup">
-              <legend>
-                <IconBolt size={16} /> Loads
-              </legend>
-              {COLONY_LOADS.map(input)}
+  const groups: { key: string; title: string; icon: ReactNode; tone: string; fields: FieldSpec[]; extra?: ReactNode }[] = [
+    { key: 'array', title: 'Solar array', icon: <IconPanel size={16} />, tone: 'yellow', fields: ARRAY },
+    ...(model !== 'array' ? [{ key: 'battery', title: 'Battery', icon: <IconBattery size={16} />, tone: 'green', fields: BATTERY }] : []),
+    ...(model === 'battery' ? [{ key: 'load', title: 'Load', icon: <IconBolt size={16} />, tone: 'orange', fields: LOAD }] : []),
+    ...(model === 'colony'
+      ? [
+          {
+            key: 'loads',
+            title: 'Loads',
+            icon: <IconBolt size={16} />,
+            tone: 'orange',
+            fields: COLONY_LOADS,
+            extra: (
               <label className="check-row">
                 <input type="checkbox" checked={commsCritical} onChange={(e) => setFlag('comms_critical', e.target.checked)} />
                 <span>Comms are essential</span>
                 <Tip label="comms essential">If on, losing the Earth link counts as a failure. Off, the comms load is optional.</Tip>
               </label>
-            </fieldset>
-            <details className="pgroup-d">
-              <summary>
-                <IconHabitat size={16} /> Habitat
-              </summary>
-              {HABITAT.map(input)}
-            </details>
-            <details className="pgroup-d">
-              <summary>
-                <IconThermo size={16} /> Ground
-              </summary>
-              {REGOLITH.map(input)}
-            </details>
+            ),
+          },
+          { key: 'habitat', title: 'Habitat', icon: <IconHabitat size={16} />, tone: 'blue', fields: HABITAT },
+          { key: 'ground', title: 'Ground', icon: <IconThermo size={16} />, tone: 'gray', fields: REGOLITH },
+        ]
+      : []),
+  ]
+
+  return (
+    <>
+      {(current || (result && !current) || power.error) && (
+        <section className="band result-band" aria-labelledby={`${id}-res`} aria-live="polite">
+          <div className="band-head">
+            <h3 id={`${id}-res`} className="band-title">
+              Result
+            </h3>
+            {current && <span className="band-sub">{MODELS.find((m) => m.level === current.level)?.title ?? `level ${current.level}`}</span>}
+          </div>
+          {power.error && <ApiStatus error={power.error} what="Power model" fallback={isMissing(power.error) ? 'Coming with the MECH model.' : undefined} />}
+          {result && !current && <p className="note">Place or window changed. Compute again.</p>}
+          {current && <PowerResult r={current} />}
+        </section>
+      )}
+
+      <section className="band" aria-labelledby={`${id}-opt`}>
+        <div className="band-head">
+          <h3 id={`${id}-opt`} className="band-title">
+            <IconSliders size={17} /> Options
+          </h3>
+        </div>
+
+        <div className="opt-top">
+          <PanelSetting />
+          <div className="ios-list setting">
+            <div className="ios-row stack">
+              <div className="ios-row-top">
+                <span className="ios-icon ios-icon-orange">
+                  <IconBolt size={16} />
+                </span>
+                <span id={`${id}-model-l`} className="ios-label">
+                  Model
+                </span>
+                <Tip label="the model">
+                  Solar array: watts and energy from a panel you size. Battery: the array feeding a battery and a load. Colony: a heated habitat with essential and
+                  optional loads, and whether it survives on its own (needs 30 days or more).
+                </Tip>
+              </div>
+              <div className="seg seg-icons" role="radiogroup" aria-labelledby={`${id}-model-l`}>
+                {MODELS.map((mo) => (
+                  <label key={mo.id} className={`seg-item${model === mo.id ? ' is-on' : ''}`}>
+                    <input type="radio" name={`${id}-model`} checked={model === mo.id} onChange={() => setModel(mo.id)} />
+                    <span className="seg-ico">{mo.icon(15)}</span>
+                    <span>{mo.title}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <form onSubmit={submit} noValidate className="opt-form" aria-label={`${active.title} inputs`}>
+          <div className="opt-panels">
+            {groups.map((g, i) => {
+              const filled = g.fields.filter((s) => (f[s.key] ?? '').trim()).length
+              const needed = g.fields.filter((s) => !s.optional).length
+              const done = g.fields.filter((s) => !s.optional && (f[s.key] ?? '').trim()).length === needed
+              return (
+                <details key={g.key} className={`opt-panel${done ? ' is-done' : ''}`} open={i === 0 || undefined}>
+                  <summary>
+                    <span className={`ios-icon ios-icon-${g.tone}`}>{g.icon}</span>
+                    <span className="opt-title">{g.title}</span>
+                    <span className="opt-count" aria-label={`${filled} of ${g.fields.length} filled${done ? ', complete' : ''}`}>
+                      {done ? '✓ ' : ''}
+                      {filled}/{g.fields.length}
+                    </span>
+                  </summary>
+                  <div className="opt-body">
+                    {g.fields.map(input)}
+                    {g.extra}
+                  </div>
+                </details>
+              )
+            })}
+          </div>
+
+          {model === 'colony' && (
             <label className="check-row">
               <input type="checkbox" checked={includeSizing} onChange={(e) => setFlag('include_sizing', e.target.checked)} />
               <span>Find the size needed</span>
               <Tip label="sizing">Also searches the smallest battery and panels that survive on their own. Adds about a second.</Tip>
             </label>
-            {tooShort && (
-              <p className="note" role="status">
-                Needs 30 days or more. A year is better at the poles.
-              </p>
-            )}
-          </>
-        )}
-        {error && (
-          <p role="alert" className="error">
-            {error}
-          </p>
-        )}
-        <div className="row">
-          <button type="submit" className="primary" disabled={power.isPending || tooShort}>
-            {power.isPending ? 'Computing…' : submitLabel}
-          </button>
-          <button
-            type="button"
-            className="link"
-            onClick={() => {
-              setFields({ ...(model === 'colony' ? EXAMPLE_COLONY : EXAMPLE), night_load_w: f.night_load_w }, true)
-              setError(null)
-            }}
-          >
-            Fill example values
-          </button>
-        </div>
-        {usedExample && <p className="fine">Example values, not recommendations.</p>}
-      </form>
+          )}
+          {tooShort && (
+            <p className="note" role="status">
+              Colony needs 30 days or more. A year is better at the poles.
+            </p>
+          )}
+          {error && (
+            <p role="alert" className="error">
+              {error}
+            </p>
+          )}
+          <div className="opt-actions">
+            <button type="submit" className="primary" disabled={power.isPending || tooShort}>
+              {active.icon(17)}
+              {power.isPending ? 'Computing…' : model === 'colony' ? 'Analyse the colony' : model === 'battery' ? 'Compute battery balance' : 'Compute array output'}
+            </button>
+            <button
+              type="button"
+              className="link"
+              onClick={() => {
+                setFields({ ...(model === 'colony' ? EXAMPLE_COLONY : EXAMPLE), night_load_w: f.night_load_w }, true)
+                setError(null)
+              }}
+            >
+              Fill example values
+            </button>
+            {usedExample && <span className="fine">Example values, not recommendations.</span>}
+          </div>
+        </form>
 
-      {power.error && <ApiStatus error={power.error} what="Power model" fallback={isMissing(power.error) ? 'Coming with the MECH model.' : undefined} />}
-      {result && !current && <p className="note">Place or window changed. Compute again.</p>}
-      {current && <PowerResult r={current} />}
-      <RadiationAdvanced />
-    </details>
+        <RadiationPanel />
+      </section>
+    </>
   )
 }
 
 function PowerResult({ r }: { r: PowerResponse }) {
   return (
-    <div className="result" aria-live="polite">
+    <div className="result">
       <p className="meta-line">
         <span className={`badge badge-${r.horizon_kind}`}>{r.horizon_kind === 'terrain' ? `Real terrain · ${r.mast_m_used} m` : 'Estimated horizon'}</span>
         <SourceTag source="api" />
@@ -423,21 +478,23 @@ function PowerResult({ r }: { r: PowerResponse }) {
               {r.survives ? 'Load served all window' : `Battery runs out${r.first_depletion_at ? ` on ${formatUtc(Date.parse(r.first_depletion_at))}` : ''}`}
             </p>
           )}
-          <ul className="metric-grid compact">
-            <Metric tone="sun" label="Panel power (W)" value={fmt(r.mean_power_w, 1, ' W')} sub={`peak ${fmt(r.peak_power_w, 1, ' W')}`} />
-            <Metric
+          <ul className="stat-strip compact">
+            <Stat tone="sun" label="Panel power" value={fmt(r.mean_power_w, 1)} unit="W" sub={`peak ${fmt(r.peak_power_w, 1, ' W')}`} />
+            <Stat
               tone="sun"
-              label="Energy produced (kWh)"
-              value={r.energy_wh === null ? '—' : `${(r.energy_wh / 1000).toFixed(2)} kWh`}
+              label="Energy produced"
+              value={r.energy_wh === null ? '—' : (r.energy_wh / 1000).toFixed(2)}
+              unit="kWh"
               sub={r.eclipse_ranges.length > 0 ? `${fmt(r.eclipse_energy_loss_wh, 0, ' Wh')} lost to eclipses` : 'no eclipses'}
             />
             {r.level === 3 && (
               <>
-                <Metric tone="neutral" label="Lowest battery (%)" value={pct(r.min_soc)} sub={`at the end ${pct(r.final_soc)}`} />
-                <Metric
+                <Stat tone="neutral" label="Lowest battery" value={pct(r.min_soc)} sub={`at the end ${pct(r.final_soc)}`} />
+                <Stat
                   tone="neutral"
-                  label="Energy to spare (kWh)"
-                  value={r.energy_margin_wh === null ? '—' : `${(r.energy_margin_wh / 1000).toFixed(2)} kWh`}
+                  label="Energy to spare"
+                  value={r.energy_margin_wh === null ? '—' : (r.energy_margin_wh / 1000).toFixed(2)}
+                  unit="kWh"
                   sub={`longest night needs ${fmt(r.longest_dark_energy_wh, 0, ' Wh')}`}
                 />
               </>
@@ -454,7 +511,7 @@ function PowerResult({ r }: { r: PowerResponse }) {
         </>
       )}
       {r.assumptions.length > 0 && (
-        <details>
+        <details className="assumptions">
           <summary>Assumptions</summary>
           <ul>
             {r.assumptions.map((a) => (
@@ -467,56 +524,62 @@ function PowerResult({ r }: { r: PowerResponse }) {
   )
 }
 
-function RadiationAdvanced() {
+function RadiationPanel() {
   const id = useId()
   const qf = usePowerStore((s) => s.qualityFactor)
   const setQf = usePowerStore((s) => s.setQualityFactor)
   const r = useRadiation(useRadiationRequest()).data
   return (
-    <fieldset className="pgroup">
-      <legend>
-        <IconRadiation size={16} /> Radiation risk
-      </legend>
-      <div className="pfield">
-        <div className="pfield-top">
-          <label htmlFor={`${id}-q`}>Quality factor</label>
-          <Tip label="the quality factor">
-            Turns absorbed dose into effective dose and a 1–10 astronaut risk index. No cited default yet: MSL RAD suggests about 3.8 (to verify).
-          </Tip>
+    <details className="opt-panel radiation-panel">
+      <summary>
+        <span className="ios-icon ios-icon-purple">
+          <IconRadiation size={16} />
+        </span>
+        <span className="opt-title">Radiation risk</span>
+        <span className="opt-count">{r?.risk ? `${r.risk.index.toFixed(1)}/10` : qf.trim() ? 'Q set' : 'needs Q'}</span>
+      </summary>
+      <div className="opt-body">
+        <div className="pfield">
+          <div className="pfield-top">
+            <label htmlFor={`${id}-q`}>Quality factor</label>
+            <Tip label="the quality factor">
+              Turns absorbed dose into effective dose and a 1–10 astronaut risk index. No cited default yet: MSL RAD suggests about 3.8 (to verify).
+            </Tip>
+          </div>
+          <div className="unit-input">
+            <input id={`${id}-q`} inputMode="decimal" autoComplete="off" value={qf} onChange={(e) => setQf(e.target.value)} />
+            <span className="unit" aria-hidden="true">
+              Q
+            </span>
+          </div>
         </div>
-        <div className="unit-input">
-          <input id={`${id}-q`} inputMode="decimal" autoComplete="off" value={qf} onChange={(e) => setQf(e.target.value)} />
-          <span className="unit" aria-hidden="true">
-            Q
-          </span>
-        </div>
+        {r && (
+          <dl className="kv">
+            <div>
+              <dt>
+                Shielding
+                <Tip label="shielding">
+                  Share of the free-space dose that reaches this point, from the open sky. Dataset: {r.dataset.name} ({r.dataset.first.slice(0, 4)}–
+                  {r.dataset.last.slice(0, 4)}), galactic cosmic rays only.
+                </Tip>
+              </dt>
+              <dd>{r.shielding_factor === null ? '—' : `${(r.shielding_factor * 100).toFixed(0)} %`}</dd>
+            </div>
+            <div>
+              <dt>Effective dose</dt>
+              <dd>{r.mission_effective_dose_msv ? `${r.mission_effective_dose_msv.mean.toFixed(1)} mSv` : '— (needs Q)'}</dd>
+            </div>
+            <div>
+              <dt>Radiation risk (1-10)</dt>
+              <dd>{r.risk ? `${r.risk.index.toFixed(1)} / 10` : '— (needs Q)'}</dd>
+            </div>
+            <div>
+              <dt>Of career limit</dt>
+              <dd>{r.fraction_of_career_limit === null ? '—' : `${(r.fraction_of_career_limit * 100).toFixed(2)} %`}</dd>
+            </div>
+          </dl>
+        )}
       </div>
-      {r && (
-        <dl className="kv">
-          <div>
-            <dt>
-              Shielding
-              <Tip label="shielding">
-                Share of the free-space dose that reaches this point, from the open sky. Dataset: {r.dataset.name} ({r.dataset.first.slice(0, 4)}–
-                {r.dataset.last.slice(0, 4)}), galactic cosmic rays only.
-              </Tip>
-            </dt>
-            <dd>{r.shielding_factor === null ? '—' : `${(r.shielding_factor * 100).toFixed(0)} %`}</dd>
-          </div>
-          <div>
-            <dt>Effective dose</dt>
-            <dd>{r.mission_effective_dose_msv ? `${r.mission_effective_dose_msv.mean.toFixed(1)} mSv` : '— (needs Q)'}</dd>
-          </div>
-          <div>
-            <dt>Radiation risk (1-10)</dt>
-            <dd>{r.risk ? `${r.risk.index.toFixed(1)} / 10` : '— (needs Q)'}</dd>
-          </div>
-          <div>
-            <dt>Of career limit</dt>
-            <dd>{r.fraction_of_career_limit === null ? '—' : `${(r.fraction_of_career_limit * 100).toFixed(2)} %`}</dd>
-          </div>
-        </dl>
-      )}
-    </fieldset>
+    </details>
   )
 }

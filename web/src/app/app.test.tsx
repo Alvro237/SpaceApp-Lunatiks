@@ -119,7 +119,10 @@ describe('navigator', () => {
     expect(screen.getByText('Sunlight duration')).toBeInTheDocument()
     expect(screen.getByText('Earth visibility windows')).toBeInTheDocument()
     expect(screen.getByText('Radiation')).toBeInTheDocument()
-    expect(screen.getByText('Advanced options')).toBeInTheDocument()
+    // fixed data first, then the options in collapsible panels
+    expect(screen.getByRole('heading', { level: 3, name: 'At a glance' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 3, name: /Options/ })).toBeInTheDocument()
+    expect(screen.getByRole('radiogroup', { name: 'Model' })).toBeInTheDocument()
     await user.click(screen.getAllByRole('button', { name: /^About / })[0])
     expect(screen.getByRole('note')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'All sections' }))
