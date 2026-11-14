@@ -1,6 +1,6 @@
 """Sun and Earth state of a catalogue site at one instant (SW-1).
 
-    GET /api/v1/sites/{site_id}/state?t=2026-11-20T12:00:00Z&mast_m=2&panel=vertical&comms_min_fraction=0.5
+    GET /api/v1/sites/{site_id}/state?t=2026-11-20T12:00:00Z&mast_m=0&panel=vertical&comms_min_fraction=0.5
 
 Shape of routers/sites.py: validate, call services/engine, shape the response. No physics here.
 ``state_response`` is reused by the manual-coordinates router (``/points/state``).
@@ -9,8 +9,10 @@ Output format: docs/sw1-output-format.md.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BeforeValidator
 
 from .. import services
 from ..db.store import DataStore, get_store
@@ -24,8 +26,19 @@ ECLIPSE = {0: "none", 1: "partial", 2: "total"}
 
 T_QUERY = Query(..., description="Instant, ISO 8601 (e.g. 2026-11-20T12:00:00Z). No offset = UTC",
                 examples=["2026-11-20T12:00:00Z"])
-MAST_QUERY = Query(2.0, ge=0.0, le=20.0, description="Panel or antenna height above the ground, metres. "
-                   "Terrain masks exist for 0, 2, 5 and 10 m; the nearest is used (see mast_used_m)")
+DEFAULT_MAST_M = 0.0   # owner's decision (Sergio): a missing or null mast means the ground itself
+
+
+def _null_to_default_mast(v):
+    """Absent, empty (``mast_m=``) or literal ``null``/``none`` all mean the default mast, 0 m."""
+    if v is None or (isinstance(v, str) and v.strip().lower() in ("", "null", "none")):
+        return DEFAULT_MAST_M
+    return v
+
+
+MastParam = Annotated[float, BeforeValidator(_null_to_default_mast), Query(
+    ge=0.0, le=20.0, description="Panel or antenna height above the ground, metres, 0..20. Absent, empty or "
+    "null = 0 m (the ground). Terrain masks exist for 0, 2, 5 and 10 m; the nearest is used (see mast_used_m)")]
 PANEL_QUERY = Query("vertical", description="Solar array model for power_w_m2: sun-tracking, vertical "
                     "(turning in azimuth) or horizontal")
 COMMS_QUERY = Query(0.5, ge=0.0, le=1.0, description="Share of the Earth's disc that must be above the "
@@ -68,7 +81,8 @@ def state_response(store: DataStore, model: SiteModel, t_ms: float, params: Anal
                   s.sun_dist_km[0], s.sunlit()[0]),
         earth=_body(s.earth_az[0], s.earth_el[0], st.earth_horizon_el, s.earth_frac[0], s.earth_radius_deg[0],
                     s.earth_dist_km[0], s.comms(params)[0]),
-        eclipse=ECLIPSE[int(s.eclipse[0])], irradiance_w_m2=float(s.irradiance_w_m2[0]),
+        eclipse=ECLIPSE[int(s.eclipse[0])], sun_eclipsed_fraction=float(s.sun_eclipsed_fraction[0]),
+        irradiance_w_m2=float(s.irradiance_w_m2[0]),
         power_w_m2=float(s.power_w_m2[0]),
         next_sun_transition=_transition(st.next_sun), next_earth_transition=_transition(st.next_earth),
         transition_search_days=services.TRANSITION_SEARCH_DAYS)
@@ -76,7 +90,7 @@ def state_response(store: DataStore, model: SiteModel, t_ms: float, params: Anal
 
 @router.get("/{site_id}/state", response_model=StateResponse,
             summary="Sun and Earth at a site and instant: az/el, visible fraction, power, time to next set/rise")
-def site_state(site_id: str, t: datetime = T_QUERY, mast_m: float = MAST_QUERY,
+def site_state(site_id: str, t: datetime = T_QUERY, mast_m: MastParam = DEFAULT_MAST_M,
                panel: PanelModel = PANEL_QUERY, comms_min_fraction: float = COMMS_QUERY,
                store: DataStore = Depends(get_store)) -> StateResponse:
     site = store.sites.get(site_id)

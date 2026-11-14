@@ -51,11 +51,14 @@ class StateResponse(BaseModel):
                                                   "dip only (real terrain can only shorten light and comms)")
     sun: BodyState
     earth: BodyState
-    eclipse: EclipseState = Field(description="The Earth covering the Sun as seen from the site")
+    eclipse: EclipseState = Field(description="The Earth covering the Sun as seen from the site (a lunar eclipse "
+                                              "seen from the Earth)")
+    sun_eclipsed_fraction: float = Field(description="Fraction of the solar disc hidden behind the Earth, 0..1 "
+                                                     "(1 during a total eclipse, 0 when eclipse is 'none')")
     irradiance_w_m2: float = Field(description="Solar irradiance normal to the rays at the actual Sun "
                                                "distance, W/m2, before horizon and panel factors")
-    power_w_m2: float = Field(description="irradiance_w_m2 x sun.visible_fraction x panel cosine factor, "
-                                          "W/m2 of array (before efficiency)")
+    power_w_m2: float = Field(description="irradiance_w_m2 x sun.visible_fraction x (1 - sun_eclipsed_fraction) "
+                                          "x panel cosine factor, W/m2 of array (before efficiency)")
     next_sun_transition: Transition | None = Field(
         description="Next sunset (kind 'set') or sunrise ('rise'); null if none within the search span")
     next_earth_transition: Transition | None = Field(

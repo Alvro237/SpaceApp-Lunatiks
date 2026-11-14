@@ -24,7 +24,7 @@ def test_happy_path_matches_the_contract():
     assert r.status_code == 200
     body = StateResponse.model_validate(r.json())
     assert body.site_id == "im-2" and body.horizon_kind == "terrain" and body.t == T
-    assert body.panel == "vertical" and body.comms_min_fraction == 0.5 and body.mast_used_m == 2.0
+    assert body.panel == "vertical" and body.comms_min_fraction == 0.5 and body.mast_used_m == 0.0
     assert v.state_invariants(r.json()) == []
 
 
@@ -33,6 +33,13 @@ def test_smooth_sphere_site_says_so():
     assert r["horizon_kind"] == "smooth_sphere"
     assert r["mast_used_m"] == 3.0          # no stored masks: the requested mast is used as is
     assert r["sun"]["horizon_el"] < 0       # geometric dip of the smooth sphere
+
+
+@pytest.mark.parametrize("params", [{}, {"mast_m": ""}, {"mast_m": "null"}, {"mast_m": "NULL"}, {"mast_m": "none"}])
+def test_missing_or_null_mast_defaults_to_zero(params):
+    r = get(**params).json()
+    assert r["mast_m"] == 0.0 and r["mast_used_m"] == 0.0
+    assert r == get(mast_m=0).json()
 
 
 def test_mast_snaps_to_the_nearest_terrain_mask():
@@ -51,7 +58,8 @@ def test_unknown_site_is_404():
     assert get("atlantis").status_code == 404
 
 
-@pytest.mark.parametrize("params", [{"t": "not-a-date"}, {"mast_m": -1}, {"mast_m": 21}, {"panel": "diagonal"},
+@pytest.mark.parametrize("params", [{"t": "not-a-date"}, {"mast_m": -1}, {"mast_m": 21}, {"mast_m": "abc"},
+                                    {"panel": "diagonal"},
                                     {"comms_min_fraction": 1.5}])
 def test_invalid_input_is_422(params):
     assert get(**params).status_code == 422
@@ -98,7 +106,7 @@ def test_earth_never_sets_near_the_sub_earth_point():
 def test_the_validator_catches_wrong_numbers():
     """Guard against a validator that always passes."""
     good = get().json()
-    for path, value in ((("power_w_m2",), 999.0), (("sun", "angular_radius_deg"), 0.5),
+    for path, value in ((("power_w_m2",), 999.0), (("sun", "angular_radius_deg"), 0.5), (("eclipse",), "total"),
                         (("irradiance_w_m2",), 1300.0), (("earth", "visible"), False)):
         bad = copy.deepcopy(good)
         target = bad

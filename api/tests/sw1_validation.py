@@ -7,6 +7,8 @@ Three layers of checks, all through the HTTP layer so they test exactly what the
 2. **Physical invariants** on every response: ranges, disc sizes, irradiance from the Sun distance, power from
    irradiance x fraction x panel factor, visible fraction consistent with el - horizon_el, consistent flags.
 3. **Self-consistency of events**: a reported sunset/Earthset really flips the state one minute either side.
+4. **Eclipses** against NASA's lunar eclipse catalogue (tests/fixtures/nasa_lunar_eclipses_2025_2035.json):
+   at greatest eclipse of every total lunar eclipse the Sun is fully hidden and the power is zero.
 
 Pytest uses the functions below (tests/test_state.py). The same checks print a report from the command line:
 
@@ -20,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 FIXTURE = Path(__file__).parent / "fixtures" / "horizons_reference.json"
+ECLIPSES = Path(__file__).parent / "fixtures" / "nasa_lunar_eclipses_2025_2035.json"
 HORIZONS_TOL_DEG = 0.01
 AU_KM = 149_597_870.7
 SOLAR_CONSTANT = 1361.0
@@ -76,8 +79,13 @@ def state_invariants(r: dict) -> list[str]:
          "earth.visible disagrees with comms_min_fraction")
     irr = SOLAR_CONSTANT * (AU_KM / sun["distance_km"]) ** 2
     need(abs(r["irradiance_w_m2"] - irr) < 0.01, f"irradiance {r['irradiance_w_m2']} vs 1361/r_AU^2 = {irr}")
-    power = r["irradiance_w_m2"] * sun["visible_fraction"] * _panel_factor(r["panel"], sun["el"])
-    need(abs(r["power_w_m2"] - power) < 1e-6, f"power {r['power_w_m2']} vs irradiance x fraction x panel {power}")
+    ecl = r["sun_eclipsed_fraction"]
+    need(0.0 <= ecl <= 1.0, "sun_eclipsed_fraction outside 0..1")
+    need((r["eclipse"] == "none") == (ecl == 0.0), f"eclipse {r['eclipse']} vs eclipsed fraction {ecl}")
+    need((r["eclipse"] == "total") == (ecl == 1.0), f"eclipse {r['eclipse']} vs eclipsed fraction {ecl}")
+    power = r["irradiance_w_m2"] * sun["visible_fraction"] * (1.0 - ecl) * _panel_factor(r["panel"], sun["el"])
+    need(abs(r["power_w_m2"] - power) < 1e-6,
+         f"power {r['power_w_m2']} vs irradiance x fraction x (1 - eclipsed) x panel {power}")
     need(r["horizon_kind"] in ("terrain", "smooth_sphere"), "horizon_kind missing")
     for key, body in (("next_sun_transition", "sun"), ("next_earth_transition", "earth")):
         tr = r[key]
@@ -172,6 +180,16 @@ def main() -> int:
             bad += transition_flips(client, f"/api/v1/sites/{site_id}/state", SWEEP_TIMES[0], body)
     ok &= not bad
     print(f"[{'PASS' if not bad else 'FAIL'}] next transitions flip the state (im-2, shackleton, apollo-11)"
+          + "".join(f"\n    {m}" for m in bad))
+    bad = []
+    totals = [e for e in json.loads(ECLIPSES.read_text(encoding="utf-8"))["events"] if e["type"] == "total"]
+    for e in totals:
+        t = datetime.fromisoformat(e["greatest_td"]).replace(tzinfo=timezone.utc) - timedelta(seconds=69)  # TD->UTC
+        r = client.get("/api/v1/sites/apollo-11/state", params={"t": _iso(t)}).json()
+        if not (r["eclipse"] == "total" and r["power_w_m2"] == 0.0):
+            bad.append(f"{e['greatest_td']}: eclipse={r['eclipse']} power={r['power_w_m2']:.1f}")
+    ok &= not bad
+    print(f"[{'PASS' if not bad else 'FAIL'}] {len(totals)} NASA total lunar eclipses 2025-2035: Sun hidden, power 0"
           + "".join(f"\n    {m}" for m in bad))
     return 0 if ok else 1
 

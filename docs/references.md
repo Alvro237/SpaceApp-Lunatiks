@@ -16,6 +16,7 @@ asks for this list; keep it current when something is added.
 | NSSDCA Apollo landing site coordinates (Wagner et al. 2017) | Apollo catalogue coordinates | https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html |
 | Apollo Lunar Surface Journal, Earth and Sun altitude/azimuth tables (E. Scotti) | Historical validation, 43 events | https://www.nasa.gov/wp-content/uploads/static/history/alsj/Scotti_AltAz.txt |
 | LROC featured images: IM-1 (1360), IM-2 (1401), Blue Ghost (1400), Chandrayaan-3 (1314), SLIM (1358) | Landing coordinates and reference elevations | https://www.lroc.asu.edu/images/ |
+| NASA GSFC lunar eclipse decade tables 2021-2030 and 2031-2040 (F. Espenak) | Validation of the eclipse detection and of zero power in totality (`api/tests/fixtures/nasa_lunar_eclipses_2025_2035.json`) | https://eclipse.gsfc.nasa.gov/LEdecade/LEdecade2021.html , https://eclipse.gsfc.nasa.gov/LEdecade/LEdecade2031.html |
 | Moon Trek, QuickMap | Context and cross-checks while designing | https://trek.nasa.gov/moon/ , https://quickmap.lroc.asu.edu/ |
 | VIPER lunar operations, Artemis III candidate regions | Lessons on what real missions plan for | https://science.nasa.gov/mission/viper/lunar-operations/ , https://www.nasa.gov/news-release/nasa-identifies-candidate-regions-for-landing-next-americans-on-moon/ |
 
@@ -43,6 +44,7 @@ asks for this list; keep it current when something is added.
 - Barker, M. K., et al. (2021). High-resolution LOLA topography for lunar south pole sites. Planetary and Space Science.
 - Wagner, R. V., et al. (2017). Coordinates of anthropogenic features on the Moon. Icarus 283, 92-103.
 - Steger, C. R., Steger, B., Schaer, C. (2022). HORAYZON: fast horizon and sky-view-factor computation. GMD 15, 6817. https://gmd.copernicus.org/articles/15/6817/2022/ (considered, not used)
+- Weisstein, E. W. "Circle-Circle Intersection." MathWorld. https://mathworld.wolfram.com/Circle-CircleIntersection.html (lens area for the eclipsed share of the solar disc)
 - NASA NSSDCA/ NAIF documentation for lunar frames (MOON_ME / MOON_PA, about 875 m apart).
 
 ## Software (all open source)

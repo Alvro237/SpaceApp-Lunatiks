@@ -28,17 +28,18 @@ local horizon, the solar power it gives, and how long until the next sunset/sunr
 | --- | --- | --- | --- | --- | --- |
 | `site_id` | path | string | required | an id from `GET /api/v1/sites` | Catalogue site |
 | `t` | query | ISO 8601 datetime | **required** | inside the ephemeris tables (2025-2035, 1969-1972) | Instant. No offset means UTC; offsets are converted (`13:00+01:00` = `12:00Z`) |
-| `mast_m` | query | float, m | `2` | 0..20 | Panel/antenna height above the ground. Terrain sites use the nearest stored mask (0, 2, 5, 10 m) |
+| `mast_m` | query | float, m | `0` | 0..20 | Panel/antenna height above the ground. **Absent, empty (`mast_m=`) or `null`/`none` (any case) = 0 m**, the ground itself. Terrain sites use the nearest stored mask (0, 2, 5, 10 m) |
 | `panel` | query | `tracking` \| `vertical` \| `horizontal` | `vertical` | | Solar array model for `power_w_m2` (cos factor 1, cos(el), max(0, sin(el))) |
 | `comms_min_fraction` | query | float | `0.5` | 0..1 | Share of the Earth's disc above the horizon needed to count as direct-to-Earth comms |
 
 Defaults for `panel` and `comms_min_fraction` are the engine defaults in `app/logic/engine.py`
-(`AnalysisParams`); `mast_m = 2` is the team spec's observer height.
+(`AnalysisParams`). The `mast_m` default of 0 m is the owner's decision (Sergio, 2026-11-14): when the client
+sends no mast, or a null one, the observer is on the ground. Any other non-number (`mast_m=abc`) is a 422.
 
 Example:
 
 ```
-GET /api/v1/sites/im-2/state?t=2026-11-20T12:00:00Z
+GET /api/v1/sites/im-2/state?t=2026-11-20T12:00:00Z&mast_m=2
 ```
 
 ### Response 200
@@ -74,6 +75,7 @@ GET /api/v1/sites/im-2/state?t=2026-11-20T12:00:00Z
     "distance_km": 380562.1
   },
   "eclipse": "none",
+  "sun_eclipsed_fraction": 0.0,
   "irradiance_w_m2": 1389.83,
   "power_w_m2": 1380.91,
   "next_sun_transition": { "kind": "set", "at": "2026-12-01T00:16:08Z", "in_hours": 252.269 },
@@ -97,9 +99,10 @@ GET /api/v1/sites/im-2/state?t=2026-11-20T12:00:00Z
 | `panel`, `comms_min_fraction` | | | Echo of the parameters used |
 | `horizon_kind` | `terrain` \| `smooth_sphere` | | `terrain`: LOLA ray-traced mask. `smooth_sphere`: geometric dip only; real terrain can only shorten light and comms |
 | `sun`, `earth` | object | | See below |
-| `eclipse` | `none` \| `partial` \| `total` | | The Earth covering the Sun as seen from the site |
+| `eclipse` | `none` \| `partial` \| `total` | | The Earth covering the Sun as seen from the site (what the Earth sees as a lunar eclipse) |
+| `sun_eclipsed_fraction` | float | 0..1 | Share of the solar disc hidden behind the Earth: 0 with `none`, 1 with `total` |
 | `irradiance_w_m2` | float | W/m² | 1361 / r_AU², normal to the rays, before horizon and panel factors |
-| `power_w_m2` | float | W/m² | `irradiance_w_m2 × sun.visible_fraction × panel factor`, per m² of array, before cell efficiency |
+| `power_w_m2` | float | W/m² | `irradiance_w_m2 × sun.visible_fraction × (1 − sun_eclipsed_fraction) × panel factor`, per m² of array, before cell efficiency. 0 during a total eclipse |
 | `next_sun_transition` | object \| null | | Next sunset (`kind: "set"`) if the Sun is visible now, otherwise next sunrise (`"rise"`) |
 | `next_earth_transition` | object \| null | | Same for the Earth (comms threshold) |
 | `transition_search_days` | float | days | How far ahead the transitions were searched; `null` transition = no change within it (or before the tables end) |
@@ -131,6 +134,11 @@ bisection), `in_hours` (hours from `t` to `at`).
 
 - A null transition is a real answer, not a failure: near the sub-Earth point (Apollo 11) the Earth never sets.
 - Sites without a terrain mask (Apollo, Blue Ghost, SLIM) answer with `horizon_kind: "smooth_sphere"`.
+- During an eclipse `sun.visible` stays `true` (the disc is above the horizon: the team convention for
+  "sunlit") while `power_w_m2` drops; read `eclipse` and `sun_eclipsed_fraction` for the darkness.
+- The eclipsed share uses the area of overlap of two uniform discs (no limb darkening; the Earth's atmosphere,
+  which bends some red light into the shadow, is ignored). When an eclipse coincides with the Sun crossing the
+  skyline, horizon and Earth are combined as independent factors, which is exact whenever either is 0 or 1.
 
 ### How it was validated
 
@@ -143,4 +151,9 @@ Run `cd api && uv run python -m tests.sw1_validation` (pytest runs the same chec
    irradiance = 1361 / r_AU², power = irradiance × fraction × panel factor, fraction consistent with
    `el - horizon_el`, `visible` consistent with the thresholds, transitions in the future and `in_hours = at - t`.
 3. **Events**: each reported transition flips the state between 60 s before and 60 s after `at`.
-4. **The validator is tested**: tampered responses (wrong power, disc size, irradiance, flag) are rejected.
+4. **Eclipses against NASA's catalogue** (Espenak, GSFC, 25 lunar eclipses 2025-2035): at greatest eclipse
+   of each of the 10 total ones the Sun is fully hidden and `power_w_m2` is 0; no penumbral one hides the whole
+   Sun; every eclipse the engine finds at Apollo 11 in eleven years is a catalogue eclipse. The overlap formula
+   has hand-worked tests (disjoint, inside, area ratio, two unit circles one radius apart = 0.391002).
+5. **The validator is tested**: tampered responses (wrong power, disc size, irradiance, eclipse, flag) are
+   rejected.
