@@ -5,6 +5,8 @@
  * panels, so the map is never the only way to reach information.
  */
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { ToolPortal } from '../ui/ToolSlot'
+import { useHorizonTransition } from '../state/horizon'
 import { useQuery } from '@tanstack/react-query'
 import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
@@ -18,12 +20,13 @@ import { CameraRig, FOV_DEG, TILT_3D } from './cameraRig'
 import { Craters } from './Craters'
 import { type LayerMode, TerrainEngine } from './engine'
 import { type Exaggeration, LayersControl, LegendChip } from './Legend'
+import { IconCube, IconFit, IconGlobe, IconMinus, IconPlus } from '../ui/icons'
 import { terrainRegistry } from './registry'
 import { type Tileset, inExtent, polarLatLon, polarXY, scaleFactor } from './tileset'
 
-const TILES_BASE = `${import.meta.env.BASE_URL}tiles/`
+export const TILES_BASE = `${import.meta.env.BASE_URL}tiles/`
 
-async function loadTileset(): Promise<Tileset> {
+export async function loadTileset(): Promise<Tileset> {
   const res = await fetch(`${TILES_BASE}tileset.json`)
   if (!res.ok) throw new Error(`tileset.json: HTTP ${res.status}`)
   return (await res.json()) as Tileset
@@ -67,6 +70,11 @@ function MapView({ tileset }: { tileset: Tileset }) {
   const view = useApp((s) => s.view)
   const set = useApp((s) => s.set)
   const mode = useApp((s) => s.mode)
+  // paused while the horizon view covers the map
+  // paused (no frames drawn) while the horizon view or Block Moon covers the map; it keeps its camera and tiles
+  const underHorizon = useHorizonTransition((s) => s.phase === 'horizon')
+  const underBlocks = useApp((s) => s.blocks)
+  const covered = underHorizon || underBlocks
 
   useEffect(() => rig.setTilt(view === '3d' ? TILT_3D : 0), [rig, view])
 
@@ -150,7 +158,7 @@ function MapView({ tileset }: { tileset: Tileset }) {
         onWheel={onWheel}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <Canvas camera={{ fov: FOV_DEG, near: 1, far: 10_000, position: [0, 1500, 0] }} dpr={[1, 2]} flat linear gl={{ antialias: true }} aria-hidden="true">
+        <Canvas camera={{ fov: FOV_DEG, near: 1, far: 10_000, position: [0, 1500, 0] }} dpr={[1, 2]} flat linear gl={{ antialias: true }} aria-hidden="true" frameloop={covered ? 'never' : 'always'}>
           <Driver
             tileset={tileset}
             rig={rig}
@@ -167,24 +175,28 @@ function MapView({ tileset }: { tileset: Tileset }) {
           {mode === 'study' && ' Activate a point on the terrain to analyse it.'} Sites are listed, with the same information, in the panels.
         </p>
       </div>
+      <ToolPortal>
       <div className="map-controls" role="group" aria-label="Map view">
-        <button type="button" onClick={() => zoom(0.6)} aria-label="Zoom in">
-          +
-        </button>
-        <button type="button" onClick={() => zoom(1 / 0.6)} aria-label="Zoom out">
-          −
-        </button>
-        <button type="button" onClick={() => set({ scale: 'globe' })} title="The whole Moon">
-          Globe
-        </button>
-        <button type="button" aria-pressed={view === '3d'} onClick={toggleView} title="Tilt (T)">
-          3D
-        </button>
+        <div className="tool-group">
+          <button type="button" onClick={() => zoom(0.6)} aria-label="Zoom in" title="Zoom in (+)">
+            <IconPlus />
+          </button>
+          <button type="button" onClick={() => zoom(1 / 0.6)} aria-label="Zoom out" title="Zoom out (−)">
+            <IconMinus />
+          </button>
+        </div>
         <button type="button" onClick={() => rig.reset()} aria-label="Whole pole" title="Whole pole (R)">
-          ◎
+          <IconFit />
+        </button>
+        <button type="button" aria-pressed={view === '3d'} onClick={toggleView} aria-label="3D tilt" title="3D tilt (T)">
+          <IconCube />
+        </button>
+        <button type="button" onClick={() => set({ scale: 'globe' })} aria-label="Globe" title="The whole Moon">
+          <IconGlobe />
         </button>
         <LayersControl tileset={tileset} exaggeration={exaggeration} onExaggeration={setExaggeration} craterError={showCraters ? craterError : null} />
       </div>
+      </ToolPortal>
       <LegendChip tileset={tileset} />
       {stats && import.meta.env.DEV && <p className="map-stats">{stats}</p>}
     </>
@@ -298,6 +310,25 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
     }
     fly()
     return useApp.subscribe(fly)
+  }, [masks, rig, tileset])
+
+  // Opening the horizon view: fly down to the place, facing where the view opens; back again when it closes.
+  useEffect(() => {
+    let before: ReturnType<CameraRig['approach']> | null = null
+    let phase = useHorizonTransition.getState().phase
+    return useHorizonTransition.subscribe((t) => {
+      if (t.phase === phase) return
+      phase = t.phase
+      if (phase === 'diving') {
+        const sel = useApp.getState().selection
+        const site = sel.kind === 'site' ? masks?.site(sel.id) : null
+        const ll = sel.kind === 'point' ? [sel.lat, sel.lon] : site ? [site.lat, site.lon] : null
+        if (ll && inExtent(tileset, ll[0], ll[1])) before = rig.approach(ll[0], ll[1], t.yaw)
+      } else if ((phase === 'returning' || phase === 'map') && before) {
+        rig.restore(before)
+        before = null
+      }
+    })
   }, [masks, rig, tileset])
 
   // Open where the user clicked on the globe (a navigation target; the selection does not change).

@@ -99,6 +99,28 @@ describe('parent stays visible until all children arrive', () => {
     expect(renderable(wanted, (k) => loaded.has(k)).map(keyOf).sort()).toEqual(wanted.map(keyOf).sort())
   })
 
+  it('resolves a deep selection quickly and keeps unloaded deep tiles on their loaded ancestor', () => {
+    // a selection like the map's when zoomed in near the pole: four tiles at z11 and, at every level above, two of
+    // the three siblings on the way down (the third is outside the view, culled, so in no branch of the selection).
+    // Each culled branch used to be searched down to z11: about a second per frame, which froze the map.
+    const deep = [0, 1, 2, 3].map((i) => ({ z: 11, x: 1024 + (i & 1), y: 1024 + (i >> 1) }))
+    const between = []
+    for (let z = 1; z <= 10; z++) {
+      const px = 1024 >> (11 - z)
+      for (const [dx, dy] of [[0, 1], [1, 0]]) between.push({ z, x: (px & ~1) + dx, y: (px & ~1) + dy })
+    }
+    const wanted = [...deep, ...between]
+    const t0 = performance.now()
+    const all = renderable(wanted, () => true)
+    expect(performance.now() - t0).toBeLessThan(50)
+    expect(all.map(keyOf).sort()).toEqual(wanted.map(keyOf).sort())
+    // the four z11 tiles not loaded yet: their z10 parent is drawn instead
+    const parent = '10/512/512'
+    const some = renderable(wanted, (k) => !k.startsWith('11/')).map(keyOf)
+    expect(some).toContain(parent)
+    expect(some.some((k) => k.startsWith('11/'))).toBe(false)
+  })
+
   it('requests nearest tiles first, coarse levels before fine', () => {
     const order = byDistanceTo(synthetic(), [-400, -400], [{ z: 2, x: 3, y: 3 }, { z: 2, x: 0, y: 0 }, { z: 1, x: 1, y: 1 }])
     expect(order.map(keyOf)).toEqual(['1/1/1', '2/0/0', '2/3/3'])

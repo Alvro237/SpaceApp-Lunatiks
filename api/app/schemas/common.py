@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from typing import Literal
+
 from pydantic import BaseModel, Field, model_validator
 
 MAX_SAMPLES = 20_000
@@ -24,6 +26,10 @@ class WindowRequest(BaseModel):
     start: datetime = Field(description="Start of the mission window, ISO 8601 UTC")
     duration_h: float = Field(gt=0.0, description="Mission window length, hours")
     step_min: float = Field(60.0, ge=1.0, le=1440.0, description="Sampling step, minutes")
+    horizon: Literal["smooth_sphere", "terrain"] = Field("smooth_sphere", description=(
+        "Manual coordinates only: 'terrain' ray-traces the skyline over the LOLA elevation grids where they cover the "
+        "point (south of about 60 S; GET /api/v1/points/horizon shows it); 'smooth_sphere' (default) uses the "
+        "geometric dip. Catalogue sites always use their stored masks"))
 
     @model_validator(mode="after")
     def _check_window(self):

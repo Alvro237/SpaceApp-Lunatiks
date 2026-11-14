@@ -20,8 +20,8 @@ longitude, planetocentric latitude, degrees. The API reads these files only thro
 | `grids/*.npz` | Screening grids (table below) | NumPy npz, one int16 array `values[row][col]`; value = raw × scale; raw -32768 = no data | `lunarnav.polar_grids` |
 | `craters/robbins_2018.npz` | 1 296 796 craters: `lat`, `lon`, `diam_km`, sorted by latitude | NumPy npz, float32 | `lunarnav.craters` |
 | `craters/craters.json` | Source, citation, counts, completeness | JSON | `lunarnav.craters` |
-| `radiation/crater_dosimeter_daily.json` | LRO CRaTER dosimeter daily dose rate 2009-06-19 to 2013-04-30 (1405 days): as measured in orbit and corrected for lunar shielding (free-space GCR equivalent, N/A on solar-particle-event days), partial-day flag; `meta` holds source URL, SHA-256 and caveats | JSON, arrays `date`, `measured_mgy_si_per_day`, `corrected_mgy_si_per_day` (null = missing), `partial_day`; mGy in silicon per day | `lunarnav.crater_dose` |
 | `globe/lola_global_4ppd.png`, `globe/globe.json` | Global LOLA topography for the web globe: 1440 x 720, 4 px/deg, simple cylindrical (row 0 = 90 N, column 0 = longitude 0, east-positive), metres above the 1737.4 km sphere | 16-bit value in the red and green bytes of a PNG; height = min + v / 65535 x (max - min) (min, max in the sidecar) | `lunarnav.globe` |
+| `radiation/crater_dosimeter_daily.json` | LRO CRaTER dosimeter daily dose rate 2009-06-19 to 2013-04-30 (1405 days): as measured in orbit and corrected for lunar shielding (free-space GCR equivalent, N/A on solar-particle-event days), partial-day flag; `meta` holds source URL, SHA-256 and caveats | JSON, arrays `date`, `measured_mgy_si_per_day`, `corrected_mgy_si_per_day` (null = missing), `partial_day`; mGy in silicon per day | `lunarnav.crater_dose` |
 | `basemap_south.png`, `.json` | Hillshade of the south pole with its georeference (for maps) | PNG + JSON | `lunarnav.basemap` |
 | `provenance.json` | Source, version, size, terms and transformation of the ephemeris, DEM and catalogue inputs | JSON | `lunarnav.provenance` |
 | `validation.json` | Pipeline validation against JPL Horizons and the Apollo tables | JSON | `lunarnav.validate` |
@@ -36,6 +36,7 @@ South polar stereographic, true scale at the pole: `x = r sin(lon)`, `y = r cos(
 | `lola_slope_60s` | degrees | 960 m | south of 60 S | LOLA `LDSM_60S_240MPP_ADJ`, PGDA product 90 |
 | `lola_slope_80s` | degrees | 320 m | south of 80 S | LOLA `LDSM_80S_80MPP_ADJ`, PGDA product 90 |
 | `lola_elevation_60s` | metres above the sphere | 960 m | south of 60 S | LOLA `LDEM_60S_240MPP_ADJ`, PGDA product 90 |
+| `lola_elevation_80s` | metres above the sphere | 240 m (source pixels, not averaged) | 608 km box on the pole (south of about 80 S) | LOLA `LDEM_60S_240MPP_ADJ`, PGDA product 90; near field of the ray-traced horizons of manual coordinates |
 | `sun_illumination_65s` | fraction of time, 0..1 | 960 m | south of 65 S | `AVGVISIB_65S_240M_201608`, PGDA product 69 |
 | `earth_visibility_65s` | fraction of time, 0..1 | 960 m | south of 65 S | `AVGVISIB_65S_240M_201608_EARTH`, PGDA product 69 |
 | `permanent_shadow_65s` | fraction of the cell, 0..1 | 960 m | south of 65 S | `LPSR_65S_240M_201608`, PGDA product 69 |

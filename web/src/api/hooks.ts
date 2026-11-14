@@ -1,7 +1,7 @@
 /** TanStack Query hooks over the API client. Catalogue and metadata are cached for the session. */
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { type SeriesParams, type StateParams, api, isMissing } from './client'
-import type { CandidateSearchRequest, PowerRequest } from './types'
+import type { CandidateSearchRequest, PowerRequest, RadiationRequest } from './types'
 import type { Selection } from '../state/store'
 
 const forever = { staleTime: Infinity, gcTime: Infinity }
@@ -24,6 +24,17 @@ export function useApiState(sel: Selection, p: StateParams, enabled: boolean) {
   })
 }
 
+/** Ray-traced skyline of manual coordinates (one call per point and mast; kept for the session). */
+export function usePointHorizon(sel: Selection, mastM: number) {
+  return useQuery({
+    queryKey: ['point-horizon', sel.kind === 'point' ? sel.lat : null, sel.kind === 'point' ? sel.lon : null, mastM],
+    queryFn: ({ signal }) => (sel.kind === 'point' ? api.pointHorizon(sel.lat, sel.lon, mastM, signal) : Promise.reject(new Error('not a point'))),
+    enabled: sel.kind === 'point',
+    retry,
+    staleTime: Infinity,
+  })
+}
+
 export function useApiSeries(sel: Selection, p: SeriesParams, enabled: boolean) {
   return useQuery({
     queryKey: ['series', sel, p],
@@ -36,6 +47,16 @@ export function useApiSeries(sel: Selection, p: SeriesParams, enabled: boolean) 
 
 export const useCandidateSearch = () => useMutation({ mutationFn: (body: CandidateSearchRequest) => api.searchCandidates(body) })
 export const usePower = () => useMutation({ mutationFn: (body: PowerRequest) => api.power(body) })
+
+export function useRadiation(body: RadiationRequest | null) {
+  return useQuery({
+    queryKey: ['radiation', body],
+    queryFn: ({ signal }) => api.radiation(body!, signal),
+    enabled: !!body,
+    retry,
+    staleTime: Infinity,
+  })
+}
 
 export function useCraters(bbox: [number, number, number, number] | null, minDiamKm: number) {
   return useQuery({

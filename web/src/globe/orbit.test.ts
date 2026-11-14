@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MOON_R_KM, OrbitRig, latLonToScene, raySphere, sceneToLatLon } from './orbit'
+import { IDLE_BEFORE_SPIN_MS, MOON_R_KM, OrbitRig, RELIEF_MAX, SPIN_DEG_PER_S, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon } from './orbit'
 
 describe('globe geometry', () => {
   it('puts the north pole up and longitude 0 toward +x', () => {
@@ -46,5 +46,45 @@ describe('orbit controller', () => {
     o.turnTo(0, -170)
     o.step(0.05, false)
     expect(o.now.lon).toBeGreaterThan(170)
+  })
+})
+
+describe('relief exaggeration', () => {
+  it('is x1 close in, x4 for the whole Moon, and grows with distance in between', () => {
+    expect(reliefExaggeration(MOON_R_KM + 200)).toBe(1)
+    expect(reliefExaggeration(MOON_R_KM * 3.4)).toBe(RELIEF_MAX)
+    expect(reliefExaggeration(MOON_R_KM + 1_375)).toBeCloseTo(2.5, 6)
+  })
+})
+
+describe('idle spin', () => {
+  const rig = () => new OrbitRig({ lat: 0, lon: 0, dist: 6000 }, 0)
+
+  it('stays still until 20 s without a touch, then turns slowly', () => {
+    const o = rig()
+    o.step(1, false, IDLE_BEFORE_SPIN_MS - 1)
+    expect(o.goal.lon).toBe(0)
+    o.step(2, false, IDLE_BEFORE_SPIN_MS)
+    expect(o.goal.lon).toBeCloseTo(2 * SPIN_DEG_PER_S, 9)
+    expect(o.isSpinning(IDLE_BEFORE_SPIN_MS)).toBe(true)
+  })
+
+  it('a touch restarts the 20 s', () => {
+    const o = rig()
+    o.touch(15_000)
+    o.step(1, false, IDLE_BEFORE_SPIN_MS + 1)
+    expect(o.goal.lon).toBe(0)
+    o.step(1, false, 15_000 + IDLE_BEFORE_SPIN_MS)
+    expect(o.goal.lon).toBeGreaterThan(0)
+  })
+
+  it('does not turn when anchored or when motion is reduced', () => {
+    const a = rig()
+    a.setAnchored(true)
+    a.step(5, false, 10 * IDLE_BEFORE_SPIN_MS)
+    expect(a.goal.lon).toBe(0)
+    const r = rig()
+    r.step(5, true, 10 * IDLE_BEFORE_SPIN_MS)
+    expect(r.goal.lon).toBe(0)
   })
 })

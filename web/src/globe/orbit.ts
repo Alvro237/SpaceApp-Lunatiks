@@ -40,8 +40,21 @@ export interface Orbit {
   dist: number
 }
 
-export const MIN_DIST = MOON_R_KM * 1.12
+/** Closest the camera comes: 50 km above the 1737.4 km sphere (the detail tiles' finest cells, 83 m, fill the view). */
+export const MIN_DIST = MOON_R_KM + 50
 export const MAX_DIST = MOON_R_KM * 8
+
+/** Relief exaggeration of the globe's mesh: x4 when the camera is high enough to see the whole Moon. */
+export const RELIEF_MAX = 4
+/**
+ * Exaggeration at a camera distance (km from the centre): x1 (true relief) up to 250 km above the surface, x4 from
+ * 2 500 km, linear in between. Close in, the shading comes from 118 m heights while the mesh holds 21 km steps of
+ * the 7.6 km grid; exaggerated steps would make the fine shading slide over them as the camera moves.
+ */
+export function reliefExaggeration(distKm: number): number {
+  const t = (distKm - MOON_R_KM - 250) / (2_500 - 250)
+  return 1 + (RELIEF_MAX - 1) * Math.max(0, Math.min(1, t))
+}
 
 /** Drag: the surface follows the pointer (degrees per pixel shrink as the camera gets closer). */
 export function dragOrbit(o: Orbit, dxPx: number, dyPx: number, viewHeightPx: number, fovDeg: number): Orbit {
@@ -55,10 +68,21 @@ export function zoomOrbit(o: Orbit, factor: number): Orbit {
   return { ...o, dist: MOON_R_KM + h }
 }
 
-/** Camera controller of the globe: input moves a goal, the camera eases toward it every frame. */
+/** Idle time after which the Moon starts turning by itself, ms. */
+export const IDLE_BEFORE_SPIN_MS = 20_000
+/** Slow turn: about two minutes a revolution. */
+export const SPIN_DEG_PER_S = 3
+
+/**
+ * Camera controller of the globe: input moves a goal, the camera eases toward it every frame. When nobody has
+ * touched the Moon for IDLE_BEFORE_SPIN_MS it turns slowly by itself (unless anchored, or motion is reduced).
+ */
 export class OrbitRig {
   readonly now: Orbit
   readonly goal: Orbit
+  /** When true the Moon never turns by itself. */
+  private anchored = false
+  private lastInputMs = 0
   /** A dive toward a point of the polar cap; when it arrives, the map opens there. */
   private diving: [number, number] | null = null
   private fitted = false
@@ -84,25 +108,44 @@ export class OrbitRig {
     this.markerAt = fn
   }
 
-  constructor(start: Orbit) {
+  constructor(start: Orbit, nowMs = performance.now()) {
     this.now = { ...start }
     this.goal = { ...start }
+    this.lastInputMs = nowMs
+  }
+
+  setAnchored(anchored: boolean): void {
+    this.anchored = anchored
+  }
+
+  /** Any touch of the Moon (drag, zoom, key, pick, flight) restarts the idle timer. */
+  touch(nowMs = performance.now()): void {
+    this.lastInputMs = nowMs
+  }
+
+  /** True while the Moon is turning by itself. */
+  isSpinning(nowMs = performance.now()): boolean {
+    return !this.anchored && !this.diving && nowMs - this.lastInputMs >= IDLE_BEFORE_SPIN_MS
   }
 
   drag(dxPx: number, dyPx: number, viewHeightPx: number, fovDeg: number, immediate = false): void {
+    this.touch()
     Object.assign(this.goal, dragOrbit(this.goal, dxPx, dyPx, viewHeightPx, fovDeg))
     if (immediate) Object.assign(this.now, { lat: this.goal.lat, lon: this.goal.lon })
   }
 
   zoom(factor: number): void {
+    this.touch()
     Object.assign(this.goal, zoomOrbit(this.goal, factor))
   }
 
   turnTo(lat: number, lon: number): void {
+    this.touch()
     Object.assign(this.goal, { lat: Math.max(-88, Math.min(88, lat)), lon })
   }
 
   dive(lat: number, lon: number, dist: number): void {
+    this.touch()
     this.diving = [lat, lon]
     Object.assign(this.goal, { lat: Math.max(-88, lat), lon, dist })
   }
@@ -119,7 +162,8 @@ export class OrbitRig {
     return this.diving !== null
   }
 
-  step(dt: number, reducedMotion: boolean): void {
+  step(dt: number, reducedMotion: boolean, nowMs = performance.now()): void {
+    if (!reducedMotion && this.isSpinning(nowMs)) this.goal.lon += SPIN_DEG_PER_S * dt
     const k = reducedMotion ? 1 : 1 - Math.exp(-dt * 6)
     const n = this.now
     const g = this.goal

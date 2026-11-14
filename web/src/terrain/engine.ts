@@ -6,18 +6,25 @@
 import * as THREE from 'three'
 import { LruCache } from './cache'
 import { type LiveConfig, type LiveSource, liveConfigFromEnv, trekTileUrl, withLiveLevels } from './live/config'
+import { layerCellGeometry, liveLayerMaxZ, liveLayerSource } from './live/layers'
 import { lutBytes, type ColormapId } from './colormaps'
 import { TileLoader } from './loader'
 import { type LodOptions, byDistanceTo, renderable, selectTiles } from './lod'
 import { GRID_VERTICES, TERRAIN_FRAG, TERRAIN_VERT } from './shaders'
 import { SHADOW_FRAG, SHADOW_VERT } from './shadow'
+import { BANDS, ShadowSchedule } from './shadowSchedule'
 import { type TileKey, type Tileset, keyOf, parent, tileBounds, tileUrl } from './tileset'
 
 export const GPU_TILE_CAPACITY = 300
-/** Shadow texture: one texel per 960 m cell of the preview over the 60 S disc. */
-const SHADOW_SIZE = 2048
-/** During playback the shadow pass runs at most this often (the panels update at 10 Hz). */
-const SHADOW_MIN_INTERVAL_MS = 60
+/** Shadow texture at rest: one texel per 960 m cell of the preview over the 60 S disc (the overview is 2049²). */
+export const SHADOW_SIZE = 2048
+/**
+ * Shadow texture while the Sun moves (time playing or the slider dragged): one texel per 1 920 m. The pass costs one
+ * 72-step ray per texel, so halving the side divides its cost by about four; measured on an Intel UHD (integrated)
+ * GPU, 25-44 ms per pass at 2048² against 8-16 ms at 1024², with a whole frame budget of 16.7 ms at 60 fps. Once the
+ * Sun is still the full-size texture is computed again, in strips (shadowSchedule.ts says when each pass runs).
+ */
+export const SHADOW_FAST_SIZE = 1024
 
 export type LayerMode = { kind: 'none' } | { kind: 'elevation' } | { kind: 'data'; id: string; colormap: ColormapId; levels: number }
 
@@ -100,6 +107,10 @@ export class TerrainEngine {
   private readonly luts = new Map<ColormapId, THREE.DataTexture>()
   private readonly empty = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1)
   private previouslySplit = new Set<string>()
+  /** Live layer tiles queued or in flight, and those the drawn tiles wanted last frame (the others are cancelled). */
+  private readonly liveLayerKeys = new Set<string>()
+  private wantedLayerKeys = new Set<string>()
+  private nextWantedLayerKeys = new Set<string>()
   private layer: LayerMode = { kind: 'none' }
   private overviewHeights: Float32Array | null = null
   private overviewSamples = 0
@@ -109,10 +120,11 @@ export class TerrainEngine {
 
   // shadow pass
   private readonly shadowTarget: THREE.WebGLRenderTarget
+  private readonly shadowTargetFast: THREE.WebGLRenderTarget
+  private readonly shadowSchedule = new ShadowSchedule()
   private readonly shadowScene = new THREE.Scene()
   private readonly shadowCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
   private readonly shadowMaterial: THREE.ShaderMaterial
-  private shadowDirty = true
   private lastSun = new THREE.Vector3()
 
   /** Uniforms shared by every tile material (same objects, so one update reaches all tiles). */
@@ -147,13 +159,15 @@ export class TerrainEngine {
     this.shared.uElevRange.value.set(tileset.overview.min, tileset.overview.max)
     if (tileset.discRadiusM) this.shared.uDiscR.value = tileset.discRadiusM
 
-    this.shadowTarget = new THREE.WebGLRenderTarget(SHADOW_SIZE, SHADOW_SIZE, {
+    const shadowTargetOptions = {
       type: THREE.HalfFloatType,
       format: THREE.RGBAFormat,
       minFilter: THREE.LinearFilter,
       magFilter: THREE.LinearFilter,
       depthBuffer: false,
-    })
+    }
+    this.shadowTarget = new THREE.WebGLRenderTarget(SHADOW_SIZE, SHADOW_SIZE, shadowTargetOptions)
+    this.shadowTargetFast = new THREE.WebGLRenderTarget(SHADOW_FAST_SIZE, SHADOW_FAST_SIZE, shadowTargetOptions)
     this.shadowMaterial = new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3,
       vertexShader: SHADOW_VERT,
@@ -191,7 +205,7 @@ export class TerrainEngine {
     this.shadowMaterial.uniforms.uHeight.value = tex
     const [x0, , x1] = this.tileset.extentM
     this.shadowMaterial.uniforms.uExtent.value.w = (x1 - x0) / (res.width - 1)
-    this.shadowDirty = true
+    this.shadowSchedule.changed(performance.now())
   }
 
   /** Height (m) from the overview at a map point, bilinear; null outside the tileset or before it loads. */
@@ -249,7 +263,9 @@ export class TerrainEngine {
   /** Sun direction (unit, MOON_ME) and angular radius at the chosen instant. */
   setSun(unit: [number, number, number], radiusDeg: number, mastM: number): void {
     const v = new THREE.Vector3(...unit)
-    if (v.angleTo(this.lastSun) > 2e-5 || this.shadowMaterial.uniforms.uMast.value !== mastM) this.shadowDirty = true
+    if (v.angleTo(this.lastSun) > 2e-5 || this.shadowMaterial.uniforms.uMast.value !== mastM) {
+      this.shadowSchedule.changed(performance.now())
+    }
     this.lastSun.copy(v)
     this.shared.uSun.value.copy(v)
     this.shadowMaterial.uniforms.uSunR.value = radiusDeg
@@ -260,21 +276,27 @@ export class TerrainEngine {
     this.shared.uHighlight.value.set(x, y, radiusM)
   }
 
-  private lastShadowAt = 0
-
-  /** Recompute the shadow texture if the Sun moved; call before rendering the frame. */
+  /**
+   * Recompute the shadow texture when the Sun moved; call before rendering the frame. A fast (1024) pass answers at
+   * once; the full (2048) pass follows in strips, one per frame, once the Sun is still (shadowSchedule.ts).
+   */
   renderShadows(renderer: THREE.WebGLRenderer, playing = false): void {
-    if (!this.shadowDirty || !this.shadowMaterial.uniforms.uHeight.value) return
-    const now = performance.now()
-    if (playing && now - this.lastShadowAt < SHADOW_MIN_INTERVAL_MS) return
-    this.lastShadowAt = now
+    if (!this.shadowMaterial.uniforms.uHeight.value) return
+    const step = this.shadowSchedule.next(performance.now(), playing)
+    if (!step) return
+    const target = step.kind === 'fast' ? this.shadowTargetFast : this.shadowTarget
+    if (step.kind === 'full') {
+      const h = SHADOW_SIZE / BANDS
+      target.scissor.set(0, step.band * h, SHADOW_SIZE, h)
+      target.scissorTest = true
+    }
     const prev = renderer.getRenderTarget()
-    renderer.setRenderTarget(this.shadowTarget)
+    renderer.setRenderTarget(target)
     renderer.render(this.shadowScene, this.shadowCamera)
     renderer.setRenderTarget(prev)
-    this.shared.uShadow.value = this.shadowTarget.texture
+    if (step.kind === 'full' && !step.last) return
+    this.shared.uShadow.value = target.texture
     this.shared.uShadowReady.value = 1
-    this.shadowDirty = false
     this.stats.shadowPasses++
   }
 
@@ -316,16 +338,38 @@ export class TerrainEngine {
     }
     const order = byDistanceTo(this.tileset, targetKm, [...wanted.values()])
     const rank = new Map(order.map((t, i) => [keyOf(t), i]))
-    // overview first, then height tiles nearest the centre; layer tiles keep their place (never cancelled)
-    this.loader.prioritise((k) => (k === 'overview' ? -1 : k.startsWith('L:') ? order.length : (rank.get(k) ?? null)))
+    // overview first, then height tiles nearest the centre; static layer tiles of the layer shown keep their place,
+    // those of another layer (the user switched) and live layer tiles no tile wanted last frame are dropped
+    this.wantedLayerKeys = this.nextWantedLayerKeys
+    this.nextWantedLayerKeys = new Set()
+    const layerPrefix = this.layer.kind === 'data' ? `L:${this.layer.id}|` : null
+    this.loader.prioritise((k) => {
+      if (k === 'overview') return -1
+      if (!k.startsWith('L:')) return rank.get(k) ?? null
+      if (!layerPrefix || !k.startsWith(layerPrefix)) return null
+      if (this.liveLayerKeys.has(k) && !this.wantedLayerKeys.has(k)) return null
+      return order.length
+    })
     for (const t of order) this.requestTile(t)
 
-    // show exactly the drawable tiles
+    // show exactly the drawable tiles, nearest to the camera first (each tile has its own material, so without a
+    // render order three.js would draw them in material order and shade terrain that nearer tiles then cover)
     for (const child of [...this.group.children]) if (!drawKeys.has(child.userData.key)) this.group.remove(child)
-    for (const t of draw) {
+    const camKm = camera.position
+    const nearFirst = draw
+      .map((t) => {
+        const [a, b, c, d] = tileBounds(this.tileset, t)
+        const cx = Math.max(a / 1000, Math.min(c / 1000, camKm.x))
+        const cz = Math.max(-d / 1000, Math.min(-b / 1000, camKm.z))
+        return { t, d: Math.hypot(cx - camKm.x, cz - camKm.z) }
+      })
+      .sort((p, q) => p.d - q.d)
+    for (let i = 0; i < nearFirst.length; i++) {
+      const t = nearFirst[i].t
       const k = keyOf(t)
       const tile = this.tiles.get(k)!
       this.tiles.touch(k)
+      tile.mesh.renderOrder = -10_000 + i
       if (tile.mesh.parent !== this.group) this.group.add(tile.mesh)
       this.bindLayer(t, tile)
     }
@@ -365,7 +409,8 @@ export class TerrainEngine {
       .request(k, req)
       .then((res) => {
         const tex = new THREE.DataTexture(res.heights!, res.width, res.height, THREE.RedFormat, THREE.FloatType)
-        tex.minFilter = tex.magFilter = THREE.NearestFilter
+        // the vertex shader reads exact samples (texelFetch); the fragment shader's slopes use the filtering
+        tex.minFilter = tex.magFilter = this.floatLinear ? THREE.LinearFilter : THREE.NearestFilter
         tex.needsUpdate = true
         if (source) {
           // the measured range replaces the estimate used for culling before the tile loaded
@@ -384,10 +429,16 @@ export class TerrainEngine {
     const [xMin, , , yMax] = tileBounds(this.tileset, t)
     const size = (this.tileset.extentM[2] - this.tileset.extentM[0]) / 2 ** t.z
     const cellM = this.tileset.levels[t.z].cellM
+    // only tiles reaching past the map's disc need the discard (shaders.ts, DISC_EDGE)
+    const reach = Math.max(...[xMin, xMin + size].flatMap((x) => [yMax, yMax - size].map((y) => Math.hypot(x, y))))
+    const defines: Record<string, string> = {}
+    if (this.floatLinear) defines.FLOAT_LINEAR = ''
+    if (reach > this.shared.uDiscR.value) defines.DISC_EDGE = ''
     const material = new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3,
       vertexShader: TERRAIN_VERT,
       fragmentShader: TERRAIN_FRAG,
+      defines,
       side: THREE.DoubleSide,
       uniforms: {
         ...this.shared,
@@ -406,20 +457,35 @@ export class TerrainEngine {
     return { key: keyOf(t), heights, mesh }
   }
 
-  /** Give the tile the layer texture of its own level, or of the deepest ancestor the layer has. */
+  /**
+   * Give the tile the layer texture of its own level, or of the deepest ancestor the layer has: static levels
+   * everywhere, live levels (live/layers.ts) where a source covers the tile and the PGDA proxy is configured. While
+   * the finest one loads, the nearest loaded ancestor is shown.
+   */
   private bindLayer(t: TileKey, tile: GpuTile): void {
     const u = tile.mesh.material.uniforms
     if (this.layer.kind !== 'data') {
       u.uHasLayer.value = 0
       return
     }
-    let src: TileKey = t
-    while (src.z > this.layer.levels - 1) src = parent(src)!
-    const lk = `L:${this.layer.id}|${keyOf(src)}`
-    const tex = this.layerTextures.get(lk)
-    if (!tex) {
+    const id = this.layer.id
+    const staticMax = this.layer.levels - 1
+    const liveMax = this.liveBase ? liveLayerMaxZ(id) : -1
+    let finest: TileKey = t
+    while (finest.z > staticMax && !(finest.z <= liveMax && liveLayerSource(id, this.tileset, finest))) finest = parent(finest)!
+    let src: TileKey | null = finest
+    let tex: THREE.DataTexture | undefined
+    let lk = ''
+    while (src) {
+      lk = `L:${id}|${keyOf(src)}`
+      tex = this.layerTextures.get(lk)
+      if (tex) break
+      if (src === finest || src.z <= staticMax) this.requestLayer(id, src, lk)
+      if (src.z > staticMax) this.nextWantedLayerKeys.add(lk)
+      src = parent(src)
+    }
+    if (!tex || !src) {
       u.uHasLayer.value = 0
-      this.requestLayer(this.layer.id, src, lk)
       return
     }
     this.layerTextures.touch(lk)
@@ -431,16 +497,34 @@ export class TerrainEngine {
 
   private requestLayer(id: string, t: TileKey, lk: string): void {
     if (this.loader.known(lk)) return
+    const meta = this.tileset.layers[id]
+    const live = this.layer.kind === 'data' && t.z > this.layer.levels - 1 ? liveLayerSource(id, this.tileset, t) : null
+    if (live) this.liveLayerKeys.add(lk)
+    const req = live
+      ? {
+          url: this.liveBase + live.file,
+          kind: 'live' as const,
+          live: {
+            file: live.file,
+            source: 'cog' as const,
+            geometry: layerCellGeometry(this.tileset, t),
+            layer: { scale: live.scale, offset: live.offset, min: meta.min, max: meta.max },
+          },
+        }
+      : { url: `${this.base}layers/${id}/${t.z}/${t.x}/${t.y}.png`, kind: 'layer' as const }
     this.loader
-      .request(lk, { url: `${this.base}layers/${id}/${t.z}/${t.x}/${t.y}.png`, kind: 'layer' })
+      .request(lk, req)
       .then((res) => {
         const tex = new THREE.DataTexture(res.bytes!, res.width, res.height, THREE.RGFormat, THREE.UnsignedByteType)
-        tex.minFilter = tex.magFilter = THREE.NearestFilter
+        // bilinear between cell centres (the shader divides by the filtered coverage), so 960 m cells read as a
+        // smooth field instead of blocks when zoomed in
+        tex.minFilter = tex.magFilter = THREE.LinearFilter
         tex.colorSpace = THREE.NoColorSpace
         tex.needsUpdate = true
         this.layerTextures.set(lk, tex)
       })
       .catch(() => {})
+      .finally(() => this.liveLayerKeys.delete(lk))
   }
 
   dispose(): void {
@@ -450,6 +534,7 @@ export class TerrainEngine {
     this.luts.forEach((t) => t.dispose())
     this.geometry.dispose()
     this.shadowTarget.dispose()
+    this.shadowTargetFast.dispose()
     this.shadowMaterial.dispose()
   }
 }

@@ -168,6 +168,17 @@ With the build of 2026-11-14 that is 105 904 possible live tiles; listing them t
   Reloading with the same browser profile: 5 requests and 3.3 MB on the second run, 0 on the third (the rest
   came from IndexedDB, 18 MB on disk).
 
+## Rendering cost
+
+Measured with a GPU timer (EXT_disjoint_timer_query_webgl2) on 2026-11-14, tilted 3D view at 79.3° S 137.1° W,
+canvas 1698 × 1544 device pixels (pixel ratio 2): the terrain took 10.0 ms per frame (median; 15.5 ms at the 95th
+percentile, 18.7 ms at most) before, and 3.3 ms (6.0, 8.5) after, while drawing more tiles (35 against 21). The
+changes (`web/src/terrain/shaders.ts`, `engine.ts`): only tiles that reach past the disc carry the fragment
+`discard` (a shader that can discard loses the GPU's hidden-surface removal); slopes from 4 hardware-filtered reads
+of the height texture instead of 16 fetches where float textures filter linearly; the Sun's direction per vertex;
+tiles drawn nearest first. The shadow pass (2048², 11-13 ms of GPU time) runs at 1024² (a quarter of the pixels; not
+timed) while the Sun keeps moving, and once at 2048² when it has been still for 250 ms.
+
 ## Shadows and horizon maps
 
 The engine computes shadows on the GPU from `overview` (ray march toward the Sun with the curvature drop, 175 km,
@@ -178,3 +189,67 @@ directions per pixel at a quarter of the height resolution, as 4 RGBA textures p
 `horizon/{z}/{x}/{y}_{k}.png` with k = 0..3, each channel one direction (k × 4 + channel) × 22.5° clockwise from
 north, value = elevation in degrees mapped from [−10, 40] to 0..255. The engine will read them when
 `tileset.json` gains a `horizon` block with that `path`.
+
+## Globe detail tiles (outside the polar map)
+
+The globe ships with LDEM_16 reduced to 4 px/deg (7.6 km, `data/globe`). While the user zooms, the browser reads
+finer tiles from NASA Moon Trek (`web/src/globe/detail`): LOLA heights for the relief shading and, in the optional
+photo view, the LROC WAC mosaic.
+
+- Grid: geographic, level z has tiles of 90 / 2^z degrees (4·2^z × 2·2^z tiles from 180° W, 90° N), 256 × 256
+  cell-centred cells. Levels 2 to 7 for the view (2.7 km to 83 m cells, the level whose cells match a device
+  pixel, at most 48 tiles; the whole Moon takes the 48 level-2 tiles nearest the centre); level 1 (32 tiles of
+  45°) is the photo view's base. Boxes never cross ±180° or ±90°. The globe's closest zoom is 50 km above the
+  surface.
+- Heights, by where the tile is (all measured 2026-11-14): between 45° S and 45° N the global DEM
+  `LRO_LOLA_DEM_Global_256ppd_v06`; poleward of 45° the 100 m polar DEMs in geographic form
+  (`LRO_LOLA_DEM_SPole45_100mp_v04_EQ`, `..._NPole45_...`), which answer every level in about 1.3 s where the
+  global DEM takes 5-60 s (or HTTP 500) for large polar tiles. The polar ones return half-metres (× 0.5). The global
+  128 px/deg v04 DEM is not used: its gaps between LOLA tracks show as north-south bands near the equator (the v06
+  DEM still has some there; that is the data, LOLA's track spacing near the equator).
+- Photo: the WMTS cache of `LRO_WAC_Mosaic_Global_303ppd_v02` (JPEG, same grid: matrix z + 1, row y, column x,
+  about 0.85 s per tile).
+- Requests: DEM tiles by `exportImage`, bilinear on the server, as 16-bit integers in half-metres (the polar DEMs
+  store half-metres; the global DEM is doubled on the server by an Arithmetic rendering rule first, at most 0.25 m
+  from its float32 answer): a third to a half of the bytes of float32, which is what limited loading. From level 3
+  on, four sibling tiles come in one 512 × 512 answer (about 1.8 s against 1.3 s for one 256 px tile). One extra
+  row below the box (dropped) because Moon Trek answers the last row with zeros; the south-pole row of tiles has no extra row and a last row of zeros is
+  replaced by the row above. 15 s time limit, two attempts; a failed tile is asked for again after 10, 20 and 40 s.
+- Order: tiles are chosen for where the camera is going (not for the frames of the flight there); the few tiles two
+  levels coarser come first, then the view's level from the centre outward. From an empty cache a view loads in
+  about 1.5-3 s (50° S 1.4 s, 30 tiles; 70° S 2.3 s, 34 tiles; equator at 50 km 3.0 s, 21 tiles), on a connection
+  with about 0.7 s of latency to Moon Trek. Moon Trek sometimes takes 14-23 s for one answer in a region it has
+  not served recently (seen for float32, 16-bit and rule requests alike); such a view waits for it or for the 15 s
+  limit and the retry.
+- Checks before caching: size, georeference (DEM), no no-data, no row of zeros (DEM). Cached in the browser's
+  block cache under the URL.
+- Measured: DEM tile means within 0.25 m (global, 22.5-28.125° E, 0-5.625° N) and 13 m (south polar, 22.5-28.125° E,
+  67.5-73.125° S) of LDEM_16 over the same boxes.
+- Drawing: the mesh relief is the shipped grid, interpolated bilinearly, with its exaggeration easing from ×4 (whole
+  Moon) to ×1 (closest zoom), so the fine shading does not slide over exaggerated steps of the coarse mesh; the 513
+  vertices at each pole share one height (they used to fan out into spikes). The fragment shader shades with the
+  finest loaded tile that is not finer than the view's level (slopes exaggerated ×1.5 there, ×3 on the 7.6 km
+  grid), stepping inside the tile at its edges. The photo keeps its own, photographed lighting; the chosen instant
+  only sets day and night.
+- Known limit: near the poles the geographic tiles are thin wedges, so a view there stays at coarser levels (2.7 km
+  cells around 80° S); the detailed south-polar map is the place for that region.
+
+## Colour layers in the map
+
+The static layer tiles (sunlight, Earth visibility, slope, permanent shadow) are 960 m cells (levels 0-3), the
+resolution of the grids in `data/grids`. They are drawn with bilinear filtering between cell centres, weighted by
+coverage (the value is stored as 0 where there is no data and divided by the filtered coverage in the shader), so
+zooming in shows a smooth field instead of 960 m blocks.
+
+Live layer levels (`web/src/terrain/live/layers.ts`): when the map is zoomed in and the PGDA proxy is configured
+(always in development; `VITE_PGDA_PROXY` in a build), finer layer tiles are read block by block from the original
+products: levels 4-5 (480 and 240 m cells) for sunlight, Earth visibility and permanent shadow from the 240 m PGDA
+product 69 files (south of about 65° S), and for slope from `LDSM_60S_240MPP_ADJ`, with level 6 (120 m) from
+`LDSM_80S_80MPP_ADJ` within 304 km of the pole. Each cell is bilinear between the valid source pixels around its
+centre; values use the GeoTIFFs' own scale and offset tags (illumination ×4e-5; permanent shadow ×2.5e-5 + 0.5) and
+the static tiles' byte range (steeper 240 m and 80 m slopes clip at its top). While a live tile loads, the nearest
+loaded ancestor is shown; live tiles no longer in view are cancelled. Measured 2026-11-14: a 240 m sunlight tile
+near the pole has the same mean as the static 960 m tile over the same square (byte 73.9) and, reduced to 960 m,
+correlates 0.991 with it at zero shift; the first tile of a file takes about 5 s (opening the file through the
+proxy), the next about 2.5 s.
+

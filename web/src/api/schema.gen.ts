@@ -38,6 +38,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/points/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sun and Earth over a mission window at manual coordinates (smooth-sphere horizon) */
+        get: operations["point_series_api_v1_points_series_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/points/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sun and Earth at manual coordinates and an instant (smooth-sphere horizon) */
+        get: operations["point_state_api_v1_points_state_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sites": {
         parameters: {
             query?: never;
@@ -72,6 +106,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sites/{site_id}/horizon": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 360-degree skyline of a site (LOLA terrain mask), optionally with its neighbours */
+        get: operations["site_horizon_api_v1_sites__site_id__horizon_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sites/{site_id}/series": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sun and Earth over a mission window: per-sample arrays, sunlit/comms/eclipse ranges, metrics */
+        get: operations["site_series_api_v1_sites__site_id__series_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sites/{site_id}/state": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sun and Earth at a site and instant: az/el, visible fraction, eclipse, time to next set/rise */
+        get: operations["site_state_api_v1_sites__site_id__state_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -93,10 +178,551 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /**
+         * BodySeries
+         * @description One value per sample, aligned with ``SeriesResponse.t``.
+         */
+        BodySeries: {
+            /**
+             * Az
+             * @description Azimuth of the disc centre, degrees clockwise from north, 0..360
+             */
+            az: number[];
+            /**
+             * El
+             * @description Elevation of the disc centre, degrees (airless, apparent)
+             */
+            el: number[];
+            /**
+             * Horizon El
+             * @description Horizon elevation at the body's azimuth, degrees
+             */
+            horizon_el: number[];
+            /**
+             * Visible
+             * @description Sun: visible_fraction > 0. Earth: >= comms_min_fraction
+             */
+            visible: boolean[];
+            /**
+             * Visible Fraction
+             * @description Fraction of the disc above the horizon, 0..1
+             */
+            visible_fraction: number[];
+        };
+        /** BodyState */
+        BodyState: {
+            /**
+             * Angular Radius Deg
+             * @description Apparent angular radius of the disc, degrees
+             */
+            angular_radius_deg: number;
+            /**
+             * Az
+             * @description Azimuth of the body centre, degrees clockwise from north, 0..360
+             */
+            az: number;
+            /**
+             * Distance Km
+             * @description Distance from the site to the body centre, km
+             */
+            distance_km: number;
+            /**
+             * El
+             * @description Elevation of the body centre above the local horizontal, degrees (airless, apparent: light time + stellar aberration)
+             */
+            el: number;
+            /**
+             * Horizon El
+             * @description Elevation of the horizon at the body's azimuth, degrees (terrain mask or smooth-sphere dip, see horizon_kind)
+             */
+            horizon_el: number;
+            /**
+             * Visible
+             * @description Sun: any part of the disc above the horizon (visible_fraction > 0). Earth: at least comms_min_fraction of the disc above it
+             */
+            visible: boolean;
+            /**
+             * Visible Fraction
+             * @description Fraction of the body's disc above the horizon, 0..1
+             */
+            visible_fraction: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HorizonResponse */
+        HorizonResponse: {
+            /**
+             * Az
+             * @description Azimuths, degrees clockwise from north, 0 to 360 - az_step_deg
+             */
+            az: number[];
+            /**
+             * Az Step Deg
+             * @description Azimuth spacing, degrees
+             */
+            az_step_deg: number;
+            /**
+             * Elevation Deg
+             * @description Skyline elevation at each azimuth, degrees. Between azimuths interpolate linearly, wrapping at 360
+             */
+            elevation_deg: number[];
+            /**
+             * Ground M
+             * @description Ground height above the 1737.4 km reference sphere, metres
+             */
+            ground_m: number;
+            /**
+             * Horizon Kind
+             * @description 'terrain': LOLA ray-traced mask to 175 km; 'smooth_sphere': geometric dip -acos(R/(R+h))
+             * @enum {string}
+             */
+            horizon_kind: "terrain" | "smooth_sphere";
+            /**
+             * Lat
+             * @description Planetocentric latitude, degrees, Moon Mean-Earth frame
+             */
+            lat: number;
+            /**
+             * Lon
+             * @description East-positive longitude, degrees, -180..180
+             */
+            lon: number;
+            /**
+             * Mast M
+             * @description Mast height requested, metres
+             */
+            mast_m: number;
+            /**
+             * Mast Used M
+             * @description Mast height of the profile returned, metres: the nearest stored terrain mask, or the requested one on a smooth sphere
+             */
+            mast_used_m: number;
+            /**
+             * Masts Available M
+             * @description Mast heights with a stored terrain mask; empty on a smooth sphere (any mast is computed exactly)
+             */
+            masts_available_m: number[];
+            /**
+             * Max Az Deg
+             * @description Azimuth of the highest skyline point, degrees clockwise from north
+             */
+            max_az_deg: number;
+            /**
+             * Max Deg
+             * @description Highest skyline elevation, degrees
+             */
+            max_deg: number;
+            /**
+             * Mean Deg
+             * @description Mean skyline elevation over the 720 azimuths, degrees
+             */
+            mean_deg: number;
+            /**
+             * Min Az Deg
+             * @description Azimuth of the lowest skyline point, degrees clockwise from north
+             */
+            min_az_deg: number;
+            /**
+             * Min Deg
+             * @description Lowest skyline elevation, degrees
+             */
+            min_deg: number;
+            /**
+             * Site Id
+             * @description Catalogue id
+             */
+            site_id: string;
+            /** @description Neighbour masks; null unless include_zone=true and zone_available */
+            zone: components["schemas"]["Zone"] | null;
+            /**
+             * Zone Available
+             * @description True when neighbour masks exist for this site
+             */
+            zone_available: boolean;
+        };
+        /** LongTermComparison */
+        LongTermComparison: {
+            /**
+             * Difference
+             * @description pgda - smooth_sphere. Negative: the smooth sphere overstates here (crater, slope). Positive: it understates (summit or ridge facing the body)
+             */
+            difference: number;
+            /**
+             * Pgda
+             * @description NASA PGDA product 69 value at the point: 18.6-year average over real LOLA terrain, 960 m cell, 0..1
+             */
+            pgda: number;
+            /**
+             * Smooth Sphere
+             * @description Same quantity from this engine over the smooth-sphere horizon at the point, 2025-2035 every 6 h, 0..1
+             */
+            smooth_sphere: number;
+        };
+        /** PointSeriesResponse */
+        PointSeriesResponse: {
+            /**
+             * Comms Min Fraction
+             * @description Share of the Earth's disc required for comms, 0..1
+             */
+            comms_min_fraction: number;
+            /**
+             * Comms Ranges
+             * @description Stretches with the Earth visible for comms
+             */
+            comms_ranges: components["schemas"]["TimeRange"][];
+            /**
+             * Duration H
+             * @description Requested window length, hours
+             */
+            duration_h: number;
+            earth: components["schemas"]["BodySeries"];
+            /**
+             * Eclipse
+             * @description The Earth covering the Sun, per sample
+             */
+            eclipse: ("none" | "partial" | "total")[];
+            /**
+             * Eclipse Ranges
+             * @description Stretches with any eclipse (partial or total)
+             */
+            eclipse_ranges: components["schemas"]["TimeRange"][];
+            /**
+             * End
+             * @description Last sample, ISO 8601 UTC
+             */
+            end: string;
+            /**
+             * Ground M
+             * @description Ground height above the 1737.4 km reference sphere, metres
+             */
+            ground_m: number;
+            /**
+             * Ground Source
+             * @description Where ground_m comes from: 'lola_site' (pipeline value at a catalogue terrain site), 'lola_grid' (LOLA elevation grid south of 60 S, 960 m cells) or 'reference_sphere' (no height data there: 0 m assumed; it only shifts parallax, < 0.001 deg)
+             * @enum {string}
+             */
+            ground_source: "lola_site" | "lola_grid" | "reference_sphere";
+            /**
+             * Horizon Kind
+             * @description 'terrain' (LOLA mask) or 'smooth_sphere' (geometric dip only)
+             * @enum {string}
+             */
+            horizon_kind: "terrain" | "smooth_sphere";
+            /**
+             * Lat
+             * @description Planetocentric latitude, degrees, Moon Mean-Earth frame
+             */
+            lat: number;
+            /**
+             * Lon
+             * @description East-positive longitude, degrees, -180..180
+             */
+            lon: number;
+            /**
+             * Mast M
+             * @description Mast height requested, metres
+             */
+            mast_m: number;
+            /**
+             * Mast Used M
+             * @description Mast height of the horizon actually used, metres
+             */
+            mast_used_m: number;
+            metrics: components["schemas"]["SeriesMetrics"];
+            /**
+             * Samples
+             * @description Number of samples (length of every array)
+             */
+            samples: number;
+            /**
+             * Site Id
+             * @description Catalogue id; null for manual coordinates
+             */
+            site_id?: string | null;
+            /**
+             * Start
+             * @description Window start, ISO 8601 UTC
+             */
+            start: string;
+            /**
+             * Step Min
+             * @description Sample spacing, minutes
+             */
+            step_min: number;
+            sun: components["schemas"]["BodySeries"];
+            /**
+             * Sun Eclipsed Fraction
+             * @description Share of the solar disc hidden by the Earth, per sample
+             */
+            sun_eclipsed_fraction: number[];
+            /**
+             * Sunlit Ranges
+             * @description Stretches with the Sun visible
+             */
+            sunlit_ranges: components["schemas"]["TimeRange"][];
+            /**
+             * T
+             * @description Sample instants, ISO 8601 UTC
+             */
+            t: string[];
+            /** @description Which way the smooth sphere errs at this point, from NASA's terrain-aware long-term maps; null north of 65 S, where PGDA has no map */
+            terrain_reference: components["schemas"]["TerrainReference"] | null;
+        };
+        /** PointStateResponse */
+        PointStateResponse: {
+            /**
+             * Comms Min Fraction
+             * @description Share of the Earth's disc required for comms, 0..1
+             */
+            comms_min_fraction: number;
+            earth: components["schemas"]["BodyState"];
+            /**
+             * Eclipse
+             * @description The Earth covering the Sun as seen from the site (a lunar eclipse seen from the Earth)
+             * @enum {string}
+             */
+            eclipse: "none" | "partial" | "total";
+            /**
+             * Ground M
+             * @description Ground height above the 1737.4 km reference sphere, metres
+             */
+            ground_m: number;
+            /**
+             * Ground Source
+             * @description Where ground_m comes from: 'lola_site' (pipeline value at a catalogue terrain site), 'lola_grid' (LOLA elevation grid south of 60 S, 960 m cells) or 'reference_sphere' (no height data there: 0 m assumed; it only shifts parallax, < 0.001 deg)
+             * @enum {string}
+             */
+            ground_source: "lola_site" | "lola_grid" | "reference_sphere";
+            /**
+             * Horizon Kind
+             * @description 'terrain': LOLA ray-traced mask; 'smooth_sphere': geometric dip only. Real terrain differs both ways: crater floors and slopes see less sky, peaks see below the smooth horizon and get more light and comms
+             * @enum {string}
+             */
+            horizon_kind: "terrain" | "smooth_sphere";
+            /**
+             * Lat
+             * @description Planetocentric latitude, degrees, Moon Mean-Earth frame
+             */
+            lat: number;
+            /**
+             * Lon
+             * @description East-positive longitude, degrees, -180..180
+             */
+            lon: number;
+            /**
+             * Mast M
+             * @description Mast height requested, metres above the ground
+             */
+            mast_m: number;
+            /**
+             * Mast Used M
+             * @description Mast height of the horizon actually used, metres: the nearest stored terrain mask (0, 2, 5, 10 m) or the requested one on a smooth sphere
+             */
+            mast_used_m: number;
+            /** @description Next Earthset or Earthrise for comms; null if none within the search span */
+            next_earth_transition: components["schemas"]["Transition"] | null;
+            /** @description Next sunset (kind 'set') or sunrise ('rise'); null if none within the search span */
+            next_sun_transition: components["schemas"]["Transition"] | null;
+            /**
+             * Site Id
+             * @description Catalogue id; null for manual coordinates
+             */
+            site_id?: string | null;
+            sun: components["schemas"]["BodyState"];
+            /**
+             * Sun Eclipsed Fraction
+             * @description Fraction of the solar disc hidden behind the Earth, 0..1 (1 during a total eclipse, 0 when eclipse is 'none')
+             */
+            sun_eclipsed_fraction: number;
+            /**
+             * T
+             * @description Requested instant, ISO 8601 UTC
+             */
+            t: string;
+            /** @description Which way the smooth sphere errs at this point, from NASA's terrain-aware long-term maps; null north of 65 S, where PGDA has no map */
+            terrain_reference: components["schemas"]["TerrainReference"] | null;
+            /**
+             * Transition Search Days
+             * @description Days searched ahead for the transitions (capped by the end of the ephemeris tables)
+             */
+            transition_search_days: number;
+        };
+        /**
+         * SeriesMetrics
+         * @description The engine's Metrics over the window, from the samples. No power figures (MECH's /power).
+         */
+        SeriesMetrics: {
+            /**
+             * Both Pct
+             * @description Share of samples with both, percent
+             */
+            both_pct: number;
+            /**
+             * Comms Pct
+             * @description Share of samples with the Earth visible for comms, percent
+             */
+            comms_pct: number;
+            /**
+             * Continuous Comms
+             * @description Earth visible for comms at every sample
+             */
+            continuous_comms: boolean;
+            /**
+             * Continuous Light
+             * @description Sun visible at every sample
+             */
+            continuous_light: boolean;
+            /**
+             * Eclipse Events
+             * @description Number of separate eclipse stretches in the window
+             */
+            eclipse_events: number;
+            /**
+             * Eclipse Minutes
+             * @description Time with any eclipse (partial or total), minutes, from samples
+             */
+            eclipse_minutes: number;
+            /**
+             * Longest Blackout H
+             * @description Longest run of samples without comms, hours (grid resolution)
+             */
+            longest_blackout_h: number;
+            /**
+             * Longest Dark H
+             * @description Longest run of samples without Sun, hours (grid resolution)
+             */
+            longest_dark_h: number;
+            /**
+             * Max Sun El Deg
+             * @description Highest solar elevation in the window, degrees
+             */
+            max_sun_el_deg: number;
+            /**
+             * Min Sun El Deg
+             * @description Lowest solar elevation in the window, degrees
+             */
+            min_sun_el_deg: number;
+            /**
+             * Sunlight Pct
+             * @description Share of samples with the Sun visible, percent
+             */
+            sunlight_pct: number;
+            /**
+             * Window Hours
+             * @description Span from the first to the last sample, hours
+             */
+            window_hours: number;
+        };
+        /** SeriesResponse */
+        SeriesResponse: {
+            /**
+             * Comms Min Fraction
+             * @description Share of the Earth's disc required for comms, 0..1
+             */
+            comms_min_fraction: number;
+            /**
+             * Comms Ranges
+             * @description Stretches with the Earth visible for comms
+             */
+            comms_ranges: components["schemas"]["TimeRange"][];
+            /**
+             * Duration H
+             * @description Requested window length, hours
+             */
+            duration_h: number;
+            earth: components["schemas"]["BodySeries"];
+            /**
+             * Eclipse
+             * @description The Earth covering the Sun, per sample
+             */
+            eclipse: ("none" | "partial" | "total")[];
+            /**
+             * Eclipse Ranges
+             * @description Stretches with any eclipse (partial or total)
+             */
+            eclipse_ranges: components["schemas"]["TimeRange"][];
+            /**
+             * End
+             * @description Last sample, ISO 8601 UTC
+             */
+            end: string;
+            /**
+             * Ground M
+             * @description Ground height above the 1737.4 km reference sphere, metres
+             */
+            ground_m: number;
+            /**
+             * Ground Source
+             * @description Where ground_m comes from: 'lola_site' (pipeline value at a catalogue terrain site), 'lola_grid' (LOLA elevation grid south of 60 S, 960 m cells) or 'reference_sphere' (no height data there: 0 m assumed; it only shifts parallax, < 0.001 deg)
+             * @enum {string}
+             */
+            ground_source: "lola_site" | "lola_grid" | "reference_sphere";
+            /**
+             * Horizon Kind
+             * @description 'terrain' (LOLA mask) or 'smooth_sphere' (geometric dip only)
+             * @enum {string}
+             */
+            horizon_kind: "terrain" | "smooth_sphere";
+            /**
+             * Lat
+             * @description Planetocentric latitude, degrees, Moon Mean-Earth frame
+             */
+            lat: number;
+            /**
+             * Lon
+             * @description East-positive longitude, degrees, -180..180
+             */
+            lon: number;
+            /**
+             * Mast M
+             * @description Mast height requested, metres
+             */
+            mast_m: number;
+            /**
+             * Mast Used M
+             * @description Mast height of the horizon actually used, metres
+             */
+            mast_used_m: number;
+            metrics: components["schemas"]["SeriesMetrics"];
+            /**
+             * Samples
+             * @description Number of samples (length of every array)
+             */
+            samples: number;
+            /**
+             * Site Id
+             * @description Catalogue id; null for manual coordinates
+             */
+            site_id?: string | null;
+            /**
+             * Start
+             * @description Window start, ISO 8601 UTC
+             */
+            start: string;
+            /**
+             * Step Min
+             * @description Sample spacing, minutes
+             */
+            step_min: number;
+            sun: components["schemas"]["BodySeries"];
+            /**
+             * Sun Eclipsed Fraction
+             * @description Share of the solar disc hidden by the Earth, per sample
+             */
+            sun_eclipsed_fraction: number[];
+            /**
+             * Sunlit Ranges
+             * @description Stretches with the Sun visible
+             */
+            sunlit_ranges: components["schemas"]["TimeRange"][];
+            /**
+             * T
+             * @description Sample instants, ISO 8601 UTC
+             */
+            t: string[];
         };
         /** SiteDetail */
         SiteDetail: {
@@ -177,6 +803,100 @@ export interface components {
             /** Url */
             url: string;
         };
+        /** StateResponse */
+        StateResponse: {
+            /**
+             * Comms Min Fraction
+             * @description Share of the Earth's disc required for comms, 0..1
+             */
+            comms_min_fraction: number;
+            earth: components["schemas"]["BodyState"];
+            /**
+             * Eclipse
+             * @description The Earth covering the Sun as seen from the site (a lunar eclipse seen from the Earth)
+             * @enum {string}
+             */
+            eclipse: "none" | "partial" | "total";
+            /**
+             * Ground M
+             * @description Ground height above the 1737.4 km reference sphere, metres
+             */
+            ground_m: number;
+            /**
+             * Ground Source
+             * @description Where ground_m comes from: 'lola_site' (pipeline value at a catalogue terrain site), 'lola_grid' (LOLA elevation grid south of 60 S, 960 m cells) or 'reference_sphere' (no height data there: 0 m assumed; it only shifts parallax, < 0.001 deg)
+             * @enum {string}
+             */
+            ground_source: "lola_site" | "lola_grid" | "reference_sphere";
+            /**
+             * Horizon Kind
+             * @description 'terrain': LOLA ray-traced mask; 'smooth_sphere': geometric dip only. Real terrain differs both ways: crater floors and slopes see less sky, peaks see below the smooth horizon and get more light and comms
+             * @enum {string}
+             */
+            horizon_kind: "terrain" | "smooth_sphere";
+            /**
+             * Lat
+             * @description Planetocentric latitude, degrees, Moon Mean-Earth frame
+             */
+            lat: number;
+            /**
+             * Lon
+             * @description East-positive longitude, degrees, -180..180
+             */
+            lon: number;
+            /**
+             * Mast M
+             * @description Mast height requested, metres above the ground
+             */
+            mast_m: number;
+            /**
+             * Mast Used M
+             * @description Mast height of the horizon actually used, metres: the nearest stored terrain mask (0, 2, 5, 10 m) or the requested one on a smooth sphere
+             */
+            mast_used_m: number;
+            /** @description Next Earthset or Earthrise for comms; null if none within the search span */
+            next_earth_transition: components["schemas"]["Transition"] | null;
+            /** @description Next sunset (kind 'set') or sunrise ('rise'); null if none within the search span */
+            next_sun_transition: components["schemas"]["Transition"] | null;
+            /**
+             * Site Id
+             * @description Catalogue id; null for manual coordinates
+             */
+            site_id?: string | null;
+            sun: components["schemas"]["BodyState"];
+            /**
+             * Sun Eclipsed Fraction
+             * @description Fraction of the solar disc hidden behind the Earth, 0..1 (1 during a total eclipse, 0 when eclipse is 'none')
+             */
+            sun_eclipsed_fraction: number;
+            /**
+             * T
+             * @description Requested instant, ISO 8601 UTC
+             */
+            t: string;
+            /**
+             * Transition Search Days
+             * @description Days searched ahead for the transitions (capped by the end of the ephemeris tables)
+             */
+            transition_search_days: number;
+        };
+        /** TerrainReference */
+        TerrainReference: {
+            /** @description Share of time with any part of the Earth's disc visible (PGDA AVGVISIB_65S_240M_201608_EARTH) */
+            earth_any_visible_fraction: components["schemas"]["LongTermComparison"];
+            /**
+             * Smooth Sphere Period
+             * @description Period the smooth-sphere values average over, UTC
+             */
+            smooth_sphere_period: string;
+            /**
+             * Source
+             * @description Where the terrain-aware values come from
+             */
+            source: string;
+            /** @description Mean visible fraction of the solar disc (PGDA AVGVISIB_65S_240M_201608) */
+            sun_mean_visible_fraction: components["schemas"]["LongTermComparison"];
+        };
         /** TerrainSummary */
         TerrainSummary: {
             /**
@@ -207,6 +927,53 @@ export interface components {
              */
             slope_deg?: number | null;
         };
+        /** TimeRange */
+        TimeRange: {
+            /**
+             * Duration H
+             * @description end - start, hours (a lower bound when cut by the window)
+             */
+            duration_h: number;
+            /**
+             * End
+             * @description First instant out of the state, ISO 8601 UTC (refined to ~1 s), or the window end when ends_after_window
+             */
+            end: string;
+            /**
+             * Ends After Window
+             * @description Still in the state at the window end
+             */
+            ends_after_window: boolean;
+            /**
+             * Start
+             * @description First instant in the state, ISO 8601 UTC (refined to ~1 s), or the window start when starts_before_window
+             */
+            start: string;
+            /**
+             * Starts Before Window
+             * @description Already in the state at the window start
+             */
+            starts_before_window: boolean;
+        };
+        /** Transition */
+        Transition: {
+            /**
+             * At
+             * @description Instant of the change, ISO 8601 UTC, resolved to about one second
+             */
+            at: string;
+            /**
+             * In Hours
+             * @description Hours from the requested instant t to the change
+             */
+            in_hours: number;
+            /**
+             * Kind
+             * @description 'set': the body leaves view at that instant; 'rise': it comes into view
+             * @enum {string}
+             */
+            kind: "set" | "rise";
+        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -219,6 +986,77 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** Zone */
+        Zone: {
+            /**
+             * Mast M
+             * @description Mast height of the neighbour masks, metres (the pipeline stores 2 m only)
+             */
+            mast_m: number;
+            /**
+             * Points
+             * @description The site centre first, then the neighbours by ring and bearing
+             */
+            points: components["schemas"]["ZonePoint"][];
+        };
+        /** ZonePoint */
+        ZonePoint: {
+            /**
+             * Bearing Deg
+             * @description Direction from the site centre, degrees clockwise from north
+             */
+            bearing_deg: number;
+            /**
+             * Distance M
+             * @description Distance from the site centre over the 1737.4 km sphere, metres (0 for the centre itself)
+             */
+            distance_m: number;
+            /**
+             * Elevation Deg
+             * @description Skyline elevation at each azimuth of HorizonResponse.az, degrees
+             */
+            elevation_deg: number[];
+            /**
+             * Ground M
+             * @description Ground height above the 1737.4 km sphere, metres
+             */
+            ground_m: number;
+            /**
+             * Lat
+             * @description Planetocentric latitude, degrees, Moon Mean-Earth frame
+             */
+            lat: number;
+            /**
+             * Lon
+             * @description East-positive longitude, degrees, -180..180
+             */
+            lon: number;
+            /**
+             * Max Az Deg
+             * @description Azimuth of the highest skyline point, degrees clockwise from north
+             */
+            max_az_deg: number;
+            /**
+             * Max Deg
+             * @description Highest skyline elevation, degrees
+             */
+            max_deg: number;
+            /**
+             * Mean Deg
+             * @description Mean skyline elevation over the 720 azimuths, degrees
+             */
+            mean_deg: number;
+            /**
+             * Min Az Deg
+             * @description Azimuth of the lowest skyline point, degrees clockwise from north
+             */
+            min_az_deg: number;
+            /**
+             * Min Deg
+             * @description Lowest skyline elevation, degrees
+             */
+            min_deg: number;
         };
     };
     responses: never;
@@ -269,6 +1107,90 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    point_series_api_v1_points_series_get: {
+        parameters: {
+            query: {
+                /** @description Planetocentric latitude, degrees, Moon Mean-Earth frame, -89.9999..89.9999 (the exact poles have no azimuth reference) */
+                lat: number;
+                /** @description East-positive longitude, degrees. -180..180 or 0..360, normalised to -180..180 (330 = -30) */
+                lon: number;
+                /** @description Window start, ISO 8601 (e.g. 2026-11-20T12:00:00Z). No offset = UTC */
+                start: string;
+                /** @description Window length, hours (mission duration). Required: a mission input with no neutral default */
+                duration_h: number;
+                /** @description Sample spacing, minutes, 1..1440. Range edges are refined to ~1 s whatever the step. At most 20000 samples per request */
+                step_min?: number;
+                /** @description Panel or antenna height above the ground, metres, 0..20. Absent, empty or null = 0 m (the ground). Terrain masks exist for 0, 2, 5 and 10 m; the nearest is used (see mast_used_m) */
+                mast_m?: number;
+                /** @description Share of the Earth's disc that must be above the horizon to count as direct-to-Earth comms */
+                comms_min_fraction?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PointSeriesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    point_state_api_v1_points_state_get: {
+        parameters: {
+            query: {
+                /** @description Planetocentric latitude, degrees, Moon Mean-Earth frame, -89.9999..89.9999 (the exact poles have no azimuth reference) */
+                lat: number;
+                /** @description East-positive longitude, degrees. -180..180 or 0..360, normalised to -180..180 (330 = -30) */
+                lon: number;
+                /** @description Instant, ISO 8601 (e.g. 2026-11-20T12:00:00Z). No offset = UTC */
+                t: string;
+                /** @description Panel or antenna height above the ground, metres, 0..20. Absent, empty or null = 0 m (the ground). Terrain masks exist for 0, 2, 5 and 10 m; the nearest is used (see mast_used_m) */
+                mast_m?: number;
+                /** @description Share of the Earth's disc that must be above the horizon to count as direct-to-Earth comms */
+                comms_min_fraction?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PointStateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -325,6 +1247,122 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SiteDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    site_horizon_api_v1_sites__site_id__horizon_get: {
+        parameters: {
+            query?: {
+                /** @description Panel or antenna height above the ground, metres, 0..20. Absent, empty or null = 0 m (the ground). Terrain masks exist for 0, 2, 5 and 10 m; the nearest is used (see mast_used_m) */
+                mast_m?: number;
+                /** @description Also return the neighbours' masks (site centre plus rings at 500 m and 1.5 km, 8 bearings). They exist for the 2 m mast only */
+                include_zone?: boolean;
+            };
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HorizonResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    site_series_api_v1_sites__site_id__series_get: {
+        parameters: {
+            query: {
+                /** @description Window start, ISO 8601 (e.g. 2026-11-20T12:00:00Z). No offset = UTC */
+                start: string;
+                /** @description Window length, hours (mission duration). Required: a mission input with no neutral default */
+                duration_h: number;
+                /** @description Sample spacing, minutes, 1..1440. Range edges are refined to ~1 s whatever the step. At most 20000 samples per request */
+                step_min?: number;
+                /** @description Panel or antenna height above the ground, metres, 0..20. Absent, empty or null = 0 m (the ground). Terrain masks exist for 0, 2, 5 and 10 m; the nearest is used (see mast_used_m) */
+                mast_m?: number;
+                /** @description Share of the Earth's disc that must be above the horizon to count as direct-to-Earth comms */
+                comms_min_fraction?: number;
+            };
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeriesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    site_state_api_v1_sites__site_id__state_get: {
+        parameters: {
+            query: {
+                /** @description Instant, ISO 8601 (e.g. 2026-11-20T12:00:00Z). No offset = UTC */
+                t: string;
+                /** @description Panel or antenna height above the ground, metres, 0..20. Absent, empty or null = 0 m (the ground). Terrain masks exist for 0, 2, 5 and 10 m; the nearest is used (see mast_used_m) */
+                mast_m?: number;
+                /** @description Share of the Earth's disc that must be above the horizon to count as direct-to-Earth comms */
+                comms_min_fraction?: number;
+            };
+            header?: never;
+            path: {
+                site_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StateResponse"];
                 };
             };
             /** @description Validation Error */

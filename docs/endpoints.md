@@ -33,34 +33,47 @@ Numbers given as defaults below are placeholders for the owner to set with a cit
 
 ## SW-1 · Site state at a date and time
 
-**Status:** to do. **Files:** `routers/state.py`, `schemas/state.py`, `tests/test_state.py`.
+**Status:** done in branch `seryitron-branchito`, validated (output format: `docs/sw1-output-format.md`). **Files:** `routers/state.py`, `schemas/state.py`, `tests/test_state.py`.
 
-- `GET /api/v1/sites/{site_id}/state?t=&mast_m=&panel=&comms_min_fraction=`
-- Response: Sun and Earth `az`, `el`, `visible_fraction`, `angular_radius_deg`, `distance_km`; `eclipse`;
-  `irradiance_w_m2`, `power_w_m2`; `next_sun_transition` and `next_earth_transition` (`kind`, `at`, `in_hours`);
-  `horizon_kind`.
+- `GET /api/v1/sites/{site_id}/state?t=&mast_m=&comms_min_fraction=` (`mast_m` absent or null = 0 m)
+- Response: Sun and Earth `az`, `el`, `horizon_el`, `visible_fraction`, `visible`, `angular_radius_deg`,
+  `distance_km`; `eclipse`, `sun_eclipsed_fraction`; `next_sun_transition` and `next_earth_transition` (`kind`,
+  `at`, `in_hours`); `horizon_kind`. No irradiance or power: those belong to MECH's `/power` (owner's decision).
 - Logic: `services.model_for_site` + `engine.evaluate` at one instant + `engine.next_transition`. No new physics.
 - Done when: the values for a fixture case in `tests/fixtures/horizons_reference.json` match within 0.01 degrees
   through the HTTP layer, and a date outside the tables returns 400.
 
 ## SW-1 · Series over a window
 
-**Status:** to do. **Files:** `routers/state.py` (same router), `schemas/state.py`.
+**Status:** done in branch `seryitron-branchito`, validated (output format: `docs/sw1-output-format.md`, plan:
+`docs/sw1-roadmap.md`). **Files:** `routers/state.py` (same router), `schemas/state.py`, `tests/test_series.py`.
 
 - `GET /api/v1/sites/{site_id}/series?start=&duration_h=&step_min=&mast_m=...`
-- Response: arrays (`t`, Sun and Earth az/el/fraction, `power_w_m2`, `eclipse`), `metrics` (the `Metrics`
-  dataclass), `sunlit_ranges` and `comms_ranges` (time ranges), `horizon_kind`.
+- Response: arrays (`t`, Sun and Earth az/el/horizon_el/fraction/visible, `eclipse`, `sun_eclipsed_fraction`),
+  `metrics` (the `Metrics` dataclass without power), `sunlit_ranges`, `comms_ranges` and `eclipse_ranges` (edges
+  refined to the second), `horizon_kind`. No power: MECH's `/power` (owner's decision).
 - Guard: cap the number of samples (for example 20 000) and return 422 above it.
 
 ## SW-1 · Horizon profile
 
-**Status:** to do. `GET /api/v1/sites/{site_id}/horizon?mast_m=` returns the 720 azimuth values, `kind`, the mast
+**Status:** done in branch `seryitron-branchito`, validated (output format: `docs/sw1-output-format.md`).
+**Files:** `routers/horizon.py`, `schemas/horizon.py`, `tests/test_horizon.py`.
+`GET /api/v1/sites/{site_id}/horizon?mast_m=&include_zone=` returns the 720 azimuth values, `kind`, the mast
 actually used, and optionally the zone neighbours (`db/horizons.py: zone`).
 
 ## SW-1 · Manual coordinates
 
-**Status:** to do. **Files:** `routers/points.py`, `schemas/points.py`, `tests/test_points.py`.
+**Status:** `points/state` and `points/series` done in branch `seryitron-branchito`, validated (output format:
+`docs/sw1-output-format.md`); `points/info` not assigned in the team table.
+**Files:** `routers/points.py`, `schemas/points.py` (the site models plus `terrain_reference`),
+`tests/test_points.py`.
 
+- `GET /api/v1/points/horizon?lat=&lon=&mast_m=`: 360-degree skyline of any point, ray-traced over the LOLA
+  elevation grids (`lola_elevation_80s` 240 m near the pole, `lola_elevation_60s` 960 m to 60 S; smooth sphere
+  outside). Exact curvature, 720 azimuths to 250 km (`logic.horizon.ray_traced_horizon`, `services.point_horizon`).
+  Measured against the 13 catalogue masks: median RMS 0.21 deg, 11 of 13 within 0.5 deg, worst Mons Malapert
+  3.25 deg (`tests/test_point_horizon.py`). `points/state`, `points/series` and the MECH window endpoints take
+  `horizon=terrain` to use it; the default stays `smooth_sphere` (the contract they were validated on).
 - `GET /api/v1/points/state`, `/points/series`: same as the site endpoints with `lat`, `lon` instead of an id
   (`services.model_for_point`).
 - `GET /api/v1/points/info?lat=&lon=`: what the datasets say at the point (`services.point_lookups`): ground
@@ -105,7 +118,7 @@ actually used, and optionally the zone neighbours (`db/horizons.py: zone`).
 panels; timeline; mission mode; comparison), client generated from `/openapi.json`, web CI. Calls `/state`,
 `/series`, `/points/*`, `/candidates/search`, `/power`, `/craters` when they are deployed; contract for the
 terrain tiles in `docs/web-tileset.md`. Live terrain levels z8-z10 (20 m and 10 m LOLA DEMs read block by block
-from PGDA) on `feat/sw2-live-dem`; production needs the CORS proxy deployed (team decision). Deploy not set up (team decision). Typed client generated from `/openapi.json`; a GitHub Actions workflow running both test
+from PGDA) on `feat/sw2-live-dem`; production needs the CORS proxy deployed (team decision). Block Moon, an educational mode drawn as a world of cubes from the same LOLA data and engine, on `feat/sw2-block-moon`. Deploy not set up (team decision). Typed client generated from `/openapi.json`; a GitHub Actions workflow running both test
 suites; a public host that answers `/health` with no login. Ask the team before deploying anything.
 
 ---
@@ -138,7 +151,7 @@ one) as tests with the source of each date in `docs/references.md`.
 
 ## AERO-2 · Hard filters: communication hours and maximum blackout
 
-**Status:** to do. **File:** `logic/constraints/comms.py`.
+**Status:** in review (branch `feat/aero2-comms-filters`; level 1, line of sight only). **File:** `logic/constraints/comms.py`.
 
 - `comms_hours`: threshold `{ "min_hours": float }` or `{ "min_fraction": float }` over the mission window, from
   `ctx.series.comms(ctx.params)`. Fill `fraction` and `ranges`.

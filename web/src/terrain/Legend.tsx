@@ -3,11 +3,20 @@
  * the value range, units and source of the active colour layer. Values are printed, never colour alone.
  */
 import { useEffect, useId, useRef, useState } from 'react'
+import { IconLayers } from '../ui/icons'
 import { type LayerId, useApp } from '../state/store'
 import { ApiStatus } from '../ui/ApiStatus'
 import { type ColormapId, gradientCss } from './colormaps'
 import { CRATER_MIN_DIAM_KM } from './Craters'
+import { liveConfigFromEnv } from './live/config'
+import { liveLayerMaxZ } from './live/layers'
 import type { Tileset } from './tileset'
+
+/** Finest cell size of a layer when zoomed in (live levels, when the PGDA proxy is configured), or null. */
+function finestCellM(tileset: Tileset, id: string): number | null {
+  const z = liveConfigFromEnv(import.meta.env)?.proxyBase ? liveLayerMaxZ(id) : -1
+  return z >= 0 ? tileset.levels[0].cellM / 2 ** z : null
+}
 
 export const EXAGGERATIONS = [1, 2, 5] as const
 export type Exaggeration = (typeof EXAGGERATIONS)[number]
@@ -56,8 +65,8 @@ export function LayersControl({ tileset, exaggeration, onExaggeration, craterErr
 
   return (
     <div className="layers" ref={ref}>
-      <button type="button" aria-expanded={open} aria-controls={`${id}-menu`} onClick={() => setOpen(!open)} title="Map layers">
-        Layers
+      <button type="button" aria-expanded={open} aria-controls={`${id}-menu`} onClick={() => setOpen(!open)} aria-label="Map layers" title="Map layers">
+        <IconLayers />
       </button>
       {open && (
         <div id={`${id}-menu`} className="layers-menu" role="group" aria-label="Map layers">
@@ -125,7 +134,9 @@ export function LegendChip({ tileset }: { tileset: Tileset }) {
             min: meta.min,
             max: meta.max,
             unit: meta.unit,
-            source: `LOLA, ${meta.source.product?.replace('https://pgda.gsfc.nasa.gov/products/', 'PGDA ') ?? 'NASA'} · ${meta.cellM} m`,
+            source: `LOLA, ${meta.source.product?.replace('https://pgda.gsfc.nasa.gov/products/', 'PGDA ') ?? 'NASA'} · ${meta.cellM} m${
+              finestCellM(tileset, layer) ? `, ${finestCellM(tileset, layer)} m zoomed in` : ''
+            }`,
           }
         : null
   if (!scale) return null

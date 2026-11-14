@@ -4,6 +4,10 @@
  * Catalogue sites are buttons over the globe; the panels hold the same information as text.
  */
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { ToolPortal } from '../ui/ToolSlot'
+import { IconMinus, IconPin, IconPlus, IconPole } from '../ui/icons'
+import { useGlobe } from '../state/globe'
+import { useHorizonTransition } from '../state/horizon'
 import { useQuery } from '@tanstack/react-query'
 import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
@@ -14,7 +18,8 @@ import { type MapSite, useMapSites } from '../map/useMapSites'
 import { TileLoader } from '../terrain/loader'
 import { useEphemeris, useMasks } from '../time/hooks'
 import { DATA_BASE } from '../time/staticData'
-import { MOON_R_KM, type Orbit, OrbitRig, latLonToScene, raySphere, sceneToLatLon } from './orbit'
+import { GlobeDetail } from './detail/globeDetail'
+import { MIN_DIST, MOON_R_KM, type Orbit, OrbitRig, RELIEF_MAX, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon } from './orbit'
 import { GLOBE_FRAG, GLOBE_VERT } from './shaders'
 
 const FOV = 35
@@ -22,9 +27,13 @@ const FOV = 35
 export const MAP_DISC_LAT = -60
 /** Zooming in closer than this over the polar cap enters the map. */
 const ENTER_MAP_DIST = MOON_R_KM * 1.18
-const RELIEF_EXAGGERATION = 4
+/** Slope exaggeration of the shading where 118 m detail heights are loaded (the shipped 7.6 km grid uses 3). */
+const DETAIL_SHADE_EXAGGERATION = 1.5
 
-interface GlobeMeta {
+/** What the globe's surface shows: LOLA heights lit by the Sun at the chosen time, or the LROC WAC photo mosaic. */
+export type GlobeSurface = 'relief' | 'photo'
+
+export interface GlobeMeta {
   file: string
   width: number
   height: number
@@ -32,7 +41,7 @@ interface GlobeMeta {
   max: number
 }
 
-async function loadGlobe(): Promise<{ meta: GlobeMeta; heights: Float32Array }> {
+export async function loadGlobe(): Promise<{ meta: GlobeMeta; heights: Float32Array }> {
   const meta = (await (await fetch(`${DATA_BASE}globe/globe.json`)).json()) as GlobeMeta
   const loader = new TileLoader(1)
   try {
@@ -54,6 +63,39 @@ export function GlobeView() {
   const select = useApp((s) => s.select)
   const enterMap = useApp((s) => s.enterMap)
   const [orbit] = useState(() => new OrbitRig(START))
+  const [surface, setSurface] = useState<GlobeSurface>('relief')
+  /** The mesh's relief exaggeration, to half a unit (for the caption and the markers' height). */
+  const [exag, setExag] = useState(RELIEF_MAX)
+  const anchored = useGlobe((s) => s.anchored)
+  // In the horizon view the globe is hidden and paused: it must not start turning there, nor right after.
+  // paused (no frames drawn) while the horizon view or Block Moon covers the map; it keeps its camera and tiles
+  const underHorizon = useHorizonTransition((s) => s.phase === 'horizon')
+  const underBlocks = useApp((s) => s.blocks)
+  const covered = underHorizon || underBlocks
+  useEffect(() => orbit.touch(), [covered, orbit])
+
+  // Opening the horizon view: turn to the place and come down over it; back to the previous view when it closes.
+  useEffect(() => {
+    let before: Orbit | null = null
+    let phase = useHorizonTransition.getState().phase
+    return useHorizonTransition.subscribe((t) => {
+      if (t.phase === phase) return
+      phase = t.phase
+      if (phase === 'diving') {
+        const sel = useApp.getState().selection
+        const site = sel.kind === 'site' ? masks?.site(sel.id) : null
+        const ll = sel.kind === 'point' ? [sel.lat, sel.lon] : site ? [site.lat, site.lon] : null
+        if (!ll) return
+        before = { ...orbit.goal }
+        orbit.turnTo(ll[0], ll[1])
+        orbit.goal.dist = MIN_DIST
+      } else if ((phase === 'returning' || phase === 'map') && before) {
+        orbit.touch()
+        Object.assign(orbit.goal, before)
+        before = null
+      }
+    })
+  }, [masks, orbit])
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null)
   const pickRef = useRef<((cx: number, cy: number) => [number, number] | null) | null>(null)
 
@@ -78,6 +120,7 @@ export function GlobeView() {
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return
+    orbit.touch()
     const h = e.currentTarget.clientHeight || 600
     const keys: Record<string, () => void> = {
       ArrowLeft: () => orbit.drag(h * 0.08, 0, h, FOV),
@@ -96,6 +139,7 @@ export function GlobeView() {
     }
   }
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    orbit.touch()
     if ((e.target as HTMLElement).closest('button, select, input, a')) return
     drag.current = { x: e.clientX, y: e.clientY, moved: false }
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -141,13 +185,16 @@ export function GlobeView() {
         onWheel={onWheel}
       >
         {globe.data ? (
-          <Canvas camera={{ fov: FOV, near: 10, far: 50_000, position: [0, 0, 6000] }} dpr={[1, 2]} flat linear gl={{ antialias: true }} aria-hidden="true">
+          <Canvas camera={{ fov: FOV, near: 10, far: 50_000, position: [0, 0, 6000] }} dpr={[1, 2]} flat linear gl={{ antialias: true }} aria-hidden="true" frameloop={covered ? 'never' : 'always'}>
             <GlobeScene
               data={globe.data}
               orbit={orbit}
               sites={sites}
               markerStyle={markerStyle}
               pickRef={pickRef}
+              surface={surface}
+              exag={exag}
+              onExag={setExag}
               onEnter={(lat, lon) => enterMap(lat, lon)}
             />
           </Canvas>
@@ -160,18 +207,46 @@ export function GlobeView() {
           Arrow keys turn the Moon, plus and minus zoom, Enter opens the detailed south-polar map. Sites are listed, with the same information, in the panels.
         </p>
       </div>
+      <ToolPortal>
       <div className="map-controls" role="group" aria-label="Globe view">
-        <button type="button" onClick={() => orbit.zoom(0.6)} aria-label="Zoom in">
-          +
+        <div className="tool-group">
+          <button type="button" onClick={() => orbit.zoom(0.6)} aria-label="Zoom in" title="Zoom in (+)">
+            <IconPlus />
+          </button>
+          <button type="button" onClick={() => orbit.zoom(1 / 0.6)} aria-label="Zoom out" title="Zoom out (−)">
+            <IconMinus />
+          </button>
+        </div>
+        <button type="button" onClick={() => enterMap()} aria-label="South pole map" title="Detailed south-polar map">
+          <IconPole />
         </button>
-        <button type="button" onClick={() => orbit.zoom(1 / 0.6)} aria-label="Zoom out">
-          −
+        <button
+          type="button"
+          aria-pressed={anchored}
+          aria-label="Pin the Moon"
+          title={anchored ? 'Pinned: the Moon stays still. Press to let it turn when idle' : 'Pin the Moon: stop it turning by itself when idle'}
+          onClick={() => {
+            orbit.touch()
+            useGlobe.getState().setAnchored(!anchored)
+          }}
+        >
+          <IconPin />
         </button>
-        <button type="button" onClick={() => enterMap()} title="Detailed south-polar map">
-          South pole map
+        <button
+          type="button"
+          aria-pressed={surface === 'photo'}
+          onClick={() => setSurface(surface === 'photo' ? 'relief' : 'photo')}
+          title="Show the LROC WAC photo mosaic instead of the relief lit by the Sun"
+        >
+          Photo
         </button>
       </div>
-      <p className="globe-caption">Global LOLA topography (relief ×{RELIEF_EXAGGERATION}) · lit by the Sun at the chosen time</p>
+      </ToolPortal>
+      <p className="globe-caption">
+        {surface === 'photo'
+          ? `LROC WAC photo mosaic, 100 m, from NASA Moon Trek (lighting as photographed; night side from the chosen time) · LOLA relief ×${exag}`
+          : `Global LOLA topography (relief ×${exag}; 118 m detail from NASA Moon Trek as you zoom) · lit by the Sun at the chosen time`}
+      </p>
     </>
   )
 }
@@ -191,6 +266,10 @@ function placeCamera(cam: THREE.PerspectiveCamera, n: Orbit, w: number, h: numbe
   cam.updateProjectionMatrix()
 }
 
+function setExaggeration(m: THREE.ShaderMaterial, e: number) {
+  m.uniforms.uExag.value = e
+}
+
 /** Unit vector to the Sun, Moon Mean-Earth axes. */
 function setSun(m: THREE.ShaderMaterial, x: number, y: number, z: number) {
   ;(m.uniforms.uSun.value as THREE.Vector3).set(x, y, z)
@@ -202,6 +281,10 @@ interface SceneProps {
   sites: MapSite[]
   markerStyle: MarkerStyle
   pickRef: { current: ((cx: number, cy: number) => [number, number] | null) | null }
+  surface: GlobeSurface
+  /** Relief exaggeration to half a unit, as the caption shows it. */
+  exag: number
+  onExag: (exag: number) => void
   onEnter: (lat: number, lon: number) => void
 }
 
@@ -213,11 +296,12 @@ function globeHeight(data: SceneProps['data'], lat: number, lon: number): number
   return data.heights[row * width + col]
 }
 
-function GlobeScene({ data, orbit, sites, markerStyle, pickRef, onEnter }: SceneProps) {
-  const { camera, size, scene } = useThree()
+function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, onExag, onEnter }: SceneProps) {
+  const { camera, size, scene, gl } = useThree()
   const [markersSet] = useState(() => new MarkerSet())
   const eph = useEphemeris().data
   const [reduced] = useState(() => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
+  const [detail] = useState(() => new GlobeDetail())
   const [material] = useState(() => {
     const tex = new THREE.DataTexture(data.heights, data.meta.width, data.meta.height, THREE.RedFormat, THREE.FloatType)
     tex.minFilter = tex.magFilter = THREE.NearestFilter
@@ -228,9 +312,11 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, onEnter }: Scene
       fragmentShader: GLOBE_FRAG,
       uniforms: {
         uHeight: { value: tex },
-        uExag: { value: RELIEF_EXAGGERATION },
+        uExag: { value: RELIEF_MAX },
         uSun: { value: new THREE.Vector3(1, 0, 0) },
         uDiscLat: { value: MAP_DISC_LAT },
+        ...detail.uniforms(),
+        uDetailShade: { value: DETAIL_SHADE_EXAGGERATION },
       },
     })
   })
@@ -240,9 +326,13 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, onEnter }: Scene
       material.uniforms.uHeight.value.dispose()
       material.dispose()
       geometry.dispose()
+      detail.dispose()
     },
-    [material, geometry],
+    [material, geometry, detail],
   )
+
+  // the surface shown picks which detail tiles the shader reads; work out the wanted tiles again at once
+  useEffect(() => detail.setKind(material, surface === 'photo' ? 'photo' : 'dem'), [surface, material, detail])
 
   useEffect(() => {
     scene.add(markersSet.group)
@@ -252,9 +342,15 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, onEnter }: Scene
     }
   }, [scene, markersSet])
 
-  // Places on the globe, just above the (exaggerated) relief; crater outlines as small circles on the sphere.
+  // Places on the globe, just above the (exaggerated) relief; crater outlines as small circles on the sphere. `exag`
+  // is the mesh's exaggeration to half a unit (the mesh's own is within ±0.25 of it, and the places are rebuilt only
+  // when the half unit changes), so places above the sphere use the most the mesh can have and places below it the
+  // least: they never sink under the surface between rebuilds.
   useEffect(() => {
-    const radius = (lat: number, lon: number) => MOON_R_KM + ((globeHeight(data, lat, lon) + 300) / 1000) * RELIEF_EXAGGERATION
+    const radius = (lat: number, lon: number) => {
+      const h = globeHeight(data, lat, lon)
+      return MOON_R_KM + ((h + 300) / 1000) * (h >= 0 ? exag + 0.25 : exag - 0.25)
+    }
     markersSet.set(sites, markerStyle, {
       anchor: (s) => new THREE.Vector3(...latLonToScene(s.lat, s.lon, radius(s.lat, s.lon))),
       ring: (s) => {
@@ -280,7 +376,7 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, onEnter }: Scene
       },
     })
     orbit.setMarkerPicker((px, py) => markersSet.pick(px, py, camera as THREE.PerspectiveCamera, size.width, size.height))
-  }, [markersSet, sites, markerStyle, data, camera, size, orbit])
+  }, [markersSet, sites, markerStyle, data, camera, size, orbit, exag])
 
   useEffect(() => {
     pickRef.current = (cx, cy) => {
@@ -297,6 +393,7 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, onEnter }: Scene
   const toPoint = useMemo(() => new THREE.Vector3(), [])
 
   useFrame((_, dt) => {
+    orbit.setAnchored(useGlobe.getState().anchored)
     orbit.fit(size.width, size.height, useInsets.getState(), FOV)
     orbit.step(dt, reduced)
     const n = orbit.now
@@ -312,15 +409,28 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, onEnter }: Scene
       setSun(material, s[0] / len, s[1] / len, s[2] / len)
     }
 
+    // detail tiles for the part of the Moon in view
+    const e = reliefExaggeration(n.dist)
+    setExaggeration(material, e)
+    const half = Math.round(e * 2) / 2
+    if (half !== exag) onExag(half)
+    const g = orbit.goal
+    const dpr = gl.getPixelRatio()
+    const view = { fovDeg: FOV, widthPx: size.width * dpr, heightPx: size.height * dpr }
+    detail.update(dt, { ...view, lat: n.lat, lon: n.lon, distKm: n.dist }, { ...view, lat: g.lat, lon: g.lon, distKm: g.dist }, material)
+
     // enter the polar map once the flight down has arrived, or when zoomed in over the cap
-    const target = orbit.arrived()
-    if (target) {
-      onEnter(target[0], target[1])
-      return
-    }
-    if (!orbit.isDiving && orbit.goal.dist < ENTER_MAP_DIST && n.lat <= MAP_DISC_LAT + 2) {
-      onEnter(Math.min(n.lat, MAP_DISC_LAT - 1), n.lon)
-      return
+    // (not while the horizon view opens or closes: then the camera comes down over the place on purpose)
+    if (useHorizonTransition.getState().phase === 'map') {
+      const target = orbit.arrived()
+      if (target) {
+        onEnter(target[0], target[1])
+        return
+      }
+      if (!orbit.isDiving && orbit.goal.dist < ENTER_MAP_DIST && n.lat <= MAP_DISC_LAT + 2) {
+        onEnter(Math.min(n.lat, MAP_DISC_LAT - 1), n.lon)
+        return
+      }
     }
 
     // places on the visible hemisphere only (a point is hidden when the sphere is between it and the camera)
