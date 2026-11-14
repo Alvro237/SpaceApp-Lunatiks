@@ -19,6 +19,13 @@ export const GPU_TILE_CAPACITY = 300
 const SHADOW_SIZE = 2048
 /** During playback the shadow pass runs at most this often (the panels update at 10 Hz). */
 const SHADOW_MIN_INTERVAL_MS = 60
+/**
+ * While the Sun keeps moving (time playing or the slider dragged) the shadow pass runs at this size, a quarter of the
+ * work (the full pass took 11-13 ms of GPU time, measured); once the Sun has been still for SHADOW_SETTLE_MS the
+ * full-size pass runs once.
+ */
+const SHADOW_FAST_SIZE = 1024
+const SHADOW_SETTLE_MS = 250
 
 export type LayerMode = { kind: 'none' } | { kind: 'elevation' } | { kind: 'data'; id: string; colormap: ColormapId; levels: number }
 
@@ -114,6 +121,10 @@ export class TerrainEngine {
 
   // shadow pass
   private readonly shadowTarget: THREE.WebGLRenderTarget
+  private readonly shadowTargetFast: THREE.WebGLRenderTarget
+  /** The shadow texture shown is the fast one, to be replaced by a full pass once the Sun settles. */
+  private shadowFastShown = false
+  private lastSunChange = 0
   private readonly shadowScene = new THREE.Scene()
   private readonly shadowCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
   private readonly shadowMaterial: THREE.ShaderMaterial
@@ -152,13 +163,15 @@ export class TerrainEngine {
     this.shared.uElevRange.value.set(tileset.overview.min, tileset.overview.max)
     if (tileset.discRadiusM) this.shared.uDiscR.value = tileset.discRadiusM
 
-    this.shadowTarget = new THREE.WebGLRenderTarget(SHADOW_SIZE, SHADOW_SIZE, {
+    const shadowTargetOptions = {
       type: THREE.HalfFloatType,
       format: THREE.RGBAFormat,
       minFilter: THREE.LinearFilter,
       magFilter: THREE.LinearFilter,
       depthBuffer: false,
-    })
+    }
+    this.shadowTarget = new THREE.WebGLRenderTarget(SHADOW_SIZE, SHADOW_SIZE, shadowTargetOptions)
+    this.shadowTargetFast = new THREE.WebGLRenderTarget(SHADOW_FAST_SIZE, SHADOW_FAST_SIZE, shadowTargetOptions)
     this.shadowMaterial = new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3,
       vertexShader: SHADOW_VERT,
@@ -254,7 +267,10 @@ export class TerrainEngine {
   /** Sun direction (unit, MOON_ME) and angular radius at the chosen instant. */
   setSun(unit: [number, number, number], radiusDeg: number, mastM: number): void {
     const v = new THREE.Vector3(...unit)
-    if (v.angleTo(this.lastSun) > 2e-5 || this.shadowMaterial.uniforms.uMast.value !== mastM) this.shadowDirty = true
+    if (v.angleTo(this.lastSun) > 2e-5 || this.shadowMaterial.uniforms.uMast.value !== mastM) {
+      this.shadowDirty = true
+      this.lastSunChange = performance.now()
+    }
     this.lastSun.copy(v)
     this.shared.uSun.value.copy(v)
     this.shadowMaterial.uniforms.uSunR.value = radiusDeg
@@ -267,17 +283,30 @@ export class TerrainEngine {
 
   private lastShadowAt = 0
 
-  /** Recompute the shadow texture if the Sun moved; call before rendering the frame. */
+  /**
+   * Recompute the shadow texture if the Sun moved; call before rendering the frame. While the Sun keeps moving the
+   * pass is smaller and at most every SHADOW_MIN_INTERVAL_MS; a full pass follows once it settles.
+   */
   renderShadows(renderer: THREE.WebGLRenderer, playing = false): void {
-    if (!this.shadowDirty || !this.shadowMaterial.uniforms.uHeight.value) return
+    if (!this.shadowMaterial.uniforms.uHeight.value) return
     const now = performance.now()
-    if (playing && now - this.lastShadowAt < SHADOW_MIN_INTERVAL_MS) return
+    let target: THREE.WebGLRenderTarget
+    if (this.shadowDirty) {
+      const moving = playing || now - this.lastShadowAt < SHADOW_SETTLE_MS
+      if (moving && now - this.lastShadowAt < SHADOW_MIN_INTERVAL_MS) return
+      target = moving ? this.shadowTargetFast : this.shadowTarget
+    } else if (this.shadowFastShown && !playing && now - this.lastSunChange > SHADOW_SETTLE_MS) {
+      target = this.shadowTarget
+    } else {
+      return
+    }
     this.lastShadowAt = now
+    this.shadowFastShown = target === this.shadowTargetFast
     const prev = renderer.getRenderTarget()
-    renderer.setRenderTarget(this.shadowTarget)
+    renderer.setRenderTarget(target)
     renderer.render(this.shadowScene, this.shadowCamera)
     renderer.setRenderTarget(prev)
-    this.shared.uShadow.value = this.shadowTarget.texture
+    this.shared.uShadow.value = target.texture
     this.shared.uShadowReady.value = 1
     this.shadowDirty = false
     this.stats.shadowPasses++
@@ -333,12 +362,24 @@ export class TerrainEngine {
     })
     for (const t of order) this.requestTile(t)
 
-    // show exactly the drawable tiles
+    // show exactly the drawable tiles, nearest to the camera first (each tile has its own material, so without a
+    // render order three.js would draw them in material order and shade terrain that nearer tiles then cover)
     for (const child of [...this.group.children]) if (!drawKeys.has(child.userData.key)) this.group.remove(child)
-    for (const t of draw) {
+    const camKm = camera.position
+    const nearFirst = draw
+      .map((t) => {
+        const [a, b, c, d] = tileBounds(this.tileset, t)
+        const cx = Math.max(a / 1000, Math.min(c / 1000, camKm.x))
+        const cz = Math.max(-d / 1000, Math.min(-b / 1000, camKm.z))
+        return { t, d: Math.hypot(cx - camKm.x, cz - camKm.z) }
+      })
+      .sort((p, q) => p.d - q.d)
+    for (let i = 0; i < nearFirst.length; i++) {
+      const t = nearFirst[i].t
       const k = keyOf(t)
       const tile = this.tiles.get(k)!
       this.tiles.touch(k)
+      tile.mesh.renderOrder = -10_000 + i
       if (tile.mesh.parent !== this.group) this.group.add(tile.mesh)
       this.bindLayer(t, tile)
     }
@@ -378,7 +419,8 @@ export class TerrainEngine {
       .request(k, req)
       .then((res) => {
         const tex = new THREE.DataTexture(res.heights!, res.width, res.height, THREE.RedFormat, THREE.FloatType)
-        tex.minFilter = tex.magFilter = THREE.NearestFilter
+        // the vertex shader reads exact samples (texelFetch); the fragment shader's slopes use the filtering
+        tex.minFilter = tex.magFilter = this.floatLinear ? THREE.LinearFilter : THREE.NearestFilter
         tex.needsUpdate = true
         if (source) {
           // the measured range replaces the estimate used for culling before the tile loaded
@@ -397,10 +439,16 @@ export class TerrainEngine {
     const [xMin, , , yMax] = tileBounds(this.tileset, t)
     const size = (this.tileset.extentM[2] - this.tileset.extentM[0]) / 2 ** t.z
     const cellM = this.tileset.levels[t.z].cellM
+    // only tiles reaching past the map's disc need the discard (shaders.ts, DISC_EDGE)
+    const reach = Math.max(...[xMin, xMin + size].flatMap((x) => [yMax, yMax - size].map((y) => Math.hypot(x, y))))
+    const defines: Record<string, string> = {}
+    if (this.floatLinear) defines.FLOAT_LINEAR = ''
+    if (reach > this.shared.uDiscR.value) defines.DISC_EDGE = ''
     const material = new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3,
       vertexShader: TERRAIN_VERT,
       fragmentShader: TERRAIN_FRAG,
+      defines,
       side: THREE.DoubleSide,
       uniforms: {
         ...this.shared,
@@ -495,6 +543,7 @@ export class TerrainEngine {
     this.luts.forEach((t) => t.dispose())
     this.geometry.dispose()
     this.shadowTarget.dispose()
+    this.shadowTargetFast.dispose()
     this.shadowMaterial.dispose()
   }
 }

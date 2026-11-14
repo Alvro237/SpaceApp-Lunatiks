@@ -168,6 +168,17 @@ With the build of 2026-11-14 that is 105 904 possible live tiles; listing them t
   Reloading with the same browser profile: 5 requests and 3.3 MB on the second run, 0 on the third (the rest
   came from IndexedDB, 18 MB on disk).
 
+## Rendering cost
+
+Measured with a GPU timer (EXT_disjoint_timer_query_webgl2) on 2026-11-14, tilted 3D view at 79.3° S 137.1° W,
+canvas 1698 × 1544 device pixels (pixel ratio 2): the terrain took 10.0 ms per frame (median; 15.5 ms at the 95th
+percentile, 18.7 ms at most) before, and 3.3 ms (6.0, 8.5) after, while drawing more tiles (35 against 21). The
+changes (`web/src/terrain/shaders.ts`, `engine.ts`): only tiles that reach past the disc carry the fragment
+`discard` (a shader that can discard loses the GPU's hidden-surface removal); slopes from 4 hardware-filtered reads
+of the height texture instead of 16 fetches where float textures filter linearly; the Sun's direction per vertex;
+tiles drawn nearest first. The shadow pass (2048², 11-13 ms of GPU time) runs at 1024² (a quarter of the pixels; not
+timed) while the Sun keeps moving, and once at 2048² when it has been still for 250 ms.
+
 ## Shadows and horizon maps
 
 The engine computes shadows on the GPU from `overview` (ray march toward the Sun with the curvature drop, 175 km,
