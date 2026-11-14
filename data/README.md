@@ -20,6 +20,7 @@ longitude, planetocentric latitude, degrees. The API reads these files only thro
 | `grids/*.npz` | Screening grids (table below) | NumPy npz, one int16 array `values[row][col]`; value = raw × scale; raw -32768 = no data | `lunarnav.polar_grids` |
 | `craters/robbins_2018.npz` | 1 296 796 craters: `lat`, `lon`, `diam_km`, sorted by latitude | NumPy npz, float32 | `lunarnav.craters` |
 | `craters/craters.json` | Source, citation, counts, completeness | JSON | `lunarnav.craters` |
+| `globe/lola_global_4ppd.png`, `globe/globe.json` | Global LOLA topography for the web globe: 1440 x 720, 4 px/deg, simple cylindrical (row 0 = 90 N, column 0 = longitude 0, east-positive), metres above the 1737.4 km sphere | 16-bit value in the red and green bytes of a PNG; height = min + v / 65535 x (max - min) (min, max in the sidecar) | `lunarnav.globe` |
 | `basemap_south.png`, `.json` | Hillshade of the south pole with its georeference (for maps) | PNG + JSON | `lunarnav.basemap` |
 | `provenance.json` | Source, version, size, terms and transformation of the ephemeris, DEM and catalogue inputs | JSON | `lunarnav.provenance` |
 | `validation.json` | Pipeline validation against JPL Horizons and the Apollo tables | JSON | `lunarnav.validate` |
@@ -68,6 +69,7 @@ uv run python -m lunarnav.download        # SPICE kernels
 uv run python -m lunarnav.build           # ephemeris, sites, horizons, basemap, provenance, validation
 uv run python -m lunarnav.polar_grids     # screening grids
 uv run python -m lunarnav.craters         # crater catalogue
+uv run python -m lunarnav.globe           # global LOLA topography for the web globe (downloads LDEM_16, 33 MB)
 ```
 
 The four product 69 GeoTIFFs are fetched by hand into `data/raw/illumination/` from
