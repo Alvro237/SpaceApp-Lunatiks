@@ -8,17 +8,17 @@ from fastapi import HTTPException
 from .. import services
 from ..db.store import DataStore
 from ..logic.engine import SiteModel, visibility_ranges
-from ..schemas.common import TimeRange, WindowRequest
+from ..schemas.common import MAST_M, TimeRange, WindowRequest
 
 
 def resolve_model(req: WindowRequest, store: DataStore) -> SiteModel:
-    """Catalogue site (404 when unknown) or manual coordinates."""
+    """Catalogue site (404 when unknown) or manual coordinates, seen from the fixed height MAST_M."""
     if req.site_id is not None:
         site = store.sites.get(req.site_id)
         if site is None:
             raise HTTPException(status_code=404, detail=f"Unknown site id {req.site_id!r}; see GET /api/v1/sites")
-        return services.model_for_site(store, site, req.mast_m)
-    return services.model_for_point(store, req.lat, req.lon, req.mast_m)
+        return services.model_for_site(store, site, MAST_M)
+    return services.model_for_point(store, req.lat, req.lon, MAST_M)
 
 
 def window_ms(req: WindowRequest, store: DataStore) -> float:
@@ -32,7 +32,7 @@ def window_ms(req: WindowRequest, store: DataStore) -> float:
 
 
 def mast_used(model: SiteModel, req: WindowRequest, store: DataStore) -> float:
-    return store.horizons.nearest_mast(req.mast_m) if model.horizon.kind == "terrain" else req.mast_m
+    return store.horizons.nearest_mast(MAST_M) if model.horizon.kind == "terrain" else MAST_M
 
 
 def ranges(t_ms: np.ndarray, flags: np.ndarray) -> list[TimeRange]:

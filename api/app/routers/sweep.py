@@ -11,6 +11,7 @@ from ..logic.power import array_power_w, load_series_w, params_from_flat
 from ..logic.radiation import mission_dose, shielding_factor, sky_solid_angle
 from ..logic.sweep import (energy_balance_rows, longest_run_rows, window_fraction, window_matrix, window_mean,
                            window_starts)
+from ..schemas.common import MAST_M
 from ..schemas.sweep import PlaceSweep, SweepRequest, SweepResponse
 
 router = APIRouter(prefix="/sweep", tags=["sweep"])
@@ -20,6 +21,7 @@ ASSUMPTIONS = [
     "Sunlit: any part of the Sun above the horizon. Link: at least comms_min_fraction of the Earth's disc above it.",
     "Power includes eclipses (1 - obscuration). Durations are counted at the sampling step.",
     "Radiation: CRaTER GCR climatology, the same for every landing date; no solar particle events.",
+    "Panels, antenna and habitat 2 m above the ground (fixed, team decision: most panels sit on structures).",
 ]
 
 
@@ -43,9 +45,9 @@ def sweep(req: SweepRequest, store: DataStore = Depends(get_store)) -> SweepResp
             site = store.sites.get(pl.site_id)
             if site is None:
                 raise HTTPException(status_code=404, detail=f"Unknown site id {pl.site_id!r}; see GET /api/v1/sites")
-            model, name = services.model_for_site(store, site, req.mast_m), site.name
+            model, name = services.model_for_site(store, site, MAST_M), site.name
         else:
-            model, name = services.model_for_point(store, pl.lat, pl.lon, req.mast_m), None
+            model, name = services.model_for_point(store, pl.lat, pl.lon, MAST_M), None
         s = services.evaluate_window(store, model, start_ms, span_h, req.step_min, params)
         lit, link = s.sunlit(), s.comms(params)
         occ = obscuration(s)

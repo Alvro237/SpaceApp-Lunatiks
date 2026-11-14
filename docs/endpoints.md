@@ -194,7 +194,9 @@ obscuration is the fraction of the solar disc covered by the Earth (`logic/eclip
 
 Contract = the team's API rules (2026-11-14), flat fields:
 
-- Input, always: `site_id` or `lat` + `lon`, `start`, `duration_h`, `step_min`, `mast_m`, `panel`, `level` (1-3).
+- Input, always: `site_id` or `lat` + `lon`, `start`, `duration_h`, `step_min`, `panel`, `level` (1-3).
+  Height above the ground fixed at 2 m for panels, antenna and habitat in every MECH endpoint, `/sweep` included
+  (team decision 2026-11-14: most panels sit on structures); `mast_m` is no longer an input, `mast_m_used` = 2.
   Level 2: `panel_area_m2`, `cell_efficiency`, `derating`. Level 3: `load_w`, `battery_capacity_wh`,
   `battery_initial_soc`, `battery_min_soc`, `charge_efficiency`, `discharge_efficiency`. Extra: `night_load_w`.
 - Response, always: `level`, `horizon_kind`, `assumptions[]`. Level 1: `t[]`, `sun_fraction[]`, `sun_el_deg[]`,
