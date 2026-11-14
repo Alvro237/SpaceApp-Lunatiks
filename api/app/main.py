@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import config
 from .db.store import get_store
-from .routers import horizon, meta, sites, state
+from .routers import horizon, meta, points, sites, state
 
 
 @asynccontextmanager
@@ -36,6 +36,7 @@ def create_app() -> FastAPI:
     app.include_router(sites.router, prefix=config.API_PREFIX)
     app.include_router(state.router, prefix=config.API_PREFIX)
     app.include_router(horizon.router, prefix=config.API_PREFIX)
+    app.include_router(points.router, prefix=config.API_PREFIX)
     app.include_router(meta.router, prefix=config.API_PREFIX)
     return app
 

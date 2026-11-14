@@ -63,7 +63,10 @@ actually used, and optionally the zone neighbours (`db/horizons.py: zone`).
 
 ## SW-1 · Manual coordinates
 
-**Status:** to do. **Files:** `routers/points.py`, `schemas/points.py`, `tests/test_points.py`.
+**Status:** `points/state` done in branch `seryitron-branchito`, validated (output format:
+`docs/sw1-output-format.md`); `points/series` next; `points/info` not assigned in the team table.
+**Files:** `routers/points.py`, `tests/test_points.py` (`schemas/points.py` not needed: the responses are the
+site endpoints' models with `site_id: null`).
 
 - `GET /api/v1/points/state`, `/points/series`: same as the site endpoints with `lat`, `lon` instead of an id
   (`services.model_for_point`).

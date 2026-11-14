@@ -11,6 +11,8 @@ Three layers of checks, all through the HTTP layer so they test exactly what the
    at greatest eclipse of every total lunar eclipse the Sun is fully hidden behind the Earth.
 5. **Horizon masks** bit-exact against an independent read of the data files, and against NASA PGDA product 69
    (long-term Sun and Earth visibility maps) through the engine.
+6. **Manual points** against Horizons at every fixture place, against the site endpoint, and terrain against
+   smooth sphere: the lower skyline always sees more.
 
 Pytest uses the functions below (tests/test_state.py). The same checks print a report from the command line:
 
@@ -419,6 +421,101 @@ def horizon_vs_pgda(client) -> list[dict]:
     return rows
 
 
+# ---------------------------------------------------------------------------- points (manual coordinates)
+
+POINT_STATE = "/api/v1/points/state"
+
+
+def points_horizons_comparisons(client) -> list[dict]:
+    """Every case of the Horizons fixture (11 places from pole to pole, near and far side, a +4 km site) asked
+    as manual coordinates: the point sits exactly where Horizons computed. One row per body and sample."""
+    rows = []
+    for case in json.loads(FIXTURE.read_text(encoding="utf-8"))["cases"]:
+        for sample in case["samples"]:
+            r = client.get(POINT_STATE, params={"lat": case["lat"], "lon": case["lon"], "t": sample["utc"]})
+            if r.status_code == 400:
+                continue
+            r.raise_for_status()
+            body = r.json()
+            for name in ("sun", "earth"):
+                rows.append({"case": case["name"], "utc": sample["utc"], "body": name,
+                             "error_deg": sky_error_deg(body[name]["az"], body[name]["el"],
+                                                        sample[name]["az"], sample[name]["el"])})
+    return rows
+
+
+def point_equals_site(client, site_id: str, t: str) -> list[str]:
+    """At a smooth-sphere catalogue site the point endpoint gives the site endpoint's answer, except site_id."""
+    site = client.get(STATE.format(site_id=site_id), params={"t": t, "mast_m": 2}).json()
+    pt = client.get(POINT_STATE, params={"lat": site["lat"], "lon": site["lon"], "t": t, "mast_m": 2}).json()
+    diff = [k for k in site if k != "site_id" and site[k] != pt[k]]
+    return [f"{site_id} {t}: point differs from site in {diff}"] if diff else []
+
+
+def _span_extremes(values: list[float], step: float, az: float, half_width_deg: float) -> tuple[float, float]:
+    """Min and max of a 720-value profile over [az - w, az + w] (sampled every 0.1 deg, linear, wrapping)."""
+    k = max(1, int(2 * half_width_deg / 0.1))
+    pts = [_interp(values, step, az - half_width_deg + i * 2 * half_width_deg / k) for i in range(k + 1)]
+    return min(pts), max(pts)
+
+
+def lower_skyline_sees_more(client, site_id: str, times: list[str], mast_m: float = 2.0) -> tuple[list[str], dict]:
+    """Terrain (site) against smooth sphere (point at the same coordinates). Where the terrain skyline across the
+    whole disc is below the smooth dip, terrain must see at least as much of the disc; where it is entirely
+    above, at most. Returns violations and how many instants fell in each case."""
+    prof = client.get(HORIZON.format(site_id=site_id), params={"mast_m": mast_m}).json()
+    dip = -math.degrees(math.acos(MOON_R_M / (MOON_R_M + mast_m)))
+    bad, counts = [], {"terrain_lower": 0, "terrain_higher": 0, "mixed": 0}
+    for t in times:
+        site = client.get(STATE.format(site_id=site_id), params={"t": t, "mast_m": mast_m}).json()
+        pt = client.get(POINT_STATE, params={"lat": site["lat"], "lon": site["lon"], "t": t, "mast_m": mast_m}).json()
+        for body in ("sun", "earth"):
+            b = site[body]
+            w = b["angular_radius_deg"] / max(0.05, math.cos(math.radians(b["el"]))) + 0.05
+            lo, hi = _span_extremes(prof["elevation_deg"], prof["az_step_deg"], b["az"], w)
+            ft, fs = b["visible_fraction"], pt[body]["visible_fraction"]
+            if hi < dip - 0.01:
+                counts["terrain_lower"] += 1
+                if ft < fs - 1e-3:
+                    bad.append(f"{site_id} {t} {body}: terrain lower everywhere but sees {ft:.4f} < {fs:.4f}")
+            elif lo > dip + 0.01:
+                counts["terrain_higher"] += 1
+                if ft > fs + 1e-3:
+                    bad.append(f"{site_id} {t} {body}: terrain higher everywhere but sees {ft:.4f} > {fs:.4f}")
+            else:
+                counts["mixed"] += 1
+    return bad, counts
+
+
+def point_ground_checks(client) -> list[str]:
+    """ground_m and ground_source: the LOLA grid inside 60 S, the reference sphere elsewhere."""
+    from app.db.store import get_store
+    grids = get_store().grids
+    bad = []
+    for lat, lon in ((-85.0, 20.0), (-84.7906, 29.1957), (-60.5, 0.0), (-59.9, 0.0), (0.0, 0.0), (45.0, -120.0)):
+        r = client.get(POINT_STATE, params={"lat": lat, "lon": lon, "t": SWEEP_TIMES[0]}).json()
+        g = grids.sample("lola_elevation_60s", lat, lon)
+        want = ("lola_grid", g) if g is not None else ("reference_sphere", 0.0)
+        if (r["ground_source"], r["ground_m"]) != want:
+            bad.append(f"({lat}, {lon}): ground {r['ground_source']} {r['ground_m']} vs {want}")
+    return bad
+
+
+def lon_normalisation(client) -> list[str]:
+    """0..360 and -180..180 name the same meridian and give identical answers."""
+    bad = []
+    for a, b in ((330.0, -30.0), (180.0, -180.0), (360.0, 0.0), (200.5, -159.5)):
+        ra = client.get(POINT_STATE, params={"lat": -85.0, "lon": a, "t": SWEEP_TIMES[0]}).json()
+        rb = client.get(POINT_STATE, params={"lat": -85.0, "lon": b, "t": SWEEP_TIMES[0]}).json()
+        if ra != rb:
+            bad.append(f"lon {a} and {b} differ")
+    return bad
+
+
+POINT_SWEEP = [(-89.9999, 0.0), (-89.5, 129.78), (-85.0, -42.0), (-70.0, 100.0), (-30.0, -60.0), (0.0, 0.0),
+               (0.0, 180.0), (45.0, 90.0), (89.9999, 0.0)]
+
+
 def main() -> int:
     from fastapi.testclient import TestClient
 
@@ -487,6 +584,38 @@ def main() -> int:
           f"masks): Sun {n_sun}/{len(rows) // 2}, Earth {n_earth}/{len(rows) // 2} inside the zone range +/-{PGDA_TOL}"
           + "".join(f"\n    {x['site']} {x['kind']}: PGDA {x['pgda']:.3f} vs zone [{x['lo']:.3f}, {x['hi']:.3f}]"
                     for x in fails))
+    rows = points_horizons_comparisons(client)
+    worst = max(rows, key=lambda x: x["error_deg"])
+    passed = worst["error_deg"] < HORIZONS_TOL_DEG
+    ok &= passed
+    print(f"[{'PASS' if passed else 'FAIL'}] points/state vs JPL Horizons at all 11 fixture places: {len(rows)} "
+          f"comparisons, worst {worst['error_deg']:.6f} deg ({worst['case']}, {worst['body']})")
+    bad = []
+    for lat, lon in POINT_SWEEP:
+        for t in SWEEP_TIMES:
+            r = client.get(POINT_STATE, params={"lat": lat, "lon": lon, "t": t}).json()
+            bad += [f"({lat}, {lon}) {t}: {m}" for m in state_invariants(r)]
+            if r["horizon_kind"] != "smooth_sphere" or r["site_id"] is not None:
+                bad.append(f"({lat}, {lon}): not a smooth-sphere point")
+    for site_id in ("apollo-11", "slim", "blue-ghost-1"):
+        bad += point_equals_site(client, site_id, SWEEP_TIMES[0])
+    bad += point_ground_checks(client) + lon_normalisation(client)
+    for lat, lon in ((-89.5, 129.78), (-70.0, 100.0)):
+        for body in ("sun", "earth"):
+            bad += transition_flips(client, POINT_STATE, SWEEP_TIMES[0], body, {"lat": lat, "lon": lon})
+    ok &= not bad
+    print(f"[{'PASS' if not bad else 'FAIL'}] points/state: invariants pole to pole, equal to the site endpoint at "
+          "smooth-sphere sites, ground source, longitude normalisation, transitions" + "".join(f"\n    {m}" for m in bad[:20]))
+    times = [_iso(datetime(2027, 1, 1, tzinfo=timezone.utc) + timedelta(hours=h)) for h in range(0, 24 * 365, 37)]
+    bad, total = [], {"terrain_lower": 0, "terrain_higher": 0, "mixed": 0}
+    for site_id in ("im-2", "mons-malapert", "nobile", "shackleton"):
+        b, c = lower_skyline_sees_more(client, site_id, times)
+        bad += b
+        total = {k: total[k] + c[k] for k in total}
+    ok &= not bad
+    print(f"[{'PASS' if not bad else 'FAIL'}] terrain vs smooth sphere: the lower skyline always sees more "
+          f"({total['terrain_lower']} cases terrain below, {total['terrain_higher']} above, {total['mixed']} mixed "
+          "and not judged)" + "".join(f"\n    {m}" for m in bad[:20]))
     return 0 if ok else 1
 
 

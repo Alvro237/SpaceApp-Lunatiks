@@ -163,3 +163,14 @@ def horizon_view(store: DataStore, site: Site, mast_m: float, include_zone: bool
     return HorizonView(profile=store.horizons.for_site(site, mast_m),
                        mast_used_m=store.horizons.nearest_mast(mast_m) if site.has_terrain else mast_m,
                        zone=zone if include_zone else [], zone_available=bool(zone))
+
+
+# ---------------------------------------------------------------------------- SW-1: where the ground height comes from
+
+def site_ground_source(site: Site) -> str:
+    return "lola_site" if site.has_terrain else "reference_sphere"
+
+
+def point_ground_source(store: DataStore, lat: float, lon: float) -> str:
+    """Same look-up as ``model_for_point``: the LOLA grid when it covers the point, else the reference sphere."""
+    return "reference_sphere" if store.grids.sample("lola_elevation_60s", lat, lon) is None else "lola_grid"

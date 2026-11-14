@@ -10,7 +10,7 @@ from typing import Annotated
 
 import numpy as np
 from fastapi import HTTPException, Query
-from pydantic import BeforeValidator
+from pydantic import AfterValidator, BeforeValidator
 
 from .. import services
 from ..db.store import DataStore
@@ -68,3 +68,20 @@ def parse_window_ms(store: DataStore, start: datetime, duration_h: float, step_m
         raise HTTPException(status_code=400, detail=f"window {services.iso_utc(start_ms)} .. {services.iso_utc(end_ms)} "
                                                     f"leaves the ephemeris tables ({spans})")
     return start_ms
+
+
+# ---------------------------------------------------------------------------- manual coordinates
+
+MAX_ABS_LAT = 89.9999   # team spec: at the exact poles "north", and so the azimuth, is undefined
+
+
+def _normalise_lon(v: float) -> float:
+    """0..360 to -180..180 (east-positive). 180 becomes -180: the same meridian."""
+    return round(v - 360.0, 10) if v >= 180.0 else v
+
+
+LatParam = Annotated[float, Query(ge=-MAX_ABS_LAT, le=MAX_ABS_LAT, description="Planetocentric latitude, degrees, "
+                     f"Moon Mean-Earth frame, -{MAX_ABS_LAT}..{MAX_ABS_LAT} (the exact poles have no azimuth "
+                     "reference)", examples=[-84.7906])]
+LonParam = Annotated[float, Query(ge=-180.0, le=360.0, description="East-positive longitude, degrees. -180..180 or "
+                     "0..360, normalised to -180..180 (330 = -30)", examples=[29.1957]), AfterValidator(_normalise_lon)]

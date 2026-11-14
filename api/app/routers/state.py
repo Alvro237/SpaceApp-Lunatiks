@@ -48,14 +48,15 @@ def _body(az, el, horizon_el, frac, radius, dist, visible) -> BodyState:
 
 
 def state_response(store: DataStore, model: SiteModel, t_ms: float, params: AnalysisParams,
-                   mast_used_m: float, site_id: str | None) -> StateResponse:
+                   mast_used_m: float, site_id: str | None, ground_source: str) -> StateResponse:
     try:
         st = services.state_at(store, model, t_ms, params)
     except OutOfCoverage as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     s = st.series
     return StateResponse(
-        site_id=site_id, lat=model.lat, lon=model.lon, ground_m=model.ground_m, t=services.iso_utc(t_ms),
+        site_id=site_id, lat=model.lat, lon=model.lon, ground_m=model.ground_m, ground_source=ground_source,
+        t=services.iso_utc(t_ms),
         mast_m=model.mast_m, mast_used_m=mast_used_m,
         comms_min_fraction=params.comms_min_fraction, horizon_kind=model.horizon.kind,
         sun=_body(s.sun_az[0], s.sun_el[0], st.sun_horizon_el, s.sun_frac[0], s.sun_radius_deg[0],
@@ -79,7 +80,7 @@ def site_state(site_id: str, t: datetime = T_QUERY, mast_m: MastParam = DEFAULT_
     model = services.model_for_site(store, site, mast_m)
     mast_used = store.horizons.nearest_mast(mast_m) if site.has_terrain else mast_m
     params = AnalysisParams(comms_min_fraction=comms_min_fraction)
-    return state_response(store, model, t_ms, params, mast_used, site.id)
+    return state_response(store, model, t_ms, params, mast_used, site.id, services.site_ground_source(site))
 
 
 # ---------------------------------------------------------------------------- series
@@ -95,14 +96,16 @@ def _ranges(rr) -> list[TimeRange]:
 
 
 def series_response(store: DataStore, model: SiteModel, start_ms: float, duration_h: float, step_min: float,
-                    params: AnalysisParams, mast_used_m: float, site_id: str | None) -> SeriesResponse:
+                    params: AnalysisParams, mast_used_m: float, site_id: str | None,
+                    ground_source: str) -> SeriesResponse:
     try:
         w = services.series_window(store, model, start_ms, duration_h, step_min, params)
     except OutOfCoverage as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     s, m = w.series, w.metrics
     return SeriesResponse(
-        site_id=site_id, lat=model.lat, lon=model.lon, ground_m=model.ground_m, start=services.iso_utc(start_ms),
+        site_id=site_id, lat=model.lat, lon=model.lon, ground_m=model.ground_m, ground_source=ground_source,
+        start=services.iso_utc(start_ms),
         end=services.iso_utc(float(s.t_ms[-1])), duration_h=duration_h, step_min=step_min, samples=int(s.t_ms.size),
         mast_m=model.mast_m, mast_used_m=mast_used_m, comms_min_fraction=params.comms_min_fraction,
         horizon_kind=model.horizon.kind, t=[services.iso_utc(x) for x in s.t_ms],
@@ -132,4 +135,5 @@ def site_series(site_id: str, start: datetime = START_QUERY, duration_h: float =
     model = services.model_for_site(store, site, mast_m)
     mast_used = store.horizons.nearest_mast(mast_m) if site.has_terrain else mast_m
     params = AnalysisParams(comms_min_fraction=comms_min_fraction)
-    return series_response(store, model, start_ms, duration_h, step_min, params, mast_used, site.id)
+    return series_response(store, model, start_ms, duration_h, step_min, params, mast_used, site.id,
+                           services.site_ground_source(site))

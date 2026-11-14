@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 EclipseState = Literal["none", "partial", "total"]
 HorizonKind = Literal["terrain", "smooth_sphere"]
+GroundSource = Literal["lola_site", "lola_grid", "reference_sphere"]
 
 
 class Transition(BaseModel):
@@ -42,6 +43,10 @@ class StateResponse(BaseModel):
     lat: float = Field(description="Planetocentric latitude, degrees, Moon Mean-Earth frame")
     lon: float = Field(description="East-positive longitude, degrees, -180..180")
     ground_m: float = Field(description="Ground height above the 1737.4 km reference sphere, metres")
+    ground_source: GroundSource = Field(description="Where ground_m comes from: 'lola_site' (pipeline value at a "
+                                                    "catalogue terrain site), 'lola_grid' (LOLA elevation grid south "
+                                                    "of 60 S, 960 m cells) or 'reference_sphere' (no height data "
+                                                    "there: 0 m assumed; it only shifts parallax, < 0.001 deg)")
     t: str = Field(description="Requested instant, ISO 8601 UTC")
     mast_m: float = Field(description="Mast height requested, metres above the ground")
     mast_used_m: float = Field(description="Mast height of the horizon actually used, metres: the nearest "
@@ -49,7 +54,9 @@ class StateResponse(BaseModel):
                                            "smooth sphere")
     comms_min_fraction: float = Field(description="Share of the Earth's disc required for comms, 0..1")
     horizon_kind: HorizonKind = Field(description="'terrain': LOLA ray-traced mask; 'smooth_sphere': geometric "
-                                                  "dip only (real terrain can only shorten light and comms)")
+                                                  "dip only. Real terrain differs both ways: crater floors and "
+                                                  "slopes see less sky, peaks see below the smooth horizon and "
+                                                  "get more light and comms")
     sun: BodyState
     earth: BodyState
     eclipse: EclipseState = Field(description="The Earth covering the Sun as seen from the site (a lunar eclipse "
@@ -106,6 +113,10 @@ class SeriesResponse(BaseModel):
     lat: float = Field(description="Planetocentric latitude, degrees, Moon Mean-Earth frame")
     lon: float = Field(description="East-positive longitude, degrees, -180..180")
     ground_m: float = Field(description="Ground height above the 1737.4 km reference sphere, metres")
+    ground_source: GroundSource = Field(description="Where ground_m comes from: 'lola_site' (pipeline value at a "
+                                                    "catalogue terrain site), 'lola_grid' (LOLA elevation grid south "
+                                                    "of 60 S, 960 m cells) or 'reference_sphere' (no height data "
+                                                    "there: 0 m assumed; it only shifts parallax, < 0.001 deg)")
     start: str = Field(description="Window start, ISO 8601 UTC")
     end: str = Field(description="Last sample, ISO 8601 UTC")
     duration_h: float = Field(description="Requested window length, hours")

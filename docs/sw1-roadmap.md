@@ -11,7 +11,7 @@ holds the order, the decisions and the validation plan. Branch: `seryitron-branc
 | 1 | `GET /api/v1/sites/{site_id}/state` | The only mandatory objective of the challenge; its pieces (body state, transitions) are reused by all the others | Done, validated |
 | 2 | `GET /api/v1/sites/{site_id}/series` | The mission window: timeline, Gantt, fractions and ranges; the hard filters and `/power` build on the same engine series | Done, validated |
 | 3 | `GET /api/v1/sites/{site_id}/horizon` | The 360° skyline for the panorama; no time dependence, small | Done, validated |
-| 4 | `GET /api/v1/points/state` | `state` with `lat`/`lon` instead of an id (smooth-sphere horizon); reuses `state_response` | To do |
+| 4 | `GET /api/v1/points/state` | `state` with `lat`/`lon` instead of an id (smooth-sphere horizon); reuses `state_response` | Done, validated |
 | 5 | `GET /api/v1/points/series` | `series` with `lat`/`lon`; reuses the series builder | To do |
 
 `GET /api/v1/points/info` is listed under SW-1 in `docs/endpoints.md` but has no owner in the team's endpoint
@@ -128,4 +128,58 @@ No time dependence and no new physics: the masks are precomputed by the pipeline
    terrain sites. Measured during planning: Sun 13/13, Earth 13/13 once the definitions match (PGDA's Earth map
    counts "any part of the disc visible"; the engine's comms flag uses half the disc, which reads lower).
 6. **Errors**: 404 unknown id, 422 bad `mast_m`.
+
+## 4. `GET /api/v1/points/state`: plan (done; as built in `docs/sw1-output-format.md`)
+
+`state` for any point typed in by the user. Same engine, same response model, same validation; only the site
+model changes: `services.model_for_point` instead of `model_for_site`. Files: `routers/points.py`,
+`tests/test_points.py` (no new schema: the response is `StateResponse` with `site_id: null`).
+
+### Housekeeping first
+
+The query parameters shared by every SW-1 endpoint (`t`, `mast_m` with null = 0, `comms_min_fraction`, the
+window parameters) move from `routers/state.py` to `routers/params.py`, so `horizon` and `points` stop importing
+one another. The response builders (`state_response`, `series_response`) stay in `routers/state.py` and are
+reused, so a point and a site can never be shaped differently.
+
+### Request
+
+| Parameter | Default | Bounds | Notes |
+| --- | --- | --- | --- |
+| `lat` | required | -89.9999..89.9999 | Planetocentric, degrees. The exact poles are excluded: there "north" (and so the azimuth) is undefined (team spec: latitude ≥ -89.9999) |
+| `lon` | required | -180..360 | East-positive. 0..360 is accepted and normalised to -180..180 (330 → -30; 180 → -180, the same meridian) |
+| `t`, `mast_m`, `comms_min_fraction` | as in `state` | | |
+
+### What is different from a catalogue site
+
+- **Horizon**: always `smooth_sphere` (`-acos(R / (R + mast))`). No terrain mask exists for an arbitrary point and
+  computing one takes minutes (`CLAUDE.md`, known data gaps). `mast_used_m` = `mast_m`.
+  **Correction found while building this:** `CLAUDE.md` says real terrain "can only shorten light and
+  communication", so a smooth-sphere answer would be an upper bound. That holds on crater floors and low ground,
+  not on peaks: from a summit the real skyline drops below the smooth one. Over 2027 at 2 m, the terrain gives IM-2
+  691 h of Earth contact and 52 h of Sun, Mons Malapert 2 743 h and 145 h, Nobile 470 h of Sun that the smooth
+  sphere does not. A manual point is therefore an estimate that can err either way, not a bound.
+- **Ground height**: from the LOLA elevation grid south of 60° S (960 m cells); elsewhere there is no height in
+  the repository and the reference sphere (0 m) is used. A new field, `ground_source`, says which:
+  `lola_site` (catalogue site with terrain, pipeline value), `lola_grid` (screening grid), `reference_sphere`
+  (no data: 0 m assumed). The ground only moves the observer for parallax (about 0.00015° of Earth direction per
+  km), so the assumption costs well under the 0.01° budget; the field is there so the 0 is never read as a
+  measurement. Added to `state` and `series` for sites too (additive).
+
+### Validation plan
+
+1. **JPL Horizons at every fixture point**: all 11 fixture cases (south pole to north pole, near and far side, a
+   +4 km site), not only IM-1, because a point can sit exactly where Horizons was asked. Tolerance 0.01°.
+2. **Same as the site endpoint where they must agree**: at a smooth-sphere catalogue site (Apollo 11) the point
+   response equals the site response except `site_id`; at a terrain site (IM-2) the Sun and Earth directions
+   agree to within the parallax of the ground difference.
+3. **The lower skyline sees more**: at the terrain sites' coordinates, compare the site (terrain) with the point
+   (smooth sphere) at many instants. Where the terrain profile across the whole disc is below the smooth dip, the
+   terrain's visible fraction is at least the point's; where it is entirely above, at most. (Replaces "terrain
+   only shortens", which the data refutes on peaks.)
+4. **Longitude normalisation**: `lon=330` and `lon=-30` give the same response; `lon=180` and `lon=-180` too.
+5. **Ground**: inside the grid it equals the grid sample and says `lola_grid`; outside it is 0 with
+   `reference_sphere`; catalogue terrain sites say `lola_site`, the others `reference_sphere`.
+6. **State invariants** (the `state` validator) on a sweep of points, and transitions that flip the state.
+7. **Errors**: 422 for missing or out-of-range `lat`/`lon` (including the poles), 400 outside the tables.
 

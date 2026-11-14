@@ -9,7 +9,7 @@ the meaning, units and edge cases. One section per endpoint, added as each one i
 | `GET /api/v1/sites/{site_id}/state` | Done, validated (this file) |
 | `GET /api/v1/sites/{site_id}/series` | Done, validated (this file) |
 | `GET /api/v1/sites/{site_id}/horizon` | Done, validated (this file) |
-| `GET /api/v1/points/state` | To do (same output as `sites/{id}/state`, `site_id: null`) |
+| `GET /api/v1/points/state` | Done, validated (this file) |
 | `GET /api/v1/points/series` | To do (same output as `sites/{id}/series`, `site_id: null`) |
 
 Conventions in every response: Moon Mean-Earth frame (MOON_ME); angles in degrees; azimuth clockwise from
@@ -94,12 +94,13 @@ GET /api/v1/sites/im-2/state?t=2026-11-20T12:00:00Z&mast_m=2
 | --- | --- | --- | --- |
 | `site_id` | string \| null | | Catalogue id; `null` in `/points/state` |
 | `lat`, `lon` | float | deg | Planetocentric latitude; east-positive longitude -180..180 |
-| `ground_m` | float | m | Ground height above the 1737.4 km sphere (0 where no terrain data was read) |
+| `ground_m` | float | m | Ground height above the 1737.4 km sphere used in the computation |
+| `ground_source` | `lola_site` \| `lola_grid` \| `reference_sphere` | | Where `ground_m` comes from: the pipeline's value at a catalogue terrain site, the LOLA elevation grid south of 60° S (960 m cells), or no data (0 m assumed). The ground only moves the observer for parallax, under 0.001° |
 | `t` | string | UTC | The instant evaluated, normalised to `YYYY-MM-DDTHH:MM:SSZ` |
 | `mast_m` | float | m | Mast height requested |
 | `mast_used_m` | float | m | Mast of the horizon actually used: nearest stored terrain mask, or `mast_m` on a smooth sphere |
 | `comms_min_fraction` | float | 0..1 | Echo of the comms threshold used |
-| `horizon_kind` | `terrain` \| `smooth_sphere` | | `terrain`: LOLA ray-traced mask. `smooth_sphere`: geometric dip only; real terrain can only shorten light and comms |
+| `horizon_kind` | `terrain` \| `smooth_sphere` | | `terrain`: LOLA ray-traced mask. `smooth_sphere`: geometric dip only. Real terrain differs **both ways**: crater floors and slopes see less sky; peaks see below the smooth horizon and get more light and comms (in 2027 at 2 m, IM-2 has 691 h of comms and Mons Malapert 2 743 h that a smooth sphere would not give) |
 | `sun`, `earth` | object | | See below |
 | `eclipse` | `none` \| `partial` \| `total` | | The Earth covering the Sun as seen from the site (what the Earth sees as a lunar eclipse) |
 | `sun_eclipsed_fraction` | float | 0..1 | Share of the solar disc hidden behind the Earth: 0 with `none`, 1 with `total` |
@@ -243,7 +244,7 @@ the disc, not the centre, decides "sunlit". It sets at 20:50:42, the same instan
 
 ### Fields
 
-Window echo: `site_id`, `lat`, `lon`, `ground_m`, `mast_m`, `mast_used_m`, `comms_min_fraction`, `horizon_kind` as
+Window echo: `site_id`, `lat`, `lon`, `ground_m`, `ground_source`, `mast_m`, `mast_used_m`, `comms_min_fraction`, `horizon_kind` as
 in `state`; `start` and `end` (first and last sample, UTC); `duration_h`, `step_min`; `samples` (length of every
 array).
 
@@ -433,4 +434,88 @@ With `include_zone=true` the response is about 72 KB; without it about 9 KB.
    (half the disc) reads lower.
 6. **The validator is tested**: a value changed by 0.01°, a wrong azimuth of the maximum, a neighbour moved by
    0.01°, a reversed zone mask and a wrong `mast_used_m` are each rejected.
+
+---
+
+## `GET /api/v1/points/state`
+
+`state` for any point typed in by the user instead of a catalogue site. Same output model (`StateResponse`), same
+fields and meaning, built by the same function; what changes is where the horizon and the ground come from.
+
+### Request
+
+| Parameter | In | Type | Default | Range | Meaning |
+| --- | --- | --- | --- | --- | --- |
+| `lat` | query | float, deg | **required** | -89.9999..89.9999 | Planetocentric latitude. The exact poles are rejected: there "north", and so the azimuth, is undefined |
+| `lon` | query | float, deg | **required** | -180..360 | East-positive longitude. 0..360 is accepted and normalised to -180..180 (`330` → `-30`, `180` → `-180`, the same meridian) |
+| `t` | query | ISO 8601 | **required** | inside the tables | As in `state` |
+| `mast_m` | query | float, m | `0` | 0..20 | As in `state` (null = 0). Used exactly: no stored masks to snap to |
+| `comms_min_fraction` | query | float | `0.5` | 0..1 | As in `state` |
+
+```
+GET /api/v1/points/state?lat=-84.7906&lon=29.1957&t=2026-11-20T12:00:00Z&mast_m=2
+```
+
+### Response 200
+
+The `state` model with `site_id: null`. Real response (floats rounded for reading):
+
+```json
+{
+  "site_id": null,
+  "lat": -84.7906, "lon": 29.1957,
+  "ground_m": 5327.5, "ground_source": "lola_grid",
+  "t": "2026-11-20T12:00:00Z",
+  "mast_m": 2.0, "mast_used_m": 2.0, "comms_min_fraction": 0.5,
+  "horizon_kind": "smooth_sphere",
+  "sun":   { "az": 18.4425, "el": 6.4867, "horizon_el": -0.08694, "visible_fraction": 1.0, "visible": true,
+             "angular_radius_deg": 0.26926, "distance_km": 148037935.5 },
+  "earth": { "az": 323.2564, "el": 7.9783, "horizon_el": -0.08694, "visible_fraction": 1.0, "visible": true,
+             "angular_radius_deg": 0.96031, "distance_km": 380562.5 },
+  "eclipse": "none", "sun_eclipsed_fraction": 0.0,
+  "next_sun_transition":   { "kind": "set", "at": "2026-12-01T02:40:48Z", "in_hours": 254.68 },
+  "next_earth_transition": { "kind": "set", "at": "2026-12-03T11:42:53Z", "in_hours": 311.715 },
+  "transition_search_days": 45.0
+}
+```
+
+Fields: see `GET /api/v1/sites/{site_id}/state` above.
+
+### What differs from a catalogue site
+
+- **`horizon_kind` is always `smooth_sphere`**, at `-acos(R / (R + mast_m))` in every direction. No terrain mask
+  exists for an arbitrary point, and computing one takes minutes per point.
+- **The answer can err either way, not only optimistically.** In a crater or on a slope the real skyline is higher
+  and the point overstates light and comms. On a summit it is lower and the point understates them. Same instant,
+  IM-2 at 2 m: the site endpoint (terrain) has the Earth setting on 2026-12-04 09:56; the point at the same
+  coordinates (smooth sphere) on 2026-12-03 11:42, almost a day earlier, because Mons Mouton's real skyline
+  dips to -1.46°.
+- **Ground**: from the LOLA grid south of 60° S (`ground_source: "lola_grid"`), else 0 m
+  (`"reference_sphere"`). Typing a catalogue site's coordinates still gives the grid's height (960 m cells), not
+  the site's pipeline value: 5 327.5 m here against 5 312.6 m for the IM-2 site.
+
+### Errors
+
+| Status | When |
+| --- | --- |
+| 422 | `lat` or `lon` missing, not a number or out of range (the exact poles included); `t`, `mast_m`, `comms_min_fraction` as in `state` |
+| 400 | `t` outside the ephemeris tables |
+
+### How it was validated
+
+`cd api && uv run python -m tests.sw1_validation` (pytest: `tests/test_points.py`):
+
+1. **JPL Horizons at every fixture place**: all 11 cases (both poles' regions, Shackleton, Malapert, Mons Mouton,
+   IM-1, Chandrayaan-3, Apollo 11, Mare Crisium, far side, a +4 km site) asked as coordinates: 352 comparisons,
+   worst 0.00086° (Mons Mouton, the parallax of the grid's 5.3 km ground against Horizons' 0 km).
+2. **Equal to the site endpoint** at smooth-sphere catalogue sites (Apollo 11, Apollo 17, SLIM, Blue Ghost):
+   identical responses except `site_id`.
+3. **The lower skyline always sees more**: at IM-2, Mons Malapert, Nobile and Shackleton, over 2027, terrain
+   (site) against smooth sphere (point): when the terrain is below the smooth dip across the whole disc it sees at
+   least as much (687 cases), when above at most as much (1 201 cases). This replaces the claim that terrain can
+   only shorten light, which the data refutes on peaks.
+4. **Ground source** inside and outside the grid; **longitude** 0..360 and -180..180 give identical answers;
+   **invariants** of `state` on points from 89.9999° S to 89.9999° N; **transitions** flip the state at the
+   published second.
+5. **The validator is tested**: a site response doctored to see the full Sun under a higher skyline is caught.
 
