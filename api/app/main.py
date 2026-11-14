@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from . import config
 from .db.store import get_store
-from .routers import meta, sites
+from .routers import earth, meta, power, radiation, sites, sun, sweep, thermal, validation, verdict
 
 
 @asynccontextmanager
@@ -35,6 +35,14 @@ def create_app() -> FastAPI:
     # One router per endpoint group; register new ones here (see CLAUDE.md, "Adding an endpoint").
     app.include_router(sites.router, prefix=config.API_PREFIX)
     app.include_router(meta.router, prefix=config.API_PREFIX)
+    app.include_router(power.router, prefix=config.API_PREFIX)
+    app.include_router(sun.router, prefix=config.API_PREFIX)
+    app.include_router(earth.router, prefix=config.API_PREFIX)
+    app.include_router(radiation.router, prefix=config.API_PREFIX)
+    app.include_router(sweep.router, prefix=config.API_PREFIX)
+    app.include_router(thermal.router, prefix=config.API_PREFIX)
+    app.include_router(verdict.router, prefix=config.API_PREFIX)
+    app.include_router(validation.router, prefix=config.API_PREFIX)
     return app
 
 
