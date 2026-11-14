@@ -175,3 +175,14 @@ def test_unknown_site_and_dates_outside_the_tables():
     assert client.post("/api/v1/power", json={**BASE, "site_id": "nowhere", "level": 1}).status_code == 404
     r = client.post("/api/v1/power", json={**BASE, "start": "2040-01-01T00:00:00Z", "level": 1})
     assert r.status_code == 400 and "ephemeris" in r.json()["detail"].lower()
+
+
+def test_height_is_fixed_at_two_metres():
+    # team decision 2026-11-14: panels, antenna and habitat 2 m above the ground; mast_m is not an input
+    a = client.post("/api/v1/power", json={**BASE, "level": 1}).json()
+    b = client.post("/api/v1/power", json={**BASE, "level": 1, "mast_m": 10}).json()      # ignored
+    assert a["mast_m_used"] == b["mast_m_used"] == 2.0 and a["sun_fraction"] == b["sun_fraction"]
+    point = client.post("/api/v1/power", json={**BASE, "site_id": None, "lat": -85.0, "lon": 30.0, "level": 1}).json()
+    assert point["horizon_kind"] == "smooth_sphere" and point["mast_m_used"] == 2.0
+    schemas = client.get("/openapi.json").json()["components"]["schemas"]
+    assert all("mast_m" not in schemas[n]["properties"] for n in ("PowerRequest", "SweepRequest", "SunRequest"))
