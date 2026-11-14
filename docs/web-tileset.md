@@ -122,8 +122,11 @@ NASA PGDA while you zoom (`web/src/terrain/live/`).
   the answer matches the range (PGDA sometimes truncates them) and keeps each range in the edge cache. Without
   `VITE_PGDA_PROXY` a production build has no live levels and the map ends at z7 (60 m).
 - **Deployed proxy** (2026-11-14, version `28147e49`): `https://lunatiks-pgda-proxy.lunatiks-spaceapps.workers.dev/`,
-  `ALLOWED_ORIGINS = "*"` until the site's public URL is known. Build with
-  `VITE_PGDA_PROXY=https://lunatiks-pgda-proxy.lunatiks-spaceapps.workers.dev/ npm run build`. Checked with curl:
+  `ALLOWED_ORIGINS = "*"` until the site's public URL is known. `web/.env.production` sets `VITE_PGDA_PROXY` to it,
+  so every production build (CI included) has the live levels; `VITE_PGDA_PROXY=off npm run build` builds without
+  them. The file is committed on purpose although the root `.gitignore` ignores `.env.*`: it holds a public URL,
+  no secret. Measured with that build (`vite preview`, same zoom): 20 requests to the Worker, all 206, 13.4 MB,
+  no page errors. Checked with curl:
   preflight 204 with CORS; a 64 KiB range 206 with the same bytes as PGDA; the same range again served from the
   edge cache (`x-proxy-cache: hit`, 0.88 s then 0.17 s and 0.08 s), so the Workers cache does work on
   `workers.dev`; another file 404, no range 416, POST 405, a 100 MB range 416. Through it, the map at the same
