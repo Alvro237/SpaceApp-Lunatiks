@@ -60,6 +60,35 @@ class LoadParams:
     night_w: float
 
 
+ARRAY_KEYS = ("panel_area_m2", "cell_efficiency", "derating")
+BATTERY_KEYS = ("load_w", "battery_capacity_wh", "battery_initial_soc", "battery_min_soc",
+                "charge_efficiency", "discharge_efficiency")
+
+
+def params_from_flat(d: dict) -> tuple[ArrayParams | None, BatteryParams | None, LoadParams | None]:
+    """The API's flat field names (team API rules) -> model parameters. A group is None when its fields are absent.
+    ``night_load_w`` is optional and defaults to ``load_w``."""
+    has = lambda keys: all(d.get(k) is not None for k in keys)  # noqa: E731
+    array = ArrayParams(area_m2=d["panel_area_m2"], efficiency=d["cell_efficiency"], derating=d["derating"]) \
+        if has(ARRAY_KEYS) else None
+    battery = load = None
+    if has(BATTERY_KEYS):
+        battery = BatteryParams(capacity_wh=d["battery_capacity_wh"], initial_soc=d["battery_initial_soc"],
+                                min_soc=d["battery_min_soc"], charge_efficiency=d["charge_efficiency"],
+                                discharge_efficiency=d["discharge_efficiency"])
+        night = d.get("night_load_w")
+        load = LoadParams(day_w=d["load_w"], night_w=d["load_w"] if night is None else night)
+    return array, battery, load
+
+
+def energy_margin_wh(bal: "Balance", battery: BatteryParams) -> float:
+    """Energy above the battery floor at the worst moment: (min SoC - floor) x capacity when the load was always
+    served; minus the unserved energy otherwise. Positive = spare energy, negative = missing energy."""
+    if bal.survived:
+        return (bal.min_soc - battery.min_soc) * battery.capacity_wh
+    return -bal.unserved_wh
+
+
 def array_power_w(power_w_m2: np.ndarray, array: ArrayParams) -> np.ndarray:
     """Level 2: electrical power of the array (W) = q(t) * A * eta * d."""
     return np.asarray(power_w_m2, dtype=np.float64) * array.area_m2 * array.efficiency * array.derating

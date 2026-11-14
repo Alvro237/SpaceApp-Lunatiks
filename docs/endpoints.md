@@ -186,13 +186,19 @@ obscuration is the fraction of the solar disc covered by the Earth (`logic/eclip
 **Files:** `logic/power.py`, `routers/power.py`, `routers/common.py`, `schemas/power.py`, `schemas/common.py`,
 `tests/test_power.py`.
 
-- `POST /api/v1/power` with `level`:
-  1. Fraction of the solar disc visible (engine).
-  2. Array power: `series.power_w_m2` (irradiance × visible fraction × panel factor) × area × efficiency ×
-     derating; the three panel models are in `engine.panel_factor`.
-  3. Energy balance: load, battery capacity and state of charge through the dark stretches; does the mission
-     survive the longest night.
-- Inputs as a parameter dataclass with units; three hand-worked cases as tests.
+Contract = the team's API rules (2026-11-14), flat fields:
+
+- Input, always: `site_id` or `lat` + `lon`, `start`, `duration_h`, `step_min`, `mast_m`, `panel`, `level` (1-3).
+  Level 2: `panel_area_m2`, `cell_efficiency`, `derating`. Level 3: `load_w`, `battery_capacity_wh`,
+  `battery_initial_soc`, `battery_min_soc`, `charge_efficiency`, `discharge_efficiency`. Extra: `night_load_w`.
+- Response, always: `level`, `horizon_kind`, `assumptions[]`. Level 1: `t[]`, `sun_fraction[]`, `sun_el_deg[]`,
+  `sunlit_ranges[]`. Level 2 adds `irradiance_w_m2[]` (irradiance reaching the panel: solar irradiance x visible
+  fraction x orientation factor x (1 - eclipse obscuration)), `power_w[]`, `mean_power_w`, `energy_wh`. Level 3 adds
+  `net_power_w[]` (power - load), `battery_soc[]`, `min_soc`, `survives`, `first_depletion_at`, `longest_dark_h`,
+  `energy_margin_wh` ((min_soc - battery_min_soc) x capacity when it survives, minus the unserved energy when not).
+  Fields of a higher level are null at lower levels. Extras beyond the rules (eclipse ranges and loss, peak power,
+  load profile, final SoC, depleted ranges, unserved / curtailed energy, usable capacity) may be ignored.
+- The same flat names are used by `/sweep` and by the `battery_survives` hard filter threshold.
 
 ## MECH · Sun over a mission window
 
@@ -220,7 +226,8 @@ sees the Earth, 180° E never; Malapert 100 %, Shackleton floor 0 % in March 202
 2000 landing times (`first_landing`, `landings`, `landing_step_h`) for one `stay_h`. One series per place;
 prefix sums for fractions, windows processed as a matrix for longest runs and the battery. Per landing:
 sunlight, comms and both fractions, longest dark and blackout, eclipse hours, mean power per m2 (eclipses
-included); with `array` the mean array power; with `battery` and `load` survival, minimum SoC and unserved energy.
+included); with the panel fields (`panel_area_m2`, `cell_efficiency`, `derating`) the mean array power; adding
+the battery fields of `/power` level 3, survival, minimum SoC and unserved energy.
 GCR dose per stay (CRaTER climatology). Every window equals the single-window endpoints (tests). Measured:
 21 sites x 365 landings x 14-day stay with battery in about 1 s.
 **Files:** `logic/sweep.py`, `routers/sweep.py`, `schemas/sweep.py`, `tests/test_sweep.py`.
@@ -251,7 +258,7 @@ the prototype's, not yet decided with a source. `POST /api/v1/verdict` (RF-11): 
 (`hard_filters`: id -> threshold), then the soft score with visible, adjustable `weights`, `favourable_min`,
 `marginal_min`. Verdict: `unfeasible` if any filter fails, `unknown` if any cannot be evaluated (unless
 `unknown_passes`), else the score band. New hard filter `battery_survives` (`logic/constraints/power.py`,
-threshold `{array, battery, load: {day_w, night_w}}`), same model as `/power` level 3.
+threshold = the flat level-3 fields of `/power`), same model as `/power` level 3.
 **Files:** `logic/scoring.py` (`overall_verdict`, band arguments), `routers/verdict.py`, `schemas/verdict.py`,
 `logic/constraints/power.py`, `tests/test_verdict.py`.
 

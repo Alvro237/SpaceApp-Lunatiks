@@ -1,7 +1,8 @@
-"""Request and response models of POST /api/v1/power (MECH). snake_case JSON, units in descriptions.
+"""Request and response models of POST /api/v1/power (MECH), following the team's API rules: flat field names.
+snake_case JSON, units in descriptions.
 
 No panel, battery or load value has a default: none has a cited source yet, so the caller gives them.
-The frontend decides which ones a user sees (for example ideal values in a simplified view).
+Fields marked "extra" are beyond the API rules and may be ignored by the frontend.
 """
 from __future__ import annotations
 
@@ -9,92 +10,83 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from ..logic.power import ARRAY_KEYS, BATTERY_KEYS
 from .common import TimeRange, WindowRequest, WindowResponse
 
 
-class ArrayIn(BaseModel):
-    area_m2: float = Field(gt=0.0, description="Active solar array area, m2")
-    efficiency: float = Field(gt=0.0, le=1.0, description="Array conversion efficiency, 0..1")
-    derating: float = Field(gt=0.0, le=1.0, description="Product of other losses (wiring, temperature, mismatch), 0..1; 1 = none")
+class PowerInputs(BaseModel):
+    """Panel, battery and load parameters with the API rules' flat names (shared by /power and /sweep)."""
+    panel_area_m2: float | None = Field(None, gt=0.0, description="Active solar array area, m2 (level 2+)")
+    cell_efficiency: float | None = Field(None, gt=0.0, le=1.0, description="Array conversion efficiency, 0..1 (level 2+)")
+    derating: float | None = Field(None, gt=0.0, le=1.0, description="Product of other losses, 0..1; 1 = none (level 2+)")
+    load_w: float | None = Field(None, ge=0.0, description="Electrical load, W (level 3)")
+    night_load_w: float | None = Field(None, ge=0.0, description="Extra: load while no Sun is visible, W; load_w when omitted")
+    battery_capacity_wh: float | None = Field(None, gt=0.0, description="Nominal battery capacity, Wh (level 3)")
+    battery_initial_soc: float | None = Field(None, ge=0.0, le=1.0, description="State of charge at start, 0..1 (level 3)")
+    battery_min_soc: float | None = Field(None, ge=0.0, lt=1.0, description="Lowest allowed state of charge, 0..1 (level 3)")
+    charge_efficiency: float | None = Field(None, gt=0.0, le=1.0, description="One-way charge efficiency, 0..1 (level 3)")
+    discharge_efficiency: float | None = Field(None, gt=0.0, le=1.0, description="One-way discharge efficiency, 0..1 (level 3)")
+
+    def _missing(self, keys) -> list[str]:
+        return [k for k in keys if getattr(self, k) is None]
+
+    def _partial(self, keys) -> bool:
+        m = self._missing(keys)
+        return 0 < len(m) < len(keys)
 
 
-class BatteryIn(BaseModel):
-    capacity_wh: float = Field(gt=0.0, description="Nominal battery capacity, Wh")
-    initial_soc: float = Field(ge=0.0, le=1.0, description="State of charge at the start, fraction of capacity")
-    min_soc: float = Field(ge=0.0, lt=1.0, description="Lowest allowed state of charge, fraction of capacity")
-    charge_efficiency: float = Field(gt=0.0, le=1.0, description="One-way charge efficiency, 0..1; 1 = ideal")
-    discharge_efficiency: float = Field(gt=0.0, le=1.0, description="One-way discharge efficiency, 0..1; 1 = ideal")
-
-
-class LoadIn(BaseModel):
-    load_w: float = Field(ge=0.0, description="Electrical load while any part of the Sun is above the horizon, W")
-    night_load_w: float | None = Field(None, ge=0.0, description=(
-        "Load while no part of the Sun is above the horizon (survival mode, heaters), W; load_w when omitted"))
-
-
-class PowerRequest(WindowRequest):
+class PowerRequest(WindowRequest, PowerInputs):
     panel: Literal["tracking", "vertical", "horizontal"] = Field("vertical", description=(
         "Array orientation: always facing the Sun, vertical turning in azimuth, or flat on the ground"))
     level: Literal[1, 2, 3] = Field(description=(
-        "1 visible solar disc fraction; 2 adds array power (needs array); 3 adds the battery energy balance "
-        "(needs array, battery, load)"))
-    array: ArrayIn | None = None
-    battery: BatteryIn | None = None
-    load: LoadIn | None = None
+        "1 visible solar disc; 2 adds array power (panel_area_m2, cell_efficiency, derating); 3 adds the battery "
+        "balance (load_w, battery_capacity_wh, battery_initial_soc, battery_min_soc, charge_efficiency, discharge_efficiency)"))
 
     @model_validator(mode="after")
     def _check_level(self) -> "PowerRequest":
-        if self.level >= 2 and self.array is None:
-            raise ValueError("level 2 and 3 need array")
-        if self.level == 3 and (self.battery is None or self.load is None):
-            raise ValueError("level 3 needs battery and load")
+        missing = (self._missing(ARRAY_KEYS) if self.level >= 2 else []) + \
+                  (self._missing(BATTERY_KEYS) if self.level == 3 else [])
+        if missing:
+            raise ValueError(f"level {self.level} needs " + ", ".join(missing))
         return self
-
-
-class SunLevel(BaseModel):
-    sun_el_deg: list[float] = Field(description="Solar elevation of the disc centre at each sample, degrees")
-    visible_fraction: list[float] = Field(description="Fraction of the solar disc above the horizon, 0..1")
-    mean_visible_fraction: float = Field(description="Mean of visible_fraction over the window, 0..1")
-    sunlit_fraction: float = Field(description="Fraction of samples with any part of the Sun visible, 0..1")
-    sunlit_ranges: list[TimeRange]
-    longest_dark_h: float = Field(description="Longest stretch with no part of the Sun visible, hours")
-    obscuration: list[float] = Field(description="Fraction of the solar disc covered by the Earth (eclipse), 0..1")
-    eclipse_fraction: float = Field(description="Fraction of samples with the Earth covering part of the Sun, 0..1")
-    eclipse_ranges: list[TimeRange]
-
-
-class ArrayLevel(BaseModel):
-    power_w: list[float] = Field(description="Array electrical power at each sample, W")
-    mean_power_w: float = Field(description="Mean array power over the window, W")
-    peak_power_w: float = Field(description="Highest array power in the window, W")
-    energy_wh: float = Field(description="Array energy over the window (left Riemann sum), Wh")
-    producing_fraction: float = Field(description="Fraction of samples with array power above zero, 0..1")
-    producing_ranges: list[TimeRange]
-    eclipse_energy_loss_wh: float = Field(description="Array energy lost to eclipses in the window, Wh")
-
-
-class BalanceLevel(BaseModel):
-    soc_fraction: list[float] = Field(description="Battery state of charge at each sample, fraction of capacity")
-    load_w: list[float] = Field(description="Load applied at each sample, W")
-    min_soc_fraction: float
-    final_soc_fraction: float
-    survived: bool = Field(description="True when the load was always served")
-    first_depletion_at: str | None = Field(description="First sample with load unserved, ISO 8601 UTC")
-    depleted_fraction: float = Field(description="Fraction of samples ending a step with load unserved, 0..1")
-    depleted_ranges: list[TimeRange]
-    generated_energy_wh: float = Field(description="Array energy over the window, Wh")
-    consumed_energy_wh: float = Field(description="Load energy served, Wh")
-    unserved_energy_wh: float = Field(description="Load energy not served because the battery was at its floor, Wh")
-    curtailed_energy_wh: float = Field(description="Array energy lost because the battery was full, Wh")
-    usable_capacity_wh: float = Field(description="capacity x (1 - min_soc), Wh")
-    longest_dark_energy_wh: float = Field(description=(
-        "Battery energy to carry the night load through the longest dark stretch: night load x hours / "
-        "discharge efficiency, Wh"))
 
 
 class PowerResponse(WindowResponse):
     level: int
     panel: str
-    sun: SunLevel
-    array: ArrayLevel | None = None
-    balance: BalanceLevel | None = None
+    # level 1 (API rules)
+    sun_fraction: list[float] = Field(description="Fraction of the solar disc above the local horizon at each sample, 0..1")
+    sun_el_deg: list[float] = Field(description="Solar elevation of the disc centre at each sample, degrees")
+    sunlit_ranges: list[TimeRange]
+    longest_dark_h: float = Field(description="Longest stretch with no part of the Sun visible, hours")
+    # level 1 extras
+    sunlit_fraction: float = Field(description="Extra: share of samples with any of the Sun visible, 0..1")
+    obscuration: list[float] = Field(description="Extra: fraction of the solar disc covered by the Earth (eclipse), 0..1")
+    eclipse_ranges: list[TimeRange] = Field(description="Extra: time ranges with the Earth covering part of the Sun")
+    # level 2 (API rules)
+    irradiance_w_m2: list[float] | None = Field(None, description=(
+        "Irradiance reaching the panel at each sample, W/m2: solar irradiance x visible fraction x panel orientation "
+        "factor x (1 - eclipse obscuration)"))
+    power_w: list[float] | None = Field(None, description="Array electrical power at each sample, W")
+    mean_power_w: float | None = Field(None, description="Mean array power over the window, W")
+    energy_wh: float | None = Field(None, description="Array energy over the window (left Riemann sum), Wh")
+    # level 2 extras
+    peak_power_w: float | None = Field(None, description="Extra: highest array power, W")
+    eclipse_energy_loss_wh: float | None = Field(None, description="Extra: array energy lost to eclipses, Wh")
+    # level 3 (API rules)
+    net_power_w: list[float] | None = Field(None, description="Array power minus load at each sample, W")
+    battery_soc: list[float] | None = Field(None, description="Battery state of charge at each sample, fraction of capacity")
+    min_soc: float | None = Field(None, description="Lowest state of charge reached, fraction of capacity")
+    survives: bool | None = Field(None, description="True when the load was always served")
+    first_depletion_at: str | None = Field(None, description="First sample with load unserved, ISO 8601 UTC; null if it survives")
+    energy_margin_wh: float | None = Field(None, description=(
+        "Energy above the battery floor at the worst moment, Wh; negative = load energy that could not be served"))
+    # level 3 extras
+    load_profile_w: list[float] | None = Field(None, description="Extra: load applied at each sample, W")
+    final_soc: float | None = Field(None, description="Extra: state of charge at the end, fraction")
+    depleted_ranges: list[TimeRange] | None = Field(None, description="Extra: time ranges with load unserved")
+    unserved_energy_wh: float | None = Field(None, description="Extra: load energy not served, Wh")
+    curtailed_energy_wh: float | None = Field(None, description="Extra: array energy lost because the battery was full, Wh")
+    usable_capacity_wh: float | None = Field(None, description="Extra: capacity x (1 - battery_min_soc), Wh")
+    longest_dark_energy_wh: float | None = Field(None, description=(
+        "Extra: battery energy to carry the night load through the longest dark stretch, Wh"))

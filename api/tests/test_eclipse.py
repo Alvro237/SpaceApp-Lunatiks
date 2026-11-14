@@ -46,11 +46,11 @@ def test_obscuration_agrees_with_engine_eclipse_codes_at_blue_ghost():
 
 def test_power_drops_to_zero_during_totality_at_blue_ghost():
     body = {"site_id": "blue-ghost-1", "start": "2025-03-14T00:00:00Z", "duration_h": 12, "step_min": 1, "level": 2,
-            "panel": "tracking", "array": {"area_m2": 1.0, "efficiency": 0.3, "derating": 1.0}}
+            "panel": "tracking", "panel_area_m2": 1.0, "cell_efficiency": 0.3, "derating": 1.0}
     b = client.post("/api/v1/power", json=body).json()
     i = b["t"].index("2025-03-14T06:59:00Z")
-    assert b["sun"]["obscuration"][i] == 1.0 and b["array"]["power_w"][i] == 0.0
-    assert b["array"]["power_w"][0] > 300.0                         # Sun well up before the eclipse
-    assert b["array"]["eclipse_energy_loss_wh"] > 1000.0            # ~4.8 h of ~400 W lost
+    assert b["obscuration"][i] == 1.0 and b["power_w"][i] == 0.0 and b["irradiance_w_m2"][i] == 0.0
+    assert b["power_w"][0] > 300.0                         # Sun well up before the eclipse
+    assert b["eclipse_energy_loss_wh"] > 1000.0            # ~4.8 h of ~400 W lost
     sun = client.post("/api/v1/sun", json={k: body[k] for k in ("site_id", "start", "duration_h", "step_min")}).json()
     assert sun["eclipses"][0]["max_obscuration"] == 1.0

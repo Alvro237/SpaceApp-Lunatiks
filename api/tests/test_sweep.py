@@ -38,15 +38,15 @@ def test_vectorised_battery_equals_the_scalar_model():
         assert rows.unserved_wh[i] == pytest.approx(b.unserved_wh, abs=1e-9) and bool(rows.survived[i]) == b.survived
 
 
-ARRAY = {"area_m2": 2.0, "efficiency": 0.3, "derating": 0.9}
-BATTERY = {"capacity_wh": 3000.0, "initial_soc": 1.0, "min_soc": 0.2, "charge_efficiency": 0.95, "discharge_efficiency": 0.95}
-LOAD = {"load_w": 60.0, "night_load_w": 40.0}
+PWR = {"panel_area_m2": 2.0, "cell_efficiency": 0.3, "derating": 0.9, "load_w": 60.0, "night_load_w": 40.0,
+       "battery_capacity_wh": 3000.0, "battery_initial_soc": 1.0, "battery_min_soc": 0.2, "charge_efficiency": 0.95,
+       "discharge_efficiency": 0.95}
 
 
 def test_each_window_equals_the_single_window_endpoints():
     req = {"places": [{"site_id": "mons-malapert"}, {"lat": -85.0, "lon": 30.0}], "first_landing": "2027-03-10T00:00:00Z",
            "landings": 6, "landing_step_h": 24, "stay_h": 96, "step_min": 60,
-           "array": ARRAY, "battery": BATTERY, "load": LOAD}
+           **PWR}
     r = client.post("/api/v1/sweep", json=req)
     assert r.status_code == 200, r.text
     b = r.json()
@@ -59,15 +59,14 @@ def test_each_window_equals_the_single_window_endpoints():
             common = {**place, "start": start, "duration_h": 96, "step_min": 60}
             sun = client.post("/api/v1/sun", json=common).json()
             earth = client.post("/api/v1/earth", json=common).json()
-            pw = client.post("/api/v1/power", json={**common, "level": 3, "array": ARRAY, "battery": BATTERY,
-                                                    "load": LOAD}).json()
+            pw = client.post("/api/v1/power", json={**common, "level": 3, **PWR}).json()
             assert row["sunlight_fraction"][k] == pytest.approx(sun["sunlit_fraction"])
             assert row["longest_dark_h"][k] == pytest.approx(sun["longest_dark_h"])
             assert row["comms_fraction"][k] == pytest.approx(earth["visible_window_fraction"])
             assert row["longest_blackout_h"][k] == pytest.approx(earth["longest_blackout_h"])
-            assert row["mean_array_w"][k] == pytest.approx(pw["array"]["mean_power_w"])
-            assert row["battery_min_soc"][k] == pytest.approx(pw["balance"]["min_soc_fraction"])
-            assert row["battery_survived"][k] == pw["balance"]["survived"]
+            assert row["mean_array_w"][k] == pytest.approx(pw["mean_power_w"])
+            assert row["battery_min_soc"][k] == pytest.approx(pw["min_soc"])
+            assert row["battery_survived"][k] == pw["survives"]
     assert b["places"][0]["horizon_kind"] == "terrain" and b["places"][1]["horizon_kind"] == "smooth_sphere"
     assert b["places"][0]["gcr_dose_mgy_si"] > 0
 
@@ -76,7 +75,7 @@ def test_errors():
     base = {"places": [{"site_id": "im-2"}], "first_landing": "2027-03-01T00:00:00Z", "landings": 3, "stay_h": 48}
     assert client.post("/api/v1/sweep", json={**base, "places": [{"site_id": "nowhere"}]}).status_code == 404
     assert client.post("/api/v1/sweep", json={**base, "step_min": 7}).status_code == 422          # 7 min does not divide 24 h
-    assert client.post("/api/v1/sweep", json={**base, "battery": BATTERY}).status_code == 422     # battery without array/load
+    assert client.post("/api/v1/sweep", json={**base, "battery_capacity_wh": 3000.0}).status_code == 422   # incomplete battery fields
     assert client.post("/api/v1/sweep", json={**base, "places": [{}]}).status_code == 422
     assert client.post("/api/v1/sweep", json={**base, "landings": 2000, "stay_h": 2000, "step_min": 1}).status_code == 422
     assert client.post("/api/v1/sweep", json={**base, "first_landing": "2040-01-01T00:00:00Z"}).status_code == 400

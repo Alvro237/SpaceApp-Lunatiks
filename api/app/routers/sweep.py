@@ -7,7 +7,7 @@ from .. import services
 from ..db.store import DataStore, get_store
 from ..logic.eclipse import obscuration
 from ..logic.engine import AnalysisParams
-from ..logic.power import ArrayParams, BatteryParams, LoadParams, array_power_w, load_series_w
+from ..logic.power import array_power_w, load_series_w, params_from_flat
 from ..logic.radiation import mission_dose, shielding_factor, sky_solid_angle
 from ..logic.sweep import (energy_balance_rows, longest_run_rows, window_fraction, window_matrix, window_mean,
                            window_starts)
@@ -35,6 +35,7 @@ def sweep(req: SweepRequest, store: DataStore = Depends(get_store)) -> SweepResp
     step_h = req.step_min / 60.0
     params = AnalysisParams(panel=req.panel, comms_min_fraction=req.comms_min_fraction)
     gcr = store.radiation.gcr_free_space_mean() if store.radiation else None
+    array, battery, load = params_from_flat(req.model_dump())
 
     out: list[PlaceSweep] = []
     for pl in req.places:
@@ -58,17 +59,12 @@ def sweep(req: SweepRequest, store: DataStore = Depends(get_store)) -> SweepResp
             longest_blackout_h=(longest_run_rows(window_matrix(link, starts, n), False) * step_h).tolist(),
             eclipse_hours=(window_fraction(occ > 0, starts, n) * (n + 1) * step_h).tolist(),
             mean_power_w_m2=window_mean(q, starts, n).tolist())
-        if req.array is not None:
-            a = req.array
-            p = array_power_w(q, ArrayParams(area_m2=a.area_m2, efficiency=a.efficiency, derating=a.derating))
+        if array is not None:
+            p = array_power_w(q, array)
             row.mean_array_w = window_mean(p, starts, n).tolist()
-            if req.battery is not None:
-                b, ld = req.battery, req.load
-                load = LoadParams(day_w=ld.load_w, night_w=ld.load_w if ld.night_load_w is None else ld.night_load_w)
+            if battery is not None:
                 bal = energy_balance_rows(window_matrix(p, starts, n), window_matrix(load_series_w(lit, load), starts, n),
-                                          step_h, BatteryParams(capacity_wh=b.capacity_wh, initial_soc=b.initial_soc,
-                                                                min_soc=b.min_soc, charge_efficiency=b.charge_efficiency,
-                                                                discharge_efficiency=b.discharge_efficiency))
+                                          step_h, battery)
                 row.battery_survived = bal.survived.tolist()
                 row.battery_min_soc = bal.min_soc.tolist()
                 row.unserved_energy_wh = bal.unserved_wh.tolist()

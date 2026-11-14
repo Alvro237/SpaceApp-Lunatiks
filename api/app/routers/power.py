@@ -1,4 +1,5 @@
-"""Power levels (MECH): POST /api/v1/power. Validate, call the engine and app/logic/power, shape."""
+"""Power levels (MECH): POST /api/v1/power, team API rules (flat fields). Validate, call the engine and
+app/logic/power, shape."""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
@@ -7,9 +8,9 @@ from .. import services
 from ..db.store import DataStore, get_store
 from ..logic.eclipse import obscuration
 from ..logic.engine import AnalysisParams, compute_metrics
-from ..logic.power import (ArrayParams, BatteryParams, LoadParams, array_power_w, energy_balance, energy_wh,
-                           load_series_w, night_energy_wh, usable_capacity_wh)
-from ..schemas.power import ArrayLevel, BalanceLevel, PowerRequest, PowerResponse, SunLevel
+from ..logic.power import (array_power_w, energy_balance, energy_margin_wh, energy_wh, load_series_w, night_energy_wh,
+                           params_from_flat, usable_capacity_wh)
+from ..schemas.power import PowerRequest, PowerResponse
 from .common import ranges, resolve_model, window_fields, window_ms
 
 router = APIRouter(prefix="/power", tags=["power"])
@@ -26,41 +27,37 @@ ASSUMPTIONS = [
 def power(req: PowerRequest, store: DataStore = Depends(get_store)) -> PowerResponse:
     model = resolve_model(req, store)
     start_ms = window_ms(req, store)
-    series = services.evaluate_window(store, model, start_ms, req.duration_h, req.step_min, AnalysisParams(panel=req.panel))
-    t, m = series.t_ms, compute_metrics(series)
-    occ = obscuration(series)
+    s = services.evaluate_window(store, model, start_ms, req.duration_h, req.step_min, AnalysisParams(panel=req.panel))
+    t, m = s.t_ms, compute_metrics(s)
+    occ = obscuration(s)
     out = PowerResponse(
         **window_fields(req, model, store, start_ms, t, ASSUMPTIONS), level=req.level, panel=req.panel,
-        sun=SunLevel(sun_el_deg=series.sun_el.tolist(), visible_fraction=series.sun_frac.tolist(),
-                     mean_visible_fraction=float(series.sun_frac.mean()), sunlit_fraction=m.sunlight_pct / 100.0,
-                     sunlit_ranges=ranges(t, series.sunlit()), longest_dark_h=m.longest_dark_h,
-                     obscuration=occ.tolist(), eclipse_fraction=float((occ > 0).mean()), eclipse_ranges=ranges(t, occ > 0)))
+        sun_fraction=s.sun_frac.tolist(), sun_el_deg=s.sun_el.tolist(), sunlit_ranges=ranges(t, s.sunlit()),
+        longest_dark_h=m.longest_dark_h, sunlit_fraction=m.sunlight_pct / 100.0, obscuration=occ.tolist(),
+        eclipse_ranges=ranges(t, occ > 0))
     if req.level == 1:
         return out
 
-    a = req.array
-    array = ArrayParams(area_m2=a.area_m2, efficiency=a.efficiency, derating=a.derating)
-    p_clear = array_power_w(series.power_w_m2, array)
-    p = p_clear * (1.0 - occ)
-    out.array = ArrayLevel(power_w=p.tolist(), mean_power_w=float(p.mean()), peak_power_w=float(p.max()),
-                           energy_wh=energy_wh(p, t), producing_fraction=float((p > 0).mean()),
-                           producing_ranges=ranges(t, p > 0),
-                           eclipse_energy_loss_wh=energy_wh(p_clear, t) - energy_wh(p, t))
+    array, battery, load = params_from_flat(req.model_dump())
+    q = s.power_w_m2 * (1.0 - occ)                        # irradiance reaching the panel
+    p = array_power_w(q, array)
+    out.irradiance_w_m2 = q.tolist()
+    out.power_w, out.mean_power_w, out.energy_wh = p.tolist(), float(p.mean()), energy_wh(p, t)
+    out.peak_power_w = float(p.max())
+    out.eclipse_energy_loss_wh = energy_wh(array_power_w(s.power_w_m2, array), t) - out.energy_wh
     if req.level == 2:
         return out
 
-    b, ld = req.battery, req.load
-    battery = BatteryParams(capacity_wh=b.capacity_wh, initial_soc=b.initial_soc, min_soc=b.min_soc,
-                            charge_efficiency=b.charge_efficiency, discharge_efficiency=b.discharge_efficiency)
-    load = LoadParams(day_w=ld.load_w, night_w=ld.load_w if ld.night_load_w is None else ld.night_load_w)
-    q = load_series_w(series.sunlit(), load)
-    bal = energy_balance(t, p, q, battery)
-    out.balance = BalanceLevel(
-        soc_fraction=(bal.soc_wh / battery.capacity_wh).tolist(), load_w=q.tolist(),
-        min_soc_fraction=bal.min_soc, final_soc_fraction=bal.final_soc, survived=bal.survived,
-        first_depletion_at=None if bal.first_depletion_index is None else services.iso_utc(t[bal.first_depletion_index]),
-        depleted_fraction=float(bal.depleted.mean()), depleted_ranges=ranges(t, bal.depleted),
-        generated_energy_wh=bal.generated_wh, consumed_energy_wh=bal.consumed_wh, unserved_energy_wh=bal.unserved_wh,
-        curtailed_energy_wh=bal.curtailed_wh, usable_capacity_wh=usable_capacity_wh(battery),
-        longest_dark_energy_wh=night_energy_wh(m.longest_dark_h, load, battery))
+    load_w = load_series_w(s.sunlit(), load)
+    bal = energy_balance(t, p, load_w, battery)
+    out.net_power_w = (p - load_w).tolist()
+    out.battery_soc = (bal.soc_wh / battery.capacity_wh).tolist()
+    out.min_soc, out.final_soc, out.survives = bal.min_soc, bal.final_soc, bal.survived
+    out.first_depletion_at = None if bal.first_depletion_index is None else services.iso_utc(t[bal.first_depletion_index])
+    out.energy_margin_wh = energy_margin_wh(bal, battery)
+    out.load_profile_w = load_w.tolist()
+    out.depleted_ranges = ranges(t, bal.depleted)
+    out.unserved_energy_wh, out.curtailed_energy_wh = bal.unserved_wh, bal.curtailed_wh
+    out.usable_capacity_wh = usable_capacity_wh(battery)
+    out.longest_dark_energy_wh = night_energy_wh(m.longest_dark_h, load, battery)
     return out

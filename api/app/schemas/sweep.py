@@ -6,7 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-from .power import ArrayIn, BatteryIn, LoadIn
+from ..logic.power import ARRAY_KEYS, BATTERY_KEYS
+from .power import PowerInputs
 
 MAX_PLACES = 25
 MAX_CELLS = 2_000_000         # windows x samples per window, per place
@@ -25,7 +26,9 @@ class Place(BaseModel):
         return self
 
 
-class SweepRequest(BaseModel):
+class SweepRequest(PowerInputs):
+    """Panel fields (panel_area_m2, cell_efficiency, derating) give array power per landing; adding the battery
+    fields (load_w, battery_*, charge_efficiency, discharge_efficiency) gives survival per landing."""
     places: list[Place] = Field(min_length=1, max_length=MAX_PLACES)
     first_landing: datetime = Field(description="First landing time, ISO 8601 UTC")
     landings: int = Field(ge=1, le=2000, description="Number of landing times to try")
@@ -35,9 +38,6 @@ class SweepRequest(BaseModel):
     mast_m: float = Field(2.0, ge=0.0, le=10.0, description="Height of the panel / antenna above the ground, m")
     panel: Literal["tracking", "vertical", "horizontal"] = "vertical"
     comms_min_fraction: float = Field(0.5, gt=0.0, le=1.0, description="Share of the Earth's disc needed for a link")
-    array: ArrayIn | None = Field(None, description="Give it to get array power per window")
-    battery: BatteryIn | None = Field(None, description="Give it with array and load to get survival per window")
-    load: LoadIn | None = None
 
     @model_validator(mode="after")
     def _check(self) -> "SweepRequest":
@@ -49,8 +49,12 @@ class SweepRequest(BaseModel):
         ls = round(self.landing_step_h * 60.0 / self.step_min)
         if self.landings * (n + 1) > MAX_CELLS or (self.landings - 1) * ls + n + 1 > MAX_SERIES_SAMPLES:
             raise ValueError("sweep too large: fewer landings, a shorter stay or a larger step_min")
-        if self.battery is not None and (self.array is None or self.load is None):
-            raise ValueError("battery needs array and load")
+        if self._partial(ARRAY_KEYS):
+            raise ValueError("panel fields incomplete: missing " + ", ".join(self._missing(ARRAY_KEYS)))
+        if self._partial(BATTERY_KEYS):
+            raise ValueError("battery fields incomplete: missing " + ", ".join(self._missing(BATTERY_KEYS)))
+        if not self._missing(BATTERY_KEYS) and self._missing(ARRAY_KEYS):
+            raise ValueError("battery fields need the panel fields too")
         return self
 
 

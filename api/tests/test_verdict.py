@@ -23,8 +23,9 @@ def test_score_and_verdict_rules_hand_case():
 
 
 BASE = {"site_id": "mons-malapert", "start": "2027-10-05T00:00:00Z", "duration_h": 24 * 14, "step_min": 60}
-ARRAY = {"area_m2": 2.0, "efficiency": 0.3, "derating": 0.9}
-BATTERY = {"capacity_wh": 3000.0, "initial_soc": 1.0, "min_soc": 0.2, "charge_efficiency": 0.95, "discharge_efficiency": 0.95}
+PWR = {"panel_area_m2": 2.0, "cell_efficiency": 0.3, "derating": 0.9, "load_w": 60.0, "night_load_w": 40.0,
+       "battery_capacity_wh": 3000.0, "battery_initial_soc": 1.0, "battery_min_soc": 0.2, "charge_efficiency": 0.95,
+       "discharge_efficiency": 0.95}
 
 
 def test_score_only_and_a_failing_filter():
@@ -45,15 +46,14 @@ def test_unknown_data_gives_unknown_unless_accepted():
 
 def test_battery_filter_agrees_with_power_level_3():
     for cap in (300.0, 30000.0):
-        bat = {**BATTERY, "capacity_wh": cap}
+        bat = {**PWR, "battery_capacity_wh": cap}
         v = client.post("/api/v1/verdict", json={**BASE, "hard_filters": {"battery_survives": {
-            "array": ARRAY, "battery": bat, "load": {"day_w": 60.0, "night_w": 40.0}}}}).json()
-        p = client.post("/api/v1/power", json={**BASE, "level": 3, "array": ARRAY, "battery": bat,
-                                               "load": {"load_w": 60.0, "night_load_w": 40.0}}).json()
+            **bat}}}).json()
+        p = client.post("/api/v1/power", json={**BASE, "level": 3, **bat}).json()
         f = v["hard_filters"][0]
-        assert f["passed"] == p["balance"]["survived"]
-        assert f["value"] == pytest.approx(p["balance"]["min_soc_fraction"])
-        assert (v["verdict"] == "unfeasible") == (not p["balance"]["survived"])
+        assert f["passed"] == p["survives"]
+        assert f["value"] == pytest.approx(p["min_soc"])
+        assert (v["verdict"] == "unfeasible") == (not p["survives"])
 
 
 def test_errors():

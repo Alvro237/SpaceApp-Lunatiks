@@ -67,64 +67,81 @@ def test_balance_charge_efficiency_and_day_night_load():
     assert usable_capacity_wh(battery) == pytest.approx(750.0)
 
 
-# ------------------------------------------------------------------ HTTP contract
+
+
+def test_energy_margin_hand_cases():
+    from app.logic.power import energy_margin_wh, params_from_flat
+    # survives: min SoC 0.5 over a 0.2 floor on 100 Wh -> 30 Wh spare
+    ok = energy_balance(T, np.array([100.0, 100.0, 0.0, 0.0]), np.full(4, 50.0),
+                        BatteryParams(capacity_wh=100.0, initial_soc=0.9, min_soc=0.2))
+    assert energy_margin_wh(ok, BatteryParams(capacity_wh=100.0, initial_soc=0.9, min_soc=0.2)) == pytest.approx(30.0)
+    # depletes: 96 Wh unserved (case above) -> -96 Wh
+    bat = BatteryParams(capacity_wh=100.0, initial_soc=0.5, min_soc=0.2, discharge_efficiency=0.8)
+    bad = energy_balance(T, np.zeros(4), np.full(4, 40.0), bat)
+    assert energy_margin_wh(bad, bat) == pytest.approx(-96.0)
+    a, b, ld = params_from_flat({**FLAT2, **FLAT3})
+    assert (a.area_m2, a.efficiency, a.derating) == (2.0, 0.3, 1.0) and b.capacity_wh == 2000.0 and ld.night_w == 50.0
+    assert params_from_flat({"load_w": 1}) == (None, None, None)
+
+
+# ------------------------------------------------------------------ HTTP contract (team API rules: flat fields)
 
 BASE = {"site_id": "mons-malapert", "start": "2027-03-01T00:00:00Z", "duration_h": 24 * 30, "step_min": 60}
-ARRAY = {"area_m2": 2.0, "efficiency": 0.3, "derating": 1.0}
-BATTERY = {"capacity_wh": 2000.0, "initial_soc": 1.0, "min_soc": 0.0, "charge_efficiency": 1.0,
-           "discharge_efficiency": 1.0}
+FLAT2 = {"panel_area_m2": 2.0, "cell_efficiency": 0.3, "derating": 1.0}
+FLAT3 = {"load_w": 50.0, "battery_capacity_wh": 2000.0, "battery_initial_soc": 1.0, "battery_min_soc": 0.0,
+         "charge_efficiency": 1.0, "discharge_efficiency": 1.0}
+L1_KEYS = {"t", "sun_fraction", "sun_el_deg", "sunlit_ranges", "level", "horizon_kind", "assumptions"}
+L2_KEYS = {"irradiance_w_m2", "power_w", "mean_power_w", "energy_wh"}
+L3_KEYS = {"net_power_w", "battery_soc", "min_soc", "survives", "first_depletion_at", "longest_dark_h", "energy_margin_wh"}
 
 
-def test_level_1_visible_fraction_matches_the_engine():
-    r = client.post("/api/v1/power", json={**BASE, "level": 1})
-    assert r.status_code == 200, r.text
-    body = r.json()
-    store = get_store()
-    series = services.evaluate_window(store, services.model_for_site(store, store.sites.get("mons-malapert"), 2.0),
-                                      T0, 24 * 30, 60)
-    m = compute_metrics(series)
-    assert body["horizon_kind"] == "terrain" and len(body["t"]) == series.t_ms.size
-    assert body["sun"]["visible_fraction"] == pytest.approx(series.sun_frac.tolist())
-    assert body["sun"]["sunlit_fraction"] == pytest.approx(m.sunlight_pct / 100.0)
-    assert body["sun"]["longest_dark_h"] == pytest.approx(m.longest_dark_h)
-    assert (len(body["sun"]["sunlit_ranges"]) > 0) == (body["sun"]["sunlit_fraction"] > 0)
-    assert body["array"] is None and body["balance"] is None
-
-
-def test_level_2_array_power_is_irradiance_times_area_efficiency():
-    r = client.post("/api/v1/power", json={**BASE, "level": 2, "panel": "tracking", "array": ARRAY})
-    assert r.status_code == 200, r.text
-    body = r.json()
+def _series(panel="vertical"):
     store = get_store()
     model = services.model_for_site(store, store.sites.get("mons-malapert"), 2.0)
-    series = services.evaluate_window(store, model, T0,
-                                      24 * 30, 60, AnalysisParams(panel="tracking"))
-    expected = series.power_w_m2 * 2.0 * 0.3
-    assert body["array"]["power_w"] == pytest.approx(expected.tolist())
-    assert body["array"]["peak_power_w"] == pytest.approx(float(expected.max()))
-    assert body["array"]["energy_wh"] == pytest.approx(float(np.sum(expected[:-1] * 1.0)))
-    derated = client.post("/api/v1/power", json={**BASE, "level": 2, "panel": "tracking",
-                                                 "array": {**ARRAY, "derating": 0.85}}).json()
-    assert derated["array"]["energy_wh"] == pytest.approx(0.85 * body["array"]["energy_wh"])
+    return services.evaluate_window(store, model, T0, 24 * 30, 60, AnalysisParams(panel=panel))
 
 
-def test_level_3_ideal_and_lossy_battery():
-    ideal = client.post("/api/v1/power", json={**BASE, "level": 3, "array": ARRAY, "battery": BATTERY,
-                                               "load": {"load_w": 50.0}})
-    assert ideal.status_code == 200, ideal.text
-    b = ideal.json()["balance"]
-    assert len(b["soc_fraction"]) == len(ideal.json()["t"]) and 0.0 <= b["min_soc_fraction"] <= 1.0
-    assert b["survived"] == (b["unserved_energy_wh"] == 0.0)
-    assert set(b["load_w"]) == {50.0}                                    # night load defaults to load_w
-    lossy = client.post("/api/v1/power", json={
-        **BASE, "level": 3, "array": {**ARRAY, "derating": 0.85},
-        "battery": {**BATTERY, "min_soc": 0.2, "charge_efficiency": 0.95, "discharge_efficiency": 0.95},
-        "load": {"load_w": 50.0, "night_load_w": 80.0}})
-    assert lossy.status_code == 200, lossy.text
-    a = lossy.json()["balance"]
-    assert a["min_soc_fraction"] >= 0.2 - 1e-9 and set(a["load_w"]) == {50.0, 80.0}
-    assert a["generated_energy_wh"] == pytest.approx(0.85 * b["generated_energy_wh"])
-    assert a["usable_capacity_wh"] == pytest.approx(1600.0)
+def test_level_1_fields_match_the_engine():
+    r = client.post("/api/v1/power", json={**BASE, "level": 1})
+    assert r.status_code == 200, r.text
+    b = r.json()
+    assert L1_KEYS <= set(b) and all(b[k] is None for k in L2_KEYS | (L3_KEYS - {"longest_dark_h"}))
+    s, m = _series(), compute_metrics(_series())
+    assert b["horizon_kind"] == "terrain" and len(b["t"]) == s.t_ms.size
+    assert b["sun_fraction"] == pytest.approx(s.sun_frac.tolist())
+    assert b["sun_el_deg"] == pytest.approx(s.sun_el.tolist())
+    assert b["longest_dark_h"] == pytest.approx(m.longest_dark_h)
+    assert (len(b["sunlit_ranges"]) > 0) == (m.sunlight_pct > 0)
+
+
+def test_level_2_power_is_panel_irradiance_times_area_efficiency():
+    b = client.post("/api/v1/power", json={**BASE, "level": 2, "panel": "tracking", **FLAT2}).json()
+    assert (L1_KEYS | L2_KEYS) <= set(b) and all(b[k] is not None for k in L2_KEYS)
+    s = _series("tracking")
+    assert b["irradiance_w_m2"] == pytest.approx(s.power_w_m2.tolist())      # no eclipse in this window
+    expected = s.power_w_m2 * 2.0 * 0.3
+    assert b["power_w"] == pytest.approx(expected.tolist())
+    assert b["mean_power_w"] == pytest.approx(float(expected.mean()))
+    assert b["energy_wh"] == pytest.approx(float(np.sum(expected[:-1])))
+    derated = client.post("/api/v1/power", json={**BASE, "level": 2, "panel": "tracking", **FLAT2, "derating": 0.85}).json()
+    assert derated["energy_wh"] == pytest.approx(0.85 * b["energy_wh"])
+
+
+def test_level_3_fields_and_lossy_battery():
+    ideal = client.post("/api/v1/power", json={**BASE, "level": 3, **FLAT2, **FLAT3}).json()
+    assert (L1_KEYS | L2_KEYS | L3_KEYS) <= set(ideal)
+    assert ideal["net_power_w"] == pytest.approx((np.array(ideal["power_w"]) - 50.0).tolist())
+    assert len(ideal["battery_soc"]) == len(ideal["t"]) and ideal["min_soc"] == pytest.approx(min(ideal["battery_soc"]))
+    if ideal["survives"]:
+        assert ideal["first_depletion_at"] is None and ideal["energy_margin_wh"] >= 0
+    else:
+        assert ideal["energy_margin_wh"] == pytest.approx(-ideal["unserved_energy_wh"])
+    lossy = client.post("/api/v1/power", json={**BASE, "level": 3, **FLAT2, **FLAT3, "derating": 0.85,
+                                               "battery_min_soc": 0.2, "charge_efficiency": 0.95,
+                                               "discharge_efficiency": 0.95, "night_load_w": 80.0}).json()
+    assert lossy["min_soc"] >= 0.2 - 1e-9 and set(lossy["load_profile_w"]) == {50.0, 80.0}
+    assert lossy["energy_wh"] == pytest.approx(0.85 * ideal["energy_wh"])
+    assert lossy["usable_capacity_wh"] == pytest.approx(1600.0)
 
 
 def test_manual_coordinates_use_a_smooth_sphere():
@@ -135,12 +152,11 @@ def test_manual_coordinates_use_a_smooth_sphere():
 
 
 @pytest.mark.parametrize("payload", [
-    {**BASE, "level": 2},                                                     # array missing
-    {**BASE, "level": 3, "array": ARRAY},                                     # battery and load missing
-    {**BASE, "level": 2, "array": {"area_m2": 2.0, "efficiency": 0.3}},       # derating missing: no defaults
-    {**BASE, "level": 3, "array": ARRAY, "battery": {"capacity_wh": 100.0, "initial_soc": 1.0},
-     "load": {"load_w": 50}},                                                 # battery losses missing
-    {**BASE, "level": 2, "array": {**ARRAY, "efficiency": 1.5}},              # efficiency above 1
+    {**BASE, "level": 2},                                                     # panel fields missing
+    {**BASE, "level": 2, "panel_area_m2": 2.0, "cell_efficiency": 0.3},       # derating missing: no defaults
+    {**BASE, "level": 3, **FLAT2},                                            # battery and load missing
+    {**BASE, "level": 3, **FLAT2, **FLAT3, "charge_efficiency": None},        # one battery field missing
+    {**BASE, "level": 2, **FLAT2, "cell_efficiency": 1.5},                    # efficiency above 1
     {**BASE, "level": 1, "lat": -85.0, "lon": 30.0},                          # both site and coordinates
     {**BASE, "site_id": None, "level": 1},                                    # neither
     {**BASE, "level": 1, "duration_h": 24 * 3650, "step_min": 1},             # above the sample cap
