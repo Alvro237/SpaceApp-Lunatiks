@@ -9,6 +9,8 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type { SiteSummary } from '../api/types'
 import { useApp } from '../state/store'
+import { placeKey } from '../state/placeStyle'
+import { useSiteNames } from '../time/hooks'
 import { pointName } from '../time/place'
 import { ApiStatus } from '../ui/ApiStatus'
 import { IconCrosshair, IconSearch } from '../ui/icons'
@@ -21,6 +23,7 @@ export function SiteSearch() {
   const { sites, fromApi, error } = useCatalogue()
   const selection = useApp((s) => s.selection)
   const select = useApp((s) => s.select)
+  const names = useSiteNames()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [active, setActive] = useState(0)
@@ -37,7 +40,8 @@ export function SiteSearch() {
   const ordered = useMemo(() => groups.flatMap((g) => shown.filter((s) => s.group === g)), [groups, shown])
 
   const current =
-    selection.kind === 'site' ? (sites.find((s) => s.id === selection.id)?.name ?? selection.id) : pointName(selection.lat, selection.lon)
+    names.get(placeKey(selection)) ??
+    (selection.kind === 'site' ? (sites.find((s) => s.id === selection.id)?.name ?? selection.id) : pointName(selection.lat, selection.lon))
 
   useEffect(() => {
     if (!open) return

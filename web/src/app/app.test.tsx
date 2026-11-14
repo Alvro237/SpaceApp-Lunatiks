@@ -13,6 +13,7 @@ import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { routes } from './routes'
 import { defaultScene, useApp } from '../state/store'
+import { usePlaceStyles } from '../state/placeStyle'
 import { colorAt, luminance, textOn } from '../terrain/colormaps'
 
 vi.mock('../terrain/TerrainView', () => ({ TerrainView: () => <div role="img" aria-label="Map (test stub)" /> }))
@@ -87,6 +88,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fakeFetch())
   window.location.hash = ''
   useApp.setState({ ...defaultScene(T), playing: false })
+  usePlaceStyles.setState({ styles: {}, menu: null })
 })
 afterEach(() => vi.unstubAllGlobals())
 
@@ -269,7 +271,20 @@ describe('navigator', () => {
     const table = screen.getByRole('table', { name: /Places compared over the window/ })
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent).join('|')).toMatch(/Place\|Sunlight\|Earth contact\|Short nights\|Steady contact\|Power/)
     await noAxeViolations(container)
-    // removing a place (the keyboard route of a right click on the map) can be undone
+    // the place menu (right click on the map, or ⋯ here): rename and pointer colour
+    await user.click(screen.getByRole('button', { name: 'Options for Mons Malapert' }))
+    const menu = screen.getByRole('dialog', { name: 'Options for Mons Malapert' })
+    await user.click(within(menu).getByRole('button', { name: /Rename/ }))
+    const field = within(menu).getByLabelText('Name')
+    await user.clear(field)
+    await user.type(field, 'Base camp{Enter}')
+    expect(await screen.findByRole('button', { name: 'Base camp' })).toBeInTheDocument()
+    await user.click(within(screen.getByRole('dialog', { name: 'Options for Base camp' })).getByRole('radio', { name: 'Blue' }))
+    expect(usePlaceStyles.getState().styles['mons-malapert']).toEqual({ name: 'Base camp', colour: '#4c8dff' })
+    await noAxeViolations(container)
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: /Options for/ })).toBeNull()
+    // removing a place (also in the menu) can be undone
     await user.click(screen.getByRole('button', { name: 'Remove Shackleton crater' }))
     expect(useApp.getState().compare).toHaveLength(2)
     expect(await screen.findByText(/Removed Shackleton crater/)).toBeInTheDocument()

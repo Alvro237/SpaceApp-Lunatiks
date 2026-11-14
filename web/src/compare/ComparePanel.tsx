@@ -18,7 +18,8 @@ import { formatUtc } from '../time/clock'
 import { MS_PER_DAY, MS_PER_HOUR, SOLAR_CONSTANT_W_M2 } from '../time/engine'
 import { type WindowSeries, evaluateWindow, useEphemeris, useMasks, useParams, useSiteNames, useThrottledTime } from '../time/hooks'
 import { type ModelInfo, placeModel } from '../time/place'
-import { IconAntenna, IconClose, IconSun } from '../ui/icons'
+import { IconAntenna, IconClose, IconMore, IconSun } from '../ui/icons'
+import { openMenuFrom } from '../panels/PlaceMenu'
 
 interface Place {
   num: number
@@ -114,6 +115,16 @@ export function ComparePanel({ titleId }: { titleId: string }) {
                 {p.info.name}
               </button>
               {p.info.model.horizon.kind === 'smooth_sphere' && <span className="tag-pill">smooth sphere</span>}
+              <button
+                type="button"
+                className="icon small"
+                aria-haspopup="dialog"
+                aria-label={`Options for ${p.info.name}`}
+                title="Rename, pointer colour, remove"
+                onClick={(e) => openMenuFrom(e.currentTarget, { sel: p.sel, name: p.info.name })}
+              >
+                <IconMore size={14} />
+              </button>
               <button type="button" className="icon small" onClick={() => removePlace(p.sel, p.info.name)} aria-label={`Remove ${p.info.name}`}>
                 <IconClose size={14} />
               </button>

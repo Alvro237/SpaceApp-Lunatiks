@@ -8,7 +8,8 @@
  *   - Right: a side panel only on demand. The open section of the single place, or, with Multiselect on and two
  *     or more places picked, the comparison. With neither, the map keeps the whole screen.
  *   - Bottom: the bare timeline.
- * A right click on a place removes it; a toast offers to undo it.
+ * A right click on a place (or its ⋯ button in the panels) opens a small menu: rename it, choose its pointer
+ * colour, or remove it (a toast offers to undo the removal).
  * The panels report the space they cover so the map centres the Moon in the free area.
  *
  * Two systems share these top bars: the planner (the map, the place panel, the timeline) and Block Moon, the
@@ -25,6 +26,7 @@ import { ComparePanel } from '../compare/ComparePanel'
 import { Timeline } from '../charts/Timeline'
 import { DatePill } from '../panels/DatePill'
 import { MissionPanel } from '../panels/MissionPanel'
+import { PlaceMenu } from '../panels/PlaceMenu'
 import { PlaceTools, SectionDrawer } from '../panels/PlacePanel'
 import { CoordsButton, SiteSearch } from '../panels/SiteSearch'
 import { NowProvider } from '../panels/useNow'
@@ -149,6 +151,7 @@ export function NavigatorPage() {
                 section && <SidePanel wide={section === 'power'}>{(titleId) => <SectionDrawer titleId={titleId} />}</SidePanel>
               )}
               <RemovedToast />
+              <PlaceMenu />
               <QuestPanel />
               <div className="float float-bottom">
                 <Timeline />

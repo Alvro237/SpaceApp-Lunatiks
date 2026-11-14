@@ -17,7 +17,8 @@ import { type SectionId, usePanels } from '../state/panels'
 import { useApp } from '../state/store'
 import { formatUtc } from '../time/clock'
 import { SourceTag } from '../ui/ApiStatus'
-import { IconAntenna, IconBolt, IconClose, IconHorizon, IconMulti } from '../ui/icons'
+import { IconAntenna, IconBolt, IconClose, IconHorizon, IconMore, IconMulti } from '../ui/icons'
+import { openMenuFrom } from './PlaceMenu'
 import { fmtLat, fmtLon } from './format'
 import { LinkPanel } from './LinkPanel'
 import { HorizonPanel } from './HorizonPanel'
@@ -129,6 +130,18 @@ export function SectionDrawer({ titleId }: { titleId: string }) {
             </p>
           )}
         </div>
+        {info && (
+          <button
+            type="button"
+            className="icon"
+            aria-haspopup="dialog"
+            aria-label={`Options for ${info.name}`}
+            title="Rename, pointer colour, remove"
+            onClick={(e) => openMenuFrom(e.currentTarget, { sel: useApp.getState().selection, name: info.name })}
+          >
+            <IconMore size={18} />
+          </button>
+        )}
         <button type="button" className="icon" onClick={close} aria-label={`Close ${active.title}`} title="Close (Esc)">
           <IconClose size={18} />
         </button>
