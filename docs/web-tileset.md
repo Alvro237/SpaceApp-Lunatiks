@@ -178,3 +178,24 @@ directions per pixel at a quarter of the height resolution, as 4 RGBA textures p
 `horizon/{z}/{x}/{y}_{k}.png` with k = 0..3, each channel one direction (k × 4 + channel) × 22.5° clockwise from
 north, value = elevation in degrees mapped from [−10, 40] to 0..255. The engine will read them when
 `tileset.json` gains a `horizon` block with that `path`.
+
+## Globe detail tiles (outside the polar map)
+
+The globe ships with LDEM_16 reduced to 4 px/deg (7.6 km, `data/globe`). While the user zooms, the browser reads
+finer tiles from two global Moon Trek ImageServer layers (`web/src/globe/detail`): the LOLA DEM
+`LRO_LOLA_DEM_Global_256ppd_v06` (float32 metres above the 1737.4 km sphere) for the relief shading, and, in the
+optional photo view, the LROC WAC mosaic `LRO_WAC_Mosaic_Global_303ppd_v02` (8-bit grey).
+
+- Grid: geographic, level z has tiles of 90 / 2^z degrees (4·2^z × 2·2^z tiles from 180° W, 90° N), 256 × 256
+  cell-centred cells. Levels 2 to 6 for the view (2.7 km to 168 m cells, the level whose cells match a screen
+  pixel, at most 48 tiles); level 1 (32 tiles of 45°) is the photo view's base. Boxes never cross ±180° or ±90°.
+- Requests: `exportImage`, bilinear on the server, one extra row below the tile (dropped) because Moon Trek
+  answers the last row with zeros; the south-pole row of tiles has no extra row and a last row of zeros is
+  replaced by the row above. On the WAC mosaic, Moon Trek also answers the column at ±180° with zeros; it is
+  replaced by its neighbour. The DEM does not do this (measured 2026-11-14).
+- Checks before caching: size, georeference (DEM), no no-data, no row of zeros (DEM). Cached in the browser's
+  block cache under the URL.
+- Measured: the DEM tile 22.5-28.125° E, 0-5.625° N has a mean height within 0.25 m of LDEM_16 over the same box.
+- Drawing: the mesh relief stays the shipped grid; the fragment shader shades with the finest loaded tile that is
+  not finer than the view's level (slopes exaggerated ×1.5 there, ×3 on the 7.6 km grid). The photo keeps its own,
+  photographed lighting; the chosen instant only sets day and night.
