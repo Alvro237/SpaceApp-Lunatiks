@@ -39,6 +39,13 @@ asks for this list; keep it current when something is added.
 - Wagner, R. V., et al. (2017). Coordinates of anthropogenic features on the Moon. Icarus 283, 92-103.
 - Steger, C. R., Steger, B., Schaer, C. (2022). HORAYZON: fast horizon and sky-view-factor computation. GMD 15, 6817. https://gmd.copernicus.org/articles/15/6817/2022/ (considered, not used)
 - NASA NSSDCA/ NAIF documentation for lunar frames (MOON_ME / MOON_PA, about 875 m apart).
+- Anderson, M. S., Ewert, M. K., Keener, J. F. (2018). Life Support Baseline Values and Assumptions Document
+  (BVAD), NASA/TP-2015-218570 Rev 1, Table 3-21 "Human Metabolic Rates" (40-year-old male 12.996 and female
+  11.292 MJ/CM-d): default crew metabolic heat of `/power` level 4 (mean, 140.6 W). https://ntrs.nasa.gov/citations/20180001338
+- Incropera, F. P., DeWitt, D. P., Bergman, T. L., Lavine, A. S. Fundamentals of Heat and Mass Transfer, Table A.4
+  (air at 300 K, c_p = 1.007 kJ/kg K): habitat air heat capacity, `/power` level 4.
+- U.S. Standard Atmosphere, 1976 (NOAA/NASA/USAF): molar mass of dry air 28.9644 g/mol. CODATA 2018: gas constant
+  R = 8.314462618 J/mol K and Stefan-Boltzmann constant.
 
 ## Software (all open source)
 

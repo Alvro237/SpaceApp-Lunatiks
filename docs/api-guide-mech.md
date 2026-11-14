@@ -38,6 +38,7 @@ cd api
 | Where is the Sun, how long is it up, eclipses? | `POST /api/v1/sun` | `sun_el_deg[]`, `visible_fraction[]`, `sunlit_fraction`, `sunlit_ranges`, `longest_dark_h`, `next_transition`, `eclipses[]` |
 | When can we talk to Earth? | `POST /api/v1/earth` | `earth_el_deg[]`, `visible_ranges`, `visible_window_fraction`, `longest_blackout_h`, `next_transition` |
 | How much power, does the battery last? | `POST /api/v1/power` (`level` 1-3) | see below |
+| Can a colony live here on its own? | `POST /api/v1/power` (`level` 4) | `colony_status`, `failure_after_days`, `autonomy_h[]`, `energy_breakdown`, sizing |
 | How hot / cold? | `POST /api/v1/thermal` | `surface_k[]`, `surface.{max_k,min_k,mean_k}`, `above_max`, `below_min` |
 | Radiation dose and astronaut risk | `POST /api/v1/radiation` | `risk.index` (1-10), `mission_gcr_dose_mgy_si`, `mission_effective_dose_msv`, `shielding_factor` |
 | Is this place / date feasible? | `POST /api/v1/verdict` | `verdict`, `reasons[]`, `hard_filters[]`, `score.score` |
@@ -70,6 +71,46 @@ Team API rules, flat fields. `level` decides what you must send and what comes b
  "battery_capacity_wh": 3000, "battery_initial_soc": 1, "battery_min_soc": 0.2,
  "charge_efficiency": 0.95, "discharge_efficiency": 0.95}
 ```
+
+### Level 4: colony analysis
+
+An extension beyond the team's API rules, for the advanced view. Send the level-2 and level-3 fields
+**except `load_w`**, plus these:
+
+| Field | Meaning |
+| --- | --- |
+| `critical_load_w` | Life support and anything that must never stop, W. The heater is added by the model. |
+| `deferrable_load_w` | Science, rovers: switched off while SoC < `shed_soc`, W |
+| `comms_load_w`, `comms_critical` | Earth link load, drawn only while the Earth is visible; critical or not (default not) |
+| `shed_soc` | SoC below which the deferrable loads are off (>= `battery_min_soc`) |
+| `max_charge_w`, `max_discharge_w` | Battery power limits, W |
+| `habitat` | `crew_count`, `t_set_k`, `t_min_k`, `ua_w_k`, `area_m2`, `skin_absorptivity`, `skin_emissivity`, `structure_mass_kg`, `structure_specific_heat_j_kgk`, `air_volume_m3`, `air_pressure_pa`, optional `metabolic_w_per_crew` (default 140.6 W, NASA BVAD) |
+| `regolith` | As in `/thermal` |
+| `include_sizing` | Default true: also returns `min_battery_capacity_wh` and `min_panel_area_m2` (adds about 1 s) |
+
+The window must be at least one synodic month (708.7 h); use a year at the poles. A year at one-hour steps
+answers in about 1.5 s.
+
+What to show:
+
+- **`colony_status`**, the headline:
+  - `survives_independently`: the colony can run on its own indefinitely under these conditions.
+  - `survives_window_declining`: it lasts the window, but the battery keeps draining.
+  - `failure_after_x_days`: show "Failure after `failure_after_days` days" (`failure_at`). That is when the
+    critical load could not be served.
+- **Live-style panel**:
+  - `battery_soc[]`, `autonomy_h[]` (hours on battery alone at that moment), `sunrise_margin_wh[]` (in the
+    dark: positive means it reaches sunrise).
+  - `heater_w[]`, `interior_k[]`, `ground_k[]`.
+  - `shed_ranges` / `degraded_days`, while deferrable loads are off.
+- **Energy flow**: `energy_breakdown`, ready for a Sankey or stacked bar. It is generated = loads served +
+  curtailed + losses + battery change.
+- **Resilience**: `cold_soak_h` (hours from setpoint to `t_min_k` if all power is lost; null = never) and
+  `unheated_equilibrium_k`.
+- **Sizing**: "you need at least X Wh / Y m2" from `min_battery_capacity_wh` and `min_panel_area_m2`. Null
+  means no battery or array size reaches it, for example when the window starts in a long night.
+- The level 1-3 fields come from the same model: `survives` means no critical failure, and `load_profile_w`
+  is the total demand.
 
 ## POST /api/v1/sun and /api/v1/earth
 

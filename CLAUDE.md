@@ -146,7 +146,7 @@ work: merged, tested, called on a running server. Not before.
 | Hard filter | `max_slope` | `logic/constraints/slope.py` | scaffold | Dataset-based reference; AERO-1 to review |
 | Hard filter | `continuous_light` | `logic/constraints/light.py` | scaffold | Time-based reference; AERO-1 to review |
 | Soft score | sunlight, comms, continuity | `logic/scoring.py` | scaffold | Visible weights; MECH to set criteria and defaults |
-| Endpoint | `POST /api/v1/power` | `routers/power.py`, `logic/power.py` | MECH | Levels 1-3 per the team's API rules (flat fields); eclipses included; every parameter an input |
+| Endpoint | `POST /api/v1/power` | `routers/power.py`, `logic/power.py` | MECH | Levels 1-3 per the team's API rules (flat fields); level 4 colony analysis (`logic/colony.py`: habitat heating, prioritised loads, survives / declining / failure, sizing); eclipses included; every parameter an input |
 | Endpoint | `POST /api/v1/sun` | `routers/sun.py`, `logic/sun.py` | MECH | Solar elevation, sunlight hours and ranges, next sunset/sunrise, eclipses |
 | Endpoint | `POST /api/v1/earth` | `routers/earth.py`, `logic/earth.py` | MECH | Earth visibility windows, longest blackout, next Earthset/rise, libration wander |
 | Endpoint | `POST /api/v1/radiation` | `routers/radiation.py`, `logic/radiation.py`, `db/radiation.py` | MECH | GCR dose from LRO CRaTER x open sky / 4π; climatology; mSv only with given factors |

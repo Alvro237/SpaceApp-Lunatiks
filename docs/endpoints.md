@@ -204,6 +204,30 @@ Contract = the team's API rules (2026-11-14), flat fields:
   without a panel size; the same value as `/sweep` `mean_power_w_m2` for that landing.
 - The same flat names are used by `/sweep` and by the `battery_survives` hard filter threshold.
 
+Level 4, colony analysis (team decision 2026-11-14; an extension beyond the API rules). **Files:**
+`logic/colony.py`, `logic/thermal.py` (`surface_implicit`), `tests/test_colony.py`.
+
+- Input: levels 2-3 without `load_w`, plus `critical_load_w`, `deferrable_load_w`, `comms_load_w` (only while the
+  Earth is visible; `comms_critical` false by default), `shed_soc` (deferrable loads off below it),
+  `max_charge_w`, `max_discharge_w`, `habitat` (two-node model: `crew_count`, `t_set_k`, `t_min_k`, `ua_w_k`,
+  `area_m2`, `skin_absorptivity`, `skin_emissivity`, `structure_mass_kg`, `structure_specific_heat_j_kgk`,
+  `air_volume_m3`, `air_pressure_pa`, optional `metabolic_w_per_crew`) and `regolith` (as `/thermal`).
+  `duration_h` at least one synodic month (708.7 h); a year is recommended at the poles.
+- Heating: interior held at `t_set_k`; skin solved each step against sunlight on 0.5 x area, ground view factor
+  0.5 (both team decisions), ground infrared from the regolith model; heater = leak - crew heat - electrical load
+  served inside (all of it ends as heat). Crew heat default 140.6 W per person = mean of the 40-year-old male and
+  female rates of NASA BVAD Table 3-21 (team decision). Surplus heat is a cooling demand, without electrical cost.
+- Failure = critical load (life support + holding heater, + comms if critical) not served; shedding the
+  deferrable loads is degraded mode. Status: `failure_after_x_days` (simulated time), `survives_independently`
+  (battery ends the last whole synodic month at least as full as it started, possibly after repeating the window
+  from its end state, so the repeated window never fails) or `survives_window_declining`.
+- Output, besides the levels 1-3 fields (taken from this model): status and failure time, SoC change per synodic
+  month, critical and total demand, heater, cooling demand, interior / skin / ground temperatures, autonomy (hours
+  on battery alone), sunrise margin (in the dark: stored energy minus what is needed until sunrise), degraded
+  ranges and days, interior-below-minimum ranges, energy breakdown (conserved to 1e-6 Wh in tests), crew heat,
+  heat capacity, unheated equilibrium and cold-soak hours at the coldest moment, and the smallest battery and
+  array that survive independently (bisection, within 0.4 %). A year at one-hour steps takes about 1.5 s.
+
 ## MECH · Sun over a mission window
 
 **Status:** done on `feat/mech-power`. `POST /api/v1/sun` with the shared window request. Returns the state at
