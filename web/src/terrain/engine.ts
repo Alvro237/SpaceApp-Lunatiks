@@ -102,7 +102,7 @@ export class TerrainEngine {
   private readonly luts = new Map<ColormapId, THREE.DataTexture>()
   private readonly empty = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1)
   private previouslySplit = new Set<string>()
-  /** Live layer tiles asked for, and those the drawn tiles wanted last frame (the others are cancelled). */
+  /** Live layer tiles queued or in flight, and those the drawn tiles wanted last frame (the others are cancelled). */
   private readonly liveLayerKeys = new Set<string>()
   private wantedLayerKeys = new Set<string>()
   private nextWantedLayerKeys = new Set<string>()
@@ -333,13 +333,15 @@ export class TerrainEngine {
     }
     const order = byDistanceTo(this.tileset, targetKm, [...wanted.values()])
     const rank = new Map(order.map((t, i) => [keyOf(t), i]))
-    // overview first, then height tiles nearest the centre; static layer tiles keep their place (never cancelled),
-    // live layer tiles no tile wanted last frame are dropped
+    // overview first, then height tiles nearest the centre; static layer tiles of the layer shown keep their place,
+    // those of another layer (the user switched) and live layer tiles no tile wanted last frame are dropped
     this.wantedLayerKeys = this.nextWantedLayerKeys
     this.nextWantedLayerKeys = new Set()
+    const layerPrefix = this.layer.kind === 'data' ? `L:${this.layer.id}|` : null
     this.loader.prioritise((k) => {
       if (k === 'overview') return -1
       if (!k.startsWith('L:')) return rank.get(k) ?? null
+      if (!layerPrefix || !k.startsWith(layerPrefix)) return null
       if (this.liveLayerKeys.has(k) && !this.wantedLayerKeys.has(k)) return null
       return order.length
     })
@@ -517,6 +519,7 @@ export class TerrainEngine {
         this.layerTextures.set(lk, tex)
       })
       .catch(() => {})
+      .finally(() => this.liveLayerKeys.delete(lk))
   }
 
   dispose(): void {
