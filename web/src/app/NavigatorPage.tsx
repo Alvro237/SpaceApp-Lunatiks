@@ -9,7 +9,6 @@
  * The panels report the space they cover so the map centres the Moon in the free area.
  */
 import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
-import { SkyDial } from '../charts/SkyDial'
 import { Timeline } from '../charts/Timeline'
 import { DatePill } from '../panels/DatePill'
 import { MissionPanel } from '../panels/MissionPanel'
@@ -79,7 +78,6 @@ export function NavigatorPage() {
               The shared link could not be read; the default scenario is shown.
             </p>
           )}
-          <SkyDial />
           <div className="top-left">
             <div className="where-when" role="group" aria-label={mode === 'study' ? 'Where and when' : 'When'}>
               {mode === 'study' && (
