@@ -5,29 +5,65 @@
  * Drag to look around (360°) and up or down, wheel or +/− to zoom, arrow keys to turn, S / E to follow the Sun or
  * the Earth, F for free look, Escape to go back to the map. Following keeps the body in the centre while time
  * plays. The accessible name says where the camera faces and where the Sun and the Earth are.
+ *
+ * Arrival: the map's camera has already flown to the place (NavigatorPage, state/horizon); this view finishes the
+ * descent from where that flight ended: about 2.5 km up and 14° down from the polar map, about 100 km up and
+ * looking further down from the globe. At altitude h the horizon of the curved Moon lies below the level by
+ * acos(R / (R + h)) (3° at 2.5 km, 19° at 100 km) and the relief is flat; as the camera comes down the horizon
+ * rises and the real relief grows into the LOLA mask, the camera turns to the horizon and the field narrows. The
+ * Sun and the Earth do not move (they are far away). The last frame is the exact view. Skipped with reduced motion.
  */
 import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { useNow } from '../panels/useNow'
 import { useInsets } from '../state/layout'
 import { usePanels } from '../state/panels'
 import { useHorizonCam } from '../state/horizon'
+import { useApp } from '../state/store'
 import { IconBack, IconMinus, IconPlus } from '../ui/icons'
 import { ToolPortal } from '../ui/ToolSlot'
 import { drawHorizon } from './draw'
 import { cameraFor, compass16, wrap180 } from './project'
+import { MOON_R_KM } from '../globe/orbit'
 import { useEffectiveCamera } from './useEffectiveCamera'
 
 const state = (f: number) => (f >= 0.999 ? 'fully visible' : f > 0 ? `${Math.round(f * 100)} percent visible` : 'hidden by the horizon')
 
-export function HorizonView() {
+/** Length of the arrival descent, ms. */
+const DESCENT_MS = 1100
+/** Where the descent starts: where the map camera's flight ended (altitude km, pitch and field in degrees). */
+const DESCENT_FROM = {
+  map: { km: 2.5, pitch: -14, fov: 70 },
+  globe: { km: 100, pitch: -24, fov: 110 },
+} as const
+const easeOut = (p: number) => 1 - (1 - p) ** 3
+/** How far below the level the horizon of a smooth Moon lies from an altitude, degrees. */
+const dipDeg = (hKm: number) => (Math.acos(MOON_R_KM / (MOON_R_KM + hKm)) * 180) / Math.PI
+
+export function HorizonView({ animate = false }: { animate?: boolean }) {
   const { view, info, series } = useNow()
   const insets = useInsets()
   const cam = useEffectiveCamera()
+  // read once: where the map camera was when the view opened
+  const [from] = useState(() => DESCENT_FROM[useApp.getState().scale === 'globe' ? 'globe' : 'map'])
   const { look, zoom, setMode } = useHorizonCam.getState()
   const wrap = useRef<HTMLDivElement>(null)
   const canvas = useRef<HTMLCanvasElement>(null)
   const drag = useRef<{ x: number; y: number; yaw: number; pitch: number } | null>(null)
   const [size, setSize] = useState({ w: 0, h: 0 })
+  // 0 → 1 over the arrival descent (1 at once without animation)
+  const [arrival, setArrival] = useState(animate ? 0 : 1)
+  useEffect(() => {
+    if (!animate) return
+    const t0 = performance.now()
+    let raf = 0
+    const tick = () => {
+      const p = Math.min(1, (performance.now() - t0) / DESCENT_MS)
+      setArrival(p)
+      if (p < 1) raf = requestAnimationFrame(tick)
+    }
+    raf = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(raf)
+  }, [animate])
 
   // focus the view when it opens, so the keyboard drives it at once
   useEffect(() => wrap.current?.focus(), [])
@@ -49,7 +85,10 @@ export function HorizonView() {
   const freeW = Math.max(120, size.w - free.left - free.right)
   const cx = free.left + freeW / 2
   const cy = free.top + Math.max(120, size.h - free.top - free.bottom) * 0.58
-  const camera = useMemo(() => cameraFor(cam.yaw, cam.pitch, cam.fov, freeW, cx, cy), [cam.yaw, cam.pitch, cam.fov, freeW, cx, cy])
+  const e = easeOut(arrival)
+  const pitch = arrival < 1 ? from.pitch + (cam.pitch - from.pitch) * e : cam.pitch
+  const fov = arrival < 1 ? from.fov + (cam.fov - from.fov) * e : cam.fov
+  const camera = useMemo(() => cameraFor(cam.yaw, pitch, fov, freeW, cx, cy), [cam.yaw, pitch, fov, freeW, cx, cy])
 
   const tracks = useMemo(() => {
     const samples = series?.samples ?? []
@@ -69,15 +108,19 @@ export function HorizonView() {
     if (!ctx) return
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     const h = info.model.horizon
+    // during the descent: the smooth-Moon horizon of the current altitude, blending into the real mask
+    const k = easeOut(arrival)
+    const dip = -dipDeg(from.km * (1 - k))
     drawHorizon(ctx, size.w, size.h, camera, {
-      horizonAt: (az) => h.at(az),
+      horizonAt: arrival < 1 ? (az) => dip * (1 - k) + h.at(az) * k : (az) => h.at(az),
       sun: view.sun,
       earth: view.earth,
       sunTrack: tracks.sun,
       earthTrack: tracks.earth,
       free,
+      showLabels: arrival >= 1,
     })
-  }, [camera, view, info, size, tracks, free])
+  }, [camera, view, info, size, tracks, free, arrival])
 
   const turn = (dYaw: number, dPitch: number) => look(cam.yaw + dYaw, cam.pitch + dPitch)
 

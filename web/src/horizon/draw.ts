@@ -22,6 +22,8 @@ export interface Scene {
   earthTrack: { az: number; el: number }[]
   /** Free area of the screen (the rest is under panels). */
   free: { left: number; right: number; top: number; bottom: number }
+  /** Name tags state the view from the surface: hidden while the camera is still coming down. */
+  showLabels?: boolean
 }
 
 const SUN = '#ffb547'
@@ -45,7 +47,7 @@ export function drawHorizon(ctx: CanvasRenderingContext2D, W: number, H: number,
   drawSun(ctx, c, s.sun)
   drawEarth(ctx, c, s.earth, s.sun)
   drawTerrain(ctx, W, H, c, s)
-  drawLabels(ctx, W, c, s)
+  if (s.showLabels !== false) drawLabels(ctx, W, c, s)
   drawCompass(ctx, W, H, c, s)
 }
 

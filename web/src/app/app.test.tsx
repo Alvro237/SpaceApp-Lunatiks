@@ -109,7 +109,8 @@ describe('navigator', () => {
     const user = userEvent.setup()
     await user.click(within(screen.getByRole('group', { name: 'Sections' })).getByRole('button', { name: /Horizon/ }))
     // Horizon opens the first-person view on the place: it takes the focus and the keyboard; the panel steers it
-    const hv = screen.getByRole('application', { name: /Horizon view from IM-2/ })
+    // (after the short dive into the place)
+    const hv = await screen.findByRole('application', { name: /Horizon view from IM-2/ }, { timeout: 3000 })
     expect(hv).toHaveFocus()
     const camera = screen.getByRole('radiogroup', { name: 'Camera' })
     expect(within(camera).getByRole('radio', { name: /Sun/ })).toBeChecked()

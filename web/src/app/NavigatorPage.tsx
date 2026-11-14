@@ -8,7 +8,7 @@
  *   - Bottom: the bare timeline.
  * The panels report the space they cover so the map centres the Moon in the free area.
  */
-import { type ReactNode, useId, useLayoutEffect, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { SkyDial } from '../charts/SkyDial'
 import { Timeline } from '../charts/Timeline'
 import { DatePill } from '../panels/DatePill'
@@ -21,13 +21,22 @@ import { usePanels } from '../state/panels'
 import { useApp } from '../state/store'
 import { useUrlSync } from '../state/useUrlSync'
 import { GlobeView } from '../globe/GlobeView'
+import { DiveTarget } from '../horizon/DiveTarget'
 import { HorizonView } from '../horizon/HorizonView'
+import { DIVE_MS, type HorizonPhase as Phase, RETURN_MS, useHorizonTransition } from '../state/horizon'
 import { TerrainView } from '../terrain/TerrainView'
 import { useClock } from '../time/useClock'
 import { QuestPanel } from '../learn/QuestPanel'
 import { IconFilter } from '../ui/icons'
 import { Popover } from '../ui/Popover'
 import { ToolSlotContext } from '../ui/toolSlotContext'
+
+/**
+ * Map → horizon: the map camera flies to the place, comes down and tilts toward the horizon, and fades (DIVE_MS);
+ * then the horizon view finishes the descent. Horizon → map: the map camera flies back (RETURN_MS).
+ * The phase is shared (state/horizon) so the map views can drive their cameras.
+ */
+const reducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
 export function NavigatorPage() {
   const { restoredFromCorruptLink } = useUrlSync()
@@ -36,19 +45,35 @@ export function NavigatorPage() {
   const scale = useApp((s) => s.scale)
   const section = usePanels((s) => s.section)
   const root = useRef<HTMLDivElement>(null)
+  // Transition between the map and the horizon view, derived from the section while rendering (no effect needed
+  // to start it); timers only end a phase.
+  const [prevSection, setPrevSection] = useState(section)
+  const [phase, setPhase] = useState<Phase>(section === 'horizon' ? 'horizon' : 'map')
+  if (prevSection !== section) {
+    setPrevSection(section)
+    if (section === 'horizon') setPhase(reducedMotion() ? 'horizon' : 'diving')
+    else if (prevSection === 'horizon') setPhase(reducedMotion() ? 'map' : 'returning')
+  }
+  useLayoutEffect(() => useHorizonTransition.getState().setPhase(phase), [phase])
+  useEffect(() => {
+    if (phase !== 'diving' && phase !== 'returning') return
+    const t = setTimeout(() => setPhase(phase === 'diving' ? 'horizon' : 'map'), phase === 'diving' ? DIVE_MS : RETURN_MS)
+    return () => clearTimeout(t)
+  }, [phase])
   const [slot, setSlot] = useState<HTMLDivElement | null>(null)
   useMeasureInsets(root)
 
   return (
     <NowProvider>
+      <DiveTarget />
       <ToolSlotContext.Provider value={slot}>
-        <div className={`navigator${section === 'horizon' ? ' is-horizon' : ''}`} ref={root}>
+        <div className={`navigator${section === 'horizon' ? ' is-horizon' : ''}${phase === 'diving' ? ' is-diving' : ''}${phase === 'returning' ? ' is-returning' : ''}`} ref={root}>
           <h1 className="sr-only">Lunar Landing Site Navigator</h1>
           {/* the map stays mounted (and keeps its camera) under the horizon view, paused and out of the tab order */}
           <div className="map-layer" inert={section === 'horizon' ? true : undefined} aria-hidden={section === 'horizon' ? true : undefined}>
             {scale === 'globe' ? <GlobeView /> : <TerrainView />}
           </div>
-          {section === 'horizon' && <HorizonView />}
+          {section === 'horizon' && phase === 'horizon' && <HorizonView animate={!reducedMotion()} />}
           {restoredFromCorruptLink && (
             <p className="toast" role="alert">
               The shared link could not be read; the default scenario is shown.
