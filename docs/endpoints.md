@@ -161,13 +161,20 @@ one) as tests with the source of each date in `docs/references.md`.
 
 **Status:** to do. **Files:** `logic/link.py`, `routers/link.py`, `schemas/link.py`, `tests/test_link.py`.
 
-- `POST /api/v1/link` with `level`:
-  1. Earth visible (already in the engine: fraction of the disc above the horizon).
-  2. Ground-station visibility: is the Moon above a minimum elevation at each station at that time. Needs the
-     station coordinates (cite the source) and the Earth's orientation; the tables give the Earth-Moon vector
-     in MOON_ME, so decide with the team how to get the sub-lunar point (SPICE in the pipeline, precomputed).
-  3. Link budget: EIRP, free-space loss with the real distance (`series.earth_dist_km`), receiver G/T, required
-     Eb/N0, margin, achievable data rate. Every parameter has a unit and a source.
+- `POST /api/v1/link` with `level` (team decision 2026-11-14: contact needs BOTH ends, so station visibility is
+  part of level 1 and the link budget is level 2; each level includes the one before):
+  1. Geometric contact. There is contact at an instant when (a) the site sees the Earth (at least
+     `comms_min_fraction` of its disc above the local horizon, as the engine computes) AND (b) at least one
+     antenna of the networks selected in the request (`networks`, plus optional user-defined antennas) sees the
+     Moon above that antenna's minimum elevation. Needs the station coordinates and the Earth's orientation
+     (NAIF kernels, see `docs/references.md`), precomputed by the pipeline as the Moon's elevation per station.
+     A minimum elevation without a cited source is flagged in the response (`owner_estimate`), never silent.
+  2. Link budget: EIRP, free-space loss with the real distance (`series.earth_dist_km`), receiver G/T, required
+     Eb/N0, margin, achievable data rate. Contact then means margin >= a minimum margin given by the user.
+     Every parameter has a unit and a source.
+- Satellite relays in lunar orbit are out of scope for now (team decision 2026-11-14).
+- The hard filters `comms_hours` and `max_blackout` currently use the Earth line of sight only (the old level 1);
+  they move to the combined contact series of level 1 once the station dataset exists.
 - `logic/link.py` is pure: inputs are arrays and parameter dataclasses, outputs are arrays.
 
 MECH integration guide (requests, fields to show, conventions, errors): `docs/api-guide-mech.md`.
