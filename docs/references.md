@@ -10,6 +10,7 @@ asks for this list; keep it current when something is added.
 | JPL SPICE kernels (NAIF): `de440s.bsp`, `moon_pa_de440_200625.bpc`, `moon_de440_250416.tf`, `naif0012.tls`, `pck00011.tpc` | Sun and Earth positions in the Moon Mean-Earth frame | https://naif.jpl.nasa.gov/pub/naif/generic_kernels/ |
 | JPL Horizons System / API | Independent validation reference (never a runtime dependency) | https://ssd.jpl.nasa.gov/horizons/ , https://ssd.jpl.nasa.gov/api/horizons.api |
 | LOLA south-pole digital elevation and slope models, PGDA product 90 (Barker et al.): `LDEM_*`, `LDSM_60S_240MPP_ADJ`, `LDSM_80S_80MPP_ADJ` | Terrain horizon, ground height, slope, hillshade basemap, slope and elevation screening grids | https://pgda.gsfc.nasa.gov/products/90 |
+| LOLA Gridded Data Record `LDEM_16` v3.1 (PDS `LRO-L-LOLA-4-GDR-V1.0`), NASA PDS Geosciences Node | Global topography of the web globe (`data/globe`, 4 px/deg) | https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/cylindrical/img/ |
 | LOLA high-resolution site topography, PGDA product 78 | Background on uncertainty (not yet read by the pipeline) | https://pgda.gsfc.nasa.gov/products/78 |
 | Lunar polar illumination, PGDA product 69 (Mazarico et al.): `AVGVISIB_65S_240M_201608`, `AVGVISIB_65S_240M_201608_EARTH`, `LPSR_65S_240M_201608`, `SKYV_65S_240M` | Screening grids: long-term Sun illumination, Earth visibility, permanent shadow, sky visibility (`data/grids`); method reference | https://pgda.gsfc.nasa.gov/products/69 |
 | NSSDCA Apollo landing site coordinates (Wagner et al. 2017) | Apollo catalogue coordinates | https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html |
@@ -27,6 +28,8 @@ asks for this list; keep it current when something is added.
 
 ## Papers and documents consulted
 
+- Smith, D. E., et al. (2010). The Lunar Orbiter Laser Altimeter investigation on the Lunar Reconnaissance
+  Orbiter mission. Space Science Reviews 150, 209-241. doi:10.1007/s11214-009-9512-y (LOLA global DEM)
 - van der Walt, S., Smith, N. (2015). viridis, magma, inferno colour maps for matplotlib (perceptually uniform,
   readable with colour-vision deficiencies); used through d3-scale-chromatic. https://bids.github.io/colormap/
 - Nuñez, J. R., Anderton, C. R., Renslow, R. S. (2018). Optimizing colormaps with consideration for color vision

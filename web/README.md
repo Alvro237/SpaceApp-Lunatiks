@@ -1,7 +1,10 @@
 # Web
 
-Frontend of the Lunar Landing Site Navigator. The map fills the window: the whole lunar south pole (south of
-60° S) seen from above, tilting into 3D LOLA relief, with shadows from the Sun at the chosen instant. Panels
+Frontend of the Lunar Landing Site Navigator. It opens on the whole Moon (global LOLA topography, lit by the Sun
+at the chosen instant): drag to turn it, wheel to come closer. A click on the south-polar cap (or zooming in over
+it) dives into the polar map: the lunar south pole (south of 60° S) seen from above, with more detail the
+closer you get, dragged to move, tilting into 3D LOLA relief, with shadows from the Sun at the chosen instant;
+zooming far out returns to the globe. Panels
 float over it: where and when (or mission filters) on the left, the chosen place on the right (Sun and Earth over
 its horizon, horizon chart, power, link), playback along the bottom. With Compare on, every place picked on the
 map or in the list joins a live comparison table, numbered as on the map. Vite, React, TypeScript, React Three
@@ -42,6 +45,7 @@ the dev proxy elsewhere; in production set `VITE_API_URL` to the API's public UR
 | `src/app` | Router (hash, for static hosting), header, the navigator screen |
 | `src/state` | Zustand store (mode, view, instant, layers, place, comparison) and the shareable URL (`?s=`) |
 | `src/api` | Client generated from `/openapi.json` (`schema.gen.ts`), hand-typed pending endpoints, query hooks |
+| `src/globe` | The whole Moon: orbit controller, globe shaders, entry into the polar map |
 | `src/terrain` | Engine: tileset, quadtree LOD, decode worker, GPU cache, shaders, shadow pass, camera, map |
 | `src/time` | Browser engine (ephemeris, horizon, disc fractions), playback clock, static data loaders |
 | `src/panels` | Where, when, the chosen place (Sun and Earth now, power, link), mission filters |

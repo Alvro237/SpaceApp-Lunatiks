@@ -61,6 +61,14 @@ export function DataPage() {
               <td>Visible share of the solar and Earth discs, sunset and Earthset times</td>
             </tr>
             <tr>
+              <th scope="row">The whole Moon (globe)</th>
+              <td>
+                <a href="https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/cylindrical/img/">LOLA LDEM_16</a>, NASA PDS
+                (4 px/deg area means)
+              </td>
+              <td>Globe lit by the Sun at the chosen time; relief exaggerated ×4</td>
+            </tr>
+            <tr>
               <th scope="row">Relief tiles and elevation</th>
               <td>LOLA LDEM_60S_240MPP_ADJ (960 m preview cells)</td>
               <td>2D and 3D terrain, shadows at the chosen instant</td>
