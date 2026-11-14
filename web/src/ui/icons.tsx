@@ -152,3 +152,75 @@ export const IconCalendar = (p: P) => (
     <path d="M3 10h18M8 3v4M16 3v4" />
   </Svg>
 )
+export const IconInfo = (p: P) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 11v5" />
+    <circle cx="12" cy="7.8" r="0.6" fill="currentColor" />
+  </Svg>
+)
+export const IconCompare = (p: P) => (
+  <Svg {...p}>
+    <rect x="3" y="4" width="7.5" height="16" rx="1.6" />
+    <rect x="13.5" y="4" width="7.5" height="16" rx="1.6" />
+    <path d="M5.8 15v-2M17.2 15V9" />
+  </Svg>
+)
+export const IconHabitat = (p: P) => (
+  <Svg {...p}>
+    <path d="M3 20h18M5 20v-5a7 7 0 0 1 14 0v5" />
+    <path d="M10 20v-4h4v4M12 6V3" />
+  </Svg>
+)
+export const IconThermo = (p: P) => (
+  <Svg {...p}>
+    <path d="M10 14.5V5a2 2 0 0 1 4 0v9.5a4 4 0 1 1-4 0Z" />
+    <path d="M12 9v7" />
+  </Svg>
+)
+export const IconPlay = (p: P) => (
+  <Svg {...p}>
+    <path d="M7 4.5v15l12-7.5-12-7.5Z" fill="currentColor" />
+  </Svg>
+)
+export const IconPause = (p: P) => (
+  <Svg {...p}>
+    <path d="M8 5v14M16 5v14" strokeWidth={3} />
+  </Svg>
+)
+export const IconSpeed = (p: P) => (
+  <Svg {...p}>
+    <path d="M4.5 18a8.5 8.5 0 1 1 15 0" />
+    <path d="m12 14 4-5" />
+    <circle cx="12" cy="14" r="1.2" fill="currentColor" />
+  </Svg>
+)
+export const IconPin = (p: P) => (
+  <Svg {...p}>
+    <path d="M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6Z" />
+    <path d="M12 14v7" />
+  </Svg>
+)
+export const IconSpin = (p: P) => (
+  <Svg {...p}>
+    <path d="M20 12a8 8 0 1 1-2.6-5.9" />
+    <path d="M20 4v4h-4" />
+  </Svg>
+)
+export const IconSearch = (p: P) => (
+  <Svg {...p}>
+    <circle cx="11" cy="11" r="7" />
+    <path d="m20 20-4-4" />
+  </Svg>
+)
+export const IconCrosshair = (p: P) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="7" />
+    <path d="M12 2v5M12 17v5M2 12h5M17 12h5" />
+  </Svg>
+)
+export const IconFilter = (p: P) => (
+  <Svg {...p}>
+    <path d="M3 5h18l-7 8v6l-4 2v-8L3 5Z" />
+  </Svg>
+)

@@ -5,19 +5,20 @@
  * named after the place; focus follows. All text, so it is also the accessible
  * equivalent of the map.
  */
-import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useId, useRef } from 'react'
 import { HorizonChart } from '../charts/HorizonChart'
+import { type SectionId, usePanels } from '../state/panels'
 import { sameSelection, useApp } from '../state/store'
 import { formatUtc } from '../time/clock'
 import { SourceTag } from '../ui/ApiStatus'
-import { IconAntenna, IconBack, IconBolt, IconChevron, IconHorizon } from '../ui/icons'
+import { ComparePanel } from '../compare/ComparePanel'
+import { IconAntenna, IconBack, IconBolt, IconChevron, IconCompare, IconHorizon } from '../ui/icons'
 import { fmtLat, fmtLon } from './format'
 import { LinkPanel } from './LinkPanel'
+import { ContactSetting, HeightSetting } from './Settings'
 import { NowCards } from './NowPanel'
 import { PowerPanel } from './PowerPanel'
 import { useNow } from './useNow'
-
-type SectionId = 'horizon' | 'power' | 'link'
 
 export function PlacePanel() {
   const id = useId()
@@ -26,11 +27,14 @@ export function PlacePanel() {
   const compare = useApp((s) => s.compare)
   const { addCompare, setCompareMode } = useApp.getState()
   const compared = compare.some((c) => sameSelection(c, selection))
-  const [open, setOpen] = useState<SectionId | null>(null)
+  const open = usePanels((s) => s.section)
+  const setOpen = usePanels.getState().setSection
   const lastOpened = useRef<SectionId | null>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   const tiles = useRef<HTMLDivElement>(null)
 
+  // A section left open must not survive leaving the navigator.
+  useEffect(() => () => usePanels.getState().setSection(null), [])
   // Focus goes to the section heading when one opens, and back to its button when it closes.
   useEffect(() => {
     if (open) heading.current?.focus()
@@ -43,7 +47,12 @@ export function PlacePanel() {
       title: 'Horizon',
       icon: <IconHorizon size={18} />,
       value: view ? `Sun ${view.sun.el.toFixed(1)}°` : '…',
-      body: info && view ? <HorizonChart info={info} sun={view.sun} earth={view.earth} tMs={view.tMs} /> : <p className="muted">Loading…</p>,
+      body: (
+        <>
+          <HeightSetting />
+          {info && view ? <HorizonChart info={info} sun={view.sun} earth={view.earth} tMs={view.tMs} /> : <p className="muted">Loading…</p>}
+        </>
+      ),
     },
     {
       id: 'power',
@@ -57,7 +66,19 @@ export function PlacePanel() {
       title: 'Earth link',
       icon: <IconAntenna size={18} />,
       value: view ? `Earth ${Math.round(view.earth.fraction * 100)} %` : '…',
-      body: <LinkPanel />,
+      body: (
+        <>
+          <ContactSetting />
+          <LinkPanel />
+        </>
+      ),
+    },
+    {
+      id: 'compare',
+      title: 'Compare',
+      icon: <IconCompare size={18} />,
+      value: compare.length === 0 ? 'Add places' : `${compare.length} ${compare.length === 1 ? 'place' : 'places'}`,
+      body: <ComparePanel />,
     },
   ]
   const active = sections.find((s) => s.id === open)

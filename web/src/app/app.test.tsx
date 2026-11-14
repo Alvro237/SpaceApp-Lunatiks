@@ -92,9 +92,12 @@ afterEach(() => vi.unstubAllGlobals())
 describe('navigator', () => {
   it('shows the catalogue, the Sun and Earth for IM-2, and says which engine computed them', async () => {
     const { container } = renderAt('/')
-    expect(await screen.findByRole('heading', { level: 1, name: 'Lunar Landing Site Navigator' })).toBeInTheDocument()
-    const im2 = await screen.findByRole('button', { name: /IM-2/ })
-    expect(im2).toHaveAttribute('aria-pressed', 'true')
+    expect(await screen.findByRole('heading', { level: 1, name: 'Lunar Landing Site Navigator' }, { timeout: 5000 })).toBeInTheDocument()
+    // the left panel is gone: where is a search box at the top left that shows the current place
+    const search = await screen.findByRole('combobox', { name: 'Search sites and missions' })
+    await waitFor(() => expect(search).toHaveAttribute('placeholder', expect.stringMatching(/IM-2/)))
+    expect(screen.getByRole('button', { name: 'Coordinates' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Date and duration' })).toBeInTheDocument()
     const sun = await screen.findByRole('article', { name: 'Sun' }, { timeout: 5000 })
     expect(within(sun).getByText('Elevation')).toBeInTheDocument()
     expect(screen.getByRole('article', { name: 'Earth' })).toBeInTheDocument()
@@ -109,12 +112,17 @@ describe('navigator', () => {
     expect(screen.getByRole('img', { name: /360° horizon with the Sun and the Earth/ })).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'All sections' }))
     await user.click(within(screen.getByRole('group', { name: 'Sections' })).getByRole('button', { name: /Power/ }))
+    // the engine parameters live in the section they change
+    expect(screen.getByRole('radiogroup', { name: 'Panel' })).toBeInTheDocument()
     expect(screen.getByText('Power per m²')).toBeInTheDocument()
     expect(screen.getByText('Solar elevation')).toBeInTheDocument()
     expect(screen.getByText('Sunlight duration')).toBeInTheDocument()
     expect(screen.getByText('Earth visibility windows')).toBeInTheDocument()
     expect(screen.getByText('Radiation')).toBeInTheDocument()
     expect(screen.getByText('Advanced options')).toBeInTheDocument()
+    await user.click(screen.getAllByRole('button', { name: /^About / })[0])
+    expect(screen.getByRole('note')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'All sections' }))
     await noAxeViolations(container)
    }, 30_000)
 
@@ -126,20 +134,24 @@ describe('navigator', () => {
     expect(useApp.getState().mapEntry).toMatchObject({ lat: -85, lon: 30 })
   })
 
-  it('selects another site from the list with the keyboard', async () => {
+  it('finds and selects a site from the search box with the keyboard', async () => {
     const user = userEvent.setup()
     renderAt('/')
-    const btn = await screen.findByRole('button', { name: /Shackleton crater/ })
-    btn.focus()
+    const search = await screen.findByRole('combobox', { name: 'Search sites and missions' })
+    await user.click(search)
+    await user.type(search, 'shackle')
+    expect(search).toHaveAttribute('aria-expanded', 'true')
+    const option = await screen.findByRole('option', { name: /Shackleton crater/ })
+    expect(option).toHaveAttribute('aria-selected', 'true')
     await user.keyboard('{Enter}')
     expect(useApp.getState().selection).toEqual({ kind: 'site', id: 'shackleton' })
-    expect(btn).toHaveAttribute('aria-pressed', 'true')
+    expect(search).toHaveAttribute('aria-expanded', 'false')
   })
 
   it('rejects invalid manual coordinates with an alert, accepts valid ones', async () => {
     const user = userEvent.setup()
     renderAt('/')
-    await user.click(await screen.findByText('Coordinates'))
+    await user.click(await screen.findByRole('button', { name: 'Coordinates' }))
     const lat = await screen.findByLabelText('Latitude (°)')
     await user.clear(lat)
     await user.type(lat, '-95')
@@ -149,6 +161,7 @@ describe('navigator', () => {
     await user.clear(lat)
     await user.type(lat, '-89.5')
     await user.click(screen.getByRole('button', { name: 'Analyse this point' }))
+    // a valid point closes the coordinates panel
     expect(useApp.getState().selection).toEqual({ kind: 'point', lat: -89.5, lon: 137.3 })
     expect((await screen.findAllByText(/Smooth sphere · 2 m/)).length).toBeGreaterThan(0)
   })
@@ -162,12 +175,18 @@ describe('navigator', () => {
     document.body.focus()
     await user.keyboard(' ')
     expect(useApp.getState().playing).toBe(false)
+    // the second icon cycles the playback speed
+    const before = useApp.getState().speed
+    await user.click(screen.getByRole('button', { name: /^Speed:/ }))
+    expect(useApp.getState().speed).not.toBe(before)
   })
 
   it('mission mode: filters need a value, and a missing endpoint is reported, not faked', async () => {
     const user = userEvent.setup()
     useApp.setState({ mode: 'mission' })
     const { container } = renderAt('/')
+    // the filters open from the tool bar at the top right
+    await user.click(await screen.findByRole('button', { name: 'Mission filters' }))
     const slope = await screen.findByRole('checkbox', { name: /Maximum slope/ })
     await user.click(slope)
     await user.click(screen.getByRole('button', { name: 'Find viable sites' }))
@@ -184,25 +203,35 @@ describe('navigator', () => {
     const { container } = renderAt('/')
     await screen.findByRole('article', { name: 'Sun' }, { timeout: 5000 })
     await user.click(screen.getByRole('button', { name: /^Compare$/ }))
-    const list = screen.getByRole('region', { name: 'Catalogue sites' })
-    await user.click(within(list).getByRole('button', { name: /Mons Malapert/ }))
-    await user.click(within(list).getByRole('button', { name: /Shackleton crater/ }))
+    const search = screen.getByRole('combobox', { name: 'Search sites and missions' })
+    for (const [q, name] of [['malapert', /Mons Malapert/], ['shackle', /Shackleton crater/]] as const) {
+      await user.click(search)
+      await user.type(search, q)
+      await user.click(await screen.findByRole('option', { name }))
+    }
+    // the comparison is a section of the place panel: one card per place, numbers also in a table behind them
+    expect(await screen.findByRole('heading', { level: 3, name: /Compare/ })).toBeInTheDocument()
+    const card = await screen.findByRole('article', { name: /Shackleton crater/ })
+    expect(within(card).getByText('Sunlit')).toBeInTheDocument()
     const table = await screen.findByRole('table', { name: /Places side by side/ })
     const heads = within(table).getAllByRole('columnheader').map((h) => h.textContent)
-    expect(heads.join('|')).toMatch(/1IM-2.*\|2Mons Malapert.*\|3Shackleton crater/)
-    expect(within(table).getByRole('rowheader', { name: 'Sunlit (window)' })).toBeInTheDocument()
+    expect(heads.join('|')).toMatch(/Metric\|1 IM-2.*\|2 Mons Malapert.*\|3 Shackleton crater/)
+    expect(within(table).getByRole('rowheader', { name: 'Sunlit' })).toBeInTheDocument()
     expect(useApp.getState().compare).toHaveLength(3)
-    await user.click(within(table).getByRole('button', { name: 'Remove Shackleton crater' }))
+    await user.click(screen.getByRole('button', { name: 'Remove Shackleton crater' }))
     expect(useApp.getState().compare).toHaveLength(2)
     await noAxeViolations(container)
   })
 
   it('keeps working from static data when the API is down', async () => {
     vi.stubGlobal('fetch', fakeFetch(false))
+    const user = userEvent.setup()
     renderAt('/')
-    expect(await screen.findByText(/Site catalogue: the API did not answer/, undefined, { timeout: 5000 })).toBeInTheDocument()
-    expect(await screen.findByRole('button', { name: /IM-2/ })).toBeInTheDocument()
     expect(await screen.findByRole('article', { name: 'Sun' }, { timeout: 5000 })).toBeInTheDocument()
+    // the catalogue comes from the static copy, and the search list says so
+    await user.click(screen.getByRole('combobox', { name: 'Search sites and missions' }))
+    expect(await screen.findByText(/Site catalogue: the API did not answer/, undefined, { timeout: 5000 })).toBeInTheDocument()
+    expect(await screen.findByRole('option', { name: /IM-2/ })).toBeInTheDocument()
   })
 })
 

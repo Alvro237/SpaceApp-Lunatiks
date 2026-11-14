@@ -1,69 +1,92 @@
 /**
- * The planner's screen: the map fills the window and the panels float over it. Where and when on the left,
- * the chosen place on the right, playback along the bottom, and the live comparison above it when on.
+ * The planner's screen: the map fills the window and only small tools float over it.
+ *   - Top left: where and when. In study mode a site search (catalogue and missions) with a coordinates button;
+ *     in both modes the date pill (start and duration).
+ *   - Top right: the tool bar (Adobe-style options bar): mission filters in mission mode, then the active map
+ *     view's own tools (zoom, view, layers), which it puts there through ToolPortal.
+ *   - Right: the chosen place and its sections (the engine parameters live in the section they change).
+ *   - Bottom: the bare timeline.
  * The panels report the space they cover so the map centres the Moon in the free area.
  */
 import { type ReactNode, useId, useLayoutEffect, useRef, useState } from 'react'
-import { CompareLive } from '../compare/CompareLive'
 import { SkyDial } from '../charts/SkyDial'
 import { Timeline } from '../charts/Timeline'
+import { DatePill } from '../panels/DatePill'
 import { MissionPanel } from '../panels/MissionPanel'
 import { PlacePanel } from '../panels/PlacePanel'
-import { SitePicker } from '../panels/SitePicker'
+import { CoordsButton, SiteSearch } from '../panels/SiteSearch'
 import { NowProvider } from '../panels/useNow'
-import { WhenPanel } from '../panels/WhenPanel'
 import { useInsets } from '../state/layout'
+import { usePanels } from '../state/panels'
 import { useApp } from '../state/store'
 import { useUrlSync } from '../state/useUrlSync'
 import { GlobeView } from '../globe/GlobeView'
 import { TerrainView } from '../terrain/TerrainView'
 import { useClock } from '../time/useClock'
 import { QuestPanel } from '../learn/QuestPanel'
-
-const narrow = () => typeof window !== 'undefined' && window.innerWidth < 760
+import { IconFilter } from '../ui/icons'
+import { Popover } from '../ui/Popover'
+import { ToolSlotContext } from '../ui/toolSlotContext'
 
 export function NavigatorPage() {
   const { restoredFromCorruptLink } = useUrlSync()
   useClock()
   const mode = useApp((s) => s.mode)
-  const compareMode = useApp((s) => s.compareMode)
   const scale = useApp((s) => s.scale)
+  const section = usePanels((s) => s.section)
   const root = useRef<HTMLDivElement>(null)
+  const [slot, setSlot] = useState<HTMLDivElement | null>(null)
   useMeasureInsets(root)
 
   return (
     <NowProvider>
-      <div className="navigator" ref={root}>
-        <h1 className="sr-only">Lunar Landing Site Navigator</h1>
-        {scale === 'globe' ? <GlobeView /> : <TerrainView />}
-        {restoredFromCorruptLink && (
-          <p className="toast" role="alert">
-            The shared link could not be read; the default scenario is shown.
-          </p>
-        )}
-        <SkyDial />
-        <Float side="left" title={mode === 'study' ? 'Where and when' : 'Mission filters'} defaultOpen={!narrow()}>
-          {mode === 'study' ? <SitePicker /> : <MissionPanel />}
-          <WhenPanel />
-        </Float>
-        <Float side="right" title="Place" defaultOpen>
-          <PlacePanel />
-        </Float>
-        <QuestPanel />
-        <div className="float float-bottom">
-          {compareMode && <CompareLive />}
-          <Timeline />
+      <ToolSlotContext.Provider value={slot}>
+        <div className="navigator" ref={root}>
+          <h1 className="sr-only">Lunar Landing Site Navigator</h1>
+          {scale === 'globe' ? <GlobeView /> : <TerrainView />}
+          {restoredFromCorruptLink && (
+            <p className="toast" role="alert">
+              The shared link could not be read; the default scenario is shown.
+            </p>
+          )}
+          <SkyDial />
+          <div className="where-when" role="group" aria-label={mode === 'study' ? 'Where and when' : 'When'}>
+            {mode === 'study' && (
+              <>
+                <SiteSearch />
+                <CoordsButton />
+              </>
+            )}
+            <DatePill />
+          </div>
+          <div className="toolstrip" role="toolbar" aria-label="Map tools">
+            {mode === 'mission' && (
+              <Popover label="Mission filters" button={<IconFilter size={18} />} buttonClass="tool-btn" align="right" className="mission-pop">
+                <h2 className="pop-title">Mission filters</h2>
+                <MissionPanel />
+              </Popover>
+            )}
+            <div className="toolslot" ref={setSlot} />
+          </div>
+          <Float side="right" title="Place" wide={section !== null}>
+            <PlacePanel />
+          </Float>
+          <QuestPanel />
+          <div className="float float-bottom">
+            <Timeline />
+          </div>
         </div>
-      </div>
+      </ToolSlotContext.Provider>
     </NowProvider>
   )
 }
 
-function Float({ side, title, defaultOpen, children }: { side: 'left' | 'right'; title: string; defaultOpen: boolean; children: ReactNode }) {
+/** The place panel: folds to its title with its own button, and widens while a section is open. */
+function Float({ side, title, wide, children }: { side: 'left' | 'right'; title: string; wide?: boolean; children: ReactNode }) {
   const id = useId()
-  const [open, setOpen] = useState(defaultOpen)
+  const [open, setOpen] = useState(true)
   return (
-    <section className={`float float-${side}${open ? '' : ' is-closed'}`} aria-labelledby={`${id}-h`}>
+    <section className={`float float-${side}${open ? '' : ' is-closed'}${wide ? ' is-wide' : ''}`} aria-labelledby={`${id}-h`}>
       <div className="float-head">
         <h2 id={`${id}-h`}>{title}</h2>
         <button type="button" className="icon" aria-expanded={open} aria-controls={`${id}-b`} onClick={() => setOpen(!open)} aria-label={`${open ? 'Hide' : 'Show'} ${title}`}>
@@ -98,7 +121,8 @@ function useMeasureInsets(root: { current: HTMLDivElement | null }) {
         const r = f.getBoundingClientRect()
         // a folded panel is only its title bar: it does not hide the map
         if (r.width === 0 || r.height < 80) continue
-        const side = r.width < W * 0.6
+        // the bottom bar always counts as bottom, however narrow the side panels leave it
+        const side = !f.classList.contains('float-bottom') && r.width < W * 0.85
         if (side && r.left < 40) ins.left = Math.max(ins.left, r.right)
         else if (side && r.right > W - 40) ins.right = Math.max(ins.right, W - r.left)
         else if (r.top > H / 2) ins.bottom = Math.max(ins.bottom, H - r.top)

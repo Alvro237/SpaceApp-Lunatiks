@@ -5,11 +5,12 @@
  * panels, so the map is never the only way to reach information.
  */
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { ToolPortal } from '../ui/ToolSlot'
 import { useQuery } from '@tanstack/react-query'
 import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { type Selection, sameSelection, useApp } from '../state/store'
-import { useInsets } from '../state/layout'
+import { underToolbar, useInsets } from '../state/layout'
 import { SUN_R_KM } from '../time/engine'
 import { useEphemeris, useMasks, useSiteNames } from '../time/hooks'
 import { pointName } from '../time/place'
@@ -221,6 +222,7 @@ function MapView({ tileset }: { tileset: Tileset }) {
           {mode === 'study' && ' Activate a point on the terrain to analyse it.'}
         </p>
       </div>
+      <ToolPortal>
       <div className="map-controls" role="group" aria-label="Map view">
         <div className="tool-group">
           <button type="button" onClick={() => zoom(0.6)} aria-label="Zoom in" title="Zoom in (+)">
@@ -241,6 +243,7 @@ function MapView({ tileset }: { tileset: Tileset }) {
         </button>
         <LayersControl tileset={tileset} exaggeration={exaggeration} onExaggeration={setExaggeration} craterError={showCraters ? craterError : null} />
       </div>
+      </ToolPortal>
       <LegendChip tileset={tileset} />
       {stats && import.meta.env.DEV && <p className="map-stats">{stats}</p>}
     </>
@@ -385,6 +388,7 @@ function Driver({ tileset, rig, markers, markerEls, exaggeration, onStats, crate
     // Marker buttons over the canvas. Markers closer than 34 px to one already placed are hidden (the selected and
     // compared ones are placed first): no overlapping targets, and the list still reaches every site.
     const showLabels = rig.now.dist < 450
+    const toolbar = document.querySelector('.map-controls')?.getBoundingClientRect() ?? null
     const placed: [number, number][] = []
     const ordered = [...markers].sort((a, b) => priority(markerEls.current.get(b.key)) - priority(markerEls.current.get(a.key)))
     for (const m of ordered) {
@@ -396,7 +400,9 @@ function Driver({ tileset, rig, markers, markerEls, exaggeration, onStats, crate
       const sy = ((1 - v.y) / 2) * size.height
       const onScreen = v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05
       const crowded = placed.some(([px, py]) => Math.hypot(px - sx, py - sy) < MIN_MARKER_GAP_PX)
-      const visible = onScreen && !crowded
+      // a marker under a floating panel is hidden (the list still reaches it); the selected one stays
+      const free = sx > insets.left && sx < size.width - insets.right && sy > insets.top && sy < size.height - insets.bottom && !underToolbar(sx, sy, toolbar)
+      const visible = onScreen && !crowded && (free || priority(el) > 0)
       if (visible) placed.push([sx, sy])
       el.style.display = visible ? '' : 'none'
       el.style.transform = `translate(${sx}px, ${sy}px)`

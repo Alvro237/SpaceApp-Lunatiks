@@ -10,7 +10,7 @@ export function LinkPanel() {
   const { series: local, view } = useNow()
 
   return (
-    <div className="panel-section">
+    <div className="panel-section link-body">
       {view && local ? (
         <dl className="kv">
           <div>

@@ -137,7 +137,7 @@ export interface PowerRequest {
   step_min: number
   mast_m: number
   panel: 'tracking' | 'vertical' | 'horizontal'
-  level: 1 | 2 | 3
+  level: 1 | 2 | 3 | 4
   // level 2
   panel_area_m2?: number
   cell_efficiency?: number
@@ -150,6 +150,59 @@ export interface PowerRequest {
   battery_min_soc?: number
   charge_efficiency?: number
   discharge_efficiency?: number
+  // level 4 (colony analysis; the battery fields above without load_w)
+  critical_load_w?: number
+  deferrable_load_w?: number
+  comms_load_w?: number
+  comms_critical?: boolean
+  shed_soc?: number
+  max_charge_w?: number
+  max_discharge_w?: number
+  habitat?: HabitatIn
+  regolith?: RegolithIn
+  include_sizing?: boolean
+}
+
+/** Level 4 habitat (two-node thermal model). Temperatures in kelvin on the wire. */
+export interface HabitatIn {
+  crew_count: number
+  t_set_k: number
+  t_min_k: number
+  ua_w_k: number
+  area_m2: number
+  skin_absorptivity: number
+  skin_emissivity: number
+  structure_mass_kg: number
+  structure_specific_heat_j_kgk: number
+  air_volume_m3: number
+  air_pressure_pa: number
+  metabolic_w_per_crew?: number
+}
+
+export interface RegolithIn {
+  albedo: number
+  emissivity: number
+  conductivity_w_mk: number
+  density_kg_m3: number
+  heat_capacity_j_kgk: number
+  geothermal_flux_w_m2: number
+}
+
+export type ColonyStatus = 'survives_independently' | 'survives_window_declining' | 'failure_after_x_days'
+
+export interface EnergyBreakdown {
+  generated_wh: number
+  critical_served_wh: number
+  heater_served_wh: number
+  comms_served_wh: number
+  deferrable_served_wh: number
+  critical_unserved_wh: number
+  noncritical_unserved_wh: number
+  shed_wh: number
+  curtailed_wh: number
+  charge_losses_wh: number
+  discharge_losses_wh: number
+  battery_change_wh: number
 }
 
 export interface PowerResponse {
@@ -195,6 +248,30 @@ export interface PowerResponse {
   curtailed_energy_wh: number | null
   usable_capacity_wh: number | null
   longest_dark_energy_wh: number | null
+  // level 4 (null below)
+  colony_status: ColonyStatus | null
+  failure_after_days: number | null
+  failure_at: string | null
+  synodic_months: number | null
+  month_soc_change: number[] | null
+  critical_load_profile_w: number[] | null
+  heater_w: number[] | null
+  cooling_demand_w: number[] | null
+  interior_k: number[] | null
+  skin_k: number[] | null
+  ground_k: number[] | null
+  autonomy_h: (number | null)[] | null
+  sunrise_margin_wh: (number | null)[] | null
+  shed_ranges: TimeRange[] | null
+  degraded_days: number | null
+  interior_below_min_ranges: TimeRange[] | null
+  energy_breakdown: EnergyBreakdown | null
+  metabolic_heat_w: number | null
+  habitat_heat_capacity_j_k: number | null
+  unheated_equilibrium_k: number | null
+  cold_soak_h: number | null
+  min_battery_capacity_wh: number | null
+  min_panel_area_m2: number | null
 }
 
 /** POST /api/v1/radiation (MECH, branch feat/mech-power): galactic cosmic rays from LRO CRaTER. */

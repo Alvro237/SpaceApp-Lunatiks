@@ -4,11 +4,13 @@
  * Catalogue sites are buttons over the globe; the panels hold the same information as text.
  */
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-import { IconMinus, IconPlus, IconPole } from '../ui/icons'
+import { ToolPortal } from '../ui/ToolSlot'
+import { IconMinus, IconPin, IconPlus, IconPole } from '../ui/icons'
+import { useGlobe } from '../state/globe'
 import { useQuery } from '@tanstack/react-query'
 import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
-import { useInsets } from '../state/layout'
+import { underToolbar, useInsets } from '../state/layout'
 import { type Selection, sameSelection, useApp } from '../state/store'
 import { TileLoader } from '../terrain/loader'
 import { useEphemeris, useMasks, useSiteNames } from '../time/hooks'
@@ -56,6 +58,7 @@ export function GlobeView() {
   const select = useApp((s) => s.select)
   const enterMap = useApp((s) => s.enterMap)
   const [orbit] = useState(() => new OrbitRig(START))
+  const anchored = useGlobe((s) => s.anchored)
   const markerEls = useRef(new Map<string, HTMLButtonElement>())
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null)
   const pickRef = useRef<((cx: number, cy: number) => [number, number] | null) | null>(null)
@@ -93,6 +96,7 @@ export function GlobeView() {
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return
+    orbit.touch()
     const h = e.currentTarget.clientHeight || 600
     const keys: Record<string, () => void> = {
       ArrowLeft: () => orbit.drag(h * 0.08, 0, h, FOV),
@@ -111,6 +115,7 @@ export function GlobeView() {
     }
   }
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    orbit.touch()
     if ((e.target as HTMLElement).closest('button, select, input, a')) return
     drag.current = { x: e.clientX, y: e.clientY, moved: false }
     e.currentTarget.setPointerCapture(e.pointerId)
@@ -201,6 +206,7 @@ export function GlobeView() {
           Arrow keys turn the Moon, plus and minus zoom, Enter opens the detailed south-polar map. Sites are buttons.
         </p>
       </div>
+      <ToolPortal>
       <div className="map-controls" role="group" aria-label="Globe view">
         <div className="tool-group">
           <button type="button" onClick={() => orbit.zoom(0.6)} aria-label="Zoom in" title="Zoom in (+)">
@@ -213,7 +219,20 @@ export function GlobeView() {
         <button type="button" onClick={() => enterMap()} aria-label="South pole map" title="Detailed south-polar map">
           <IconPole />
         </button>
+        <button
+          type="button"
+          aria-pressed={anchored}
+          aria-label="Pin the Moon"
+          title={anchored ? 'Pinned: the Moon stays still. Press to let it turn when idle' : 'Pin the Moon: stop it turning by itself when idle'}
+          onClick={() => {
+            orbit.touch()
+            useGlobe.getState().setAnchored(!anchored)
+          }}
+        >
+          <IconPin />
+        </button>
       </div>
+      </ToolPortal>
       <p className="globe-caption">Global LOLA topography (relief ×{RELIEF_EXAGGERATION}) · lit by the Sun at the chosen time</p>
     </>
   )
@@ -293,6 +312,7 @@ function GlobeScene({ data, orbit, markers, markerEls, pickRef, onEnter }: Scene
   const camDir = useMemo(() => new THREE.Vector3(), [])
 
   useFrame((_, dt) => {
+    orbit.setAnchored(useGlobe.getState().anchored)
     orbit.fit(size.width, size.height, useInsets.getState(), FOV)
     orbit.step(dt, reduced)
     const n = orbit.now
@@ -322,6 +342,8 @@ function GlobeScene({ data, orbit, markers, markerEls, pickRef, onEnter }: Scene
     // site buttons on the visible hemisphere
     camDir.copy(cam.position).normalize()
     const placed: [number, number][] = []
+    const insets = useInsets.getState()
+    const toolbar = document.querySelector('.map-controls')?.getBoundingClientRect() ?? null
     const rank = (el?: HTMLElement) => (!el ? 0 : el.classList.contains('is-selected') ? 2 : el.classList.contains('is-compared') ? 1 : 0)
     const ordered = [...markers].sort((a, b) => rank(markerEls.current.get(b.key)) - rank(markerEls.current.get(a.key)))
     for (const m of ordered) {
@@ -334,7 +356,9 @@ function GlobeScene({ data, orbit, markers, markerEls, pickRef, onEnter }: Scene
       const sx = ((v.x + 1) / 2) * size.width
       const sy = ((1 - v.y) / 2) * size.height
       const crowded = placed.some(([a, b]) => Math.hypot(a - sx, b - sy) < MIN_MARKER_GAP_PX)
-      const visible = facing && !crowded && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05
+      // a marker under a floating panel is hidden (the list still reaches it); the selected one stays
+      const free = sx > insets.left && sx < size.width - insets.right && sy > insets.top && sy < size.height - insets.bottom && !underToolbar(sx, sy, toolbar)
+      const visible = facing && !crowded && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05 && (free || rank(el) > 0)
       if (visible) placed.push([sx, sy])
       el.style.display = visible ? '' : 'none'
       el.style.transform = `translate(${sx}px, ${sy}px)`

@@ -18,10 +18,35 @@ export type PowerKey =
   | 'discharge_efficiency'
   | 'load_w'
   | 'night_load_w'
+  // level 4, colony analysis (temperatures in °C here, sent as kelvin)
+  | 'critical_load_w'
+  | 'deferrable_load_w'
+  | 'comms_load_w'
+  | 'shed_soc'
+  | 'max_charge_w'
+  | 'max_discharge_w'
+  | 'crew_count'
+  | 't_set_c'
+  | 't_min_c'
+  | 'ua_w_k'
+  | 'hab_area_m2'
+  | 'skin_absorptivity'
+  | 'skin_emissivity'
+  | 'structure_mass_kg'
+  | 'structure_specific_heat_j_kgk'
+  | 'air_volume_m3'
+  | 'air_pressure_pa'
+  | 'metabolic_w_per_crew'
+  | 'reg_albedo'
+  | 'reg_emissivity'
+  | 'reg_conductivity_w_mk'
+  | 'reg_density_kg_m3'
+  | 'reg_heat_capacity_j_kgk'
+  | 'reg_geothermal_flux_w_m2'
 export type PowerFields = Partial<Record<PowerKey, string>>
 
 /** What the advanced model computes: the array alone, or the array feeding a battery and a load. */
-export type PowerModel = 'array' | 'battery'
+export type PowerModel = 'array' | 'battery' | 'colony'
 
 export interface ScenarioKey {
   selection: Selection
@@ -40,10 +65,14 @@ interface PowerState {
   usedExample: boolean
   /** GCR quality factor typed by the planner (no cited default yet), for the radiation risk index. */
   qualityFactor: string
+  /** Level 4 switches. Sizing is on by default, as in the API (it adds about one second). */
+  comms_critical: boolean
+  include_sizing: boolean
   result: PowerResponse | null
   resultFor: string | null
   setModel: (m: PowerModel) => void
   setQualityFactor: (q: string) => void
+  setFlag: (k: 'comms_critical' | 'include_sizing', v: boolean) => void
   setFields: (f: PowerFields, usedExample?: boolean) => void
   setResult: (r: PowerResponse | null, forScenario: string | null) => void
 }
@@ -53,10 +82,13 @@ export const usePowerStore = create<PowerState>((set) => ({
   fields: {},
   usedExample: false,
   qualityFactor: '',
+  comms_critical: false,
+  include_sizing: true,
   result: null,
   resultFor: null,
   setModel: (model) => set({ model }),
   setQualityFactor: (qualityFactor) => set({ qualityFactor }),
+  setFlag: (k, v) => set({ [k]: v }),
   setFields: (fields, usedExample = false) => set({ fields, usedExample }),
   setResult: (result, resultFor) => set({ result, resultFor }),
 }))
