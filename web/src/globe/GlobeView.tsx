@@ -14,6 +14,7 @@ import { type MapSite, useMapSites } from '../map/useMapSites'
 import { TileLoader } from '../terrain/loader'
 import { useEphemeris, useMasks } from '../time/hooks'
 import { DATA_BASE } from '../time/staticData'
+import { GlobeDetail } from './detail/globeDetail'
 import { MOON_R_KM, type Orbit, OrbitRig, latLonToScene, raySphere, sceneToLatLon } from './orbit'
 import { GLOBE_FRAG, GLOBE_VERT } from './shaders'
 
@@ -23,6 +24,11 @@ export const MAP_DISC_LAT = -60
 /** Zooming in closer than this over the polar cap enters the map. */
 const ENTER_MAP_DIST = MOON_R_KM * 1.18
 const RELIEF_EXAGGERATION = 4
+/** Slope exaggeration of the shading where 118 m detail heights are loaded (the shipped 7.6 km grid uses 3). */
+const DETAIL_SHADE_EXAGGERATION = 1.5
+
+/** What the globe's surface shows: LOLA heights lit by the Sun at the chosen time, or the LROC WAC photo mosaic. */
+export type GlobeSurface = 'relief' | 'photo'
 
 interface GlobeMeta {
   file: string
@@ -54,6 +60,7 @@ export function GlobeView() {
   const select = useApp((s) => s.select)
   const enterMap = useApp((s) => s.enterMap)
   const [orbit] = useState(() => new OrbitRig(START))
+  const [surface, setSurface] = useState<GlobeSurface>('relief')
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null)
   const pickRef = useRef<((cx: number, cy: number) => [number, number] | null) | null>(null)
 
@@ -148,6 +155,7 @@ export function GlobeView() {
               sites={sites}
               markerStyle={markerStyle}
               pickRef={pickRef}
+              surface={surface}
               onEnter={(lat, lon) => enterMap(lat, lon)}
             />
           </Canvas>
@@ -170,8 +178,20 @@ export function GlobeView() {
         <button type="button" onClick={() => enterMap()} title="Detailed south-polar map">
           South pole map
         </button>
+        <button
+          type="button"
+          aria-pressed={surface === 'photo'}
+          onClick={() => setSurface(surface === 'photo' ? 'relief' : 'photo')}
+          title="Show the LROC WAC photo mosaic instead of the relief lit by the Sun"
+        >
+          Photo
+        </button>
       </div>
-      <p className="globe-caption">Global LOLA topography (relief ×{RELIEF_EXAGGERATION}) · lit by the Sun at the chosen time</p>
+      <p className="globe-caption">
+        {surface === 'photo'
+          ? `LROC WAC photo mosaic, 100 m, from NASA Moon Trek (lighting as photographed; night side from the chosen time) · LOLA relief ×${RELIEF_EXAGGERATION}`
+          : `Global LOLA topography (relief ×${RELIEF_EXAGGERATION}; 118 m detail from NASA Moon Trek as you zoom) · lit by the Sun at the chosen time`}
+      </p>
     </>
   )
 }
@@ -202,6 +222,7 @@ interface SceneProps {
   sites: MapSite[]
   markerStyle: MarkerStyle
   pickRef: { current: ((cx: number, cy: number) => [number, number] | null) | null }
+  surface: GlobeSurface
   onEnter: (lat: number, lon: number) => void
 }
 
@@ -213,11 +234,12 @@ function globeHeight(data: SceneProps['data'], lat: number, lon: number): number
   return data.heights[row * width + col]
 }
 
-function GlobeScene({ data, orbit, sites, markerStyle, pickRef, onEnter }: SceneProps) {
+function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, onEnter }: SceneProps) {
   const { camera, size, scene } = useThree()
   const [markersSet] = useState(() => new MarkerSet())
   const eph = useEphemeris().data
   const [reduced] = useState(() => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
+  const [detail] = useState(() => new GlobeDetail())
   const [material] = useState(() => {
     const tex = new THREE.DataTexture(data.heights, data.meta.width, data.meta.height, THREE.RedFormat, THREE.FloatType)
     tex.minFilter = tex.magFilter = THREE.NearestFilter
@@ -231,6 +253,8 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, onEnter }: Scene
         uExag: { value: RELIEF_EXAGGERATION },
         uSun: { value: new THREE.Vector3(1, 0, 0) },
         uDiscLat: { value: MAP_DISC_LAT },
+        ...detail.uniforms(),
+        uDetailShade: { value: DETAIL_SHADE_EXAGGERATION },
       },
     })
   })
@@ -240,9 +264,13 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, onEnter }: Scene
       material.uniforms.uHeight.value.dispose()
       material.dispose()
       geometry.dispose()
+      detail.dispose()
     },
-    [material, geometry],
+    [material, geometry, detail],
   )
+
+  // the surface shown picks which detail tiles the shader reads; work out the wanted tiles again at once
+  useEffect(() => detail.setKind(material, surface === 'photo' ? 'photo' : 'dem'), [surface, material, detail])
 
   useEffect(() => {
     scene.add(markersSet.group)
@@ -311,6 +339,9 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, onEnter }: Scene
       const len = Math.hypot(s[0], s[1], s[2])
       setSun(material, s[0] / len, s[1] / len, s[2] / len)
     }
+
+    // detail tiles for the part of the Moon in view
+    detail.update(dt, { lat: n.lat, lon: n.lon, distKm: n.dist, fovDeg: FOV, widthPx: size.width, heightPx: size.height }, material)
 
     // enter the polar map once the flight down has arrived, or when zoomed in over the cap
     const target = orbit.arrived()

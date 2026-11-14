@@ -3,17 +3,22 @@
  * Decodes tiles off the main thread (plan: "Fuera del hilo principal"): fetch the PNG, inflate it and turn it
  * into heights in metres (Float32Array) or a layer's value + alpha bytes. The buffers are transferred back.
  */
+import type { GeoTileRequest } from '../globe/detail/trekGeo'
 import type { LiveTileRequest } from './live/cog'
 import { decodePng, heightsFromRgb } from './png'
 
 export interface DecodeRequest {
   id: number
   url: string
-  /** 'live': heights sampled from a remote DEM block by block (live/cog.ts) instead of a PNG tile. */
-  kind: 'height' | 'layer' | 'live'
+  /**
+   * 'live': heights sampled from a remote DEM block by block (live/cog.ts) instead of a PNG tile.
+   * 'globe': a detail tile of the globe from Moon Trek's global layers (globe/detail/trekGeo.ts).
+   */
+  kind: 'height' | 'layer' | 'live' | 'globe'
   min?: number
   max?: number
   live?: Omit<LiveTileRequest, 'url'>
+  globe?: Omit<GeoTileRequest, 'url'>
 }
 
 export type DecodeResponse =
@@ -33,6 +38,17 @@ ctx.onmessage = async (e: MessageEvent<DecodeRequest>) => {
         { id, ok: true, width: t.samples, height: t.samples, heights: t.heights, min: t.min, max: t.max } satisfies DecodeResponse,
         [t.heights.buffer],
       )
+      return
+    }
+    if (kind === 'globe') {
+      const { readGeoTile } = await import('../globe/detail/trekGeo')
+      const t = await readGeoTile({ url, ...e.data.globe! })
+      const n = Math.sqrt(t.kind === 'dem' ? t.heights.length : t.bytes.length)
+      if (t.kind === 'dem') {
+        ctx.postMessage({ id, ok: true, width: n, height: n, heights: t.heights } satisfies DecodeResponse, [t.heights.buffer])
+      } else {
+        ctx.postMessage({ id, ok: true, width: n, height: n, bytes: t.bytes } satisfies DecodeResponse, [t.bytes.buffer])
+      }
       return
     }
     const res = await fetch(url)
