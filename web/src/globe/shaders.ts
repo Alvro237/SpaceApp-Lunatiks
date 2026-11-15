@@ -10,7 +10,7 @@
  * grid, interpolated bilinearly, its exaggeration easing from x4 (whole Moon) to x2 (closest zoom, orbit.ts); the
  * patches (below) lift the ground by the detail heights in both modes.
  */
-import { MAX_LEVEL } from './detail/grid'
+import { MAX_LEVEL, PHOTO_BASE_LEVEL } from './detail/grid'
 import { POLAR_MAX_Z } from './detail/polar'
 
 // bilinear between the centres of the shipped height grid's cells, longitude wrapping
@@ -137,6 +137,7 @@ export const GLOBE_FRAG = /* glsl */ `
 precision highp float;
 precision highp sampler2DArray;
 #define DETAIL_MAX_LEVEL ${MAX_LEVEL}
+#define PHOTO_BASE_LEVEL ${PHOTO_BASE_LEVEL}
 #define POLAR_MAX_Z ${POLAR_MAX_Z}
 uniform sampler2D uHeight;
 uniform vec3 uSun;          // unit vector to the Sun, Moon Mean-Earth axes
@@ -292,12 +293,8 @@ vec2 slopes(int slot, vec2 cell, float tileDeg, float lat, float lon) {
   return vec2((hAt(uv + vec2(1.0 / size.x, 0.0)) - hAt(uv - vec2(1.0 / size.x, 0.0))) / (2.0 * R * coslat * (2.0 * PI / size.x)),
               (hAt(uv - vec2(0.0, 1.0 / size.y)) - hAt(uv + vec2(0.0, 1.0 / size.y))) / (2.0 * R * (PI / size.y)));
 }
-// relief shading exaggeration of the shipped grid's slopes, for legibility at 7.6 km pixels (relief mode). In photo
-// mode the photograph carries the texture, and the grid is shaded like the detail heights (uDetailShade): in the
-// whole-Moon view only the MAX_VIEW_TILES detail tiles nearest the centre are loaded, and a stronger shading on the
-// rest of the disc drew the limbs in a second, harsher look next to the centre's.
+// relief shading exaggeration of the shipped grid's slopes, for legibility at 7.6 km pixels
 const float GRID_SHADE = 3.0;
-float gridShade() { return uPhotoMode > 0.5 ? uDetailShade : GRID_SHADE; }
 
 void main() {
   vec3 up = normalize(vMe);
@@ -334,11 +331,15 @@ void main() {
   if (uPhotoMode > 0.5 && uMaxLevel >= 0.0 && !onlyPolar) {
     vec2 pCell;
     float pDeg;
-    int pSlot = findTile(uPhotoIndex, degrees(lon), degrees(lat), maxLevel, pCell, pDeg);
+    // never coarser than the photo base, which is always loaded: where a pixel spans more ground than a base cell
+    // (the whole Moon far away, the foreshortened limbs, slopes facing the camera) the pixel's own level is 0 and
+    // holds no photo, and the ground showed the plain relief grey in its place
+    int photoLevel = max(maxLevel, PHOTO_BASE_LEVEL);
+    int pSlot = findTile(uPhotoIndex, degrees(lon), degrees(lat), photoLevel, pCell, pDeg);
     if (pSlot >= 0) {
       // faded into the coarser photo tile toward a lone edge (edgeWeight)
       float raw = tileAt(uPhoto, pSlot, pCell);
-      float w = edgeWeight(uPhotoIndex, degrees(lon), degrees(lat), maxLevel, pCell, pDeg);
+      float w = edgeWeight(uPhotoIndex, degrees(lon), degrees(lat), photoLevel, pCell, pDeg);
       if (w < 1.0) {
         vec2 cCell;
         float cDeg;
@@ -386,7 +387,7 @@ void main() {
         float cDeg;
         int coarse = findTile(uIndex, degrees(lon), degrees(lat), levelOf(tileDeg) - 1, cCell, cDeg);
         g = mix(slopes(coarse, cCell, cDeg, lat, lon), g, w);
-        exag = mix(coarse >= 0 ? uDetailShade : gridShade(), uDetailShade, w);
+        exag = mix(coarse >= 0 ? uDetailShade : GRID_SHADE, uDetailShade, w);
       }
       he = g.x;
       hn = g.y;
@@ -394,7 +395,7 @@ void main() {
       vec2 g = slopes(-1, cell, tileDeg, lat, lon);
       he = g.x;
       hn = g.y;
-      exag = gridShade();
+      exag = GRID_SHADE;
     }
     // south of 60 S the slopes of the polar height tiles, eased in from the disc's edge: one and a half vertices
     // either side in map metres (wider than one: the bilinear heights' slope then changes smoothly across a cell
@@ -461,6 +462,7 @@ export const PATCH_VERT = /* glsl */ `
 precision highp float;
 precision highp sampler2DArray;
 #define DETAIL_MAX_LEVEL ${MAX_LEVEL}
+#define PHOTO_BASE_LEVEL ${PHOTO_BASE_LEVEL}
 uniform sampler2D uHeight;
 uniform float uExag;
 uniform sampler2DArray uDetail;
