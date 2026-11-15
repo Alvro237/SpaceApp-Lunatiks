@@ -15,6 +15,8 @@ const TARGETS: Record<string, string> = {
 
 for (const scheme of ['dark', 'light'] as const) {
   test(`the tour spotlights each control, passes axe and ends on the full guide (${scheme})`, async ({ page }) => {
+    // a dozen steps, each with a screenshot of the WebGL globe, and two axe scans: longer than the default 60 s
+    test.setTimeout(180_000)
     await page.emulateMedia({ colorScheme: scheme })
     await page.goto('./')
     await expect(page.locator('.place-tools')).toBeVisible({ timeout: 20_000 })
@@ -26,12 +28,14 @@ for (const scheme of ['dark', 'light'] as const) {
     const r = await new AxeBuilder({ page }).include('.tour-card').withTags(WCAG).analyze()
     expect(r.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target).join(' ')}`)).toEqual([])
 
-    // walk every step; each one with a control puts the spotlight on it
+    // walk every step; each one with a control puts the spotlight on it, and the count never jumps or changes total
+    const count = card.locator('.tour-count')
+    const total = Number((await count.textContent())!.match(/of (\d+)/)![1])
     for (let i = 1; i < 20; i++) {
       if (await card.getByRole('button', { name: 'Done' }).isVisible()) break
       await card.getByRole('button', { name: 'Next' }).click()
       const title = (await card.getByRole('heading').textContent())!
-      await expect(card).toContainText(`Step ${i + 1} of`)
+      await expect(count).toHaveText(`Step ${i + 1} of ${total}`)
       const target = TARGETS[title]
       if (target) {
         // the spotlight surrounds the control the card talks about
@@ -44,6 +48,8 @@ for (const scheme of ['dark', 'light'] as const) {
           .toBeLessThan(4)
       }
       await page.screenshot({ path: `test-results/tour-${i}-${scheme}.png` })
+      // still right once the step's mode switch has settled
+      await expect(count).toHaveText(`Step ${i + 1} of ${total}`)
     }
     await expect(card).toContainText('You are ready')
     await card.getByRole('button', { name: 'Read the full guide' }).click()

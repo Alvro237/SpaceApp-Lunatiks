@@ -32,9 +32,11 @@ describe('TourButton', () => {
     expect(useApp.getState().blocks).toBe(false)
 
     const titles: string[] = []
+    const counts: string[] = []
     for (let i = 0; i < STEPS.length; i++) {
       const card = screen.getByRole('dialog')
       titles.push(within(card).getByRole('heading').textContent!)
+      counts.push(card.querySelector('.tour-count')!.textContent!)
       const done = within(card).queryByRole('button', { name: 'Done' })
       if (done) {
         await user.click(within(card).getByRole('button', { name: 'Read the full guide' }))
@@ -48,6 +50,8 @@ describe('TourButton', () => {
     expect(titles).toContain('Mission filters')
     expect(titles).not.toContain('Map tools')
     expect(titles.at(-1)).toBe('You are ready')
+    // the count covers only the steps shown, so it never jumps over a skipped one
+    expect(counts).toEqual(titles.map((_, i) => `Step ${i + 1} of ${titles.length}`))
 
     // the tour is over, the app is back as it was, and the full guide opens
     await screen.findByRole('dialog', { name: 'Guide' })
@@ -62,6 +66,11 @@ describe('TourButton', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent('Step 1 of')
     await user.keyboard('{ArrowRight}')
     expect(screen.getByRole('dialog')).toHaveTextContent('Two ways to work')
+    expect(screen.getByRole('dialog')).toHaveTextContent('Step 2 of')
+    // Back returns to the step shown before, and the count with it
+    await user.keyboard('{ArrowLeft}')
+    expect(screen.getByRole('dialog')).toHaveTextContent('Welcome to the Navigator')
+    expect(screen.getByRole('dialog')).toHaveTextContent('Step 1 of')
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(btn).toHaveFocus()

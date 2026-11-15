@@ -6,7 +6,8 @@
  *
  * The tour works on the navigator: started from another page it goes there first. It shows the planner, so it turns
  * Educational mode off for its length, and it switches to Mission planner for the step on the mission filters; both
- * are put back as they were when the tour ends. A step whose control is not on screen is skipped.
+ * are put back as they were when the tour ends. A step whose control is not on screen is skipped, the step count
+ * covers only the steps shown, so it never jumps, and Back returns to the step shown before.
  *
  * Accessibility: the card is a modal dialog (the app behind it is inert), focus moves to its Next button, Escape ends
  * the tour, the arrow keys move between steps, and the card says "Step n of N". The spotlight is decorative; the
@@ -103,13 +104,23 @@ const PAD = 6
 const GAP = 12
 const CARD_W = 340
 
-/** The step to show after `from` going `dir`, skipping steps whose control is not on screen. */
-function nextShown(from: number, dir: 1 | -1): number | null {
-  for (let i = from + dir; i >= 0 && i < STEPS.length; i += dir) {
-    const t = STEPS[i].target
-    // steps that change the app (enter) decide their own target once applied
-    if (!t || STEPS[i].enter || document.querySelector(t)) return i
-  }
+/** Whether step `i` is shown: it has no control, it changes the app (and decides its own target once applied), or
+ * its control is on screen. */
+function isShown(i: number): boolean {
+  const t = STEPS[i].target
+  return !t || !!STEPS[i].enter || document.querySelector(t) !== null
+}
+
+/** How many steps after `from` the tour will show, with the screen as it is now. */
+function countAhead(from: number): number {
+  let n = 0
+  for (let i = from + 1; i < STEPS.length; i++) if (isShown(i)) n++
+  return n
+}
+
+/** The step to show after `from`, skipping steps whose control is not on screen. */
+function nextShown(from: number): number | null {
+  for (let i = from + 1; i < STEPS.length; i++) if (isShown(i)) return i
   return null
 }
 
@@ -166,10 +177,16 @@ function Tour({
   const next = useRef<HTMLButtonElement>(null)
   const [rect, setRect] = useState<DOMRect | null>(null)
   const [cardH, setCardH] = useState(200)
-  const last = nextShown(step, 1) === null
-  const first = nextShown(step, -1) === null
-  // the count is over every step, so "n of N" stays the same whichever controls the mode shows
-  const pos = step + 1
+  // The count covers only the steps shown, so it never jumps over a skipped one (the timeline is hidden until a place
+  // is chosen, for example). The steps behind are the ones actually visited, so a later mode switch that hides their
+  // controls does not move the count back; Back returns to exactly those steps. The steps ahead are counted on the
+  // screen as it is, kept up to date while the tour runs.
+  const [visited, setVisited] = useState<number[]>([])
+  const [ahead, setAhead] = useState(() => countAhead(step))
+  const last = nextShown(step) === null
+  const first = visited.length === 0
+  const pos = visited.length + 1
+  const total = pos + ahead
 
   // the app behind the card is inert while the tour runs
   useEffect(() => {
@@ -185,6 +202,7 @@ function Tour({
     s.enter?.(useApp.getState().set)
     let raf = 0
     let prev = ''
+    let prevAhead = -1
     const track = () => {
       const el = s.target ? document.querySelector(s.target) : null
       const r = el?.getBoundingClientRect() ?? null
@@ -193,11 +211,16 @@ function Tour({
         prev = key
         setRect(r && r.width > 0 ? r : null)
       }
+      const n = countAhead(step)
+      if (n !== prevAhead) {
+        prevAhead = n
+        setAhead(n)
+      }
       raf = requestAnimationFrame(track)
     }
     track()
     return () => cancelAnimationFrame(raf)
-  }, [s])
+  }, [s, step])
 
   useLayoutEffect(() => {
     if (card.current) setCardH(card.current.offsetHeight)
@@ -205,9 +228,17 @@ function Tour({
   }, [step])
 
   const go = (dir: 1 | -1) => {
-    const i = nextShown(step, dir)
-    if (i !== null) setStep(i)
-    else if (dir === 1) onEnd()
+    if (dir === -1) {
+      const back = visited.at(-1)
+      if (back === undefined) return
+      setVisited(visited.slice(0, -1))
+      setStep(back)
+      return
+    }
+    const i = nextShown(step)
+    if (i === null) return onEnd()
+    setVisited([...visited, step])
+    setStep(i)
   }
 
   const onKey = (e: KeyboardEvent) => {
@@ -261,7 +292,7 @@ function Tour({
       <div ref={card} className="tour-card" role="dialog" aria-modal="true" aria-labelledby={`${id}-t`} aria-describedby={`${id}-d`} style={cardStyle}>
         <div className="tour-top">
           <span className="tour-count">
-            Step {pos} of {STEPS.length}
+            Step {pos} of {total}
           </span>
           <button type="button" className="icon tour-x" onClick={onEnd} aria-label="End the tour" title="End the tour (Esc)">
             <IconClose size={16} />
@@ -270,8 +301,8 @@ function Tour({
         <h2 id={`${id}-t`}>{s.title}</h2>
         <p id={`${id}-d`}>{s.text}</p>
         <div className="tour-dots" aria-hidden="true">
-          {STEPS.map((_, i) => (
-            <span key={i} className={i === step ? 'is-on' : ''} />
+          {Array.from({ length: total }, (_, i) => (
+            <span key={i} className={i === pos - 1 ? 'is-on' : ''} />
           ))}
         </div>
         <div className="tour-actions">
