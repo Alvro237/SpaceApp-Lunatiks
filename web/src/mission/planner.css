@@ -28,6 +28,8 @@
 .filter-list .pfield { padding: 0 10px 10px; margin: 0; }
 
 .region-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: stretch; }
+/* the typed centre is applied only by this button (or Enter), on its own row so the fields keep their width */
+.region-row > button[type='submit'] { grid-column: 1 / -1; }
 .region-row > * { min-width: 0; }
 .range-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
 /* the two ends of a range (Sun height at landing): each one shrinks with the panel, labelled above */

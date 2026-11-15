@@ -322,9 +322,11 @@ describe('navigator', () => {
     // the panel is visible in mission mode without clicking a button (P2: no popover over the timeline)
     expect(await screen.findByRole('heading', { level: 2, name: 'Mission planner inputs' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Mission filters' })).toBeNull()
-    // the centre is set by typing latitude and longitude
+    // the centre is set by typing latitude and longitude and pressing Search; typing alone does not move it
     fireEvent.change(screen.getByLabelText('Region centre latitude'), { target: { value: '-89.45' } })
     fireEvent.change(screen.getByLabelText('Region centre longitude'), { target: { value: '137.3' } })
+    expect(useAreas.getState().center).toBeNull()
+    await user.click(screen.getByRole('button', { name: 'Search' }))
     expect(useAreas.getState().center).toEqual({ lat: -89.45, lon: 137.3 })
     // Advanced inputs: switch on Topography, type Maximum slope
     await user.click(screen.getByRole('button', { name: 'Advanced inputs' }))

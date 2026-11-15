@@ -2,7 +2,7 @@
  * "Mission basics" (mission-planner-ui-spec.md section 3.2): always visible at the top of the planner panel.
  * The landing date and duration are the date pill itself, shown above the scrolling body (PlannerPanel).
  */
-import { useId } from 'react'
+import { type FormEvent, useId, useState } from 'react'
 import { useCatalogue } from '../panels/useCatalogue'
 import { useAreas } from '../state/areas'
 import { IconCrosshair } from '../ui/icons'
@@ -23,6 +23,36 @@ export function PlannerBasics() {
   const nSide = cellsSide(a.radiusKm, cellKm)
   const maxRadius = maxRadiusForCell(cellKm)
   const resAtCentre = a.center ? dataResolutionKm(a.center.lat) : 0.96
+  // typed coordinates are a draft until Search is pressed (or Enter); a centre set elsewhere (the Moon, a site) refills them
+  const [latText, setLatText] = useState(a.center ? String(a.center.lat) : '')
+  const [lonText, setLonText] = useState(a.center ? String(a.center.lon) : '')
+  const [coordError, setCoordError] = useState<string | null>(null)
+  const [shownCenter, setShownCenter] = useState(a.center)
+  if (shownCenter !== a.center) {
+    setShownCenter(a.center)
+    setLatText(a.center ? String(a.center.lat) : '')
+    setLonText(a.center ? String(a.center.lon) : '')
+    setCoordError(null)
+  }
+  const searchCoords = (e: FormEvent) => {
+    e.preventDefault()
+    const lat = Number(latText.trim().replace(',', '.'))
+    const lon = Number(lonText.trim().replace(',', '.'))
+    if (latText.trim() === '' || lonText.trim() === '' || !Number.isFinite(lat) || !Number.isFinite(lon)) {
+      setCoordError('Type a latitude and a longitude in degrees')
+      return
+    }
+    if (lat < -90 || lat > -60) {
+      setCoordError('The search covers south of 60° S: latitude from -90 to -60')
+      return
+    }
+    if (lon < -180 || lon > 360) {
+      setCoordError('Longitude from -180 to 180 (east positive)')
+      return
+    }
+    setCoordError(null)
+    a.set({ center: { lat, lon: lon > 180 ? lon - 360 : lon } })
+  }
 
   return (
     <div className="ios-list planner-basics">
@@ -34,19 +64,17 @@ export function PlannerBasics() {
             S).
           </Tip>
         </div>
-        <div className="region-row">
+        <form className="region-row" onSubmit={searchCoords} noValidate>
           <div className="unit-input">
             <input
               aria-label="Region centre latitude"
               inputMode="decimal"
+              autoComplete="off"
               placeholder="Latitude"
-              value={a.center ? a.center.lat : ''}
-              onChange={(e) => {
-                const lat = Number(e.target.value.replace(',', '.'))
-                if (!Number.isFinite(lat)) return
-                if (lat > -60) return
-                a.set({ center: { lat, lon: a.center?.lon ?? 0 } })
-              }}
+              value={latText}
+              onChange={(e) => setLatText(e.target.value)}
+              aria-invalid={!!coordError}
+              aria-describedby={coordError ? `${id}-coord-err` : undefined}
             />
             <span className="unit" aria-hidden="true">
               °
@@ -57,12 +85,11 @@ export function PlannerBasics() {
               aria-label="Region centre longitude"
               inputMode="decimal"
               placeholder="Longitude"
-              value={a.center ? a.center.lon : ''}
-              onChange={(e) => {
-                const lon = Number(e.target.value.replace(',', '.'))
-                if (!Number.isFinite(lon)) return
-                a.set({ center: { lat: a.center?.lat ?? -85, lon } })
-              }}
+              autoComplete="off"
+              value={lonText}
+              onChange={(e) => setLonText(e.target.value)}
+              aria-invalid={!!coordError}
+              aria-describedby={coordError ? `${id}-coord-err` : undefined}
             />
             <span className="unit" aria-hidden="true">
               °
@@ -71,8 +98,15 @@ export function PlannerBasics() {
           <button type="button" className="small" aria-pressed={a.pickArmed} aria-label="Pick on the Moon" title="Pick on the Moon" onClick={() => a.set({ pickArmed: !a.pickArmed })}>
             <IconCrosshair size={15} />
           </button>
-        </div>
-        {a.center && a.center.lat > -60 && <p role="alert" className="error">The search covers south of 60° S</p>}
+          <button type="submit" className="small">
+            Search
+          </button>
+        </form>
+        {coordError && (
+          <p id={`${id}-coord-err`} role="alert" className="error">
+            {coordError}
+          </p>
+        )}
         <label className="ios-row-top">
           <span className="ios-label">Catalogue site</span>
           <select
