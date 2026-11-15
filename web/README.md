@@ -63,8 +63,11 @@ the dev proxy elsewhere; in production set `VITE_API_URL` to the API's public UR
 WCAG 2.2 AA target (`docs/accessibility.md`): everything on the map is also text in the panels; site markers
 are buttons; keyboard map control (arrows, + and −, T to tilt, Q and E to rotate, R to reset, Space to play);
 verdicts carry a symbol and a word; reduced motion makes playback jump in 6-hour steps. The LOD refines a tile
-above 2 px of screen error and merges it below 1.5 px, loads at most 6 tiles at a time from each server (8 from the PGDA proxy), keeps up to 300 tiles in
-GPU memory and lowers its quality below 45 fps.
+above 2 px of screen error and merges it below 1.5 px, loads at most 6 tiles at a time
+from each server (8 from the PGDA proxy), asks again up to three times for a tile that failed, and keeps up to 300 tiles in GPU memory. The map and the globe
+draw a frame only when the picture changes (camera, Sun, tiles, places), plus two a second as a safety net. Below 45 fps the map steps its quality down
+(coarser LOD, then a pixel ratio of 1.5) and steps back up once after ten fast seconds; the globe lowers its pixel ratio. The map uses multisampling
+only on screens with one device pixel per CSS pixel.
 
 Code written with Claude (Anthropic) assistance under the team's direction; declared in the app's Data & methods
 page and in the repository README.
