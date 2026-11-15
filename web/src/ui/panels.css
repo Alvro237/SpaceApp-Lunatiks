@@ -1099,7 +1099,59 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
 .cmp-radar .radar-series polygon { fill-opacity: 0.22; stroke-dasharray: none; }
 .cmp-metrics { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 0.78rem; }
 .cmp-metrics li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1px 6px; align-items: baseline; }
-.cmp-m-label { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cmp-m-label {
+  justify-self: start;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.cmp-m-label:hover, .cmp-metrics li.is-active .cmp-m-label { color: var(--text); }
+.cmp-m-label:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+
+/* radar axes: a wide invisible hit area, the hovered axis drawn stronger */
+.cmp-body { position: relative; }
+.cmp-axis { cursor: help; }
+.cmp-axis-hit { fill: transparent; stroke: transparent; stroke-width: 10; pointer-events: all; }
+.cmp-axis.is-active .radar-spoke { stroke: var(--text); stroke-width: 1.5; }
+.cmp-axis.is-active .cmp-radar-axis, .cmp-axis:hover .cmp-radar-axis { fill: var(--text); }
+
+/* the explanation pop-up */
+.cmp-tip {
+  position: absolute;
+  z-index: 6;
+  width: 250px;
+  max-width: calc(100vw - 48px);
+  padding: 9px 11px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--c);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  pointer-events: none;
+  transform: translateX(-18px);
+  animation: cmp-tip-in 0.12s ease-out;
+}
+.cmp-tip.is-above { transform: translate(-18px, -100%); }
+.cmp-tip p { margin: 5px 0 0; }
+.cmp-tip-title { display: block; font-size: 0.86rem; }
+.cmp-tip-value { display: block; margin-top: 1px; font-family: var(--mono); font-size: 0.74rem; color: var(--c); font-weight: 600; }
+.cmp-tip-good span { color: #7ee2a8; }
+.cmp-tip-bad span { color: #ff8f8f; }
+@keyframes cmp-tip-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .cmp-tip { animation: none; } }
 .cmp-m-value { font-family: var(--mono); font-weight: 600; white-space: nowrap; }
 .cmp-metrics li.is-best .cmp-m-value { color: var(--c); }
 .cmp-m-bar { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--grid); overflow: hidden; }

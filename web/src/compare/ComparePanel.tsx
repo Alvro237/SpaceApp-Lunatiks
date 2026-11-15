@@ -12,6 +12,7 @@
  * Same instant and window for every place, computed with the browser engine (the same tables and masks as the
  * rest of the navigator). The numbers behind the cards are also in a table.
  */
+import { type FocusEvent, type MouseEvent, useId, useState } from 'react'
 import { DataTable } from '../charts/DataTable'
 import { sameSelection, useApp } from '../state/store'
 import { formatUtc } from '../time/clock'
@@ -78,6 +79,47 @@ const AXES: Axis[] = [
   },
 ]
 
+/**
+ * What each axis means and which way is better, shown in a small pop-up when the pointer is over an axis of the
+ * radar or a metric name (or the metric name has keyboard focus). `comms` is the share of the Earth's disc that
+ * counts as contact (the analysis setting).
+ */
+const HELP: Record<string, { what: (comms: number) => string; better: string; worse: string }> = {
+  sun: {
+    what: () => 'Share of the window with any part of the Sun above the local horizon.',
+    better: 'More sunlight: more solar power and warmth.',
+    worse: 'Long stretches in shadow: batteries and heaters must carry the load.',
+  },
+  earth: {
+    what: (c) => `Share of the window with at least ${Math.round(c * 100)} % of the Earth's disc above the horizon (direct radio link).`,
+    better: 'More time talking to Earth directly.',
+    worse: 'Little direct contact: a relay satellite is needed.',
+  },
+  night: {
+    what: () => 'Longest continuous time without sunlight in the window. On the radar: 1 − longest night ÷ window length.',
+    better: 'Short nights: a smaller battery survives them.',
+    worse: 'Long nights: the battery and the thermal design must last through them.',
+  },
+  blackout: {
+    what: () => 'Longest continuous time without the Earth in view. On the radar: 1 − longest blackout ÷ window length.',
+    better: 'Short gaps: commands and data flow steadily.',
+    worse: 'Long blackouts: the lander must work on its own for that long.',
+  },
+  power: {
+    what: () => `Mean sunlight reaching the solar panel over the window, as a share of the solar constant (${SOLAR_CONSTANT_W_M2} W/m²).`,
+    better: 'More energy per square metre of panel.',
+    worse: 'Low mean power: larger panels are needed.',
+  },
+}
+
+interface Tip {
+  key: string
+  left: number
+  top: number
+  /** Open above the anchor (for anchors in the lower half). */
+  above: boolean
+}
+
 export function ComparePanel({ titleId }: { titleId: string }) {
   const startMs = useApp((s) => s.startMs)
   const durationH = useApp((s) => s.durationH)
@@ -124,6 +166,15 @@ function PlaceCard({ p, best, several }: { p: ComparedPlace; best: number[]; sev
   const { select, removePlace } = useApp.getState()
   const current = sameSelection(p.sel, selection)
   const values = p.win ? AXES.map((a) => a.value(p.win!)) : null
+  const comms = useApp((s) => s.commsMinFraction)
+  const tipId = useId()
+  const [tip, setTip] = useState<Tip | null>(null)
+  // a metric name: open the pop-up under its row, over the metrics column
+  const openFromRow = (key: string) => (e: MouseEvent<HTMLElement> | FocusEvent<HTMLElement>) => {
+    const li = e.currentTarget.closest('li') as HTMLElement
+    setTip({ key, left: li.offsetLeft, top: li.offsetTop + li.offsetHeight + 4, above: false })
+  }
+  const close = () => setTip(null)
 
   return (
     <li className={`cmp-card cmp-c-${p.num}${current ? ' is-current' : ''}`}>
@@ -150,19 +201,32 @@ function PlaceCard({ p, best, several }: { p: ComparedPlace; best: number[]; sev
       </div>
       {p.info.model.horizon.kind === 'smooth_sphere' && <span className="tag-pill cmp-tag">smooth sphere horizon</span>}
       {values ? (
-        <div className="cmp-body">
+        <div className="cmp-body" onMouseLeave={close}>
           <MiniRadar
             num={p.num}
             values={values}
             best={several ? best : null}
+            active={tip?.key ?? null}
+            onAxis={(key, left, top) => setTip(key ? { key, left, top, above: top > RS * RSCALE * 0.55 } : null)}
             label={`Radar of ${p.num} ${p.info.name}, outward is better: ${AXES.map((a) => `${a.label.toLowerCase()} ${a.text(p.win!)}`).join(', ')}.`}
           />
           <ul className="cmp-metrics">
             {AXES.map((a, i) => {
               const isBest = several && values[i] === best[i]
+              const on = tip?.key === a.key
               return (
-                <li key={a.key} className={isBest ? 'is-best' : undefined}>
-                  <span className="cmp-m-label">{a.cardLabel}</span>
+                <li key={a.key} className={`${isBest ? 'is-best' : ''}${on ? ' is-active' : ''}`.trim() || undefined}>
+                  <button
+                    type="button"
+                    className="cmp-m-label"
+                    aria-describedby={on ? tipId : undefined}
+                    onMouseEnter={openFromRow(a.key)}
+                    onFocus={openFromRow(a.key)}
+                    onBlur={close}
+                    onKeyDown={(e) => e.key === 'Escape' && close()}
+                  >
+                    {a.cardLabel}
+                  </button>
                   <span className="cmp-m-value">
                     {isBest && (
                       <>
@@ -179,6 +243,15 @@ function PlaceCard({ p, best, several }: { p: ComparedPlace; best: number[]; sev
               )
             })}
           </ul>
+          {tip && (
+            <AxisTip
+              id={tipId}
+              tip={tip}
+              comms={comms}
+              label={AXES.find((a) => a.key === tip.key)!.label}
+              value={p.win ? AXES.find((a) => a.key === tip.key)!.text(p.win) : null}
+            />
+          )}
         </div>
       ) : (
         <p className="muted">Computing…</p>
@@ -187,7 +260,32 @@ function PlaceCard({ p, best, several }: { p: ComparedPlace; best: number[]; sev
   )
 }
 
+/** The explanation pop-up: what the axis measures, then which way is better and worse (words, not colour alone). */
+function AxisTip({ id, tip, comms, label, value }: { id: string; tip: Tip; comms: number; label: string; value: string | null }) {
+  const h = HELP[tip.key]
+  return (
+    <div
+      id={id}
+      role="tooltip"
+      className={`cmp-tip${tip.above ? ' is-above' : ''}`}
+      style={{ left: tip.left, top: tip.top }}
+    >
+      <strong className="cmp-tip-title">{label}</strong>
+      {value && <span className="cmp-tip-value">Here: {value}</span>}
+      <p>{h.what(comms)}</p>
+      <p className="cmp-tip-good">
+        <span aria-hidden="true">▲</span> <b>Better:</b> {h.better}
+      </p>
+      <p className="cmp-tip-bad">
+        <span aria-hidden="true">▼</span> <b>Worse:</b> {h.worse}
+      </p>
+    </div>
+  )
+}
+
 const RS = 120
+/** Rendered size of the radar in CSS pixels over its viewBox size (.cmp-radar is 112 px wide). */
+const RSCALE = 112 / RS
 const RC = RS / 2
 const RR = 46
 const RINGS = [0.5, 1]
@@ -200,30 +298,55 @@ const at = (i: number, n: number, v: number): [number, number] => {
 }
 const poly = (vals: number[]) => vals.map((v, i) => at(i, vals.length, Math.max(0, Math.min(1, v))).join(',')).join(' ')
 
-/** A small radar for one place: short axis names at the rim, the group's best as a faint outline behind it. */
-function MiniRadar({ num, values, best, label }: { num: number; values: number[]; best: number[] | null; label: string }) {
+/**
+ * A small radar for one place: short axis names at the rim, the group's best as a faint outline behind it. Hovering
+ * an axis (its spoke or its name) reports it with the pop-up's anchor in CSS pixels; the same explanations are
+ * reachable from the keyboard through the metric names next to the radar.
+ */
+function MiniRadar({
+  num,
+  values,
+  best,
+  label,
+  active,
+  onAxis,
+}: {
+  num: number
+  values: number[]
+  best: number[] | null
+  label: string
+  active: string | null
+  onAxis: (key: string | null, left: number, top: number) => void
+}) {
   const n = values.length
   return (
     <svg className="cmp-radar" viewBox={`0 0 ${RS} ${RS}`} role="img" aria-label={label}>
       {RINGS.map((r) => (
         <polygon key={r} className="radar-ring" points={poly(values.map(() => r))} />
       ))}
+      {best && <polygon className="cmp-radar-best" points={poly(best)} />}
+      <g className={`radar-series rs-${num}`}>
+        <polygon points={poly(values)} />
+      </g>
       {AXES.map((a, i) => {
         const [x, y] = at(i, n, 1)
         const [lx, ly] = at(i, n, 1.24)
+        const below = ly > RC
         return (
-          <g key={a.key}>
+          <g
+            key={a.key}
+            className={`cmp-axis${active === a.key ? ' is-active' : ''}`}
+            onMouseEnter={() => onAxis(a.key, lx * RSCALE, (below ? ly - 8 : ly + 8) * RSCALE)}
+          >
             <line className="radar-spoke" x1={RC} y1={RC} x2={x} y2={y} />
+            <line className="cmp-axis-hit" x1={RC} y1={RC} x2={lx} y2={ly} />
+            <circle className="cmp-axis-hit" cx={lx} cy={ly} r={11} />
             <text className="cmp-radar-axis" x={lx} y={ly + 3.5} textAnchor="middle">
               {ABBR[a.key]}
             </text>
           </g>
         )
       })}
-      {best && <polygon className="cmp-radar-best" points={poly(best)} />}
-      <g className={`radar-series rs-${num}`}>
-        <polygon points={poly(values)} />
-      </g>
     </svg>
   )
 }
