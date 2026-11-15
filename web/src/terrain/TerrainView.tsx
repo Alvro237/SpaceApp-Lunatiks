@@ -12,7 +12,8 @@ import { type KeyboardEvent, type MouseEvent, type PointerEvent, type WheelEvent
 import * as THREE from 'three'
 import { type MarkerStyle, useApp } from '../state/store'
 import { type AreaRaster, useAreas } from '../state/areas'
-import { MarkerSet } from '../map/markerSet'
+import { loadLandingSites, landingSitesNear } from '../mission/landings'
+import { FlagMarkerSet, LandingMarkerSet, MarkerSet } from '../map/markerSet'
 import { usePlaceStyles } from '../state/placeStyle'
 import { type MapSite, useMapSites } from '../map/useMapSites'
 import { useInsets } from '../state/layout'
@@ -22,7 +23,7 @@ import { CameraRig, FOV_DEG, TILT_3D } from './cameraRig'
 import { Craters } from './Craters'
 import { type LayerMode, type Quality, TerrainEngine } from './engine'
 import { type Exaggeration, LayersControl, LegendChip } from './Legend'
-import { IconCube, IconFit, IconGlobe, IconMinus, IconPlus } from '../ui/icons'
+import { IconCrosshair, IconCube, IconFit, IconGlobe, IconMinus, IconPlus } from '../ui/icons'
 import { terrainRegistry } from './registry'
 import { type Tileset, inExtent, polarLatLon, polarXY, scaleFactor } from './tileset'
 
@@ -80,6 +81,28 @@ export function TerrainView() {
   return <MapView tileset={tileset.data} />
 }
 
+/**
+ * How far the region ring's highest ground stands above its centre, in scene km (relief exaggeration included):
+ * the camera aims at the centre's height, so that much relief brings the ring closer and it must step back by it.
+ * 0 while the heights are not loaded. The ring is drawn in map metres around the centre (engine.setRegion).
+ */
+function ringRiseKm(lat: number, lon: number, radiusKm: number, exaggeration: number): number {
+  const engine = terrainRegistry.engine
+  if (!engine) return 0
+  const [x0, y0] = polarXY(lat, lon)
+  const h0 = engine.heightAt(x0, y0)
+  if (h0 == null) return 0
+  let top = h0
+  for (let i = 0; i < 48; i++) {
+    const a = (i / 48) * Math.PI * 2
+    for (const f of [0.5, 1]) {
+      const h = engine.heightAt(x0 + Math.cos(a) * radiusKm * 1000 * f, y0 + Math.sin(a) * radiusKm * 1000 * f)
+      if (h != null && h > top) top = h
+    }
+  }
+  return ((top - h0) / 1000) * exaggeration
+}
+
 function MapView({ tileset }: { tileset: Tileset }) {
   const sites = useMapSites()
   const markerStyle = useApp((s) => s.markerStyle)
@@ -113,6 +136,17 @@ function MapView({ tileset }: { tileset: Tileset }) {
 
   const toggleView = () => set({ view: view === '3d' ? '2d' : '3d' })
 
+  /** Repeats the fly-to of the search region's centre (3.8). */
+  const areaCenter = useAreas((s) => s.center)
+  const regionCenter = mode === 'mission' ? areaCenter : null
+  const regionRadiusKm = useAreas((s) => s.radiusKm)
+  const centreOnRegion = () => {
+    if (!regionCenter) return
+    // top-down so the whole ring shows: the 3D switch goes off with it (its effect sets the same tilt, 0)
+    if (view === '3d') set({ view: '2d' })
+    rig.frameCircle(regionCenter.lat, regionCenter.lon, regionRadiusKm, undefined, ringRiseKm(regionCenter.lat, regionCenter.lon, regionRadiusKm, exaggeration))
+  }
+
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return
     const h = e.currentTarget.clientHeight || 600
@@ -130,6 +164,7 @@ function MapView({ tileset }: { tileset: Tileset }) {
       q: () => rig.rotate(-Math.PI / 12),
       e: () => rig.rotate(Math.PI / 12),
       r: () => rig.reset(),
+      ...(regionCenter ? { c: centreOnRegion, C: centreOnRegion } : {}),
     }
     const fn = keys[e.key]
     if (fn) {
@@ -258,6 +293,11 @@ function MapView({ tileset }: { tileset: Tileset }) {
         <button type="button" onClick={() => set({ scale: 'globe' })} aria-label="Globe" title="The whole Moon">
           <IconGlobe />
         </button>
+        {mode === 'mission' && (
+          <button type="button" disabled={!regionCenter} onClick={centreOnRegion} aria-label="Centre on region" title="Centre on region (C)">
+            <IconCrosshair />
+          </button>
+        )}
         <LayersControl tileset={tileset} exaggeration={exaggeration} onExaggeration={setExaggeration} craterError={showCraters ? craterError : null} />
       </div>
       </ToolPortal>
@@ -296,6 +336,9 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
   }, [])
   const masks = useMasks().data
   const [markersSet] = useState(() => new MarkerSet())
+  const [landingMarkers] = useState(() => new LandingMarkerSet())
+  const [flagMarkers] = useState(() => new FlagMarkerSet())
+  const landings = useQuery({ queryKey: ['static', 'landing-sites'], queryFn: loadLandingSites, staleTime: Infinity, retry: 1 }).data
   /** The camera where the current motion ends (the rig's goal): what the engine loads ahead for. */
   const [goalCam] = useState(() => new THREE.PerspectiveCamera())
   const [heightsReady, setHeightsReady] = useState(false)
@@ -308,14 +351,68 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
     if (import.meta.env.DEV) (window as unknown as { __terrain?: TerrainEngine }).__terrain = engine // e2e and debugging
     engine.loadOverview().then(() => setHeightsReady(true), () => {})
     scene.add(markersSet.group)
+    scene.add(landingMarkers.group)
+    scene.add(flagMarkers.group)
     return () => {
+      scene.remove(flagMarkers.group)
+      flagMarkers.dispose()
       scene.remove(markersSet.group)
       markersSet.dispose()
+      scene.remove(landingMarkers.group)
+      landingMarkers.dispose()
       scene.remove(engine.group)
       if (terrainRegistry.engine === engine) terrainRegistry.engine = null
       engine.dispose()
     }
-  }, [engine, scene, markersSet, gl, camera])
+  }, [engine, scene, markersSet, landingMarkers, flagMarkers, gl, camera])
+
+  // Past landings on the map (section 3.6): a pin per measured landing/impact point within the search region.
+  useEffect(() => {
+    const lift = (x: number, y: number) => (((engine.heightAt(x, y) ?? 0) + 60) / 1000) * exaggeration
+    const apply = () => {
+      const a = useAreas.getState()
+      const mission = useApp.getState().mode === 'mission'
+      const shown = mission && a.showLandings && a.center && landings ? landingSitesNear(landings, a.center.lat, a.center.lon, a.radiusKm) : []
+      landingMarkers.set(shown, (s) => {
+        const [x, y] = polarXY(s.lat, s.lon)
+        return new THREE.Vector3(x / 1000, lift(x, y), -y / 1000)
+      })
+      touch()
+    }
+    apply()
+    const offAreas = useAreas.subscribe(apply)
+    const offApp = useApp.subscribe(apply)
+    return () => {
+      offAreas()
+      offApp()
+    }
+  }, [landingMarkers, landings, engine, exaggeration, heightsReady, tileset, touch])
+
+  // The best places of the mission planner's answer: a red flag, numbered as in the results list, on the best
+  // cell of each of the first ten areas (the API ranks them). Only while the answer is painted.
+  useEffect(() => {
+    const lift = (x: number, y: number) => (((engine.heightAt(x, y) ?? 0) + 40) / 1000) * exaggeration
+    let shownFor: unknown = undefined
+    const apply = () => {
+      const a = useAreas.getState()
+      const on = useApp.getState().mode === 'mission' && a.show ? a.result : null
+      if (on === shownFor) return
+      shownFor = on
+      const best = (on?.areas ?? []).slice(0, 10).map((ar, i) => ({ rank: i + 1, lat: ar.best_lat, lon: ar.best_lon }))
+      flagMarkers.set(best.filter((b) => inExtent(tileset, b.lat, b.lon)), (b) => {
+        const [x, y] = polarXY(b.lat, b.lon)
+        return new THREE.Vector3(x / 1000, lift(x, y), -y / 1000)
+      })
+      touch()
+    }
+    apply()
+    const offAreas = useAreas.subscribe(apply)
+    const offApp = useApp.subscribe(apply)
+    return () => {
+      offAreas()
+      offApp()
+    }
+  }, [flagMarkers, engine, exaggeration, heightsReady, tileset, touch])
 
   // Places drawn in the scene: rebuilt when the list, the style, the relief or the heights change.
   useEffect(() => {
@@ -426,6 +523,7 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
         engine.setAreas(want)
         painted = want
       }
+      engine.setAreaMode(a.areaMode)
       if (mission && a.center) {
         const [x, y] = polarXY(a.center.lat, a.center.lon)
         engine.setRegion(x, y, a.radiusKm * 1000)
@@ -450,6 +548,28 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
     })
   }, [rig, tileset])
 
+  // the relief exaggeration for the framing below, read when a frame happens (not a reason to re-subscribe)
+  const exagRef = useRef(exaggeration)
+  useEffect(() => {
+    exagRef.current = exaggeration
+  }, [exaggeration])
+  // The region's centre changing (typed, catalogue site, or a click already landed on this map) flies there,
+  // framed to the region (3.8: "when the centre changes ... the view flies to it").
+  // The radius changing reframes too, so the whole ring always fits the view (no zooming in or out by hand).
+  useEffect(() => {
+    let prev = useAreas.getState().center
+    let prevR = useAreas.getState().radiusKm
+    return useAreas.subscribe((a) => {
+      if (a.center === prev && a.radiusKm === prevR) return
+      prev = a.center
+      prevR = a.radiusKm
+      if (!a.center || useApp.getState().mode !== 'mission') return
+      if (!inExtent(tileset, a.center.lat, a.center.lon)) return
+      if (useApp.getState().view === '3d') useApp.getState().set({ view: '2d' })
+      rig.frameCircle(a.center.lat, a.center.lon, a.radiusKm, undefined, ringRiseKm(a.center.lat, a.center.lon, a.radiusKm, exagRef.current))
+    })
+  }, [rig, tileset])
+
   // Open where the user clicked on the globe (a navigation target; the selection does not change).
   useEffect(() => {
     let seq = -1
@@ -457,7 +577,12 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
       const e = useApp.getState().mapEntry
       if (!e || e.seq === seq) return
       seq = e.seq
-      if (inExtent(tileset, e.lat, e.lon)) rig.flyTo(e.lat, e.lon, 450)
+      if (!inExtent(tileset, e.lat, e.lon)) return
+      // mission mode with a region: open on the whole region, centred (not on the fixed 450 km entry view)
+      const a = useAreas.getState()
+      const c = useApp.getState().mode === 'mission' ? a.center : null
+      if (c && inExtent(tileset, c.lat, c.lon)) rig.frameCircle(c.lat, c.lon, a.radiusKm, undefined, ringRiseKm(c.lat, c.lon, a.radiusKm, exagRef.current))
+      else rig.flyTo(e.lat, e.lon, 450)
     }
     go()
     return useApp.subscribe(go)
@@ -502,6 +627,8 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
     engine.update(cam, size.height, [rig.now.tx, rig.now.tz], goalCam, !rig.settled)
 
     markersSet.update(cam, size.width, size.height, true)
+    landingMarkers.update(cam, size.height)
+    flagMarkers.update(cam, size.height)
 
     // Draw only when the picture changed: the camera, the canvas, or anything the engine or the scene counted.
     // (This callback has a priority, so React Three Fiber leaves the drawing to it.) An idle map costs the GPU

@@ -36,6 +36,10 @@ export class CameraRig {
   private fitted = false
   /** A fly-to requested before the first fit (entering from the globe); applied after it. */
   private pending: Partial<View> | null = null
+  /** Last view size and panel insets (from fitHome, every frame), so a region can be fitted into the free area. */
+  private viewport: { w: number; h: number; insets: Insets } | null = null
+  /** A region asked for before the first frame knew the view size; framed on the next fitHome. */
+  private pendingCircle: { lat: number; lon: number; radiusKm: number; fill: number; riseKm: number } | null = null
 
   /** Distance of the whole-pole view. */
   get homeDist(): number {
@@ -55,6 +59,7 @@ export class CameraRig {
    * camera there; later fits (panels opened or closed, window resized) only update what Reset returns to.
    */
   fitHome(viewW: number, viewH: number, insets: Insets): void {
+    this.viewport = { w: viewW, h: viewH, insets }
     const free = Math.max(120, Math.min(viewW - insets.left - insets.right, viewH - insets.top - insets.bottom)) * 0.96
     const dist = (this.discKm * viewH) / (free * Math.tan(THREE.MathUtils.degToRad(FOV_DEG / 2)))
     Object.assign(this.home, { tx: 0, tz: 0, dist, tilt: 0, heading: 0 })
@@ -64,6 +69,36 @@ export class CameraRig {
       Object.assign(this.goal, this.home, this.pending ?? {})
       this.pending = null
     }
+    if (this.pendingCircle) {
+      const c = this.pendingCircle
+      this.pendingCircle = null
+      this.frameCircle(c.lat, c.lon, c.radiusKm, c.fill, c.riseKm)
+    }
+  }
+
+  /**
+   * Fly to a circle (the mission search region: centre and radius in map km, as drawn by setRegion) seen from
+   * straight above, centred in the free area between the panels (apply() puts the target there) and small enough
+   * that the whole ring shows with room around it: its diameter is `fill` (70 %) of the free area's shorter side. Top-down so no edge hides
+   * behind the tilt; the heading is kept (a circle looks the same at any heading).
+   *   radius on screen (px) = R / kmPerPixel = R·h / (2·d·tan(fov/2))  =  fill·free/2   →   d = R·h / (fill·free·tan(fov/2))
+   */
+  frameCircle(lat: number, lon: number, radiusKm: number, fill = 0.7, riseKm = 0): void {
+    const v = this.viewport
+    if (!v || v.w <= 0 || v.h <= 0) {
+      this.pendingCircle = { lat, lon, radiusKm, fill, riseKm }
+      return
+    }
+    const free = Math.max(120, Math.min(v.w - v.insets.left - v.insets.right, v.h - v.insets.top - v.insets.bottom))
+    // riseKm: how far the ring's highest ground stands above the centre (scene km, relief exaggeration included).
+    // The camera looks at the centre's height, so a ring that high is that much closer: step back by it.
+    const dist = (radiusKm * v.h) / (fill * free * Math.tan(THREE.MathUtils.degToRad(FOV_DEG / 2))) + Math.max(0, riseKm)
+    const [x, y] = polarXY(lat, lon)
+    this.goal.tx = x / 1000
+    this.goal.tz = -y / 1000
+    this.goal.dist = THREE.MathUtils.clamp(dist, 2, this.home.dist * 2.2)
+    this.goal.tilt = 0
+    if (!this.fitted) this.pending = { tx: this.goal.tx, tz: this.goal.tz, dist: this.goal.dist, tilt: 0 }
   }
 
   kmPerPixel(viewportHeightPx: number): number {
