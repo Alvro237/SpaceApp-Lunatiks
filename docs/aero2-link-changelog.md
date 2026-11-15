@@ -91,8 +91,8 @@ The link is now in the interface. The section is still opened with the "Earth li
 - Owner decisions of 2026-11-15: the "Earth contact" slider is gone (the 0.5 stays); the budget level requires what
   characterises the user's own radio and antennas: lunar EIRP, data rate, the Eb/N0 needed, the lunar G/T for an uplink,
   and for each own antenna its G/T or its dish diameter. Only generic values keep a default (band X, margin 3 dB, other
-  losses 0 dB). The note under the antenna table was removed. In the timeline, solid green bars are link and green dotted
-  bars are contact without enough margin.
+  losses 0 dB). The note under the antenna table was removed. The timeline's Link row draws only real link: with no link,
+  or while the budget is incomplete, it stays empty.
 - Nothing is pre-filled except the networks. The ESA elevation warning is not shown (owner decision); `estimated_limits`
   and `gt_basis` stay in the API response.
 - Shared frontend files touched, additions only apart from the rewrite of `LinkPanel.tsx` and the strip of
