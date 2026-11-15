@@ -159,13 +159,22 @@ export const ringHalf = (cellM: number) => (RING_N / 2) * cellM
 
 /** Does a square of half-width `half` (ground metres, any orientation) around the place lie inside the source? */
 function covers(s: ReliefSource, lat: number, lon: number, half: number): boolean {
-  const cell = half / (RING_N / 2)
-  if (cell < (s.minCellM ?? 0) || cell > (s.maxCellM ?? Infinity)) return false
+  return coversReach(s, lat, lon, half / (RING_N / 2), half * Math.SQRT2)
+}
+
+/** Does the source serve cells of `cellM`, and does everything within `reachM` (ground metres) of the place lie inside it? */
+function coversReach(s: ReliefSource, lat: number, lon: number, cellM: number, reachM: number): boolean {
+  if (cellM < (s.minCellM ?? 0) || cellM > (s.maxCellM ?? Infinity)) return false
   if (s.pole === null) return true
   if ((s.pole === 'S') !== lat < 0) return false
   // the polar DEMs are squares in their polar stereographic plane; north mirrors south
   const [x, y] = polarXY(-Math.abs(lat), lon)
-  return Math.max(Math.abs(x), Math.abs(y)) + half * Math.SQRT2 * scaleFactor(-Math.abs(lat)) <= s.halfExtentM
+  return Math.max(Math.abs(x), Math.abs(y)) + reachM * scaleFactor(-Math.abs(lat)) <= s.halfExtentM
+}
+
+/** The finest DEM that serves cells of `cellM` for ground up to `reachM` from the place (the patches, patches.ts). */
+export function sourceFor(lat: number, lon: number, cellM: number, reachM: number): ReliefSource {
+  return RELIEF_SOURCES.find((s) => coversReach(s, lat, lon, cellM, reachM))!
 }
 
 /**
@@ -207,11 +216,19 @@ export function localStereoWkt(lat: number, lon: number): string {
  */
 export function ringUrl(service: string, lat: number, lon: number, cellM: number): string {
   const h = ringHalf(cellM)
+  return heightsUrl(service, lat, lon, [-h, -h, h, h], cellM, RING_N)
+}
+
+/**
+ * exportImage URL of n x n heights at `cellM` over a box (xMin, yMin, xMax, yMax metres in the place's stereographic
+ * plane; the box is the samples' cells), widened downwards by TREK_EXTRA_ROWS cells.
+ */
+export function heightsUrl(service: string, lat: number, lon: number, box: [number, number, number, number], cellM: number, n: number): string {
   const sr = encodeURIComponent(JSON.stringify({ wkt: localStereoWkt(lat, lon) }))
-  const bbox = [-h, -h - TREK_EXTRA_ROWS * cellM, h, h].join(',')
+  const bbox = [box[0], box[1] - TREK_EXTRA_ROWS * cellM, box[2], box[3]].join(',')
   return (
     `${TREK_IMAGE_SERVER}${service}/ImageServer/exportImage?bbox=${bbox}&bboxSR=${sr}&imageSR=${sr}` +
-    `&size=${RING_N},${RING_N + TREK_EXTRA_ROWS}` +
+    `&size=${n},${n + TREK_EXTRA_ROWS}` +
     '&format=tiff&pixelType=F32&compression=LZ77&interpolation=RSP_BilinearInterpolation&f=image'
   )
 }
@@ -397,9 +414,13 @@ export function mergeFine(lola: Float32Array, fine: Float32Array): { share: numb
 
 /** Decode and check one ring answer: size, no-data, no row of exact zeros (the Moon Trek fault). */
 export async function decodeRing(buf: ArrayBuffer, spec: RingSpec): Promise<Ring> {
+  return { ...spec, ...(await decodeHeights(buf, RING_N)) }
+}
+
+/** Decode and check n x n heights (plus the extra rows asked for): size, no-data, no row of exact zeros. */
+export async function decodeHeights(buf: ArrayBuffer, n: number): Promise<{ heights: Float32Array; min: number; max: number }> {
   const tiff = await fromArrayBuffer(buf)
   const image = await tiff.getImage(0)
-  const n = RING_N
   if (image.getWidth() !== n || image.getHeight() !== n + TREK_EXTRA_ROWS) {
     throw new Error(`ring is ${image.getWidth()} x ${image.getHeight()}, expected ${n} x ${n + TREK_EXTRA_ROWS}`)
   }
@@ -420,7 +441,7 @@ export async function decodeRing(buf: ArrayBuffer, spec: RingSpec): Promise<Ring
     for (let c = 0; c < n && zero; c++) zero = heights[r * n + c] === 0
     if (zero) throw new Error(`ring row ${r} is all zeros`)
   }
-  return { ...spec, heights, min, max }
+  return { heights, min, max }
 }
 
 const cache = new Map<string, Promise<Ring>>()
@@ -470,6 +491,15 @@ export function loadRing(spec: RingSpec, fetchFn: typeof fetch = (u, i) => fetch
   cache.set(spec.url, p)
   p.catch(() => cache.delete(spec.url))
   return p
+}
+
+/**
+ * Start reading a place's rings before the view asks for them (the map's flight down to the place takes over a
+ * second): loadRing keeps them, so the view finds them on their way or already there. A failure here is left to the
+ * view, which asks again.
+ */
+export function prefetchRings(lat: number, lon: number): void {
+  for (const spec of ringSpecs(lat, lon) ?? []) loadRing(spec).catch(() => undefined)
 }
 
 /** Height of the curved ground below the observer's level plane at horizontal distance d: d^2 / (2 R). */

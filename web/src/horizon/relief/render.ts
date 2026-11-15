@@ -12,8 +12,13 @@
  * The ground is drawn up to its own silhouette, so a ridge or a crater wall rising above the site's horizon mask
  * shows as the wall it is, with its photo and its light (the mask comes from a coarser grid away from the poles:
  * 3.8 km cells against the rings' 60-118 m, and misses near slopes). The mask, the skyline the metrics use, is drawn
- * over it as a thin line (drawRelief.ts). Where the mask stands above the rings' ground instead, the band up to it
- * takes the shade of the last ground the ray met.
+ * over it as a thin line (drawRelief.ts). Where the mask stands above the drawn ground instead, the band up to it
+ * takes the shade of the last ground the ray met only while the relief is incomplete (rings still to come, or the
+ * eye still high above them, `fillToMask`) or the gap is a hair (MASK_GAP_DEG): once the ground is drawn to
+ * FULL_REACH_M, a wider gap is left as the sky the heights say it is, with the mask's line across it.
+ *
+ * Far ground in view is read from the patches where there are any (patches.ts, light.ts GroundStack): the same
+ * walk, with steps of the patch's finer cell there.
  *
  * Shading: radiance of a lunar-Lambert surface (McEwen 1991), R = (1 - L) mu0 + 2 L mu0 / (mu0 + mu), with mu0 the
  * cosine of the incidence times the visible share of the solar disc (light.ts) and mu the cosine of the emission
@@ -32,8 +37,8 @@
  */
 import { R_M } from '../../terrain/tileset'
 import type { GroundTexture } from '../groundTexture'
-import { type GroundStack, bilinear, lightFromHorizon } from './light'
-import { RING_N } from './rings'
+import { BLOCK, type GroundStack, bilinear, lightFromHorizon, tileOf } from './light'
+import { RING_N, ringHalf } from './rings'
 
 export interface ReliefScene {
   stack: GroundStack
@@ -66,6 +71,11 @@ export interface ReliefScene {
   detailAt?: (e: number, n: number) => number
   /** Regolith grain under the DEM's cell, near the feet only (groundTexture.ts), as before; null: none. */
   grain?: GroundTexture | null
+  /**
+   * Paint the band between the drawn ground and the mask whatever its height (see the file comment); default: only
+   * while the rings do not reach FULL_REACH_M. Set during the arrival descent, where the eye is far above the rings.
+   */
+  fillToMask?: boolean
 }
 
 export interface ColumnCamera {
@@ -90,6 +100,14 @@ export const AMBIENT = 0.075
  * are what a step of one cell reads anyway.
  */
 const NEAR_GROWTH = 0.04
+/**
+ * The ground between two steps is drawn straight, which is off from the bilinear heights by an amount that grows
+ * with the square of the step; seen from the eye that is an angle, and what matters is that angle against a pixel.
+ * So NEAR_GROWTH holds for pixels up to NEAR_REF_DEG across (a full-resolution frame at the widest usual field) and
+ * grows in proportion for coarser ones (the lighter frames drawn while the view moves), up to NEAR_GROWTH_MAX.
+ */
+const NEAR_REF_DEG = 0.0625
+const NEAR_GROWTH_MAX = 0.16
 const STEP_CELLS = 1
 const FIRST_STEP_M = 0.3
 /**
@@ -110,6 +128,12 @@ const GRAIN_GAIN = 0.55
 const GRAIN_REACH_M = 200
 const GRAIN_EYE_M = 1.7
 const LOG_GRAIN = Math.log2(GRAIN_M)
+/**
+ * The rings count as the whole relief once the outermost reaches this far, metres; the band between the drawn ground
+ * and a higher mask is then painted only up to MASK_GAP_DEG (file comment).
+ */
+export const FULL_REACH_M = 200_000
+export const MASK_GAP_DEG = 0.08
 
 /** Limb-darkening weight L = max(0, 1 - g / 150°) tabulated over cos g in [-1, 1] (LAMBERT_STEPS + 1 entries). */
 const LAMBERT_STEPS = 4096
@@ -166,14 +190,24 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
   const rows = (el: number) => (c.cy - (el - c.pitch) / c.degPerPx) / scale - 0.5
   const f = stack.frame
   const nR = stack.rings.length
-  const ringCell = stack.rings.map((r) => r.cellM / f.k0)
+  const gridCell = stack.grids.map((r) => r.cellM / f.k0)
   const idx = stack.idx
-  const heights = stack.rings.map((r) => r.heights)
+  const heights = stack.grids.map((r) => r.heights)
+  const size = stack.size
+  const tiles = stack.tiles
+  const blockMax = stack.blockMax
+  const blocks = stack.blocks
+  const blockO = stack.blockO
+  const fillAll = s.fillToMask ?? ringHalf(stack.rings[nR - 1].cellM) < FULL_REACH_M
+  const gapRows = MASK_GAP_DEG / (scale * c.degPerPx)
   const NM1 = RING_N - 1
   const CEN = NM1 / 2
   const S = s.sun
   const twoR = 2 * R_M
   const headroom = stack.maxU - s.eyeM
+  // an eye above every height in the stack: the highest ground rises in the view out to its own horizon, at tStar.
+  // Not during the arrival descent (fillToMask): there each frame stops at once and paints the band to the mask
+  const tStar = headroom < 0 && !s.fillToMask ? Math.sqrt(-headroom * twoR) : 0
   let steps = 0
   const E = s.earth ?? [0, 0, 1]
   const earthRatio = s.earthRatio ?? 0
@@ -181,6 +215,7 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
   const detailAt = s.detailAt
   const grain = s.grain ?? null
   const dTheta = scale * c.degPerPx * D
+  const nearGrowth = Math.min(NEAR_GROWTH_MAX, Math.max(NEAR_GROWTH, (NEAR_GROWTH * scale * c.degPerPx) / NEAR_REF_DEG))
   // set by albedoAt(): whether the last point read had a finer photo
   let lastFine = false
   /** Lunar-Lambert radiance for one light: direct factor mu0, light direction L, unit vector towards the eye. */
@@ -196,16 +231,17 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
   const rSun = s.sunRadiusDeg ?? 0.2666
   const rEarth = s.earthRadiusDeg ?? 0.95
   const nrm = new Float64Array(3)
-  /** Bilinear normal of ring k at (u, v), normalised, into nrm. */
-  const normalAt = (k: number, u: number, v: number) => {
-    const N = s.normals[k]
-    const i0 = u < NM1 ? Math.floor(u) : NM1 - 1
-    const j0 = v < NM1 ? Math.floor(v) : NM1 - 1
+  /** Bilinear normal of grid g at (u, v), normalised, into nrm. */
+  const normalAt = (g: number, u: number, v: number) => {
+    const N = s.normals[g]
+    const m = size[g]
+    const i0 = u < m - 1 ? Math.floor(u) : m - 2
+    const j0 = v < m - 1 ? Math.floor(v) : m - 2
     const fu = u - i0
     const fv = v - j0
-    const o = 3 * (j0 * RING_N + i0)
+    const o = 3 * (j0 * m + i0)
     const o1 = o + 3
-    const o2 = o + 3 * RING_N
+    const o2 = o + 3 * m
     const o3 = o2 + 3
     const w0 = (1 - fu) * (1 - fv)
     const w1 = fu * (1 - fv)
@@ -233,14 +269,14 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
     if (s.sunlight) {
       const cosI = nrm[0] * S[0] + nrm[1] * S[1] + nrm[2] * S[2]
       if (cosI > 0) {
-        const mu0 = cosI * lightFromHorizon(bilinear(s.sunlight[k], u, v), rSun)
+        const mu0 = cosI * lightFromHorizon(bilinear(s.sunlight[k], u, v, size[k]), rSun)
         if (mu0 > 0) R += lunarLambert(mu0, mu, S[0], S[1], S[2], vx, vy, vz)
       }
     }
     if (hasEarth) {
       const cosI = nrm[0] * E[0] + nrm[1] * E[1] + nrm[2] * E[2]
       if (cosI > 0) {
-        const me = cosI * lightFromHorizon(bilinear(s.earthlight![k], u, v), rEarth)
+        const me = cosI * lightFromHorizon(bilinear(s.earthlight![k], u, v, size[k]), rEarth)
         if (me > 0) R += earthRatio * lunarLambert(me, mu, E[0], E[1], E[2], vx, vy, vz)
       }
     }
@@ -269,7 +305,14 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
   }
   // tangent of each screen row's elevation angle (the inverse of rows())
   const tanRow = new Float64Array(h)
-  for (let r = 0; r < h; r++) tanRow[r] = Math.tan((c.pitch + (c.cy - (r + 0.5) * scale) * c.degPerPx) * D)
+  // the same, as the test "is this ground under the rows filled so far?": ground at tangent up / t lies at or below
+  // the centre of row r when up <= tanCut[r] t. Rows 90° or more from the level are never (or always) reached
+  const tanCut = new Float64Array(h)
+  for (let r = 0; r < h; r++) {
+    const el = c.pitch + (c.cy - (r + 0.5) * scale) * c.degPerPx
+    tanRow[r] = Math.tan(el * D)
+    tanCut[r] = el >= 89.9 ? Infinity : el <= -89.9 ? -Infinity : tanRow[r]
+  }
   for (let i = 0; i < w; i++) {
     const az = c.yaw + ((i + 0.5) * scale - c.cx) * c.degPerPx
     const sa = Math.sin(az * D)
@@ -279,14 +322,28 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
     let top = h // rows >= top are filled
     let t = FIRST_STEP_M
     let k = 0
-    // the previous step: screen row, ring sample and distance; its radiance only once it is needed
-    let pY = NaN
+    let first = true
+    // the previous step: grid sample (and its ring), distance and level; its screen row and its radiance only once
+    // they are needed (most steps are hidden, or raise the ground by less than a row)
+    let pY = 0
+    let pYok = false
     let pK = 0
+    let pG = 0
     let pU = 0
     let pV = 0
     let pT = 0
     let pUp = 0
     let pR = NaN
+    // the antialiased top edge: the row the ground only partly covers, from the step that covers most of it. Drawn
+    // once the column is done (every row filled later lies above it or over it)
+    let eRow = -1
+    let eAlpha = 0
+    let eK = 0
+    let eG = 0
+    let eU = 0
+    let eV = 0
+    let eT = 0
+    let eUp = 0
     while (top > 0) {
       // finest ring under the ray (rings only get coarser outwards)
       const e = t * sa
@@ -300,80 +357,161 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
         if (u >= 0 && v >= 0 && u <= NM1 && v <= NM1) break
       }
       if (k >= nR) break
+      // the patch over this tile of the ring, where there is one: finer heights of the same ground
+      let g = k
+      const T = tiles[k]
+      if (T !== null) {
+        const tile = tileOf(u, v)
+        const p = tile < 0 ? -1 : T[tile]
+        if (p >= 0) {
+          const q = idx[p]
+          g = p
+          u = q.au * e + q.bu * n + q.cu
+          v = q.av * e + q.bv * n + q.cv
+        }
+      }
       // bilinear height
-      const H = heights[k]
-      const i0 = u < NM1 ? Math.floor(u) : NM1 - 1
-      const j0 = v < NM1 ? Math.floor(v) : NM1 - 1
+      const H = heights[g]
+      const m = size[g]
+      const i0 = u < m - 1 ? Math.floor(u) : m - 2
+      const j0 = v < m - 1 ? Math.floor(v) : m - 2
       const fu = u - i0
       const fv = v - j0
-      const o = j0 * RING_N + i0
-      const hg = (H[o] * (1 - fu) + H[o + 1] * fu) * (1 - fv) + (H[o + RING_N] * (1 - fu) + H[o + RING_N + 1] * fu) * fv
+      const o = j0 * m + i0
+      const hg = (H[o] * (1 - fu) + H[o + 1] * fu) * (1 - fv) + (H[o + m] * (1 - fu) + H[o + m + 1] * fu) * fv
       const drop = (t * t) / twoR
       const up = hg - drop - s.eyeM
-      const y = rows(Math.atan2(up, t) / D)
       steps++
       let R = NaN
       let seen = false
-      if (y < top || pY !== pY) {
-        seen = true
-        R = radiance(k, u, v, t, up, sa, ca)
-        if (pY !== pY) {
+      let y = 0
+      let yOk = false
+      // under the rows filled so far (by its tangent: no angle needed), unless nothing is filled yet
+      if (first || top === h || up > tanCut[top] * t) {
+        y = rows(Math.atan2(up, t) / D)
+        yOk = true
+        seen = first || y < top
+      }
+      if (seen) {
+        if (first) {
           // the first step also stands for the ground between it and the feet
+          first = false
+          R = radiance(g, u, v, t, up, sa, ca)
           pY = h
+          pYok = true
           pR = R
           pT = t
           pUp = up
-        } else if (pR !== pR) pR = radiance(pK, pU, pV, pT, pUp, sa, ca)
-        const r0 = Math.max(0, Math.ceil(y))
-        const span = pY - y
-        const dT = t - pT
-        const dU = up - pUp
-        for (let r = Math.min(top, h) - 1; r >= r0; r--) {
-          // where this row's line of sight meets the ground between the previous step and this one (the ground taken
-          // as straight between them): a = 0 at this step, 1 at the previous; by rows if the segment is degenerate
-          let a = span > 1e-9 ? Math.min(1, Math.max(0, (r - y) / span)) : 0
-          const tn = tanRow[r]
-          const den = dU - tn * dT
-          if (den > 1e-12 || den < -1e-12) {
-            const f = (tn * pT - pUp) / den
-            if (f >= 0 && f <= 1) a = 1 - f
-          }
-          const ta = t + (pT - t) * a
-          const ea = ta * sa
-          const na = ta * ca
-          const alb = albedoAt(k, ea, na)
-          writePixel(px, 4 * (r * w + i), R + (pR - R) * a, alb, ta, ea, na, dTheta, grain, 255)
         }
-        // antialiased top edge: the row the ground only partly covers
+        const r0 = Math.max(0, Math.ceil(y))
+        const rTop = Math.min(top, h) - 1
+        if (rTop >= r0) {
+          if (R !== R) R = radiance(g, u, v, t, up, sa, ca)
+          if (pR !== pR) pR = radiance(pG, pU, pV, pT, pUp, sa, ca)
+          if (!pYok) pY = rows(Math.atan2(pUp, pT) / D)
+          const span = pY - y
+          const dT = t - pT
+          const dU = up - pUp
+          for (let r = rTop; r >= r0; r--) {
+            // where this row's line of sight meets the ground between the previous step and this one (the ground
+            // taken as straight between them): a = 0 at this step, 1 at the previous; by rows if the segment is
+            // degenerate
+            let a = span > 1e-9 ? Math.min(1, Math.max(0, (r - y) / span)) : 0
+            const tn = tanRow[r]
+            const den = dU - tn * dT
+            if (den > 1e-12 || den < -1e-12) {
+              const f = (tn * pT - pUp) / den
+              if (f >= 0 && f <= 1) a = 1 - f
+            }
+            const ta = t + (pT - t) * a
+            const ea = ta * sa
+            const na = ta * ca
+            const alb = albedoAt(k, ea, na)
+            writePixel(px, 4 * (r * w + i), R + (pR - R) * a, alb, ta, ea, na, dTheta, grain, 255)
+          }
+        }
+        // the row above the filled ones, partly covered: kept if it covers more of it than the steps before did
         const edge = r0 - 1
-        if (edge >= 0 && edge < top && y < r0) {
-          const alb = albedoAt(k, e, n)
-          writePixel(px, 4 * (edge * w + i), R, alb, t, e, n, dTheta, grain, Math.round(255 * Math.min(1, r0 - y)))
+        if (edge >= 0 && y < r0) {
+          const alpha = Math.round(255 * Math.min(1, r0 - y))
+          if (edge !== eRow || alpha > eAlpha) {
+            eRow = edge
+            eAlpha = alpha
+            eK = k
+            eG = g
+            eU = u
+            eV = v
+            eT = t
+            eUp = up
+          }
         }
         if (r0 < top) top = r0
       }
       pY = y
+      pYok = yOk
       pK = k
+      pG = g
       pU = u
       pV = v
       pT = t
       pUp = up
       pR = R
-      let stepM = Math.min(STEP_CELLS * ringCell[k], NEAR_GROWTH * t)
+      let stepM = Math.min(STEP_CELLS * gridCell[g], nearGrowth * t)
       // finer steps only while the ray sees ground with a finer photo (ground hidden behind a ridge needs none)
       if (seen && lastFine && stepM > DETAIL_STEP_M) stepM = Math.max(DETAIL_STEP_M, DETAIL_STEP_REL * t)
+      if (!seen && top < h) {
+        // hidden ground: if even the highest sample of this block (light.ts BLOCK) would stay under the rows filled
+        // so far all the way across it, walk to just before the ray leaves the block in one step. Ground at height
+        // H stands (H - eye) / t' - t' / 2R up (as a tangent) at distance t': highest at this end of the stretch, or
+        // for H under the eye at its own horizon sqrt(2 R (eye - H)) if that falls inside the stretch
+        const nb = blocks[g]
+        const bo = blockO[g]
+        const bi = Math.floor((u - bo) / BLOCK)
+        const bj = Math.floor((v - bo) / BLOCK)
+        if (bi >= 0 && bj >= 0 && bi < nb && bj < nb) {
+          const q = idx[g]
+          const du = q.au * sa + q.bu * ca
+          const dv = q.av * sa + q.bv * ca
+          const u0 = bo + BLOCK * bi
+          const v0 = bo + BLOCK * bj
+          const lim = m - 1
+          // metres along the ray to the block's edge (kept inside the grid's own samples)
+          const xu = du > 0 ? (Math.min(lim, u0 + BLOCK) - u) / du : du < 0 ? (Math.max(0, u0) - u) / du : Infinity
+          const xv = dv > 0 ? (Math.min(lim, v0 + BLOCK) - v) / dv : dv < 0 ? (Math.max(0, v0) - v) / dv : Infinity
+          const jump = Math.min(xu, xv) - 0.01 * gridCell[g]
+          if (jump > stepM) {
+            const dH = blockMax[g][bj * nb + bi] - s.eyeM
+            let tb = t
+            if (dH < 0) {
+              const own = Math.sqrt(-dH * twoR)
+              tb = own < t ? t : own > t + jump ? t + jump : own
+            }
+            if (dH - (tb * tb) / twoR <= tanCut[top] * tb) stepM = jump
+          }
+        }
+      }
       t += Math.max(0.02, stepM)
       // nothing farther can show: even the highest ground in the rings would stay below the rows filled so far
-      if ((steps & 7) === 0 && rows(Math.atan2(headroom - (t * t) / twoR, t) / D) >= top) {
-        k = nR
-        break
+      // (ground at that height stands highest in the view here, or at tStar while the ray has not reached it)
+      if ((steps & 7) === 0) {
+        const tb = t < tStar ? tStar : t
+        const lift = headroom - (tb * tb) / twoR
+        if (top < h ? lift <= tanCut[top] * tb : rows(Math.atan2(lift, tb) / D) >= top) {
+          k = nR
+          break
+        }
       }
     }
     // beyond the rings (or beyond what can show), up to the mask: the shade of the ground where the ray stopped
-    if (top > maskTop && pY === pY) {
-      const R = pR !== pR ? radiance(pK, pU, pV, pT, pUp, sa, ca) : pR
+    // (only a hair's gap once the relief is whole: file comment)
+    if (top > maskTop && !first && (fillAll || top - maskRow <= gapRows)) {
+      const R = pR !== pR ? radiance(pG, pU, pV, pT, pUp, sa, ca) : pR
       const alb = albedoAt(pK, pT * sa, pT * ca)
       for (let r = Math.min(top, h) - 1; r >= maskTop; r--) writePixel(px, 4 * (r * w + i), R, alb, pT, 0, 0, dTheta, null, 255)
+    } else if (eRow >= 0 && eRow < top) {
+      const ee = eT * sa
+      const en = eT * ca
+      writePixel(px, 4 * (eRow * w + i), radiance(eG, eU, eV, eT, eUp, sa, ca), albedoAt(eK, ee, en), eT, ee, en, dTheta, grain, eAlpha)
     }
   }
   return steps
