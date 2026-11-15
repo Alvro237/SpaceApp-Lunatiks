@@ -13,6 +13,10 @@ import type {
   CandidateSearchResponse,
   ConstraintsMeta,
   CraterList,
+  FeatureList,
+  SuitabilityCatalogue,
+  SuitabilityRequest,
+  SuitabilityResponse,
   DatasetsMeta,
   Health,
   PowerRequest,
@@ -120,6 +124,11 @@ export const api = {
     request<CandidateSearchResponse>('POST', '/api/v1/candidates/search', body),
   areaSearch: (body: AreaSearchRequest, signal?: AbortSignal) =>
     request<AreaSearchResponse>('POST', '/api/v1/areas/search', body, signal),
+  suitabilitySearch: (body: SuitabilityRequest, signal?: AbortSignal) =>
+    request<SuitabilityResponse>('POST', '/api/v1/suitability/search', body, signal),
+  suitabilityFeatures: (text: string, limit: number, signal?: AbortSignal) =>
+    request<FeatureList>('GET', `/api/v1/suitability/features?${q({ q: text, limit })}`, undefined, signal),
+  suitabilityCriteria: (signal?: AbortSignal) => request<SuitabilityCatalogue>('GET', '/api/v1/suitability/criteria', undefined, signal),
   power: (body: PowerRequest) => request<PowerResponse>('POST', '/api/v1/power', body),
   radiation: (body: RadiationRequest, signal?: AbortSignal) => request<RadiationResponse>('POST', '/api/v1/radiation', body, signal),
   craters: (bbox: [number, number, number, number], minDiamKm: number, signal?: AbortSignal) =>

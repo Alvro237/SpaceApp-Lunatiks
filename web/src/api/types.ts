@@ -368,3 +368,155 @@ export interface AreaSearchResponse {
   seconds: number
   assumptions: string[]
 }
+
+// ---------------------------------------------------------------- POST /api/v1/suitability/search (mission planner Stage B)
+// Mirrors api/app/schemas/suitability.py (mission-planner-ui-spec.md section 6): every criterion is a hard limit,
+// the score is per category, weighted by the planner's priority order (rank order centroid).
+
+export type SuitabilityCategory = 'search' | 'power' | 'earth' | 'topography' | 'landing' | 'science' | 'radiation' | 'schedule'
+
+export interface CriterionInput {
+  id: string
+  limit?: number
+  min?: number
+  max?: number
+  choice?: string
+  params?: Record<string, number | string>
+}
+
+export interface SuitabilityRequest {
+  region: { center_lat: number; center_lon: number; radius_km: number }
+  start: string
+  duration_h: number
+  categories: SuitabilityCategory[]
+  criteria: CriterionInput[]
+  priority?: string[]
+  cell_km: number
+  landing_radius_km?: number
+  robust_delay_h?: number
+  step_min?: number
+  mast_m: number
+  panel: 'tracking' | 'vertical' | 'horizontal'
+  comms_min_fraction: number
+  horizon_az_step_deg: number
+  horizon_radius_km: number
+  max_window_samples: number
+  unknown_passes: boolean
+  use_bounds?: boolean
+  top_k: number
+  min_separation_km: number
+}
+
+export interface SuitabilityFunnelStep {
+  id: string
+  stage: 'geometry' | 'bound' | 'regional' | 'medium' | 'fine' | 'landing_radius' | 'window'
+  cells_in: number
+  cells_out: number
+  cells_unknown: number
+  seconds: number
+}
+
+export interface SuitabilityLayer {
+  category: SuitabilityCategory
+  label: string
+  measure: string
+  weight: number
+  /** uint8 per cell: floor(utility x 250 + 0.5), 255 = no data or not scored */
+  utility_b64: string
+}
+
+export interface SiteCategory {
+  category: SuitabilityCategory
+  label: string
+  utility: number | null
+  weight: number
+  contribution: number | null
+}
+
+export interface SiteCriterion {
+  id: string
+  label: string
+  unit: string | null
+  value: number | null
+  passes: boolean | null
+  margin: number | null
+}
+
+export interface TopSite {
+  rank: number
+  lat: number
+  lon: number
+  near: { name: string; distance_km: number; bearing_deg: number } | null
+  score: number
+  area_score: number
+  coverage: number
+  clearance_km: number
+  window_exact: boolean | null
+  horizon_kind: 'terrain' | null
+  categories: SiteCategory[]
+  criteria: SiteCriterion[]
+  pros: string[]
+  cons: string[]
+  unknown: string[]
+}
+
+export interface SuitabilityResponse {
+  grid: { projection: string; x_left_m: number; y_top_m: number; cell_m: number; nx: number; ny: number }
+  /** 0 outside, 1 fails static/landing radius, 2 fails window (sampled), 3 viable, 4 unknown, 5 ruled out by the ephemeris bound */
+  codes_b64: string
+  score_b64: string
+  limiting_b64: string
+  layers: SuitabilityLayer[]
+  weights: Record<string, number>
+  counts: Partial<Record<'outside' | 'failed_static' | 'failed_window' | 'viable' | 'unknown' | 'failed_bound', number>>
+  funnel: SuitabilityFunnelStep[]
+  bound: {
+    tile_km: number[]
+    tiles_evaluated: number
+    cells_proven_failed: number
+    by_criterion: Record<string, number>
+    h_min_m: number
+    elev_margin_m: number
+    margin_deg: number
+  } | null
+  window: { samples: number; finest_tile_km: number; coarsest_tile_km: number; horizon_az_step_deg: number; horizon_radius_km: number } | null
+  sites: TopSite[]
+  sites_dropped: number
+  seconds: number
+  assumptions: string[]
+}
+
+/** GET /api/v1/suitability/features: IAU named features south of 55 S whose name contains the query. */
+export interface FeatureMatch {
+  name: string
+  lat: number
+  lon: number
+  diameter_km: number | null
+  type: string
+}
+export interface FeatureList {
+  features: FeatureMatch[]
+}
+
+/** GET /api/v1/suitability/criteria (the UI keeps its own inputs as data; typed loosely). */
+export interface SuitabilityCatalogue {
+  categories: { id: SuitabilityCategory; title: string; score: string | null }[]
+  fixed_inputs: { id: string; label: string; tip: string }[]
+  request_parameters: { id: string; label: string; tip: string }[]
+  criteria: {
+    id: string
+    category: SuitabilityCategory
+    label: string
+    unit: string | null
+    kind: 'value' | 'range' | 'choice' | 'flag'
+    comparator: '>=' | '<=' | null
+    options: string[]
+    stage: string
+    params: { key: string; label: string; unit: string | null; kind: 'number' | 'text'; min: number | null; max: number | null; required: boolean }[]
+    coverage: string
+    source: string
+    tip: string
+    available: boolean
+    unavailable_reason: string | null
+  }[]
+}
