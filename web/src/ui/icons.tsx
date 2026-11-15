@@ -165,6 +165,13 @@ export const IconInfo = (p: P) => (
     <circle cx="12" cy="7.8" r="0.6" fill="currentColor" />
   </Svg>
 )
+export const IconHelp = (p: P) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M9.6 9.4a2.5 2.5 0 0 1 4.8 1c0 1.7-2.4 2.2-2.4 3.6" />
+    <circle cx="12" cy="17" r="0.6" fill="currentColor" />
+  </Svg>
+)
 export const IconCompare = (p: P) => (
   <Svg {...p}>
     <rect x="3" y="4" width="7.5" height="16" rx="1.6" />
