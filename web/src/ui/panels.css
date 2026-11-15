@@ -455,6 +455,15 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
   color: #eceae4;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 8px rgba(0, 0, 0, 0.7);
 }
+/* The horizon view's ground can be sunlit regolith, nearly white: the light text needs a dark backdrop there.
+   Fixed dark (not --glass) because the text colour above is fixed light in both themes. */
+.navigator.is-horizon .float-bottom > .timeline.mini {
+  background: rgba(11, 12, 14, 0.78);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
 .timeline.mini .tl-row { display: flex; align-items: center; gap: 10px; }
 .timeline.mini .tl-clock { font-family: var(--mono); font-size: 0.78rem; font-weight: 600; white-space: nowrap; min-width: 8.6em; }
 .timeline.mini .time-slider { flex: 1; margin: 0; min-width: 0; accent-color: #eceae4; }
