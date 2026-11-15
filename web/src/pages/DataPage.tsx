@@ -307,7 +307,8 @@ export function DataPage() {
       <h2>Use of AI</h2>
       <p>
         Claude (Anthropic) assisted the team with research, code (API, data pipeline and this interface), tests and documentation, under the team's direction
-        and review. No AI-generated images, video or audio are used. The relief, shadows and colours on the map are rendered from NASA data.
+        and review. The app uses no AI-generated images, video or audio: the relief, shadows and colours on the map are rendered from NASA data. The
+        30-second demo video contains AI-generated footage, marked as such on screen.
       </p>
     </article>
   )
