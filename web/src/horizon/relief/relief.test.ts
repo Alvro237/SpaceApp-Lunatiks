@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { R_M } from '../../terrain/tileset'
-import { GroundStack, discFractionAbove, ringNormals, ringSunlight, sampleEnu } from './light'
+import { GroundStack, discFractionAbove, earthPhaseAngle, earthshineRatio, ringNormals, ringSunlight, sampleEnu } from './light'
 import { renderRelief, tone } from './render'
 import { RING_COUNT, RING_N, RING_RATIO, enuToPlane, planeFrame, planeToEnu, ringSpecs } from './rings'
 
@@ -158,5 +158,50 @@ describe('rendering', () => {
     const maskRow = Math.ceil(H / 2 - 2 / 0.1 - 0.5)
     for (let j = 0; j < maskRow; j++) expect(img.data[4 * (j * W + W / 2) + 3]).toBe(0)
     expect(img.data[4 * (maskRow * W + W / 2) + 3]).toBe(255)
+  })
+})
+
+describe('earthshine', () => {
+  it('is A (2/3) (r/d)^2 of sunlight at full Earth, 1/pi of that at quarter, nothing at new Earth', () => {
+    const full = 0.29 * (2 / 3) * (6371 / 384_400) ** 2
+    expect(earthshineRatio(0, 384_400)).toBeCloseTo(full, 12)
+    expect(full).toBeCloseTo(5.31e-5, 7)
+    expect(earthshineRatio(90, 384_400)).toBeCloseTo(full / Math.PI, 12)
+    expect(earthshineRatio(180, 384_400)).toBeCloseTo(0, 12)
+  })
+
+  it('takes the phase angle from the Sun and the Earth in the sky: opposite means full Earth', () => {
+    expect(earthPhaseAngle({ az: 0, el: -30 }, { az: 180, el: 30 })).toBeCloseTo(0, 9)
+    expect(earthPhaseAngle({ az: 90, el: 0 }, { az: 0, el: 0 })).toBeCloseTo(90, 9)
+    expect(earthPhaseAngle({ az: 45, el: 10 }, { az: 45, el: 10 })).toBeCloseTo(180, 9)
+  })
+
+  it('shows the relief at night: earthlit ground with the exposure raised reads like day, unlit ground stays dark', () => {
+    const { stack, normals } = synthetic(10, 20, 60, () => 0)
+    const W = 16
+    const H = 200
+    const c = { yaw: 0, pitch: -10, cx: W / 2, cy: H / 2, degPerPx: 0.1 }
+    const ratio = earthshineRatio(0, 384_400)
+    const draw = (earthlight: Float32Array[] | null) => {
+      const img = { width: W, height: H, data: new Uint8ClampedArray(W * H * 4), colorSpace: 'srgb' } as ImageData
+      renderRelief(img, 1, c, () => -5, {
+        stack,
+        normals,
+        sunlight: normals.map(() => new Float32Array(RING_N * RING_N)),
+        eyeM: 1.7,
+        sun: [0, 0, -1],
+        earthlight,
+        earth: [0, -Math.cos(30 * D), Math.sin(30 * D)],
+        earthRatio: ratio,
+        exposure: 0.6 / ratio,
+        grain: null,
+      })
+      return img.data[4 * ((H - 1) * W + W / 2) + 1]
+    }
+    // flat ground, Earth 30° up behind the eye: mu0 = sin 30° = 0.5
+    const lit = draw(normals.map(() => new Float32Array(RING_N * RING_N).fill(0.5)))
+    const dark = draw(null)
+    expect(dark).toBe(Math.round(200 * tone(0)))
+    expect(lit).toBeGreaterThan(200 * tone(0.25))
   })
 })

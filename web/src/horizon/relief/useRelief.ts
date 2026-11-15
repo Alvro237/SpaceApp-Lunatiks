@@ -27,6 +27,8 @@ export interface Relief {
   reachKm: number | null
   /** Duration of the last lighting pass in the slowest worker, ms. */
   lightMs: number | null
+  /** At night: lit by earthshine (exposure raised) or dark (neither the Sun nor the Earth up). */
+  night?: 'earthshine' | 'dark' | null
 }
 
 const D = Math.PI / 180
@@ -34,7 +36,22 @@ const D = Math.PI / 180
 /** Last lighting pass: workers, slowest worker ms and wall-clock ms (for the console and the tests). */
 export const reliefLightStats = { workers: 0, ms: 0, wallMs: 0 }
 
-export function useRelief(lat: number | undefined, lon: number | undefined, mastM: number, sun: SunDir | null): Relief {
+/**
+ * The lights of the instant: the Sun, and at night the Earth (earthshine) with its irradiance as a fraction of
+ * sunlight (light.ts earthshineRatio). `sunVisible`: any part of the Sun's disc above the observer's skyline.
+ */
+export interface SceneLights {
+  sun: SunDir
+  sunVisible: boolean
+  earth: SunDir | null
+  earthRatio: number
+}
+
+/** Exposure at night relative to day: earthlit ground at this fraction of the brightness of sunlit ground. */
+export const NIGHT_EXPOSURE = 0.6
+
+export function useRelief(lat: number | undefined, lon: number | undefined, mastM: number, lights: SceneLights | null): Relief {
+  const sun = lights?.sun ?? null
   const specs = useMemo(() => (lat === undefined || lon === undefined ? null : ringSpecs(lat, lon)), [lat, lon])
   const key = specs?.map((s) => s.url).join('|') ?? ''
   // rings as they arrive (progressive: the view draws the inner ones while the outer ones load)
@@ -78,10 +95,11 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
     normals: Float32Array[]
     sunlight: Float32Array[]
     ms: number
-    sun: SunDir | null
+    earthlight: Float32Array[] | null
+    lights: SceneLights | null
   } | null>(null)
   const kick = useRef<(() => void) | null>(null)
-  const job = useRef<{ busy: boolean; sent: SunDir | null; want: SunDir | null; id: number }>({ busy: false, sent: null, want: null, id: 0 })
+  const job = useRef<{ busy: boolean; sent: SceneLights | null; want: SceneLights | null; id: number }>({ busy: false, sent: null, want: null, id: 0 })
 
   useEffect(() => {
     if (!stack || typeof Worker === 'undefined') return
@@ -90,7 +108,8 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
     const pool = Array.from({ length: count }, () => new Worker(new URL('./light.worker.ts', import.meta.url), { type: 'module' }))
     job.current = { busy: false, sent: null, want: job.current.want, id: 0 }
     let normals: Float32Array[] | null = null
-    let pending: { sunlight: Float32Array[]; ms: number; sun: SunDir | null } | null = null
+    let pending: { sunlight: Float32Array[]; earthlight: Float32Array[] | null; ms: number; lights: SceneLights | null } | null = null
+    let earthParts: (Float32Array[] | null)[] = []
     let parts: Float32Array[][] = []
     let worst = 0
     let started = 0
@@ -107,7 +126,11 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
       parts = []
       worst = 0
       started = performance.now()
-      pool.forEach((w, i) => w.postMessage({ type: 'sun', id: j.id, sun: j.want!, rowOffset: i, rowStride: count } satisfies LightRequest))
+      const want = j.want
+      earthParts = []
+      // earthshine only matters while the Sun is hidden from the observer
+      const earth = !want.sunVisible && want.earth ? want.earth : null
+      pool.forEach((w, i) => w.postMessage({ type: 'sun', id: j.id, sun: want.sun, earth, rowOffset: i, rowStride: count } satisfies LightRequest))
     }
     pool.forEach((w, wi) => {
       w.onmessage = (e: MessageEvent<LightResponse>) => {
@@ -121,6 +144,7 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
         }
         if (m.id !== job.current.id) return
         parts.push(m.sunlight)
+        earthParts.push(m.earthlight)
         worst = Math.max(worst, m.ms)
         if (parts.length < count) return
         // rows not computed by a worker are 0 in its part: the sum is the whole pass
@@ -132,7 +156,17 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
             for (let i = 0; i < a.length; i++) a[i] += b[i]
           }
         Object.assign(reliefLightStats, { workers: count, ms: worst, wallMs: performance.now() - started })
-        pending = { sunlight, ms: worst, sun: job.current.sent }
+        let earthlight: Float32Array[] | null = null
+        if (earthParts.every((e) => e)) {
+          earthlight = earthParts[0]!
+          for (let p = 1; p < earthParts.length; p++)
+            for (let k = 0; k < earthlight.length; k++) {
+              const a = earthlight[k]
+              const b = earthParts[p]![k]
+              for (let i = 0; i < a.length; i++) a[i] += b[i]
+            }
+        }
+        pending = { sunlight, earthlight, ms: worst, lights: job.current.sent }
         publish()
         job.current.busy = false
         if (moved(job.current.sent, job.current.want)) send()
@@ -150,11 +184,11 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
   }, [stack, key])
 
   useEffect(() => {
-    if (!sun) return
+    if (!lights) return
     const j = job.current
-    j.want = sun
-    if (moved(j.sent, sun)) kick.current?.()
-  }, [sun])
+    j.want = lights
+    if (moved(j.sent, lights)) kick.current?.()
+  }, [lights])
 
   return useMemo<Relief>(() => {
     if (!specs || specs.length === 0) return { status: 'unavailable', scene: null, cellM: null, reachKm: null, lightMs: null }
@@ -165,24 +199,51 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
       return { status: failed ? 'failed' : 'loading', scene: null, cellM, reachKm: null, lightMs: null }
     }
     const reachKm = (live.stack.rings[live.stack.rings.length - 1].cellM * 256) / 1000
+    const lit0 = live.lights ?? lights
+    const night: Relief['night'] = !lit0 || lit0.sunVisible ? null : live.earthlight && lit0.earthRatio > 0 ? 'earthshine' : 'dark'
     const ground = live.stack.heightAt(0, (512 - 1) / 2, (512 - 1) / 2)
-    const s = live.sun ?? sun
+    const lit = live.lights ?? lights
+    const s = lit?.sun ?? sun
     const dir: [number, number, number] = s
       ? [Math.sin(s.az * D) * Math.cos(s.el * D), Math.cos(s.az * D) * Math.cos(s.el * D), Math.sin(s.el * D)]
       : [0, 0, 1]
     return {
       status: 'ready',
-      scene: { stack: live.stack, normals: live.normals, sunlight: live.sunlight, eyeM: ground + Math.max(mastM, EYE_MIN_M), sun: dir, grain: groundTexture() },
+      scene: {
+        stack: live.stack,
+        normals: live.normals,
+        sunlight: live.sunlight,
+        eyeM: ground + Math.max(mastM, EYE_MIN_M),
+        sun: dir,
+        earthlight: live.earthlight,
+        earth: lit?.earth ? unit(lit.earth) : undefined,
+        earthRatio: lit?.earthRatio ?? 0,
+        exposure: night === 'earthshine' && lit ? NIGHT_EXPOSURE / lit.earthRatio : 1,
+        grain: groundTexture(),
+      },
+      night,
       cellM,
       reachKm,
       lightMs: live.ms,
     }
-  }, [specs, key, shown, loaded, mastM, sun])
+  }, [specs, key, shown, loaded, mastM, sun, lights])
 }
 
-function moved(a: SunDir | null, b: SunDir | null): boolean {
-  if (!b) return false
-  if (!a) return true
+const unit = (b: SunDir): [number, number, number] => [
+  Math.sin(b.az * D) * Math.cos(b.el * D),
+  Math.cos(b.az * D) * Math.cos(b.el * D),
+  Math.sin(b.el * D),
+]
+
+function movedDir(a: SunDir | null, b: SunDir | null): boolean {
+  if (!a || !b) return a !== b
   const daz = Math.abs(((b.az - a.az + 540) % 360) - 180)
   return Math.abs(b.el - a.el) > SUN_EPS.el || daz > SUN_EPS.az
+}
+
+function moved(a: SceneLights | null, b: SceneLights | null): boolean {
+  if (!b) return false
+  if (!a) return true
+  if (a.sunVisible !== b.sunVisible) return true
+  return movedDir(a.sun, b.sun) || (!b.sunVisible && movedDir(a.earth, b.earth))
 }

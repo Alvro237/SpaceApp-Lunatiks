@@ -245,3 +245,34 @@ export function ringSunlight(stack: GroundStack, normals: Float32Array[], sun: S
     return out
   })
 }
+
+/** Earth's Bond albedo (Stephens et al. 2015, CERES: 0.29) and mean radius, km. */
+export const EARTH_BOND_ALBEDO = 0.29
+export const EARTH_RADIUS_KM = 6371
+
+/**
+ * Earthshine on the Moon as a fraction of the direct sunlight there: the Earth as a Lambert sphere of Bond albedo A
+ * and radius r at distance d, seen at phase angle alpha (Sun-Earth-observer), gives
+ *   E_earth / E_sun = A (2/3) (r / d)^2 [sin(alpha) + (pi - alpha) cos(alpha)] / pi
+ * (Lambert-sphere phase law; Russell 1916, ApJ 43, 173). At full Earth (alpha = 0) and 384 400 km this is
+ * 5.3e-5, about 1/19 000 of sunlight. The real Earth is not Lambertian (clouds, oceans): an estimate within tens of
+ * percent, used only for the brightness of the night ground in the horizon view.
+ */
+export function earthshineRatio(phaseAngleDeg: number, distKm: number): number {
+  const a = (Math.min(180, Math.max(0, phaseAngleDeg)) * Math.PI) / 180
+  const q = EARTH_RADIUS_KM / distKm
+  return EARTH_BOND_ALBEDO * (2 / 3) * q * q * ((Math.sin(a) + (Math.PI - a) * Math.cos(a)) / Math.PI)
+}
+
+/**
+ * Phase angle of the Earth seen from the Moon (Sun-Earth-observer), degrees, from the directions of the Sun and the
+ * Earth in the observer's sky: the Sun being at infinity, it is 180° minus their angular separation.
+ */
+export function earthPhaseAngle(sun: { az: number; el: number }, earth: { az: number; el: number }): number {
+  const D = Math.PI / 180
+  const u = (b: { az: number; el: number }) => [Math.cos(b.el * D) * Math.sin(b.az * D), Math.cos(b.el * D) * Math.cos(b.az * D), Math.sin(b.el * D)]
+  const s = u(sun)
+  const e = u(earth)
+  const c = Math.max(-1, Math.min(1, s[0] * e[0] + s[1] * e[1] + s[2] * e[2]))
+  return 180 - Math.acos(c) / D
+}

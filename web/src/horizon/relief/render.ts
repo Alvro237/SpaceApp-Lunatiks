@@ -16,7 +16,9 @@
  * cosine of the incidence times the visible share of the solar disc (light.ts) and mu the cosine of the emission
  * angle towards the eye. The limb-darkening weight L falls with the phase angle g (L = 1 - g / 150°, a linear
  * stand-in for the tabulated values). A fixed exposure maps R to the screen. Shadowed ground keeps a floor of
- * AMBIENT so that its shape still reads: the real shadows are darker than drawn. Below the DEM's cell, a fine
+ * AMBIENT so that its shape still reads: the real shadows are darker than drawn. At night the ground facing the
+ * Earth is lit by earthshine (the Earth as a second light with its own disc and shadows, light.ts
+ * earthshineRatio), with the exposure raised as a camera would (the view says so). Below the DEM's cell, a fine
  * regolith grain from the LROC WAC patch (groundTexture.ts) modulates the albedo near the feet only.
  */
 import { R_M } from '../../terrain/tileset'
@@ -33,6 +35,15 @@ export interface ReliefScene {
   eyeM: number
   /** Sun direction in the observer's frame (east, north, up), for the emission and phase angles. */
   sun: [number, number, number]
+  /**
+   * Earthshine: direct-light factor of the Earth's disc per ring (as `sunlight`; null by day or with the Earth down),
+   * the Earth's direction, and its irradiance as a fraction of sunlight (light.ts earthshineRatio).
+   */
+  earthlight?: Float32Array[] | null
+  earth?: [number, number, number]
+  earthRatio?: number
+  /** Multiplies the radiance before the tone curve: 1 by day, raised at night so the earthlit ground reads. */
+  exposure?: number
   grain: GroundTexture | null
 }
 
@@ -107,21 +118,35 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
   const twoR = 2 * R_M
   const headroom = stack.maxU - s.eyeM
   let steps = 0
-  /** Radiance of the ground at a step (k, u, v in ring k), t metres out, `up` metres above the eye. */
+  const E = s.earth ?? [0, 0, 1]
+  const earthRatio = s.earthRatio ?? 0
+  const exposure = s.exposure ?? 1
+  /** Lunar-Lambert radiance for one light: direct factor mu0, light direction L, unit vector towards the eye. */
+  const lunarLambert = (mu0: number, mu: number, Lx: number, Ly: number, Lz: number, vx: number, vy: number, vz: number): number => {
+    const cosG = Lx * vx + Ly * vy + Lz * vz
+    const L = Math.max(0, 1 - Math.acos(Math.max(-1, Math.min(1, cosG))) / (150 * D))
+    return (1 - L) * mu0 + (2 * L * mu0) / (mu0 + mu + 1e-6)
+  }
+  /**
+   * Radiance of the ground at a step (k, u, v in ring k), t metres out, `up` metres above the eye, in units of a
+   * sunlit surface, times the exposure: sunlight plus earthshine scaled by its share of sunlight.
+   */
   const radiance = (k: number, u: number, v: number, t: number, up: number, sa: number, ca: number): number => {
     const mu0 = s.sunlight ? bilinear(s.sunlight[k], u, v) : 0
-    if (!(mu0 > 0)) return 0
+    const me = s.earthlight && earthRatio > 0 ? bilinear(s.earthlight[k], u, v) : 0
+    if (!(mu0 > 0) && !(me > 0)) return 0
     const o = 3 * (Math.min(NM1, Math.round(v)) * RING_N + Math.min(NM1, Math.round(u)))
     const N = s.normals[k]
     // towards the eye
-    const vx = -t * sa
-    const vy = -t * ca
-    const vz = -up
-    const il = 1 / Math.sqrt(vx * vx + vy * vy + vz * vz)
-    const mu = Math.max(0, (N[o] * vx + N[o + 1] * vy + N[o + 2] * vz) * il)
-    const cosG = (S[0] * vx + S[1] * vy + S[2] * vz) * il
-    const L = Math.max(0, 1 - Math.acos(Math.max(-1, Math.min(1, cosG))) / (150 * D))
-    return (1 - L) * mu0 + (2 * L * mu0) / (mu0 + mu + 1e-6)
+    const il = 1 / Math.sqrt(t * t + up * up)
+    const vx = -t * sa * il
+    const vy = -t * ca * il
+    const vz = -up * il
+    const mu = Math.max(0, N[o] * vx + N[o + 1] * vy + N[o + 2] * vz)
+    let R = 0
+    if (mu0 > 0) R += lunarLambert(mu0, mu, S[0], S[1], S[2], vx, vy, vz)
+    if (me > 0) R += earthRatio * lunarLambert(me, mu, E[0], E[1], E[2], vx, vy, vz)
+    return R * exposure
   }
   for (let i = 0; i < w; i++) {
     const az = c.yaw + ((i + 0.5) * scale - c.cx) * c.degPerPx
