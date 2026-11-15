@@ -194,10 +194,10 @@ export function Timeline() {
       )}
       {data && (
         <>
-          {!comparing && <PlaceStrip id={id} data={data} link={link.data ?? null} showEarth={showEarthRow || !link.data} left={LEFT} x={x} ticks={ticks} durationH={durationH} startMs={startMs} endMs={endMs} tMs={tMs} onSeek={seek} />}
+          {!comparing && <PlaceStrip id={id} data={data} link={link.data ?? null} linkReady={!link.problem} showEarth={showEarthRow || !link.data} left={LEFT} x={x} ticks={ticks} durationH={durationH} startMs={startMs} endMs={endMs} tMs={tMs} onSeek={seek} />}
           {battery && <BatteryChart r={battery} startMs={startMs} endMs={endMs} tMs={tMs} x={x} left={LEFT} onSeek={seek} />}
           {inside && <InsideChart r={inside} startMs={startMs} endMs={endMs} tMs={tMs} x={x} left={LEFT} onSeek={seek} />}
-          <TimelineText data={data} battery={battery} inside={inside} tMs={tMs} link={link.data ?? null} />
+          <TimelineText data={data} battery={battery} inside={inside} tMs={tMs} link={link.data && !link.problem ? link.data : null} />
         </>
       )}
     </section>
@@ -215,6 +215,8 @@ interface PlaceStripProps {
   id: string
   data: TimelineData
   link: LinkResponse | null
+  /** False while the budget is incomplete: the answer then is only the geometry and the Link row stays empty. */
+  linkReady: boolean
   showEarth: boolean
   left: number
   x: (t: number) => number
@@ -226,10 +228,10 @@ interface PlaceStripProps {
   onSeek: (e: MouseEvent<SVGSVGElement>) => void
 }
 
-function PlaceStrip({ id, data, link, showEarth, left, x, ticks, durationH, startMs, endMs, tMs, onSeek }: PlaceStripProps) {
+function PlaceStrip({ id, data, link, linkReady, showEarth, left, x, ticks, durationH, startMs, endMs, tMs, onSeek }: PlaceStripProps) {
   const level2 = !!link?.budget
-  const linkRanges = link ? toRanges(level2 ? link.budget!.link_ranges : link.contact_ranges) : []
-  const contactRanges = link && level2 ? toRanges(link.contact_ranges) : []
+  // the Link row shows real link only: where the budget closes (or, at the geometry level, where there is contact)
+  const linkRanges = link && linkReady ? toRanges(level2 ? link.budget!.link_ranges : link.contact_ranges) : []
   const rows: { key: 'sun' | 'earth' | 'link'; label: string }[] = [
     { key: 'sun', label: 'Sunlit' },
     ...(showEarth ? [{ key: 'earth' as const, label: link ? 'Earth up' : 'Earth' }] : []),
@@ -240,7 +242,7 @@ function PlaceStrip({ id, data, link, showEarth, left, x, ticks, durationH, star
   const height = tickY + 20
   const summary =
     `Sunlit ${data.sunlightPct.toFixed(1)}% and Earth in view ${data.commsPct.toFixed(1)}% of the window, longest dark ${data.longestDarkH.toFixed(1)} h, longest without Earth ${data.longestBlackoutH.toFixed(1)} h.` +
-    (link ? ` Link ${((level2 ? link.budget!.link_window_fraction : link.contact_window_fraction) * 100).toFixed(1)}% of the window, longest gap ${(level2 ? link.budget!.longest_link_blackout_h : link.longest_blackout_h).toFixed(1)} h.` : '')
+    (link && linkReady ? ` Link ${((level2 ? link.budget!.link_window_fraction : link.contact_window_fraction) * 100).toFixed(1)}% of the window, longest gap ${(level2 ? link.budget!.longest_link_blackout_h : link.longest_blackout_h).toFixed(1)} h.` : '')
 
   return (
     <svg className="strip" viewBox={`${-left} 0 ${W + left + 6} ${height}`} role="img" aria-label={summary} onClick={onSeek}>
@@ -248,9 +250,6 @@ function PlaceStrip({ id, data, link, showEarth, left, x, ticks, durationH, star
         <pattern id={`${id}-hatch`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
           <rect width="6" height="6" className="hatch-bg" />
           <line x1="0" y1="0" x2="0" y2="6" className="hatch-line" />
-        </pattern>
-        <pattern id={`${id}-dots`} width="5" height="5" patternUnits="userSpaceOnUse">
-          <circle cx="2.5" cy="2.5" r="1.2" className="dot-link" />
         </pattern>
       </defs>
       {rows.map((r, i) => {
@@ -262,8 +261,6 @@ function PlaceStrip({ id, data, link, showEarth, left, x, ticks, durationH, star
               {r.label}
             </text>
             <rect x={0} y={y} width={W} height={ROW - 2} className="row-bg" />
-            {r.key === 'link' &&
-              contactRanges.map(([a, b], k) => <rect key={`g${k}`} x={x(a)} y={y} width={Math.max(1, x(b) - x(a))} height={ROW - 2} fill={`url(#${id}-dots)`} className="range-link-geo" />)}
             {bars.map(([a, b], k) => (
               <rect
                 key={k}

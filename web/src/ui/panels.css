@@ -1295,8 +1295,6 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
 
 /* ---- Radio link (AERO-2): panel, Link row of the timeline, Filters button ---- */
 .range-link { fill: var(--pass); }
-.range-link-geo { stroke: var(--pass); stroke-width: 1; }
-.dot-link { fill: var(--pass); }
 .link-body { display: grid; gap: 12px; min-width: 0; }
 .link-level { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .link-level .seg { flex: 1; min-width: 180px; }

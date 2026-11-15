@@ -138,9 +138,6 @@ function Result({ r, busy }: { r: LinkResponse; busy: boolean }) {
           <Stat icon={<IconAntenna size={18} />} tone="neutral" label="Antennas" value={pct(s.antennaFraction)} unit="%" sub="see the Moon" />
         )}
       </ul>
-      {s.level2 && (
-        <p className="muted small">Timeline: solid bars are link, dots are contact without enough margin.</p>
-      )}
       {r.skipped_stations.length > 0 && (
         <p className="muted small">
           {r.skipped_stations.length} antenna{r.skipped_stations.length === 1 ? '' : 's'} left out: no transmit limit published.
