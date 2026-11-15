@@ -1,14 +1,26 @@
 /// <reference types="vitest/config" />
 import react from '@vitejs/plugin-react'
+import { resolve } from 'node:path'
 import { defineConfig } from 'vite'
 
 // GitHub Pages serves the site under /<repo>/ (DP-01). The router is a HashRouter, so a reload on any
 // route works without a 404.html copy.
 const API = process.env.API_PROXY ?? 'http://127.0.0.1:8000'
 
+// Vercel (`vercel build` sets VERCEL=1) serves the site at the domain root: the landing page at / and the navigator
+// at /app (routes in web/vercel.json). BASE_PATH overrides the base for any other host.
+const onVercel = Boolean(process.env.VERCEL)
+const base = process.env.BASE_PATH ?? (onVercel ? '/' : '/SpaceApp-Lunatiks/')
+// Where the landing page's "Open the navigator" buttons go. Vite exposes VITE_* variables of process.env to the code.
+process.env.VITE_APP_URL ??= onVercel ? '/app' : base
+
 export default defineConfig({
-  base: '/SpaceApp-Lunatiks/',
+  base,
   plugins: [react()],
+  build: {
+    // two pages: the navigator (index.html) and the landing page (landing.html)
+    rollupOptions: { input: { main: resolve(import.meta.dirname, 'index.html'), landing: resolve(import.meta.dirname, 'landing.html') } },
+  },
   // ES module workers, so the decode worker can load geotiff.js on demand (live terrain levels)
   worker: { format: 'es' },
   server: {
