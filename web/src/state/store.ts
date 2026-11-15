@@ -123,7 +123,7 @@ export function defaultScene(now = nowHour()): Scene {
     mastM: 2,
     panel: 'vertical',
     commsMinFraction: 0.5,
-    layer: 'none',
+    layer: 'photo',
     lighting: 'sun',
     craters: false,
     compare: [],

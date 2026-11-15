@@ -3,13 +3,12 @@
  * chosen instant, so the day and night sides are the real ones. Output is sRGB as written (no tone mapping).
  *
  * Detail tiles (detail/grid.ts) read live from Moon Trek replace the shipped 4 ppd heights in the shading wherever
- * one is loaded (the LOLA 118 m DEM). In photo mode the LROC WAC mosaic is loaded as well and gives the ground its
- * brightness (albedo), while the shape and the light still come from the LOLA heights and the Sun at the chosen
- * instant: the photograph draped over the 3D relief. The WAC mosaic keeps some shading of its own (it was
- * photographed at moderate Sun angles), so its slopes read a little stronger than in relief mode. The relief of the
- * globe's mesh itself stays the shipped grid, interpolated bilinearly, its exaggeration easing from x4 (whole Moon) to
- * x1 (closest zoom) so that the fine shading does not slide over steps of the coarse mesh; the patches (below) lift
- * the ground by the detail heights in both modes.
+ * one is loaded (the LOLA 118 m DEM). In photo mode (the default) the LROC WAC mosaic is loaded as well and draped
+ * over the 3D relief: the photograph keeps its own brightness on the day side, and the LOLA slopes are shaded by the
+ * Sun at the chosen instant relative to flat ground, so a tilted view shows the shape of the ground without the whole
+ * scene going dark when the Sun is low. The night side is the chosen instant's. The globe's mesh is the shipped
+ * grid, interpolated bilinearly, its exaggeration easing from x4 (whole Moon) to x2 (closest zoom, orbit.ts); the
+ * patches (below) lift the ground by the detail heights in both modes.
  */
 import { MAX_LEVEL } from './detail/grid'
 
@@ -105,7 +104,6 @@ uniform sampler2D uPhotoIndex;         // the same for the photo tiles
 uniform float uMaxLevel;    // finest level the view uses; -1 = no detail
 uniform float uPhotoMode;   // 1 = LROC WAC photo draped over the LOLA relief, 0 = LOLA relief alone
 uniform float uDetailShade; // slope exaggeration of the shading from detail heights
-uniform float uLighting;    // 1: the Sun at the chosen instant (day and night); 0: neutral relief, lit evenly from the north-west
 uniform vec4 uHole;         // drawn by a finer mesh instead (patch.ts): centre longitude, half-width in longitude,
                             // south and north latitude, degrees; half-width 0 = no hole
 in vec3 vMe;
@@ -117,6 +115,8 @@ const float R = 1737400.0;
 // unweighted by area, measured 2026-11-15): x2 brings it to about the plain regolith grey, as on the polar map.
 const float PHOTO_GAIN = 2.0;
 const vec3 REGOLITH = vec3(0.72, 0.71, 0.68);
+// share of the LOLA slope shading laid over the photo (the photo already holds some shading of its own)
+const float PHOTO_RELIEF = 0.7;
 
 ${H_AT}
 
@@ -136,11 +136,15 @@ void main() {
   int slot = uMaxLevel >= 0.0 ? findTile(uIndex, degrees(lon), degrees(lat), cell, tileDeg) : -1;
   // ground brightness: the WAC photograph where a photo tile is loaded (photo mode), else plain regolith grey
   vec3 albedo = REGOLITH;
+  bool photo = false;
   if (uPhotoMode > 0.5 && uMaxLevel >= 0.0) {
     vec2 pCell;
     float pDeg;
     int pSlot = findTile(uPhotoIndex, degrees(lon), degrees(lat), pCell, pDeg);
-    if (pSlot >= 0) albedo = vec3(min(1.0, tileAt(uPhoto, pSlot, pCell) * PHOTO_GAIN));
+    if (pSlot >= 0) {
+      albedo = vec3(min(1.0, tileAt(uPhoto, pSlot, pCell) * PHOTO_GAIN));
+      photo = true;
+    }
   }
   vec3 colour;
   {
@@ -175,14 +179,16 @@ void main() {
     vec3 n = normalize(up - exag * (he * east + hn * north));
     float sun = max(0.0, dot(n, uSun));
     float light;
-    if (uLighting > 0.5) {
+    if (photo) {
+      // photo: the slope's Sun relative to flat ground's (1 on the flat, brighter facing the Sun, darker away from
+      // it; the 0.2 keeps it finite at the terminator), over the day and night of the chosen instant
+      float rel = clamp((sun + 0.2) / (max(0.0, dot(up, uSun)) + 0.2), 0.0, 1.8);
+      light = (0.10 + 0.90 * day) * mix(1.0, rel, PHOTO_RELIEF);
+    } else {
       // the night side keeps a faint fixed-light relief (like earthshine) so its shape stays readable
       vec3 fixedLight = normalize(up + 0.6 * east + 0.4 * north);
       float night = 0.07 + 0.12 * max(0.0, dot(n, fixedLight));
       light = night + (1.0 - night) * sun * day;
-    } else {
-      // neutral relief, as on the polar map: no day or night, a fixed light from the north-west
-      light = 0.30 + 0.70 * max(0.0, dot(n, normalize(0.75 * up - 0.55 * east + 0.40 * north)));
     }
     colour = albedo * light;
   }
