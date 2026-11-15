@@ -1,0 +1,217 @@
+{
+ "format": 1,
+ "file": "wac_global_level1.jpg",
+ "width": 2048,
+ "height": 1024,
+ "tileCells": 256,
+ "level": 1,
+ "layout": "simple cylindrical; row 0 is 90 N, column 0 starts at 180 W, longitude grows east; tile (x, y) of the globe's level 1 is the 256 x 256 block at column 256 x, row 256 y",
+ "encoding": "grey JPEG (quality 90), brightness as in the source tiles (0-255)",
+ "transformation": "the 32 WMTS tiles of matrix 2 placed side by side, unchanged",
+ "bytes": 866759,
+ "source": {
+  "product": "LROC WAC global morphologic mosaic LRO_WAC_Mosaic_Global_303ppd_v02 (100 m, 303 px/deg)",
+  "url": "https://trek.nasa.gov/tiles/Moon/EQ/LRO_WAC_Mosaic_Global_303ppd_v02/1.0.0/default/default028mm/2/{row}/{col}.jpg",
+  "capabilities": "https://trek.nasa.gov/tiles/Moon/EQ/LRO_WAC_Mosaic_Global_303ppd_v02/1.0.0/WMTSCapabilities.xml",
+  "agency": "NASA / LRO Camera team (Arizona State University), served by NASA Moon Trek (JPL)"
+ },
+ "citation": "Speyerer, E. J., et al. (2011). Lunar Reconnaissance Orbiter Camera global morphological map of the Moon. Lunar and Planetary Science Conference XLII, abstract 2387.",
+ "validation": {
+  "rule": "every tile 256 x 256, grey, spread > 5 counts",
+  "tiles": [
+   {
+    "row": 0,
+    "col": 0,
+    "mean": 76.47,
+    "std": 46.64
+   },
+   {
+    "row": 0,
+    "col": 1,
+    "mean": 79.57,
+    "std": 43.37
+   },
+   {
+    "row": 0,
+    "col": 2,
+    "mean": 76.0,
+    "std": 39.48
+   },
+   {
+    "row": 0,
+    "col": 3,
+    "mean": 70.28,
+    "std": 34.61
+   },
+   {
+    "row": 0,
+    "col": 4,
+    "mean": 70.16,
+    "std": 37.1
+   },
+   {
+    "row": 0,
+    "col": 5,
+    "mean": 78.99,
+    "std": 49.77
+   },
+   {
+    "row": 0,
+    "col": 6,
+    "mean": 96.19,
+    "std": 49.87
+   },
+   {
+    "row": 0,
+    "col": 7,
+    "mean": 83.49,
+    "std": 48.61
+   },
+   {
+    "row": 1,
+    "col": 0,
+    "mean": 99.79,
+    "std": 27.38
+   },
+   {
+    "row": 1,
+    "col": 1,
+    "mean": 90.77,
+    "std": 21.95
+   },
+   {
+    "row": 1,
+    "col": 2,
+    "mean": 56.51,
+    "std": 18.51
+   },
+   {
+    "row": 1,
+    "col": 3,
+    "mean": 52.92,
+    "std": 10.49
+   },
+   {
+    "row": 1,
+    "col": 4,
+    "mean": 58.99,
+    "std": 18.8
+   },
+   {
+    "row": 1,
+    "col": 5,
+    "mean": 76.86,
+    "std": 23.5
+   },
+   {
+    "row": 1,
+    "col": 6,
+    "mean": 96.36,
+    "std": 24.78
+   },
+   {
+    "row": 1,
+    "col": 7,
+    "mean": 95.95,
+    "std": 26.17
+   },
+   {
+    "row": 2,
+    "col": 0,
+    "mean": 81.22,
+    "std": 26.65
+   },
+   {
+    "row": 2,
+    "col": 1,
+    "mean": 88.68,
+    "std": 23.08
+   },
+   {
+    "row": 2,
+    "col": 2,
+    "mean": 78.67,
+    "std": 19.55
+   },
+   {
+    "row": 2,
+    "col": 3,
+    "mean": 67.16,
+    "std": 24.14
+   },
+   {
+    "row": 2,
+    "col": 4,
+    "mean": 83.88,
+    "std": 20.65
+   },
+   {
+    "row": 2,
+    "col": 5,
+    "mean": 76.79,
+    "std": 23.04
+   },
+   {
+    "row": 2,
+    "col": 6,
+    "mean": 83.33,
+    "std": 22.11
+   },
+   {
+    "row": 2,
+    "col": 7,
+    "mean": 83.64,
+    "std": 24.65
+   },
+   {
+    "row": 3,
+    "col": 0,
+    "mean": 60.56,
+    "std": 38.53
+   },
+   {
+    "row": 3,
+    "col": 1,
+    "mean": 67.86,
+    "std": 47.22
+   },
+   {
+    "row": 3,
+    "col": 2,
+    "mean": 84.7,
+    "std": 43.61
+   },
+   {
+    "row": 3,
+    "col": 3,
+    "mean": 90.04,
+    "std": 49.17
+   },
+   {
+    "row": 3,
+    "col": 4,
+    "mean": 87.48,
+    "std": 52.66
+   },
+   {
+    "row": 3,
+    "col": 5,
+    "mean": 73.52,
+    "std": 52.16
+   },
+   {
+    "row": 3,
+    "col": 6,
+    "mean": 75.84,
+    "std": 44.1
+   },
+   {
+    "row": 3,
+    "col": 7,
+    "mean": 70.6,
+    "std": 40.41
+   }
+  ]
+ },
+ "built": "2026-11-15T11:49:25Z"
+}
