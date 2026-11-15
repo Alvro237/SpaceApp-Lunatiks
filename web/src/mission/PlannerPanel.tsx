@@ -87,9 +87,9 @@ export function PlannerPanel() {
       cellMode: ex.cellKm,
       landingRadiusKm: ex.landingRadiusKm,
       categoriesOn: { power: true, earth: true, topography: true },
-      plannerValues: { ...a.plannerValues, battery_autonomy: '48', max_slope: '10' },
+      plannerValues: { ...a.plannerValues, battery_autonomy: '48', max_slope: '10', landing_radius: ex.landingRadiusKm },
     })
-    a.setResult(null)
+    a.setSuit(null)
     // no look(): the centre and radius changing frame the whole region (TerrainView, GlobeView)
     setApp({ durationH: ex.durationH })
     setExample(true)
@@ -99,13 +99,13 @@ export function PlannerPanel() {
     ? search.error
     : search.pending
       ? 'Updating…'
-      : !a.result
+      : !a.suit
         ? 'No search yet'
         : !search.hasWindow
           ? 'Up to date'
           : search.isPreview
             ? `Preview · ${search.seconds?.toFixed(1)} s · ${PREVIEW_SAMPLES} horizons`
-            : `Full detail · ${search.seconds?.toFixed(1)} s · ${a.result.window?.samples ?? 300} horizons`
+            : `Full detail · ${search.seconds?.toFixed(1)} s · ${a.suit.window?.samples ?? 300} horizons`
 
   return (
     <section ref={rootRef} className={`float float-left planner-panel${open ? '' : ' is-closed'}`} aria-labelledby="planner-h">
