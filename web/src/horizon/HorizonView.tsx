@@ -29,6 +29,8 @@ import { useEffectiveCamera } from './useEffectiveCamera'
 import { type SceneLights, useRelief } from './relief/useRelief'
 import { earthPhaseAngle, earthshineRatio } from './relief/light'
 import { loadGroundTexture } from './groundTexture'
+import { reliefPending } from './relief/drawRelief'
+import { useGraphics } from '../state/graphics'
 
 const state = (f: number) => (f >= 0.999 ? 'fully visible' : f > 0 ? `${Math.round(f * 100)} percent visible` : 'hidden by the horizon')
 
@@ -131,24 +133,22 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
     const earthRatio = earth ? earthshineRatio(earthPhaseAngle(sun, earth), earthKm!) : 0
     return { sun, sunVisible: sunUp, earth, earthRatio }
   }, [sunAz, sunEl, sunR, sunUp, earthAz, earthEl, earthR, earthKm])
-  const relief = useRelief(info?.model.lat, info?.model.lon, info?.mastUsedM ?? 0, lights)
+  // low graphics (state/graphics.ts): no relief is loaded or ray cast; the plain ground under the real skyline instead
+  const lowGraphics = useGraphics((s) => s.low)
+  const relief = useRelief(lowGraphics ? undefined : info?.model.lat, lowGraphics ? undefined : info?.model.lon, info?.mastUsedM ?? 0, lights)
   // the regolith grain near the feet (LROC WAC patch, groundTexture.ts); the ground redraws once it has arrived
   const [grainReady, setGrainReady] = useState(false)
   useEffect(() => {
+    if (lowGraphics) return
     let live = true
     void loadGroundTexture().then((t) => live && setGrainReady(t !== null))
     return () => {
       live = false
     }
-  }, [])
-  // full resolution once the camera and the instant have been still for a moment, a lighter pass while they move
-  const change = useMemo(() => ({ camera, tMs, arrival, scene: relief.scene }), [camera, tMs, arrival, relief.scene])
-  const [still, setStill] = useState<typeof change | null>(null)
-  useEffect(() => {
-    const id = setTimeout(() => setStill(change), 160)
-    return () => clearTimeout(id)
-  }, [change])
-  const fine = still === change
+  }, [lowGraphics])
+  // full resolution once arrived: built a slice a frame and shifted to follow small turns (relief/drawRelief.ts), with
+  // a lighter pass while no finished image fits the camera
+  const fine = arrival >= 1
 
   const tracks = useMemo(() => {
     const samples = series?.samples ?? []
@@ -158,35 +158,62 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
     }
   }, [series])
 
+  // At most one drawing a frame: pointer and wheel events can come faster than the screen refreshes, and each
+  // drawing of the relief costs tens of milliseconds. The effect hands over the latest drawing; the frame runs it.
+  const pending = useRef<(() => void) | null>(null)
+  const raf = useRef(0)
+  useEffect(() => () => cancelAnimationFrame(raf.current), [])
+
   useEffect(() => {
     const cv = canvas.current
     if (!cv || !view || !info || size.w === 0) return
     const dpr = window.devicePixelRatio || 1
-    cv.width = Math.round(size.w * dpr)
-    cv.height = Math.round(size.h * dpr)
-    const ctx = cv.getContext('2d')
-    if (!ctx) return
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    const h = info.model.horizon
-    // during the descent: the smooth-Moon horizon of the current altitude, blending into the real mask
-    const k = easeOut(arrival)
-    const dip = -dipDeg(from.km * (1 - k))
-    drawHorizon(ctx, size.w, size.h, camera, {
-      horizonAt: arrival < 1 ? (az) => dip * (1 - k) + h.at(az) * k : (az) => h.at(az),
-      sun: view.sun,
-      earth: view.earth,
-      sunTrack: tracks.sun,
-      earthTrack: tracks.earth,
-      free,
-      showLabels: arrival >= 1,
-      stars,
-      // during the descent the eye comes down over the same ground
-      // (from up there the rings end before the horizon: the band up to it is painted)
-      relief: relief.scene
-        ? { scene: arrival < 1 ? { ...relief.scene, eyeM: relief.scene.eyeM + from.km * 1000 * (1 - k), fillToMask: true } : relief.scene, fine: fine && arrival >= 1 }
-        : null,
-    })
-  }, [camera, view, info, size, tracks, free, arrival, stars, grainReady, relief.scene, fine, from.km])
+    const pw = Math.round(size.w * dpr)
+    const ph = Math.round(size.h * dpr)
+    pending.current = () => {
+      // a new backing store only when the size changes (setting the size clears and reallocates the canvas)
+      if (cv.width !== pw || cv.height !== ph) {
+        cv.width = pw
+        cv.height = ph
+      }
+      const ctx = cv.getContext('2d')
+      if (!ctx) return
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      const h = info.model.horizon
+      // during the descent: the smooth-Moon horizon of the current altitude, blending into the real mask
+      const k = easeOut(arrival)
+      const dip = -dipDeg(from.km * (1 - k))
+      drawHorizon(ctx, size.w, size.h, camera, {
+        horizonAt: arrival < 1 ? (az) => dip * (1 - k) + h.at(az) * k : (az) => h.at(az),
+        sun: view.sun,
+        earth: view.earth,
+        sunTrack: tracks.sun,
+        earthTrack: tracks.earth,
+        free,
+        showLabels: arrival >= 1,
+        stars,
+        // during the descent the eye comes down over the same ground
+        // (from up there the rings end before the horizon: the band up to it is painted)
+        relief: relief.scene && !lowGraphics
+          ? { scene: arrival < 1 ? { ...relief.scene, eyeM: relief.scene.eyeM + from.km * 1000 * (1 - k), fillToMask: true } : relief.scene, fine }
+          : null,
+      })
+    }
+    if (!raf.current) {
+      const frame = () => {
+        raf.current = 0
+        const draw = pending.current
+        pending.current = null
+        draw?.()
+        // the full-resolution image is still being built: the same drawing again next frame (unless a newer one came)
+        if (draw && reliefPending()) {
+          pending.current ??= draw
+          raf.current = requestAnimationFrame(frame)
+        }
+      }
+      raf.current = requestAnimationFrame(frame)
+    }
+  }, [camera, view, info, size, tracks, free, arrival, stars, grainReady, relief.scene, fine, from.km, lowGraphics])
 
   const turn = (dYaw: number, dPitch: number) => look(cam.yaw + dYaw, cam.pitch + dPitch)
 
@@ -252,10 +279,12 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
       >
         <canvas ref={canvas} aria-hidden="true" style={{ width: '100%', height: '100%' }} />
         <p className="horizon-notice" style={{ left: free.left + 14, bottom: Math.max(free.bottom + 44, noticeBottom), maxWidth: `calc(100% - ${free.left + 28}px)` }}>
-          {relief.status === 'ready'
+          {lowGraphics
+            ? 'Low graphics: plain ground under the real LOLA horizon line, not footage (switch it off in the top bar for the rendered relief)'
+            : relief.status === 'ready'
             ? `Rendered from LOLA heights and this place's LROC WAC mosaic, not footage · Relief: ${relief.sourceLabel ?? `LOLA ${relief.cellM?.toFixed(0)} m DEM`} to ${(relief.reachKm ?? 0) < 10 ? (relief.reachKm ?? 0).toFixed(1) : (relief.reachKm ?? 0).toFixed(0)} km, ${relief.night === 'earthshine' ? 'night, lit by earthshine (exposure raised)' : relief.night === 'dark' ? 'night, neither the Sun nor the Earth up' : 'lit by the Sun at this instant'}${relief.detailTiles && relief.detailTiles.wanted > 0 ? ` · Ground in view: ${relief.detailTiles.source === 'kaguya' ? 'Kaguya TC (JAXA) 21 m' : 'LROC WAC 100 m'}, ${relief.detailTiles.loaded} of ${relief.detailTiles.wanted} tiles` : ''}${relief.farPatches ? ` · Far hills: ${farPatchText(relief.farPatches)}` : ''} · Line: horizon mask used by the figures`
             : 'Not real moon footage · Real moon horizon line'}
-          {relief.status === 'loading' && ' · Loading the LOLA relief around this place…'}
+          {!lowGraphics && relief.status === 'loading' && ' · Loading the LOLA relief around this place…'}
         </p>
         <p id="horizon-help" className="sr-only">
           Drag or use the arrow keys to look around, plus and minus to zoom, S to follow the Sun, E to follow the Earth, F for free look, Escape to go back to

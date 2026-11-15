@@ -180,12 +180,23 @@ function grainAt(tex: GroundTexture, logFoot: number, u: number, v: number): num
 /**
  * Render into `out` (cleared to transparent): pixel (i, j) covers CSS x = (i + 0.5) scale, y = (j + 0.5) scale.
  * `horizonAt` is the mask's elevation (degrees) at an azimuth. Returns the number of ray steps taken.
+ *
+ * Columns are independent: `i0`..`i1` renders a slice of them (the image is cleared when the slice starts at column
+ * 0), so a full-resolution image can be built over several frames (drawRelief.ts).
  */
-export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, horizonAt: (az: number) => number, s: ReliefScene): number {
+export function renderRelief(
+  out: ImageData,
+  scale: number,
+  c: ColumnCamera,
+  horizonAt: (az: number) => number,
+  s: ReliefScene,
+  i0 = 0,
+  i1 = out.width,
+): number {
   const w = out.width
   const h = out.height
   const px = out.data
-  px.fill(0)
+  if (i0 === 0) px.fill(0)
   const { stack } = s
   const rows = (el: number) => (c.cy - (el - c.pitch) / c.degPerPx) / scale - 0.5
   const f = stack.frame
@@ -313,7 +324,7 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
     tanRow[r] = Math.tan(el * D)
     tanCut[r] = el >= 89.9 ? Infinity : el <= -89.9 ? -Infinity : tanRow[r]
   }
-  for (let i = 0; i < w; i++) {
+  for (let i = Math.max(0, i0); i < Math.min(w, i1); i++) {
     const az = c.yaw + ((i + 0.5) * scale - c.cx) * c.degPerPx
     const sa = Math.sin(az * D)
     const ca = Math.cos(az * D)

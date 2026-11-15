@@ -6,6 +6,7 @@
  */
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ToolPortal } from '../ui/ToolSlot'
+import { useGraphics } from '../state/graphics'
 import { useHorizonTransition } from '../state/horizon'
 import { useQuery } from '@tanstack/react-query'
 import { type KeyboardEvent, type MouseEvent, type PointerEvent, type WheelEvent, useCallback, useEffect, useRef, useState } from 'react'
@@ -460,11 +461,12 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
 
   useEffect(() => engine.setExaggeration(exaggeration), [engine, exaggeration])
 
-  // Layer and lighting follow the store.
+  // Layer and lighting follow the store. Low graphics (state/graphics.ts) shows the relief without the photo.
   useEffect(() => {
     let last: { layer: string; lighting: string } | null = null
     const apply = () => {
-      const { layer, lighting } = useApp.getState()
+      const { layer: chosen, lighting } = useApp.getState()
+      const layer = chosen === 'photo' && useGraphics.getState().low ? 'none' : chosen
       // the store changes every frame during playback: only a new layer or lighting needs the engine
       if (last && last.layer === layer && last.lighting === lighting) return
       last = { layer, lighting }
@@ -479,7 +481,12 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
       engine.setLighting(lighting === 'sun')
     }
     apply()
-    return useApp.subscribe(apply)
+    const offApp = useApp.subscribe(apply)
+    const offGraphics = useGraphics.subscribe(apply)
+    return () => {
+      offApp()
+      offGraphics()
+    }
   }, [engine, tileset])
 
   // Fly to a place when the user picks one or opens a shared link (focusSeq changes).

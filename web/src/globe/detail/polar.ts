@@ -239,6 +239,8 @@ export class PolarDetail {
   /** The overview heights for the shadows; a 1 × 1 placeholder until they load. */
   private overview: THREE.DataTexture = new THREE.DataTexture(new Float32Array(1), 1, 1, THREE.RedFormat, THREE.FloatType)
   private ts: Tileset | null = null
+  /** True once the overview heights are loaded, so the terrain can cast its shadows (uPolarShadow). */
+  shadowReady = false
   /** Starts the overview download once it is due (overviewDue); null when started or before the tileset. */
   private startOverview: (() => void) | null = null
   private live = new Map<string, LiveSource>()
@@ -295,6 +297,7 @@ export class PolarDetail {
         this.overview = tex
         material.uniforms.uPolarOverview.value = tex
         material.uniforms.uPolarShadow.value = 1
+        this.shadowReady = true
       })
       .catch(() => {}) // no overview: no cast shadows, the slopes are still shaded
   }
