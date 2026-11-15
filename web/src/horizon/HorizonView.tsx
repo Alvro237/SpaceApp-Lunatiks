@@ -254,7 +254,6 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
             ? `Rendered from LOLA heights, not footage · Relief: ${relief.sourceLabel ?? `LOLA ${relief.cellM?.toFixed(0)} m DEM`} to ${(relief.reachKm ?? 0) < 10 ? (relief.reachKm ?? 0).toFixed(1) : (relief.reachKm ?? 0).toFixed(0)} km, ${relief.night === 'earthshine' ? 'night, lit by earthshine (exposure raised)' : relief.night === 'dark' ? 'night, neither the Sun nor the Earth up' : 'lit by the Sun at this instant'} · Skyline: horizon mask`
             : 'Not real moon footage · Real moon horizon line'}
           {relief.status === 'loading' && ' · Loading the LOLA relief around this place…'}
-          {relief.status !== 'ready' && groundReady && ' · Ground texture: LROC WAC mosaic, another place on the Moon'}
         </p>
         <p id="horizon-help" className="sr-only">
           Drag or use the arrow keys to look around, plus and minus to zoom, S to follow the Sun, E to follow the Earth, F for free look, Escape to go back to
