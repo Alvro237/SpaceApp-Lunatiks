@@ -1,16 +1,15 @@
 /**
- * The functional guide: a "Guide" button at the end of the top bar (reachable from every view, never over the
- * map) that opens a modal page saying what each part of the screen does, where its numbers come from and how to
- * read them.
+ * The full written guide: a modal page saying what each part of the screen does, where its numbers come from and
+ * how to read them. Opened from the last step of the walkthrough (Walkthrough.tsx).
  *
  * Laid out like the screen it explains: a small diagram of the navigator with numbered zones, then one section per
  * zone, numbered the same way, listing every control with its icon. The diagram is decorative (the numbered
  * headings carry the same structure), so nothing depends on seeing it.
  *
  * A native <dialog> opened with showModal(): focus moves into it and stays there, Escape closes it, the page behind
- * is inert, and focus returns to the Guide button on close. A contents list jumps to each section.
+ * is inert, and focus returns to where it was on close. A contents list jumps to each section.
  */
-import { type MouseEvent, type ReactNode, type Ref, useId, useRef } from 'react'
+import { type MouseEvent, type ReactNode, type Ref, useId } from 'react'
 import {
   IconAntenna,
   IconBolt,
@@ -75,7 +74,7 @@ const ZONES: Zone[] = [
         name: 'Data & methods',
         does: 'Every NASA dataset behind the numbers, how it was processed, the validation against JPL Horizons, the known gaps, and how AI was used.',
       },
-      { icon: <IconHelp size={18} />, name: 'Guide', does: 'This page.' },
+      { icon: <IconHelp size={18} />, name: 'Tour', does: 'A step-by-step tour of the screen; its last step opens this guide.' },
     ],
   },
   {
@@ -275,29 +274,15 @@ const KEYS: [string, string][] = [
   ['Escape', 'Close a panel, a menu or this guide'],
 ]
 
-/** The "Guide" button for the top bar, with its dialog. */
-export function GuideButton() {
-  const dialog = useRef<HTMLDialogElement>(null)
-  const open = () => {
-    const d = dialog.current
-    if (!d) return
-    // jsdom (tests) and very old browsers have no showModal: fall back to a plain open dialog
-    if (typeof d.showModal === 'function') d.showModal()
-    else d.setAttribute('open', '')
-    d.querySelector<HTMLElement>('.guide-body')?.scrollTo?.({ top: 0 })
-  }
-  return (
-    <>
-      <button type="button" className="guide-btn" onClick={open} aria-haspopup="dialog" aria-label="Guide" title="What each part of the tool does">
-        <IconHelp size={18} />
-        <span>Guide</span>
-      </button>
-      <GuideDialog ref={dialog} />
-    </>
-  )
+/** Opens the guide as a modal (a plain open dialog where showModal is missing: jsdom in tests, very old browsers). */
+export function openDialog(d: HTMLDialogElement | null) {
+  if (!d) return
+  if (typeof d.showModal === 'function') d.showModal()
+  else d.setAttribute('open', '')
+  d.querySelector<HTMLElement>('.guide-body')?.scrollTo?.({ top: 0 })
 }
 
-function GuideDialog({ ref }: { ref: Ref<HTMLDialogElement> }) {
+export function GuideDialog({ ref }: { ref: Ref<HTMLDialogElement> }) {
   const id = useId()
   const close = (e: MouseEvent<HTMLElement>) => {
     const d = e.currentTarget.closest('dialog')

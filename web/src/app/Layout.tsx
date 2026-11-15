@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useApp } from '../state/store'
 import { BlockToggle } from '../blocks/BlockToggle'
 import { BrandMark } from '../ui/BrandMark'
-import { GuideButton } from '../ui/GuideDialog'
+import { TourButton } from '../ui/Walkthrough'
 
 const TITLES: Record<string, string> = { '/': 'Navigator', '/data': 'Data & methods', '/learn': 'Learn' }
 
@@ -68,7 +68,7 @@ export function Layout() {
               </li>
             </ul>
           </nav>
-          <GuideButton />
+          <TourButton />
         </div>
       </header>
       <main id="main" ref={main} tabIndex={-1}>

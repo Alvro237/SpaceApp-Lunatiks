@@ -93,3 +93,31 @@
   .guide-btn span { display: none; }
   .guide-btn { padding: 4px 8px; }
 }
+
+/* The walkthrough (Walkthrough.tsx): a dim layer, a spotlight around the control, and the step card. */
+.tour { position: fixed; inset: 0; z-index: 100; }
+.tour-dim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); }
+.tour-dim.has-spot { background: transparent; }
+.tour-spot {
+  position: absolute; border-radius: 10px; pointer-events: none;
+  box-shadow: 0 0 0 3px var(--focus), 0 0 0 9999px rgba(0, 0, 0, 0.6);
+  transition: left 0.25s ease, top 0.25s ease, width 0.25s ease, height 0.25s ease;
+}
+.tour-card {
+  position: absolute; padding: 14px 16px 12px; border: 1px solid var(--border); border-radius: 12px;
+  background: var(--surface); color: var(--text); box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+  transition: left 0.25s ease, top 0.25s ease;
+}
+.tour-card h2 { margin: 2px 0 6px; font-size: 1.1rem; }
+.tour-card p { margin: 0 0 10px; font-size: 0.93rem; }
+.tour-top { display: flex; justify-content: space-between; align-items: center; }
+.tour-count { color: var(--muted); font: 600 0.78rem var(--mono); }
+.tour-x { display: inline-flex; align-items: center; justify-content: center; width: 32px; min-height: 32px; padding: 0; }
+.tour-dots { display: flex; gap: 5px; margin: 0 0 12px; }
+.tour-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--border); }
+.tour-dots span.is-on { background: var(--accent); width: 18px; border-radius: 3px; }
+.tour-actions { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.tour-nav { display: flex; gap: 8px; margin-left: auto; }
+@media (prefers-reduced-motion: reduce) {
+  .tour-spot, .tour-card { transition: none; }
+}
