@@ -402,7 +402,7 @@ export function StoryCard() {
   const { steps, complete, ready, sceneSet } = useStoryEffects(ctx)
   const headingId = useId()
   const top = useBelowTopBars()
-  const place: CSSProperties | undefined = top === undefined ? undefined : { top, maxHeight: `calc(100vh - ${top}px - var(--inset-bottom) - 20px)` }
+  const place: CSSProperties | undefined = top === undefined ? undefined : { top, maxHeight: `calc(100% - ${top}px - var(--inset-bottom) - 20px)` }
   const ch = CHAPTERS[chapter]
   const total = CHAPTERS.length
   const stars = CHAPTERS.filter((c) => done.includes(c.id)).length
