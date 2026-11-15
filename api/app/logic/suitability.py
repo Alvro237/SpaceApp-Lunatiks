@@ -29,7 +29,7 @@ import numpy as np
 CATEGORIES: tuple[tuple[str, str, str | None], ...] = (
     ("search", "Search area", None),
     ("power", "Power and sunlight", "Share of the mission window with any part of the Sun visible"),
-    ("earth", "Earth contact", "Share of the mission window with Earth contact"),
+    ("earth", "Earth link", "Share of the mission window with radio contact with the Earth"),
     ("topography", "Topography and landing safety", "1 - slope / maximum slope, averaged with 1 - crater cover / maximum cover when that limit is set"),
     ("landing", "Landing conditions", None),
     ("science", "Science and resources", "Mean closeness to the science targets set (1 - distance / limit; hydrogen relative to the best in the region)"),
@@ -92,7 +92,7 @@ _POWER_PARAMS = (
 CATALOGUE_LIST: tuple[CriterionSpec, ...] = (
     CriterionSpec("side", "search", "Near or far side", None, "choice", None, "geometry", "everywhere",
                   "MOON_ME longitude", "Keeps only the side chosen (near: longitude within 90 deg of the sub-Earth meridian); "
-                  "a coarse screen, the Earth contact criteria compute real visibility.", options=("near", "far")),
+                  "a coarse screen, the Earth link criteria compute real visibility.", options=("near", "far")),
     CriterionSpec("battery_autonomy_h", "power", "Battery autonomy", "h", "value", "<=", "window", "south of 60 S",
                   "Engine series over traced LOLA horizons", "No stretch of darkness during the mission may be longer "
                   "than the hours the battery keeps the lander alive.", limit_min=0.0, bounded=True),
@@ -109,7 +109,18 @@ CATALOGUE_LIST: tuple[CriterionSpec, ...] = (
                   "recharge time.", params=_POWER_PARAMS),
     CriterionSpec("blackout_h", "earth", "Longest blackout", "h", "value", "<=", "window", "south of 60 S",
                   "Engine series over traced LOLA horizons", "The longest time without direct radio contact with Earth "
-                  "that the mission accepts.", limit_min=0.0, bounded=True),
+                  "that the mission accepts. With the radio link settings, contact means a selected antenna sees the Moon "
+                  "as well.", limit_min=0.0, bounded=True),
+    CriterionSpec("link_min_daily_h", "earth", "Contact per day", "h", "value", ">=", "window", "south of 60 S",
+                  "Engine series over traced LOLA horizons x ground antennas (radio link settings)",
+                  "Every full day of the mission (24 h from the landing) must have at least this many hours of contact "
+                  "with a selected antenna: the data that can be sent down. Needs the radio link settings and a window of "
+                  "at least 24 h.", limit_min=0.0, limit_max=24.0),
+    CriterionSpec("link_min_pass_h", "earth", "Shortest contact pass", "h", "value", ">=", "window", "south of 60 S",
+                  "Engine series over traced LOLA horizons x ground antennas (radio link settings)",
+                  "Every contact pass that starts and ends inside the window must last at least this long (time to set up "
+                  "the link, send commands and bring data down). A pass cut by the start or the end of the window is not "
+                  "checked. Needs the radio link settings.", limit_min=0.0),
     CriterionSpec("max_slope_deg", "topography", "Maximum slope", "deg", "value", "<=", "fine", "south of 60 S",
                   "LOLA slope, PGDA product 90 (320 m south of 80 S, 960 m elsewhere)", "Steepest ground the lander can "
                   "stand on: a cell fails if any part of it is steeper.", limit_min=0.0, limit_max=90.0),
@@ -125,8 +136,8 @@ CATALOGUE_LIST: tuple[CriterionSpec, ...] = (
                   "south of 60 S", "Engine state at the landing instant", "Elevation of the Sun's centre above the "
                   "horizontal at touchdown.", limit_min=-90.0, limit_max=90.0, bounded=True),
     CriterionSpec("earth_at_landing", "landing", "Earth in view at landing", None, "flag", None, "window", "south of 60 S",
-                  "Engine state at the landing instant", "The Earth must be in contact at touchdown, for live telemetry.",
-                  bounded=True),
+                  "Engine state at the landing instant", "The Earth must be in contact at touchdown, for live telemetry. With the radio "
+                  "link settings, a selected antenna must see the Moon as well.", bounded=True),
     CriterionSpec("psr_distance_km", "science", "Near permanent shadow", "km", "value", "<=", "regional", "south of 65 S",
                   "PGDA product 69 permanent shadow", "Within this distance of permanently shadowed ground, where water "
                   "ice may be trapped.", limit_min=0.0, limit_max=100.0),
@@ -151,7 +162,8 @@ UNAVAILABLE: dict[str, tuple[str, str, str]] = {   # id -> (category, label, rea
     "regolith_density": ("topography", "Regolith density", "No regolith density or compaction map is loaded (candidate: Diviner H-parameter, to verify)."),
     "temperature": ("radiation", "Thermal", "The thermal model runs on one spot: open a site, then the Power panel."),
     "colony": ("power", "Colony", "Sized on one spot: open a site, then Colony in the Power panel."),
-    "link_margin": ("earth", "Link margin", "Needs a radio link budget (antenna, power, frequency)."),
+    "link_margin": ("earth", "Link margin", "The margin is the same at every site, so it cannot rank them: it is shown for "
+                    "each proposed site (POST /api/v1/link with a budget)."),
     "solar_storm_risk": ("radiation", "Solar storms", "No forecast of solar particle events exists for a future window."),
     "north_pole": ("search", "North pole", "The polar grids cover the south pole only (north polar grids are not built)."),
 }
@@ -162,7 +174,7 @@ FIXED_INPUTS = (
 )
 REQUEST_PARAMETERS = (
     ("landing_radius_km", "Landing ellipse radius", "Topography: a spot is kept only if no failing cell lies within this distance."),
-    ("comms_min_fraction", "Earth disc needed for contact", "Earth contact: share of the Earth's disc above the horizon that counts as contact (team parameter 0.5)."),
+    ("comms_min_fraction", "Earth disc needed for contact", "Earth link: share of the Earth's disc above the horizon that counts as contact (team parameter 0.5); not used when the radio link settings are given."),
     ("robust_delay_h", "Robust to a landing delay", "Schedule: every window criterion must still pass if the landing slips by this many hours."),
 )
 

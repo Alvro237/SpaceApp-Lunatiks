@@ -8,7 +8,7 @@
  * antenna they add its G/T or dish diameter. Only the generic values keep a default, sent when typed: band X, margin 3 dB,
  * other losses 0 dB, the band-centre frequency.
  */
-import type { LinkBand, LinkBudgetInput, LinkCustomStation, LinkDirection, LinkRequest, LinkResponse, LinkStationResult } from '../api/types'
+import type { LinkBand, LinkBudgetInput, LinkCustomStation, LinkDirection, LinkRequest, LinkResponse, LinkStationResult, SuitabilityLinkInput } from '../api/types'
 import type { Selection } from '../state/store'
 
 export const NETWORK_LABEL: Record<string, string> = { dsn: 'NASA DSN', estrack: 'ESA ESTRACK', jaxa: 'JAXA' }
@@ -81,8 +81,8 @@ export interface BuiltRequest {
   problem: string | null
 }
 
-export function buildLinkRequest(place: Selection | null, win: { startIso: string; durationH: number; commsMinFraction: number }, f: LinkForm): BuiltRequest {
-  if (!place) return { body: null, problem: null }
+/** The user's own antennas from the form, or what is wrong with them. `level` 2 also needs each one's G/T or diameter. */
+function buildCustoms(f: LinkForm, level: 1 | 2): { customs: LinkCustomStation[] } | { problem: string } {
   const customs: LinkCustomStation[] = []
   for (const [i, c] of f.custom.entries()) {
     const label = `Antenna ${i + 1}`
@@ -92,13 +92,13 @@ export function buildLinkRequest(place: Selection | null, win: { startIso: strin
     const height = parse(c.height)
     const diameter = parse(c.diameter)
     const gt = parse(c.gt)
-    if (lat === undefined || lon === undefined || minEl === undefined) return { body: null, problem: `${label}: latitude, longitude and minimum elevation are needed` }
-    if ([lat, lon, minEl, height, diameter, gt].includes(BAD)) return { body: null, problem: `${label}: use numbers` }
-    if ((lat as number) < -90 || (lat as number) > 90) return { body: null, problem: `${label}: latitude is between -90 and 90` }
-    if ((lon as number) < -180 || (lon as number) > 180) return { body: null, problem: `${label}: longitude is between -180 and 180` }
-    if ((minEl as number) < 0 || (minEl as number) >= 90) return { body: null, problem: `${label}: minimum elevation is from 0 to under 90°` }
-    if (diameter !== undefined && (diameter as number) <= 0) return { body: null, problem: `${label}: diameter must be above 0` }
-    if (f.level === 2 && diameter === undefined && gt === undefined) return { body: null, problem: `${label}: give its G/T or its dish diameter` }
+    if (lat === undefined || lon === undefined || minEl === undefined) return { problem: `${label}: latitude, longitude and minimum elevation are needed` }
+    if ([lat, lon, minEl, height, diameter, gt].includes(BAD)) return { problem: `${label}: use numbers` }
+    if ((lat as number) < -90 || (lat as number) > 90) return { problem: `${label}: latitude is between -90 and 90` }
+    if ((lon as number) < -180 || (lon as number) > 180) return { problem: `${label}: longitude is between -180 and 180` }
+    if ((minEl as number) < 0 || (minEl as number) >= 90) return { problem: `${label}: minimum elevation is from 0 to under 90°` }
+    if (diameter !== undefined && (diameter as number) <= 0) return { problem: `${label}: diameter must be above 0` }
+    if (level === 2 && diameter === undefined && gt === undefined) return { problem: `${label}: give its G/T or its dish diameter` }
     customs.push({
       id: `own-${c.key}`,
       name: `My antenna ${i + 1}`,
@@ -107,9 +107,39 @@ export function buildLinkRequest(place: Selection | null, win: { startIso: strin
       min_elevation_deg: minEl as number,
       height_m: (height as number | undefined) ?? 0,
       ...(diameter !== undefined ? { diameter_m: diameter as number } : {}),
-      ...(f.level === 2 && gt !== undefined ? { gt_db_per_k: gt as number } : {}),
+      ...(level === 2 && gt !== undefined ? { gt_db_per_k: gt as number } : {}),
     })
   }
+  return { customs }
+}
+
+/**
+ * Part of the Earth's disc the mission planner asks to be above the horizon for the site to "see the Earth": any part
+ * (the API's `ANY_EARTH_FRACTION`), because the antennas decide the rest. The per-site link detail asks `/link` for the
+ * same, so its numbers agree with the search.
+ */
+export const ANY_EARTH_FRACTION = 1e-6
+
+/**
+ * The radio link settings of a mission-planner search (geometry only: networks, direction, own antennas), or what is
+ * wrong with them. The budget is not part of the search: the margin is the same at every site (see `/link`).
+ */
+export function buildPlannerLink(f: LinkForm): { link: SuitabilityLinkInput | null; problem: string | null } {
+  const built = buildCustoms(f, 1)
+  if ('problem' in built) return { link: null, problem: built.problem }
+  if (f.networks.length === 0 && built.customs.length === 0) return { link: null, problem: 'Link: pick a network or add an antenna' }
+  return { link: { networks: f.networks, custom_stations: built.customs, direction: f.direction }, problem: null }
+}
+
+export function buildLinkRequest(
+  place: Selection | null,
+  win: { startIso: string; durationH: number; commsMinFraction: number; stepMin?: number },
+  f: LinkForm,
+): BuiltRequest {
+  if (!place) return { body: null, problem: null }
+  const built = buildCustoms(f, f.level)
+  if ('problem' in built) return { body: null, problem: built.problem }
+  const customs = built.customs
   if (f.networks.length === 0 && customs.length === 0) return { body: null, problem: 'Pick a network or add an antenna' }
 
   let budget: LinkBudgetInput | undefined
@@ -152,7 +182,7 @@ export function buildLinkRequest(place: Selection | null, win: { startIso: strin
       ...placeFields,
       start: win.startIso,
       duration_h: win.durationH,
-      step_min: linkStepMin(win.durationH),
+      step_min: win.stepMin ?? linkStepMin(win.durationH),
       comms_min_fraction: win.commsMinFraction,
       networks: f.networks,
       custom_stations: customs,
@@ -167,7 +197,11 @@ export function buildLinkRequest(place: Selection | null, win: { startIso: strin
  * The request to run for the form. At the budget level, while the budget is incomplete, the geometry (level 1) is asked
  * instead so the panel and the timeline keep showing the contact; `problem` still says what the budget needs.
  */
-export function buildLinkRequestWithFallback(place: Selection | null, win: { startIso: string; durationH: number; commsMinFraction: number }, f: LinkForm): BuiltRequest {
+export function buildLinkRequestWithFallback(
+  place: Selection | null,
+  win: { startIso: string; durationH: number; commsMinFraction: number; stepMin?: number },
+  f: LinkForm,
+): BuiltRequest {
   const built = buildLinkRequest(place, win, f)
   if (built.body || !built.problem || f.level !== 2) return built
   const geometry = buildLinkRequest(place, win, { ...f, level: 1 })

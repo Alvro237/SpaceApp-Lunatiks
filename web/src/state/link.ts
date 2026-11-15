@@ -13,7 +13,7 @@ import { create } from 'zustand'
 import { api, isMissing } from '../api/client'
 import { useLink } from '../api/hooks'
 import type { ComparedPlace } from '../compare/useComparePlaces'
-import { DEFAULT_FORM, type LinkForm, type LinkSummary, buildLinkRequestWithFallback, summarize } from '../panels/linkModel'
+import { ANY_EARTH_FRACTION, DEFAULT_FORM, type LinkForm, type LinkSummary, buildLinkRequest, buildLinkRequestWithFallback, linkStepMin, summarize } from '../panels/linkModel'
 import { isoMinute } from '../time/clock'
 import { useApp } from './store'
 
@@ -70,6 +70,32 @@ export function useLinkResult() {
 export function useLinkProblem(): string | null {
   const { settled, win } = useSettledLink()
   return useMemo(() => buildLinkRequestWithFallback({ kind: 'site', id: 'any' }, win, settled).problem, [win, settled])
+}
+
+/**
+ * The link budget of each site the mission planner proposes, for the planner's own window: only while the budget is on
+ * (Geometry level has nothing to add to what the search already says) and complete. The contact is the planner's (any
+ * part of the Earth above the horizon, and the antennas), so the hours agree with the search. `problem` says what the
+ * budget still needs. One entry per site, null until its answer is there.
+ */
+export function usePlannerSiteLinks(sites: { lat: number; lon: number }[], window: { startIso: string; durationH: number } | null): { links: (LinkSummary | null)[]; problem: string | null; on: boolean } {
+  const { settled } = useSettledLink()
+  const on = settled.level === 2
+  const win = window ? { ...window, commsMinFraction: ANY_EARTH_FRACTION, stepMin: Math.max(60, linkStepMin(window.durationH)) } : null
+  const requests = sites.map((s) => (on && win ? buildLinkRequest({ kind: 'point', lat: s.lat, lon: s.lon }, win, settled) : { body: null, problem: null }))
+  const results = useQueries({
+    queries: requests.map((r) => ({
+      queryKey: ['link', r.body],
+      queryFn: ({ signal }: { signal: AbortSignal }) => api.link(r.body!, signal),
+      enabled: !!r.body,
+      retry: (count: number, e: unknown) => !isMissing(e) && count < 1,
+      staleTime: 60_000,
+      placeholderData: keepPreviousData,
+    })),
+  })
+  // what the form still needs does not depend on the site
+  const problem = on ? buildLinkRequest({ kind: 'site', id: 'any' }, { startIso: '2027-01-01T00:00', durationH: 24, commsMinFraction: ANY_EARTH_FRACTION }, settled).problem : null
+  return { links: requests.map((r, i) => (r.body && results[i]?.data ? summarize(results[i].data!) : null)), problem, on }
 }
 
 /**

@@ -75,6 +75,37 @@ export function LinkSettings({ showProblem = true }: { showProblem?: boolean } =
   )
 }
 
+/**
+ * The link settings inside the mission planner's Earth link category. The search itself is geometry (the networks,
+ * the direction and the user's own antennas decide what counts as contact); the budget is only for the proposed sites:
+ * the margin is the same at every site, so it cannot rank them, but it says whether each proposed site closes the link.
+ */
+export function PlannerLinkSettings() {
+  const id = useId()
+  const level = useLinkStore((s) => s.level)
+  const set = useLinkStore((s) => s.set)
+  const problem = useLinkProblem()
+  return (
+    <div className="link-body link-settings planner-link">
+      <Networks />
+      <Advanced />
+      <label className="check-row" htmlFor={`${id}-budget`}>
+        <input id={`${id}-budget`} type="checkbox" checked={level === 2} onChange={(e) => set({ level: e.target.checked ? 2 : 1 })} />
+        <span>Show the link budget for each proposed site</span>
+        <Tip label="the link budget">
+          Adds the margin and the hours with a closed link to every proposed site, for your radio. It does not change which sites are proposed.
+        </Tip>
+      </label>
+      {level === 2 && <Budget />}
+      {problem && (
+        <p className="error link-hint" role="status">
+          {problem}
+        </p>
+      )}
+    </div>
+  )
+}
+
 /* ------------------------------------------------------------------ level */
 
 function LevelSwitch() {

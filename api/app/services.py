@@ -15,7 +15,7 @@ import numpy as np
 from .db.sites import Site
 from .db.store import DataStore
 from .logic.constraints import ConstraintContext
-from .logic.link import Contact, StationSpec, StationView, combine_contact, station_view
+from .logic.link import Contact, StationSpec, StationView, any_antenna_sees_moon, combine_contact, station_view
 from .logic.horizon import RAY_AZIMUTHS, RAY_MAX_RANGE_M, HorizonProfile, destination, horizon_from_heights, ray_distances
 from .logic.engine import (DEFAULT_PARAMS, AnalysisParams, Metrics, RefinedRange, Series, SiteModel, Transition,
                            compute_metrics, evaluate, make_model, next_transition, refined_ranges, time_grid)
@@ -365,6 +365,13 @@ def link_views(store: DataStore, series: Series, stations: LinkStations) -> dict
     """The Moon from each antenna at the samples of ``series``. Raises OutOfCoverage outside the Moon table (2025-2035)."""
     moon = store.stations.moon.positions(series.t_ms)
     return {sp.id: station_view(sp, moon) for sp in stations.specs}
+
+
+def link_antenna_mask(store: DataStore, stations: LinkStations, t_ms: np.ndarray) -> np.ndarray:
+    """At each time of ``t_ms``, does at least one antenna see the Moon? Independent of the lunar site, so a search over
+    many sites computes it once per time grid (mission planner). Raises OutOfCoverage outside the Moon table."""
+    moon = store.stations.moon.positions(t_ms)
+    return any_antenna_sees_moon({sp.id: station_view(sp, moon) for sp in stations.specs})
 
 
 def link_contact(store: DataStore, series: Series, params: AnalysisParams, stations: LinkStations) -> Contact:

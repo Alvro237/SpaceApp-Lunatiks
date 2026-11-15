@@ -115,7 +115,7 @@ const ZONES: Zone[] = [
         does: (
           <>
             Mission planner only. Place a search region, set the window, then switch on filters by family: search area, terrain and landing, light and
-            power, Earth contact, temperature, radiation, mission window and science. Each switch reveals its threshold. A cell that fails any filter
+            power, Earth link, temperature, radiation, mission window and science. Each switch reveals its threshold. A cell that fails any filter
             is out. The answer is painted on the map and listed as connected areas, each with <em>Show</em> and <em>Study</em>.
           </>
         ),

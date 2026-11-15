@@ -14,7 +14,7 @@ const ANSWER: SuitabilityResponse = {
   limiting_b64: b64(1, 0, 1),
   layers: [
     { category: 'power', label: 'Power and sunlight', measure: 'share sunlit', weight: 0.75, utility_b64: b64(250, 0, 255) },
-    { category: 'earth', label: 'Earth contact', measure: 'share with contact', weight: 0.25, utility_b64: b64(125, 125, 125) },
+    { category: 'earth', label: 'Earth link', measure: 'share with contact', weight: 0.25, utility_b64: b64(125, 125, 125) },
   ],
   weights: { power: 0.75, earth: 0.25 },
   counts: { outside: 0, failed_static: 0, failed_window: 0, viable: 3, unknown: 0, failed_bound: 0 },
@@ -55,12 +55,12 @@ describe('Priorities', () => {
     render(<Priorities />)
     const rows = () => within(screen.getByRole('list')).getAllByRole('listitem').map((li) => li.textContent)
     expect(rows()[0]).toMatch(/1\. Power and sunlight75 %/)
-    expect(rows()[1]).toMatch(/2\. Earth contact25 %/)
+    expect(rows()[1]).toMatch(/2\. Earth link25 %/)
     expect(screen.getByRole('button', { name: 'Move up: Power and sunlight' })).toBeDisabled()
-    fireEvent.click(screen.getByRole('button', { name: 'Move up: Earth contact' }))
-    expect(rows()[0]).toMatch(/1\. Earth contact75 %/)
+    fireEvent.click(screen.getByRole('button', { name: 'Move up: Earth link' }))
+    expect(rows()[0]).toMatch(/1\. Earth link75 %/)
     expect(rows()[1]).toMatch(/2\. Power and sunlight25 %/)
-    expect(screen.getByText('Earth contact moved to position 1 of 2')).toBeInTheDocument()
+    expect(screen.getByText('Earth link moved to position 1 of 2')).toBeInTheDocument()
     expect(useAreas.getState().priority).toEqual(['earth', 'power'])
     expect(useAreas.getState().weights).toEqual({ earth: 0.75, power: 0.25 })
     expect([...useAreas.getState().raster!.score]).toEqual([Math.floor(0.625 * 255 + 0.5), Math.floor(0.375 * 255 + 0.5), 128])

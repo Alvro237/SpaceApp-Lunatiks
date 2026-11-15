@@ -129,7 +129,7 @@ export function PlannerPanel() {
           <div className="ios-row-top">
             <span className="ios-label">Landing date and mission duration</span>
             <Tip label="landing date and mission duration">
-              When the lander touches down (UTC) and how long it must work on the surface. Sunlight and Earth contact are checked over this whole
+              When the lander touches down (UTC) and how long it must work on the surface. Sunlight and the Earth link are checked over this whole
               window.
             </Tip>
           </div>

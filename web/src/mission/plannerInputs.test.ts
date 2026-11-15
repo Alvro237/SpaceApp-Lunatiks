@@ -7,7 +7,7 @@ import {
   buildSuitability,
   cellTooMany,
   cellsSide,
-  commsMinFractionOf,
+  needsLink,
   maxRadiusForCell,
 } from './plannerInputs'
 
@@ -86,7 +86,7 @@ describe('planner inputs: build the /suitability/search request', () => {
     expect(build({ landing: true }, { 'sun_el_at_landing:lo': '10', 'sun_el_at_landing:hi': '5' })).toMatch(/highest value must not be below the lowest/)
   })
 
-  it('request-level inputs: landing ellipse radius, robust delay; Earth disc in percent becomes a fraction', () => {
+  it('request-level inputs: landing ellipse radius and robust delay', () => {
     const r = ok(build({ topography: true, schedule: true }, { landing_radius: '0.5', robust_delay: '24' }))
     expect(r.criteria).toEqual([])
     expect(r.landing_radius_km).toBe(0.5)
@@ -95,9 +95,32 @@ describe('planner inputs: build the /suitability/search request', () => {
     // only while their category is on
     expect(ok(build({}, { landing_radius: '0.5', robust_delay: '24' })).landing_radius_km).toBeUndefined()
     expect(build({ topography: true }, { landing_radius: '0' })).toMatch(/more than 0/)
-    expect(commsMinFractionOf({})).toBeCloseTo(0.5, 9)
-    expect(commsMinFractionOf({ comms_fraction: '80' })).toBeCloseTo(0.8, 9)
-    expect(build({ earth: true }, { comms_fraction: '150' })).toMatch(/Earth disc needed for contact/)
+  })
+
+  it('Earth contact is the radio link: the three limits go as criteria, the settings never do, and no disc share is asked', () => {
+    const earth = PLANNER_CATEGORIES.find((c) => c.id === 'earth')!
+    expect(earth.fields.map((f) => f.id)).toEqual(['link_settings', 'max_blackout', 'link_min_daily', 'link_min_pass'])
+    expect(earth.fields.some((f) => 'key' in f && f.key === 'comms_min_fraction')).toBe(false)
+    const r = ok(build({ earth: true }, { max_blackout: '48', link_min_daily: '4', link_min_pass: '1.5' }))
+    expect(r.criteria).toEqual([
+      { id: 'blackout_h', limit: 48 },
+      { id: 'link_min_daily_h', limit: 4 },
+      { id: 'link_min_pass_h', limit: 1.5 },
+    ])
+    expect(r.window).toBe(true)
+    expect(r.scored).toEqual(['earth'])
+    // checked like every number: a day has 24 hours
+    expect(build({ earth: true }, { link_min_daily: '30' })).toMatch(/between 0 and 24/)
+    expect(build({ earth: true }, { link_min_pass: '-1' })).toMatch(/Shortest contact pass/)
+    // switched off: nothing of it is sent
+    expect(ok(build({}, { max_blackout: '48', link_min_daily: '4' })).criteria).toEqual([])
+  })
+
+  it('the search needs the radio link settings when the Earth category or one of its criteria is on', () => {
+    expect(needsLink(ok(build({ earth: true }, {})))).toBe(true)
+    expect(needsLink(ok(build({ landing: true }, {}, { switches: { earth_at_landing: true } })))).toBe(true)
+    expect(needsLink(ok(build({ power: true }, { battery_autonomy: '48' })))).toBe(false)
+    expect(needsLink(ok(build({ topography: true }, { max_slope: '10' })))).toBe(false)
   })
 
   it('Past landings: "Stay away from" and "Go near" send the choice and the distance', () => {
