@@ -60,6 +60,12 @@ export interface ReliefScene {
   earthRatio?: number
   /** Multiplies the radiance before the tone curve: 1 by day, raised at night so the earthlit ground reads. */
   exposure?: number
+  /**
+   * Expose each frame as a camera would (AUTO_TARGET): the 95th percentile of the ground's radiance in view is mapped
+   * to the same display level, so bright ground seen down-sun (lunar-Lambert radiance near 2 at grazing emission)
+   * keeps the photo's contrast instead of burning out, and dim ground is brightened. Off: the fixed exposure.
+   */
+  autoExposure?: boolean
   /** Albedo per ring (rings.ts ringAlbedo), aligned with stack.rings; null or missing: plain regolith. */
   albedo?: (Float32Array | null | undefined)[]
   /** Albedo from the finer photo tiles at a point (east, north metres from the observer), or NaN where none is loaded. */
@@ -115,6 +121,16 @@ const LOG_GRAIN = Math.log2(GRAIN_M)
 const LAMBERT_STEPS = 4096
 const LAMBERT_LUT = Float32Array.from({ length: LAMBERT_STEPS + 1 }, (_, i) => Math.max(0, 1 - Math.acos(-1 + (2 * i) / LAMBERT_STEPS) / (150 * D)))
 
+/** Auto exposure: radiance the 95th percentile is brought to (tone 0.88), and the range of the factor. */
+const AUTO_TARGET = 0.85
+const AUTO_MIN = 0.25
+const AUTO_MAX = 3
+/** Linear radiance and grain factor of each pixel, filled by writePixel and toned at the end of a render. */
+let LIN = new Float32Array(0)
+let GMUL = new Float32Array(0)
+/** Exposure factor of the last render (1 without auto exposure), for the tests and the console. */
+export const exposureStats = { factor: 1, p95: 0 }
+
 /** Display level (0..1) of a radiance. */
 export const tone = (r: number) => AMBIENT + (1 - AMBIENT) * (1 - Math.exp(-EXPOSURE * Math.max(0, r)))
 
@@ -162,6 +178,10 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
   const h = out.height
   const px = out.data
   px.fill(0)
+  if (LIN.length < w * h) {
+    LIN = new Float32Array(w * h)
+    GMUL = new Float32Array(w * h)
+  }
   const { stack } = s
   const rows = (el: number) => (c.cy - (el - c.pitch) / c.degPerPx) / scale - 0.5
   const f = stack.frame
@@ -375,6 +395,30 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
       for (let r = Math.min(top, h) - 1; r >= maskTop; r--) writePixel(px, 4 * (r * w + i), R, pT, 0, 0, dTheta, null, 255)
     }
   }
+  // tone: the exposure of this frame, then the curve and the grain
+  let factor = 1
+  if (s.autoExposure) {
+    const n = w * h
+    const stride = Math.max(1, Math.floor(n / 60_000))
+    const sample: number[] = []
+    for (let q = 0; q < n; q += stride) if (px[4 * q + 3] > 0) sample.push(LIN[q])
+    if (sample.length > 50) {
+      sample.sort((a, b) => a - b)
+      const p95 = sample[Math.floor(sample.length * 0.95)]
+      exposureStats.p95 = p95
+      if (p95 > 1e-6) factor = Math.min(AUTO_MAX, Math.max(AUTO_MIN, AUTO_TARGET / p95))
+    }
+  }
+  exposureStats.factor = factor
+  for (let q = 0, o = 0; q < w * h; q++, o += 4) {
+    if (px[o + 3] === 0) continue
+    const R = LIN[q] * factor
+    const b = TONE_LUT[R > 0 ? (R < TONE_MAX ? (R * TONE_STEPS) | 0 : TONE_MAX * TONE_STEPS) : 0] * GMUL[q]
+    // Uint8ClampedArray rounds and clamps
+    px[o] = TINT_R * b
+    px[o + 1] = TINT_G * b
+    px[o + 2] = TINT_B * b
+  }
   return steps
 }
 
@@ -396,17 +440,17 @@ function writePixel(
 ): void {
   // partial edge pixels keep the higher alpha already written
   if (alpha < 255 && px[o + 3] >= alpha) return
-  let b = TONE_LUT[R > 0 ? (R < TONE_MAX ? (R * TONE_STEPS) | 0 : TONE_MAX * TONE_STEPS) : 0]
+  let gm = 1
   if (grain !== null && t < GRAIN_REACH_M) {
     // footprint of the pixel on the ground: t dTheta across the ray, about t^2 dTheta / h along it at grazing
     // incidence (h: eye height); their geometric mean picks the mip level, so far grain blurs out instead of aliasing
     const foot = t * dTheta * Math.sqrt(Math.max(1, t / GRAIN_EYE_M))
     const g = grainAt(grain, Math.log2(Math.max(1e-6, foot)) - LOG_GRAIN, e / GRAIN_M + 311, n / GRAIN_M + 517)
-    b *= 1 + (g - 1) * GRAIN_GAIN * (1 - t / GRAIN_REACH_M)
+    gm = 1 + (g - 1) * GRAIN_GAIN * (1 - t / GRAIN_REACH_M)
   }
-  // Uint8ClampedArray rounds and clamps
-  px[o] = TINT_R * b
-  px[o + 1] = TINT_G * b
-  px[o + 2] = TINT_B * b
+  // colour later, once the frame's exposure is known
+  const q = o >> 2
+  LIN[q] = R
+  GMUL[q] = gm
   px[o + 3] = alpha
 }

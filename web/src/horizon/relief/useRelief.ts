@@ -314,6 +314,7 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
         albedo: live.stack === stack && ringAlbedo ? ringAlbedo : undefined,
         detailAt: live.stack === stack ? detailAt : undefined,
         grain: groundTexture(),
+        autoExposure: true,
       },
       night,
       cellM,
