@@ -36,7 +36,7 @@ import { type PhotoBase, loadPhotoBase } from './detail/photoBase'
 import { MIN_DIST, MOON_R_KM, type Orbit, OrbitRig, RELIEF_MAX, TILT_3D, cameraPose, isNearView, latLonToScene, missionPickOutcome, nearPlaneKm, raySphere, reliefExaggeration, sceneToLatLon } from './orbit'
 import { PATCH_LEVELS, POLAR_PATCH_LAT, type PolarPatchWindow, holeOf, patchGeometry, patchWindows, polarHoleOf, polarPatchWindows } from './patch'
 import { GLOBE_FRAG, GLOBE_VERT, PATCH_VERT, POLAR_PATCH_VERT } from './shaders'
-import { PolarDetail } from './detail/polar'
+import { OVERVIEW_DELAY_S, PolarDetail } from './detail/polar'
 import { TILES_BASE, loadTileset } from '../terrain/TerrainView'
 import { polarXY } from '../terrain/tileset'
 import { IconCrosshair } from '../ui/icons'
@@ -107,11 +107,12 @@ export function GlobeView() {
   const globe = useQuery({ queryKey: ['static', 'globe'], queryFn: loadGlobe, staleTime: Infinity, gcTime: Infinity, retry: 1 })
   const masks = useMasks().data
   const queryClient = useQueryClient()
-  // once the globe has its own data, bring in what the polar map opens with (terrain/prefetch.ts)
+  // once the globe has its own data and its opening view has had the network (the photo, the ephemeris), bring in
+  // what the polar map opens with (terrain/prefetch.ts; its overview heights are about 8 MB)
   const globeReady = !!globe.data
   useEffect(() => {
     if (!globeReady) return
-    const t = setTimeout(() => prefetchMap(queryClient), 1500)
+    const t = setTimeout(() => prefetchMap(queryClient), OVERVIEW_DELAY_S * 1000)
     return () => clearTimeout(t)
   }, [globeReady, queryClient])
   const sites = useMapSites()

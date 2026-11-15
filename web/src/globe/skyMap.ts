@@ -55,16 +55,24 @@ void main() {
 }
 `
 
-/** The 8k map on large-texture desktop GPUs, the 4k one elsewhere (128 MB of GPU memory against 32 MB). */
-function mapFile(gl: THREE.WebGLRenderer): string {
+/**
+ * The 4k map (1.3 MB) loads first, so the opening view does not wait for the 8k one (3.8 MB). Large-texture desktop
+ * GPUs then swap in the 8k map after UPGRADE_DELAY_MS (128 MB of GPU memory against 32 MB); others keep the 4k.
+ */
+const UPGRADE_DELAY_MS = 10_000
+
+function wantsLargeMap(gl: THREE.WebGLRenderer): boolean {
   const coarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
-  return gl.capabilities.maxTextureSize >= 16384 && !coarse ? 'starmap_8k.jpg' : 'starmap_4k.jpg'
+  return gl.capabilities.maxTextureSize >= 16384 && !coarse
 }
 
 export class SkyMap {
   readonly mesh: THREE.Mesh
   private readonly material: THREE.ShaderMaterial
   private texture: THREE.Texture | null = null
+  /** Rank of the map shown: 0 the 4k, 1 the 8k; -1 none yet. */
+  private rank = -1
+  private upgrade: ReturnType<typeof setTimeout> | undefined
   private disposed = false
   private lastMs = NaN
 
@@ -83,8 +91,14 @@ export class SkyMap {
     this.mesh.renderOrder = -1_000_001 // before the catalogue points, which blend over it
     this.mesh.visible = false // until the map has arrived; the catalogue points show meanwhile
 
-    new THREE.TextureLoader().load(`${DATA_BASE}sky/${mapFile(gl)}`, (tex) => {
-      if (this.disposed) {
+    this.load(gl, 'starmap_4k.jpg', 0)
+    if (wantsLargeMap(gl)) this.upgrade = setTimeout(() => this.load(gl, 'starmap_8k.jpg', 1), UPGRADE_DELAY_MS)
+  }
+
+  /** Loads a map and shows it unless a sharper one (higher rank) is already shown. */
+  private load(gl: THREE.WebGLRenderer, file: string, rank: number): void {
+    new THREE.TextureLoader().load(`${DATA_BASE}sky/${file}`, (tex) => {
+      if (this.disposed || rank < this.rank) {
         tex.dispose()
         return
       }
@@ -93,7 +107,9 @@ export class SkyMap {
       tex.wrapT = THREE.ClampToEdgeWrapping
       tex.anisotropy = Math.min(8, gl.capabilities.getMaxAnisotropy())
       tex.needsUpdate = true
+      this.texture?.dispose()
       this.texture = tex
+      this.rank = rank
       this.material.uniforms.uMap.value = tex
       this.mesh.visible = true
     })
@@ -109,6 +125,7 @@ export class SkyMap {
 
   dispose(): void {
     this.disposed = true
+    clearTimeout(this.upgrade)
     this.texture?.dispose()
     this.mesh.geometry.dispose()
     this.material.dispose()
