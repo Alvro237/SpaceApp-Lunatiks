@@ -27,6 +27,40 @@ float hAt(vec2 uv) {
 }
 `
 
+// The detail tiles: which one holds a point, and its value there (needs uDetail, uIndex, uMaxLevel, DETAIL_MAX_LEVEL).
+const DETAIL_LOOKUP = /* glsl */ `
+// Finest loaded tile that holds the point (degrees) and is not finer than the view: from the view's level down, the
+// tile under the point in the index (slots.ts, findSlot). cell = position in the tile in cells, size = side (degrees).
+int findTile(float lonDeg, float latDeg, out vec2 cell, out float size) {
+  for (int z = min(int(uMaxLevel), DETAIL_MAX_LEVEL); z >= 0; z--) {
+    float s = 90.0 / float(1 << z);
+    vec2 f = vec2((lonDeg + 180.0) / s, (90.0 - latDeg) / s);
+    ivec2 t = clamp(ivec2(floor(f)), ivec2(0), ivec2((4 << z) - 1, (2 << z) - 1));
+    int slot = int(texelFetch(uIndex, ivec2(t.x, 2 * ((1 << z) - 1) + t.y), 0).r * 255.0 + 0.5) - 1;
+    if (slot >= 0) {
+      cell = (f - vec2(t)) * 256.0;
+      size = s;
+      return slot;
+    }
+  }
+  cell = vec2(0.0);
+  size = 0.0;
+  return -1;
+}
+
+// bilinear between cell centres, clamped to the tile. (Four texelFetch, not one filtered texture() read: with
+// LINEAR filtering of this float32 texture array the globe took 1.0-1.3 ms per 1600 x 1600 frame against 0.05 ms,
+// measured on an Apple M2 under ANGLE Metal, 2026-11-14; same image within 1/255.)
+float dAt(int slot, vec2 cell) {
+  vec2 g = clamp(cell - 0.5, vec2(0.0), vec2(255.0));
+  ivec2 i = ivec2(floor(g));
+  vec2 t = g - vec2(i);
+  ivec2 j = min(i + 1, ivec2(255));
+  return mix(mix(texelFetch(uDetail, ivec3(i.x, i.y, slot), 0).r, texelFetch(uDetail, ivec3(j.x, i.y, slot), 0).r, t.x),
+             mix(texelFetch(uDetail, ivec3(i.x, j.y, slot), 0).r, texelFetch(uDetail, ivec3(j.x, j.y, slot), 0).r, t.x), t.y);
+}
+`
+
 export const GLOBE_VERT = /* glsl */ `
 uniform sampler2D uHeight;  // 1440 x 720 heights, metres; row 0 = 90 N, column 0 = longitude 0, east positive
 uniform float uExag;        // relief exaggeration of the mesh (x4 for the whole Moon, x1 close in)
@@ -63,6 +97,8 @@ uniform sampler2D uIndex;              // R8: layer + 1 of each loaded tile of e
 uniform float uMaxLevel;    // finest level the view uses; -1 = no detail
 uniform float uPhotoMode;   // 1 = LROC WAC photo, 0 = LOLA relief
 uniform float uDetailShade; // slope exaggeration of the shading from detail heights
+uniform vec4 uHole;         // drawn by a finer mesh instead (patch.ts): centre longitude, half-width in longitude,
+                            // south and north latitude, degrees; half-width 0 = no hole
 in vec3 vMe;
 in float vHeight;
 layout(location = 0) out highp vec4 fragColor;
@@ -72,41 +108,16 @@ const float PHOTO_GAIN = 1.6;
 
 ${H_AT}
 
-// Finest loaded tile that holds the point (degrees) and is not finer than the view: from the view's level down, the
-// tile under the point in the index (slots.ts, findSlot). cell = position in the tile in cells, size = side (degrees).
-int findTile(float lonDeg, float latDeg, out vec2 cell, out float size) {
-  for (int z = min(int(uMaxLevel), DETAIL_MAX_LEVEL); z >= 0; z--) {
-    float s = 90.0 / float(1 << z);
-    vec2 f = vec2((lonDeg + 180.0) / s, (90.0 - latDeg) / s);
-    ivec2 t = clamp(ivec2(floor(f)), ivec2(0), ivec2((4 << z) - 1, (2 << z) - 1));
-    int slot = int(texelFetch(uIndex, ivec2(t.x, 2 * ((1 << z) - 1) + t.y), 0).r * 255.0 + 0.5) - 1;
-    if (slot >= 0) {
-      cell = (f - vec2(t)) * 256.0;
-      size = s;
-      return slot;
-    }
-  }
-  cell = vec2(0.0);
-  size = 0.0;
-  return -1;
-}
-
-// bilinear between cell centres, clamped to the tile. (Four texelFetch, not one filtered texture() read: with
-// LINEAR filtering of this float32 texture array the globe took 1.0-1.3 ms per 1600 x 1600 frame against 0.05 ms,
-// measured on an Apple M2 under ANGLE Metal, 2026-11-14; same image within 1/255.)
-float dAt(int slot, vec2 cell) {
-  vec2 g = clamp(cell - 0.5, vec2(0.0), vec2(255.0));
-  ivec2 i = ivec2(floor(g));
-  vec2 t = g - vec2(i);
-  ivec2 j = min(i + 1, ivec2(255));
-  return mix(mix(texelFetch(uDetail, ivec3(i.x, i.y, slot), 0).r, texelFetch(uDetail, ivec3(j.x, i.y, slot), 0).r, t.x),
-             mix(texelFetch(uDetail, ivec3(i.x, j.y, slot), 0).r, texelFetch(uDetail, ivec3(j.x, j.y, slot), 0).r, t.x), t.y);
-}
-
+${DETAIL_LOOKUP}
 void main() {
   vec3 up = normalize(vMe);
   float lat = asin(clamp(up.z, -1.0, 1.0));
   float lon = atan(up.y, up.x);
+  if (uHole.y > 0.0) {
+    float dLon = mod(degrees(lon) - uHole.x + 540.0, 360.0) - 180.0;
+    float la = degrees(lat);
+    if (abs(dLon) < uHole.y && la > uHole.z && la < uHole.w) discard;
+  }
   float day = smoothstep(-0.02, 0.05, dot(up, uSun));
   vec2 cell;
   float tileDeg;
@@ -156,5 +167,70 @@ void main() {
   float latDeg = degrees(lat);
   if (abs(latDeg - uDiscLat) < 0.18) colour = mix(colour, vec3(0.925, 0.918, 0.894), 0.85);
   fragColor = vec4(colour, 1.0);
+}
+`
+
+/**
+ * A patch: a dense grid of latitude and longitude around the place the camera looks at (patch.ts), lifted by the
+ * same heights as the globe and, in relief mode, by the detail heights where they are loaded, so that a tilted view
+ * shows the shape of the ground and not only its shading. It is drawn with the globe's fragment shader.
+ *
+ * Detail heights and the shipped grid differ by the relief the grid averages away, hundreds of metres on rough
+ * ground, so where the loaded tiles end the mesh would show a cliff. Toward an edge of a tile with nothing loaded
+ * beyond it the mesh therefore eases back to the shipped heights over EDGE_FADE cells.
+ */
+export const PATCH_VERT = /* glsl */ `
+precision highp float;
+precision highp sampler2DArray;
+#define DETAIL_MAX_LEVEL ${MAX_LEVEL}
+uniform sampler2D uHeight;
+uniform float uExag;
+uniform sampler2DArray uDetail;
+uniform sampler2D uIndex;
+uniform float uMaxLevel;
+uniform float uPhotoMode;   // 1: the detail tiles are a photograph, not heights
+uniform vec4 uWin;          // centre longitude and latitude, cell size in longitude and in latitude (degrees)
+uniform float uSkirtKm;     // how far the rim hangs down, hiding the gap to the coarser mesh around it
+in float skirt;
+out vec3 vMe;
+out float vHeight;
+const float PI = 3.141592653589793;
+const float EDGE_FADE = 24.0;
+${H_AT}
+${DETAIL_LOOKUP}
+float wrapLon(float d) { return mod(d + 180.0, 360.0) - 180.0; }
+bool none(float lonDeg, float latDeg) {
+  vec2 c;
+  float s;
+  return findTile(wrapLon(lonDeg), latDeg, c, s) < 0;
+}
+void main() {
+  // position.xy counts cells from the centre of the window
+  float lonDeg = wrapLon(uWin.x + position.x * uWin.z);
+  float latDeg = clamp(uWin.y + position.y * uWin.w, -89.9, 89.9);
+  float lat = radians(latDeg);
+  float lon = radians(lonDeg);
+  vec3 me = vec3(cos(lat) * cos(lon), cos(lat) * sin(lon), sin(lat));
+  float h = hAt(vec2(fract(lon / (2.0 * PI)), (0.5 * PI - lat) / PI));
+  if (uPhotoMode < 0.5 && uMaxLevel >= 0.0) {
+    vec2 cell;
+    float size;
+    int slot = findTile(lonDeg, latDeg, cell, size);
+    if (slot >= 0) {
+      float c = size / 256.0;
+      float w = 1.0;
+      if (cell.x < EDGE_FADE && none(lonDeg - (cell.x + 1.0) * c, latDeg)) w = min(w, cell.x / EDGE_FADE);
+      if (256.0 - cell.x < EDGE_FADE && none(lonDeg + (257.0 - cell.x) * c, latDeg)) w = min(w, (256.0 - cell.x) / EDGE_FADE);
+      // rows count from the tile's north edge
+      if (cell.y < EDGE_FADE && none(lonDeg, latDeg + (cell.y + 1.0) * c)) w = min(w, cell.y / EDGE_FADE);
+      if (256.0 - cell.y < EDGE_FADE && none(lonDeg, latDeg - (257.0 - cell.y) * c)) w = min(w, (256.0 - cell.y) / EDGE_FADE);
+      h = mix(h, dAt(slot, cell), w);
+    }
+  }
+  vMe = me;
+  vHeight = h;
+  // Mean-Earth axes to the scene's (north up): x, z, -y
+  vec3 pos = vec3(me.x, me.z, -me.y) * (1737.4 + h / 1000.0 * uExag - skirt * uSkirtKm);
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
 }
 `

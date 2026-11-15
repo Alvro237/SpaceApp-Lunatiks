@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { IDLE_BEFORE_SPIN_MS, MOON_R_KM, OrbitRig, RELIEF_MAX, SPIN_DEG_PER_S, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon, zoomOrbitToward } from './orbit'
+import { IDLE_BEFORE_SPIN_MS, MAX_TILT, MOON_R_KM, OrbitRig, cameraPose, RELIEF_MAX, SPIN_DEG_PER_S, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon, zoomOrbitToward } from './orbit'
 
 describe('globe geometry', () => {
   it('puts the north pole up and longitude 0 toward +x', () => {
@@ -108,5 +108,54 @@ describe('zoom toward the pointer', () => {
     const z = zoomOrbitToward(o, 2, -88, 30)
     expect([z.lat, z.lon]).toEqual([-48, 10])
     expect(z.dist).toBeCloseTo(MOON_R_KM + 2000, 6)
+  })
+})
+
+describe('tilted view of the globe', () => {
+  const len = (v: number[]) => Math.hypot(v[0], v[1], v[2])
+  const sub = (a: number[], b: number[]) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]]
+  const dot = (a: number[], b: number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+  it('without tilt is the old camera: straight above the place, north up', () => {
+    const o = { lat: 20, lon: -30, dist: MOON_R_KM + 400 }
+    const p = cameraPose(o)
+    const above = latLonToScene(20, -30, o.dist)
+    for (let i = 0; i < 3; i++) expect(p.position[i]).toBeCloseTo(above[i], 9)
+    // looking at the surface point under it is looking at the Moon's centre
+    const view = sub(p.target, p.position)
+    expect(dot(view, p.position) / (len(view) * len(p.position))).toBeCloseTo(-1, 12)
+    // north at the top: `up` points toward the north pole along the surface
+    expect(dot(p.up, [0, 1, 0])).toBeGreaterThan(0.9)
+    expect(dot(p.up, p.position)).toBeCloseTo(0, 9)
+  })
+
+  it('tilted, it keeps its distance to the place and looks along the heading', () => {
+    const o = { lat: 0, lon: 0, dist: MOON_R_KM + 100 }
+    // hand-worked: tilt 60°, heading 0 (north). 100 km from the target, 50 km above the sphere's tangent plane
+    // there and 86.60 km behind it (to the south, −Y in the scene; the target is on +X at 1737.4).
+    const p = cameraPose(o, 60, 0)
+    expect(len(sub(p.position, p.target))).toBeCloseTo(100, 9)
+    expect(p.position[0]).toBeCloseTo(MOON_R_KM + 50, 9)
+    expect(p.position[1]).toBeCloseTo(-100 * Math.sin(Math.PI / 3), 9)
+    expect(p.position[2]).toBeCloseTo(0, 9)
+    // heading 90°: the same, behind it to the west (east is −Z in the scene, so the camera sits at +Z)
+    const e = cameraPose(o, 60, 90)
+    expect(e.position[1]).toBeCloseTo(0, 9)
+    expect(e.position[2]).toBeCloseTo(100 * Math.sin(Math.PI / 3), 9)
+  })
+
+  it('turns and tilts within limits, drags along the screen and stays still while tilted', () => {
+    const o = new OrbitRig({ lat: 0, lon: 0, dist: MOON_R_KM + 500 }, 0)
+    o.rotate(0, 200, true)
+    expect(o.view.tilt).toBe(MAX_TILT)
+    expect(o.isSpinning(IDLE_BEFORE_SPIN_MS * 10)).toBe(false)
+    o.resetView()
+    o.step(1, true)
+    expect(o.view).toEqual({ tilt: 0, heading: 0 })
+    // facing east (heading 90), dragging the surface down the screen moves the view east, not north
+    o.rotate(90, 0, true)
+    o.drag(0, 50, 1000, 35, true)
+    expect(o.goal.lat).toBeCloseTo(0, 9)
+    expect(o.goal.lon).toBeGreaterThan(0)
   })
 })
