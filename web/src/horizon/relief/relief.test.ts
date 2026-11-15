@@ -45,7 +45,13 @@ describe('ring geometry', () => {
     // Apollo 11: the global LOLA DEM (118 m), first ring at 60 m; rings stop once one reaches past 250 km
     const a11 = ringSpecs(0.674, 23.473)!
     expect(a11.map((s) => s.cellM)).toEqual([60, 240, 960, 3840])
-    expect(a11.every((s) => s.source.file === 'LRO_LOLA_DEM_Global_256ppd_v06')).toBe(true)
+    // the 256 px/deg v06 DEM up to 240 m cells, the 128 px/deg v04 DEM from 960 m (faster for large rings)
+    expect(a11.map((s) => s.source.file)).toEqual([
+      'LRO_LOLA_DEM_Global_256ppd_v06',
+      'LRO_LOLA_DEM_Global_256ppd_v06',
+      'LRO_LOLA_DEM_Global_128ppd_v04',
+      'LRO_LOLA_DEM_Global_128ppd_v04',
+    ])
     expect(ringSpecs(Number.NaN, 0)).toBeNull()
   })
 

@@ -42,6 +42,9 @@ export interface ReliefSource {
   /** Polar DEMs: the pole and the half-width of their square in the polar stereographic plane, metres. */
   pole: 'S' | 'N' | null
   halfExtentM: number
+  /** Global DEMs: the range of ring cells each one serves, metres. */
+  minCellM?: number
+  maxCellM?: number
 }
 
 const polar = (pole: 'S' | 'N', res: string, pixelM: number, halfExtentM: number): ReliefSource => ({
@@ -60,8 +63,12 @@ export const RELIEF_SOURCES: ReliefSource[] = [
   polar('N', '75_30mp', 30, 457_440),
   polar('S', '45_100mp', 100, 1_440_000),
   polar('N', '45_100mp', 100, 1_440_000),
-  // the global DEM's cell is 118 m; its first ring is laid at half of that, bilinear between the DEM's samples
-  { file: 'LRO_LOLA_DEM_Global_256ppd_v06', pixelM: 60, demM: 118, pole: null, halfExtentM: Infinity },
+  // the global DEM's cell is 118 m; its first ring is laid at half of that, bilinear between the DEM's samples.
+  // Rings of 960 m cells and coarser read the 128 px/deg v04 DEM (237 m): Moon Trek cuts a 983 km ring from it in
+  // about 2 s, against 14 s or an HTTP 400 from the v06 DEM (measured 2026-11-15); its gaps between LOLA tracks are
+  // far below such cells
+  { file: 'LRO_LOLA_DEM_Global_256ppd_v06', pixelM: 60, demM: 118, pole: null, halfExtentM: Infinity, maxCellM: 959 },
+  { file: 'LRO_LOLA_DEM_Global_128ppd_v04', pixelM: 960, demM: 237, pole: null, halfExtentM: Infinity, minCellM: 960 },
 ]
 
 export interface RingSpec {
@@ -111,6 +118,8 @@ export const ringHalf = (cellM: number) => (RING_N / 2) * cellM
 
 /** Does a square of half-width `half` (ground metres, any orientation) around the place lie inside the source? */
 function covers(s: ReliefSource, lat: number, lon: number, half: number): boolean {
+  const cell = half / (RING_N / 2)
+  if (cell < (s.minCellM ?? 0) || cell > (s.maxCellM ?? Infinity)) return false
   if (s.pole === null) return true
   if ((s.pole === 'S') !== lat < 0) return false
   // the polar DEMs are squares in their polar stereographic plane; north mirrors south
