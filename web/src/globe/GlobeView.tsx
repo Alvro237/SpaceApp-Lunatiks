@@ -25,6 +25,7 @@ import { prefetchMap } from '../terrain/prefetch'
 import { useEphemeris, useMasks } from '../time/hooks'
 import { DATA_BASE } from '../time/staticData'
 import { GlobeDetail } from './detail/globeDetail'
+import { type PhotoBase, loadPhotoBase } from './detail/photoBase'
 import { MIN_DIST, MOON_R_KM, type Orbit, OrbitRig, RELIEF_MAX, TILT_3D, cameraPose, isNearView, latLonToScene, nearPlaneKm, raySphere, reliefExaggeration, sceneToLatLon } from './orbit'
 import { PATCH_LEVELS, holeOf, patchGeometry, patchWindows } from './patch'
 import { GLOBE_FRAG, GLOBE_VERT, PATCH_VERT } from './shaders'
@@ -55,12 +56,14 @@ export interface GlobeMeta {
   max: number
 }
 
-export async function loadGlobe(): Promise<{ meta: GlobeMeta; heights: Float32Array }> {
+/** The global heights and, alongside, the shipped photo base: the globe opens in photo mode with both in place. */
+export async function loadGlobe(): Promise<{ meta: GlobeMeta; heights: Float32Array; photoBase: PhotoBase | null }> {
+  const photoBase = loadPhotoBase()
   const meta = (await (await fetch(`${DATA_BASE}globe/globe.json`)).json()) as GlobeMeta
   const loader = new TileLoader(1)
   try {
     const res = await loader.request('globe', { url: `${DATA_BASE}globe/${meta.file}`, kind: 'height', min: meta.min, max: meta.max })
-    return { meta, heights: res.heights! }
+    return { meta, heights: res.heights!, photoBase: await photoBase }
   } finally {
     loader.dispose()
   }
@@ -412,7 +415,7 @@ function setSun(m: THREE.ShaderMaterial, x: number, y: number, z: number) {
 }
 
 interface SceneProps {
-  data: { meta: GlobeMeta; heights: Float32Array }
+  data: { meta: GlobeMeta; heights: Float32Array; photoBase: PhotoBase | null }
   orbit: OrbitRig
   sites: MapSite[]
   markerStyle: MarkerStyle
@@ -442,7 +445,7 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
   const perf = useRef({ frames: 0, time: 0, age: 0, dpr: viewport.dpr })
   const eph = useEphemeris().data
   const [reduced] = useState(() => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
-  const [detail] = useState(() => new GlobeDetail())
+  const [detail] = useState(() => new GlobeDetail(data.photoBase))
   const [material] = useState(() => {
     const tex = new THREE.DataTexture(data.heights, data.meta.width, data.meta.height, THREE.RedFormat, THREE.FloatType)
     tex.minFilter = tex.magFilter = THREE.NearestFilter
