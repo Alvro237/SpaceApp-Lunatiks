@@ -42,9 +42,18 @@ export function PlaceTools() {
   const setSection = usePanels((s) => s.setSection)
   // the sections are about one place: they wait until one is chosen
   const hasPlace = useApp((s) => s.selection !== null)
+  // Mission planner: a click on the terrain moves the region centre and there is no search box, so Multiselect could
+  // not pick anything; the planner compares its sites with "Compare selected" (Candidate sites) instead.
+  const mission = useApp((s) => s.mode === 'mission')
+  // a Multiselect left on in Site explorer with fewer than two places would keep adding sites clicked in the planner
+  useEffect(() => {
+    const s = useApp.getState()
+    if (mission && s.compareMode && s.compare.length < 2) s.setCompareMode(false)
+  }, [mission])
 
   return (
     <div className="place-tools" role="group" aria-label="Place tools">
+      {!mission && (
       <button
         type="button"
         className={`tool-btn multi-btn${compareMode ? ' is-on' : ''}`}
@@ -60,8 +69,9 @@ export function PlaceTools() {
           </span>
         )}
       </button>
+      )}
       {compareMode ? (
-        count < 2 && (
+        count < 2 && !mission && (
           <span className="multi-hint" role="status">
             Pick {count === 0 ? 'two places' : 'another place'} on the map or in the search
           </span>

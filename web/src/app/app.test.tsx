@@ -514,6 +514,16 @@ describe('navigator', () => {
     await noAxeViolations(container)
   })
 
+  it('mission mode: no Multiselect (no search box, a click moves the region) and a leftover one is switched off', async () => {
+    useApp.setState({ mode: 'mission', compareMode: true, compare: [{ kind: 'point', lat: -89.45, lon: 137.3 }] })
+    renderAt('/')
+    expect(await screen.findByRole('heading', { level: 2, name: 'Mission planner inputs' })).toBeInTheDocument()
+    const tools = screen.getByRole('group', { name: 'Place tools' })
+    expect(within(tools).queryByRole('button', { name: 'Multiselect' })).toBeNull()
+    expect(within(tools).queryByRole('status')).toBeNull()
+    expect(useApp.getState().compareMode).toBe(false)
+  })
+
   it('keeps working from static data when the API is down', async () => {
     vi.stubGlobal('fetch', fakeFetch(false))
     const user = userEvent.setup()
