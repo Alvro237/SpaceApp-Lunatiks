@@ -455,13 +455,15 @@ export function GlobeView() {
         <GlobeLayers surface={surface} onSurface={setSurface} tileset={tileset} />
       </div>
       </ToolPortal>
-      <p className="globe-caption">
-        {surface === 'photo'
-          ? `LROC WAC photo mosaic, 100 m, from NASA Moon Trek, over global LOLA topography (relief ×${exag}; 118 m detail as you zoom)`
-          : `Global LOLA topography (relief ×${exag}; 118 m detail from NASA Moon Trek as you zoom)`}
-        {' · lit by the Sun at the chosen time'}
-      </p>
-      {tileset && <LegendChip tileset={tileset} globe={globe.data ? [globe.data.meta.min, globe.data.meta.max] : true} />}
+      <div className="globe-notes">
+        <p className="globe-caption">
+          {surface === 'photo'
+            ? `LROC WAC photo mosaic, 100 m, from NASA Moon Trek, over global LOLA topography (relief ×${exag}; 118 m detail as you zoom)`
+            : `Global LOLA topography (relief ×${exag}; 118 m detail from NASA Moon Trek as you zoom)`}
+          {' · lit by the Sun at the chosen time'}
+        </p>
+        {tileset && <LegendChip tileset={tileset} globe={globe.data ? [globe.data.meta.min, globe.data.meta.max] : true} />}
+      </div>
       {regionToast && (
         <p className="toast" role="alert">
           {regionToast}
