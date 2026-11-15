@@ -1051,7 +1051,7 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
 
 /* ---------------------------------------------------------------- multiselect comparison */
 .multi { display: grid; gap: 12px; }
-.multi .num {
+.multi .num, .cmp-dialog .num {
   display: inline-grid;
   place-items: center;
   flex: none;
@@ -1063,99 +1063,90 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
   font-size: 0.74rem;
   font-weight: 800;
 }
-/* one card per place, side by side: header, small radar and the metrics as numbers */
-.cmp-note { margin: -4px 0 0; font-size: 0.8rem; }
-.cmp-cards {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+/* one radar with every place on it, the places beside it as its legend */
+.cmp-layout { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(220px, 1fr); gap: 12px 16px; align-items: start; }
+@media (max-width: 760px) { .cmp-layout { grid-template-columns: minmax(0, 1fr); } }
+.cmp-radar-box { position: relative; display: grid; justify-items: center; gap: 2px; min-width: 0; }
+.radar-svg { width: 100%; max-width: 400px; height: auto; display: block; overflow: visible; }
+.radar-axis-btn { cursor: help; outline: none; }
+.radar-spoke-hit { stroke: transparent; stroke-width: 16; stroke-linecap: round; pointer-events: stroke; }
+.radar-axis-btn .radar-axis { text-decoration: underline dotted; text-underline-offset: 3px; }
+.radar-axis-btn:hover .radar-axis, .radar-axis-btn.is-active .radar-axis { fill: var(--text); }
+.radar-axis-btn:focus-visible .radar-axis { fill: var(--text); stroke: var(--focus); stroke-width: 3px; paint-order: stroke; }
+.radar-spoke.is-active { stroke: var(--text); stroke-width: 1.5; }
+.radar-series { transition: opacity 0.15s ease; }
+.radar-series.is-dim { opacity: 0.18; }
+.radar-series.is-hl polygon { fill-opacity: 0.28; stroke-width: 3; }
+@media (prefers-reduced-motion: reduce) { .radar-series { transition: none; } }
+
+.cmp-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.cmp-row.radar-key {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
-  gap: 10px;
-}
-.cmp-card {
-  --c: var(--s1);
-  display: grid;
+  grid-template-columns: 26px 22px minmax(0, 1fr) auto auto;
+  align-items: center;
   gap: 6px;
-  min-width: 0;
-  padding: 8px 10px 10px;
-  border-radius: 12px;
+  padding: 5px 4px 5px 8px;
+  border-radius: 10px;
   border: 1px solid var(--border);
-  border-top: 3px solid var(--c);
   background: var(--surface-2);
+  font-size: 0.85rem;
 }
-.cmp-c-2 { --c: var(--s2); }
-.cmp-c-3 { --c: var(--s3); }
-.cmp-c-4 { --c: var(--s4); }
-.cmp-card.is-current { border-color: var(--accent); border-top-color: var(--c); box-shadow: 0 0 0 1px var(--accent); }
-.cmp-card-head { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.cmp-card-head .multi-name { flex: 1; min-width: 0; max-width: none; text-align: left; }
-.cmp-card-head .icon.small { min-width: 26px; min-height: 26px; border-radius: 50%; }
-.cmp-tag { justify-self: start; }
-.cmp-body { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; align-items: center; }
-.cmp-radar { width: 112px; height: 112px; display: block; overflow: visible; }
-.cmp-radar-axis { fill: var(--muted); font-size: 8.5px; font-weight: 700; font-family: var(--font); }
-.cmp-radar-best { fill: none; stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 2; opacity: 0.8; }
-.cmp-radar .radar-series polygon { fill-opacity: 0.22; stroke-dasharray: none; }
-.cmp-metrics { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 0.78rem; }
-.cmp-metrics li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1px 6px; align-items: baseline; }
-.cmp-m-label {
-  justify-self: start;
-  max-width: 100%;
+.cmp-row.is-current { border-color: var(--accent); }
+.cmp-row.is-hl { background: var(--surface); box-shadow: 0 0 0 1px var(--text) inset; }
+.cmp-row-main { display: grid; min-width: 0; }
+.cmp-row-main .multi-name { max-width: 100%; text-align: left; justify-self: start; }
+.cmp-row-main .tag-pill { justify-self: start; }
+.cmp-row.is-plain { grid-template-columns: 26px 22px minmax(0, 1fr); padding: 7px 10px; }
+.cmp-row-name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* the radar large, in a window centred on the screen */
+.cmp-dialog {
+  width: min(980px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
   padding: 0;
-  border: 0;
-  background: none;
-  color: var(--muted);
-  font: inherit;
-  text-align: left;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  cursor: help;
-  text-decoration: underline dotted;
-  text-underline-offset: 3px;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
 }
-.cmp-m-label:hover, .cmp-metrics li.is-active .cmp-m-label { color: var(--text); }
-.cmp-m-label:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+.cmp-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
+.cmp-dialog-body { display: grid; gap: 8px; padding: 16px 18px 20px; }
+.cmp-layout.is-big { grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); align-items: center; }
+.cmp-layout.is-big .radar-svg { max-width: 640px; }
+.cmp-layout.is-big .radar-axis { font-size: 10px; }
+@media (max-width: 760px) { .cmp-layout.is-big { grid-template-columns: minmax(0, 1fr); } }
+.cmp-row .icon.small { min-width: 26px; min-height: 26px; border-radius: 50%; }
 
-/* radar axes: a wide invisible hit area, the hovered axis drawn stronger */
-.cmp-body { position: relative; }
-.cmp-axis { cursor: help; }
-.cmp-axis-hit { fill: transparent; stroke: transparent; stroke-width: 10; pointer-events: all; }
-.cmp-axis.is-active .radar-spoke { stroke: var(--text); stroke-width: 1.5; }
-.cmp-axis.is-active .cmp-radar-axis, .cmp-axis:hover .cmp-radar-axis { fill: var(--text); }
-
-/* the explanation pop-up */
+/* the explanation pop-up, centred on the axis name; it floats over the page (rendered in <body>) */
 .cmp-tip {
-  position: absolute;
-  z-index: 6;
+  position: fixed;
+  z-index: 1000;
   width: 250px;
   max-width: calc(100vw - 48px);
   padding: 9px 11px 10px;
   border-radius: 10px;
   border: 1px solid var(--border);
-  border-left: 3px solid var(--c);
   background: var(--surface);
   color: var(--text);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
   font-size: 0.78rem;
   line-height: 1.35;
+  text-align: left;
   pointer-events: none;
-  transform: translateX(-18px);
+  transform: translateX(-50%);
   animation: cmp-tip-in 0.12s ease-out;
 }
-.cmp-tip.is-above { transform: translate(-18px, -100%); }
+.cmp-tip.is-above { transform: translate(-50%, -100%); }
 .cmp-tip p { margin: 5px 0 0; }
 .cmp-tip-title { display: block; font-size: 0.86rem; }
-.cmp-tip-value { display: block; margin-top: 1px; font-family: var(--mono); font-size: 0.74rem; color: var(--c); font-weight: 600; }
 .cmp-tip-good span { color: #7ee2a8; }
 .cmp-tip-bad span { color: #ff8f8f; }
+.cmp-tip-values { list-style: none; margin: 7px 0 0; padding: 6px 0 0; border-top: 1px solid var(--border); display: grid; grid-template-columns: 1fr 1fr; gap: 3px 8px; font-family: var(--mono); font-size: 0.72rem; }
+.cmp-tip-values li { display: flex; align-items: center; gap: 6px; }
+.cmp-tip-values .num { display: inline-grid; place-items: center; flex: none; width: 18px; height: 18px; border-radius: 50%; background: #ffd166; color: #001018; font: 800 0.66rem var(--font); }
 @keyframes cmp-tip-in { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .cmp-tip { animation: none; } }
-.cmp-m-value { font-family: var(--mono); font-weight: 600; white-space: nowrap; }
-.cmp-metrics li.is-best .cmp-m-value { color: var(--c); }
-.cmp-m-bar { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--grid); overflow: hidden; }
-.cmp-m-bar > span { display: block; height: 100%; border-radius: 2px; background: var(--c); }
 .multi-name {
   border: 0;
   background: transparent;
