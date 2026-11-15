@@ -7,12 +7,13 @@ import { defineConfig, type HtmlTagDescriptor, type Plugin } from 'vite'
 // route works without a 404.html copy.
 const API = process.env.API_PROXY ?? 'http://127.0.0.1:8000'
 
-// Vercel (`vercel build` sets VERCEL=1) serves the site at the domain root: the landing page at / and the navigator
-// at /app (routes in web/vercel.json). BASE_PATH overrides the base for any other host.
+// Vercel (build with VERCEL=1, see deploy/vercel) serves everything from one domain: the landing page at /, the
+// navigator at /app and the API at /api and /docs. BASE_PATH overrides the base for any other host.
 const onVercel = Boolean(process.env.VERCEL)
 const base = process.env.BASE_PATH ?? (onVercel ? '/' : '/SpaceApp-Lunatiks/')
-// Where the landing page's "Open the navigator" buttons go. Vite exposes VITE_* variables of process.env to the code.
+// Where the landing page's buttons go. Vite exposes VITE_* variables of process.env to the code.
 process.env.VITE_APP_URL ??= onVercel ? '/app' : base
+if (onVercel) process.env.VITE_API_DOCS_URL ??= '/docs'
 
 /**
  * The navigator (the opening view of index.html) is a lazy chunk, so the text pages stay light. Without a hint the

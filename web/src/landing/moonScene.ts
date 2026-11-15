@@ -26,7 +26,7 @@ interface Key {
   shift: number
 }
 
-// One keyframe per section: hero, demo, the four features, the closing call.
+// One keyframe per section: hero, demo, the four features, mobile, the closing call.
 const KEYS: Key[] = [
   { pos: [0.0, 0.25, 4.3], look: [0, 0, 0], up: [0, 1, 0], shift: -1.15 },
   { pos: [-0.6, 0.6, 6.4], look: [0, 0.15, 0], up: [0, 1, 0], shift: 0 },
@@ -34,6 +34,7 @@ const KEYS: Key[] = [
   { pos: [-1.0, -2.6, 1.4], look: [0, -0.55, 0], up: [0, 0.4, 1], shift: -0.75 },
   { pos: [-0.35, -2.05, -0.2], look: [0, -0.85, 0.35], up: [0, -0.5, 1], shift: -0.6 },
   { pos: [0.1, -1.55, -1.35], look: [0.05, -0.75, 2.5], up: [0, -1, 0.3], shift: -0.4 },
+  { pos: [0.55, -1.42, -1.7], look: [0.3, -0.65, 2.8], up: [0, -1, 0.3], shift: 0.2 },
   { pos: [0.05, -1.3, -2.1], look: [0.05, -0.55, 3], up: [0, -1, 0.3], shift: 0 },
 ]
 

@@ -3,3 +3,4 @@
 *.i16 binary
 *.npz binary
 *.png binary
+*.sh text eol=lf
