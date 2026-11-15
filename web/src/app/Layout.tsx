@@ -2,7 +2,6 @@ import { useEffect, useRef } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useApp } from '../state/store'
 import { BlockToggle } from '../blocks/BlockToggle'
-import { TimelineFilters } from '../panels/TimelineFilters'
 import { BrandMark } from '../ui/BrandMark'
 import { TourButton } from '../ui/Walkthrough'
 
@@ -42,17 +41,14 @@ export function Layout() {
         {onMap && (
           <div className="bar-tools">
             {!blocks && (
-              <>
-                <div className="mode-switch" role="radiogroup" aria-label="Mode">
-                  <button type="button" role="radio" aria-checked={mode === 'study'} onClick={() => set({ mode: 'study' })}>
-                    Site explorer
-                  </button>
-                  <button type="button" role="radio" aria-checked={mode === 'mission'} onClick={() => set({ mode: 'mission' })}>
-                    Mission planner
-                  </button>
-                </div>
-                <TimelineFilters />
-              </>
+              <div className="mode-switch" role="radiogroup" aria-label="Mode">
+                <button type="button" role="radio" aria-checked={mode === 'study'} onClick={() => set({ mode: 'study' })}>
+                  Site explorer
+                </button>
+                <button type="button" role="radio" aria-checked={mode === 'mission'} onClick={() => set({ mode: 'mission' })}>
+                  Mission planner
+                </button>
+              </div>
             )}
             <BlockToggle />
           </div>

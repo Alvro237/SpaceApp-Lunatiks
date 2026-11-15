@@ -203,6 +203,8 @@ export interface LinkSummary {
   stepMs: number
   linkFraction: number
   linkHours: number
+  /** The longest unbroken stretch with link, in hours (a range ends at its last sample, which stands for one step more). */
+  longestLinkH: number
   gapHours: number
   earthFraction: number
   antennaFraction: number
@@ -213,13 +215,16 @@ export interface LinkSummary {
 export function summarize(r: LinkResponse): LinkSummary {
   const b = r.budget ?? null
   const margins = (b?.best_margin_db ?? []).filter((m): m is number => m !== null)
+  const linkRanges = toRanges(b ? b.link_ranges : r.contact_ranges)
+  const stepMs = r.step_min * 60_000
   return {
     level2: b !== null,
-    linkRanges: toRanges(b ? b.link_ranges : r.contact_ranges),
+    linkRanges,
+    longestLinkH: Math.max(0, ...linkRanges.map(([a, z]) => (z - a + stepMs) / 3_600_000)),
     contactRanges: toRanges(r.contact_ranges),
     earthRanges: toRanges(r.earth_visible_ranges),
     antennaRanges: toRanges(r.any_station_ranges),
-    stepMs: r.step_min * 60_000,
+    stepMs,
     linkFraction: b ? b.link_window_fraction : r.contact_window_fraction,
     linkHours: b ? b.link_hours : r.contact_hours,
     gapHours: b ? b.longest_link_blackout_h : r.longest_blackout_h,

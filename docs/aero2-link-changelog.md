@@ -83,9 +83,18 @@ The link is now in the interface. The section is still opened with the "Earth li
   there is real link). At Budget level a `Margin` chart goes under them: the best Eb/N0 margin at each sample as a line
   against a dashed line at the margin the user asks for; the link is closed where the line is at or above the dashed one,
   and a break in the line means no antenna is in contact. The Earth row is hidden while the link answer is available and
-  appears in its place if the API does not answer. The comparison strips are unchanged.
-- `panels/TimelineFilters.tsx` and `app/Layout.tsx`: a "Filters" button in the top bar with the option "Earth above the
-  horizon" (off by default) that shows the `Earth up` row.
+  appears in its place if the API does not answer.
+- Comparison (Multiselect), `charts/Timeline.tsx` and `compare/ComparePanel.tsx`: the Sunlit / Earth switch is now
+  Sunlit / Link, and each place's strip shows only real link (nothing while the budget is incomplete); no margin chart
+  here. The radar axes "Earth contact" and "Steady contact" became **Link** (share of the window with link) and
+  **Steady link** (longest unbroken link ÷ window length; before it was 1 − longest blackout ÷ window). "Link" means
+  the same as the strip: the Earth is in view, an antenna of the chosen networks sees the Moon and, at Budget level,
+  the margin reaches the one asked for (at Geometry level, just the contact). While the link is not available the two
+  axes read "not available" and sit at 0, and the form's problem is written above the radar. The same settings as the
+  single place (level, networks, budget, direction, own antennas) are under "Link settings" in the panel.
+  `LinkSummary.longestLinkH` is new.
+- The "Filters" button of the top bar was removed; the `Earth up` row only appears as the fallback when the link
+  answer is missing.
 - `panels/linkModel.ts` (pure, tested in `linkModel.test.ts`), `state/link.ts` (form state and the shared request),
   `api/client.ts`, `api/hooks.ts`, `api/types.ts`: the client, hooks and types of `/api/v1/link`.
 - `api/schema.gen.ts` was regenerated with `npm run gen:api` (the committed one was behind the API); `types.ts`

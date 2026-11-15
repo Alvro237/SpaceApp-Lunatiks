@@ -57,13 +57,13 @@ export function LinkPanel() {
  * The same settings without a place or a result, for the comparison (several places share one form): level, networks,
  * the budget when it is on, direction and own antennas, and what the form still needs.
  */
-export function LinkSettings() {
+export function LinkSettings({ showProblem = true }: { showProblem?: boolean } = {}) {
   const level = useLinkStore((s) => s.level)
   const problem = useLinkProblem()
   return (
     <div className="link-body link-settings">
       <LevelSwitch />
-      {problem && (
+      {showProblem && problem && (
         <p className="error link-hint" role="status">
           {problem}
         </p>

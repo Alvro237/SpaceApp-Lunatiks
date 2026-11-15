@@ -1293,7 +1293,7 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
 .example-row { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
 .example-row button { display: inline-flex; align-items: center; gap: 6px; }
 
-/* ---- Radio link (AERO-2): panel, Link row of the timeline, Filters button ---- */
+/* ---- Radio link (AERO-2): panel, Link row of the timeline ---- */
 .range-link { fill: var(--pass); }
 .link-body { display: grid; gap: 12px; min-width: 0; }
 .link-level { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
@@ -1320,11 +1320,6 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
 .own-ant { border: 1px solid var(--border); border-radius: 10px; margin: 8px 0; padding: 8px 10px; min-width: 0; }
 .own-ant legend { font-size: 0.8rem; font-weight: 700; color: var(--muted); padding: 0 4px; }
 .link-remove, .link-add { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; }
-.tl-filters { position: relative; }
-.filters-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; border-radius: 999px; padding: 6px 12px; }
-.filters-btn[aria-expanded='true'] { background: var(--accent); color: var(--on-accent); }
-.filters-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 220px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--glass); backdrop-filter: blur(8px); }
-.filters-pop .check-row { margin: 6px 0 2px; }
 .link-hint { margin: 0; font-size: 0.85rem; }
 .margin-line { fill: none; stroke: var(--pass); stroke-width: 1.6; stroke-linejoin: round; }
 .margin-need { stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 5 4; }

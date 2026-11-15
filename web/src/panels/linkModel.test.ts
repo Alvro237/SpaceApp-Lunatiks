@@ -134,6 +134,14 @@ describe('summarize and noLinkReason', () => {
     const s = summarize(response())
     expect(s).toMatchObject({ level2: false, linkFraction: 0.4, linkHours: 10, gapHours: 14, margin: null })
   })
+  it('the longest unbroken link counts the step each range ends on', () => {
+    const two = [
+      { start: '2027-03-01T02:00:00Z', end: '2027-03-01T04:00:00Z' },
+      { start: '2027-03-01T10:00:00Z', end: '2027-03-01T15:00:00Z' },
+    ]
+    expect(summarize(response({ contact_ranges: two })).longestLinkH).toBe(6)
+    expect(summarize(response({ contact_ranges: [] })).longestLinkH).toBe(0)
+  })
   it('explains why there is no link', () => {
     const s = summarize(response())
     expect(noLinkReason(s, at(15))).toBeNull()

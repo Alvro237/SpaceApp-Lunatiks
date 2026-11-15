@@ -18,14 +18,11 @@ import { isoMinute } from '../time/clock'
 import { useApp } from './store'
 
 interface LinkState extends LinkForm {
-  /** Timeline: also draw the "Earth up" row (the site sees the Earth), next to the Link row. Off by default. */
-  showEarthRow: boolean
-  set: (patch: Partial<LinkForm & { showEarthRow: boolean }>) => void
+  set: (patch: Partial<LinkForm>) => void
 }
 
 export const useLinkStore = create<LinkState>()((set) => ({
   ...DEFAULT_FORM,
-  showEarthRow: false,
   set: (patch) => set(patch),
 }))
 

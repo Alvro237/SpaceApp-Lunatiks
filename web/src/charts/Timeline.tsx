@@ -25,7 +25,7 @@ import { MS_PER_DAY, MS_PER_HOUR } from '../time/engine'
 import { useParams, useThrottledTime } from '../time/hooks'
 import { type LinkSummary, toRanges } from '../panels/linkModel'
 import { useNow } from '../panels/useNow'
-import { useComparedLinks, useLinkResult, useLinkStore } from '../state/link'
+import { useComparedLinks, useLinkResult } from '../state/link'
 import { IconAntenna, IconPause, IconPlay, IconSpeed, IconSun } from '../ui/icons'
 
 const W = 1000
@@ -81,7 +81,6 @@ export function Timeline() {
   const comparedLinks = useComparedLinks(comparing ? compared : [])
   const [strip, setStrip] = useState<Strip>('sun')
   const link = useLinkResult()
-  const showEarthRow = useLinkStore((s) => s.showEarthRow)
   const LEFT = comparing ? LEFT_COMPARE : LEFT_SINGLE
 
   const data: TimelineData | null = useMemo(() => {
@@ -195,7 +194,7 @@ export function Timeline() {
       )}
       {data && (
         <>
-          {!comparing && <PlaceStrip id={id} data={data} link={link.data ?? null} linkReady={!link.problem} showEarth={showEarthRow || !link.data} left={LEFT} x={x} ticks={ticks} durationH={durationH} startMs={startMs} endMs={endMs} tMs={tMs} onSeek={seek} />}
+          {!comparing && <PlaceStrip id={id} data={data} link={link.data ?? null} linkReady={!link.problem} showEarth={!link.data} left={LEFT} x={x} ticks={ticks} durationH={durationH} startMs={startMs} endMs={endMs} tMs={tMs} onSeek={seek} />}
           {!comparing && link.data?.budget && !link.problem && <MarginChart link={link.data} startMs={startMs} endMs={endMs} tMs={tMs} x={x} left={LEFT} onSeek={seek} />}
           {battery && <BatteryChart r={battery} startMs={startMs} endMs={endMs} tMs={tMs} x={x} left={LEFT} onSeek={seek} />}
           {inside && <InsideChart r={inside} startMs={startMs} endMs={endMs} tMs={tMs} x={x} left={LEFT} onSeek={seek} />}
