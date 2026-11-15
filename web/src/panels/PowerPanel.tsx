@@ -18,9 +18,9 @@
 import { type FormEvent, type ReactNode, useId, useMemo, useState } from 'react'
 import { isMissing } from '../api/client'
 import { usePower, useRadiation } from '../api/hooks'
-import type { PowerRequest, PowerResponse, RadiationRequest } from '../api/types'
-import { type PowerKey, type PowerModel, useCurrentPowerResult, usePowerStore, useScenarioId } from '../state/power'
-import { type Selection, useApp } from '../state/store'
+import type { PowerResponse, RadiationRequest } from '../api/types'
+import { type PowerModel, useCurrentPowerResult, usePowerStore, useScenarioId } from '../state/power'
+import { useApp } from '../state/store'
 import { formatDuration, formatUtc, isoMinute } from '../time/clock'
 import { useParams } from '../time/hooks'
 import { ApiStatus, SourceTag } from '../ui/ApiStatus'
@@ -37,11 +37,11 @@ import {
   IconSliders,
 } from '../ui/icons'
 import { ColonyResult } from './ColonyResult'
-import { ALL_FIELDS, ARRAY, BATTERY, COLONY_LOADS, EXAMPLE, EXAMPLE_COLONY, type FieldSpec, HABITAT, LOAD, SYNODIC_MONTH_H } from './powerSpecs'
+import { ARRAY, BATTERY, COLONY_LOADS, EXAMPLE, EXAMPLE_COLONY, type FieldSpec, HABITAT, LOAD, SYNODIC_MONTH_H } from './powerSpecs'
+import { buildPowerRequest, placeFields } from './powerRequest'
 import { PanelSetting } from './Settings'
 import { useNow } from './useNow'
 
-const K = 273.15
 const fmt = (v: number | null | undefined, digits = 0, unit = '') => (v === null || v === undefined ? '—' : `${v.toFixed(digits)}${unit}`)
 const pct = (v: number | null | undefined) => (v === null || v === undefined ? '—' : `${(v * 100).toFixed(0)} %`)
 const stepFor = (durationH: number) => Math.max(60, Math.ceil((durationH * 60) / 19_000))
@@ -139,12 +139,6 @@ function Stat({ icon, tone, label, value, unit, sub }: { icon?: ReactNode; tone:
   )
 }
 
-/** The place part of a /power or /radiation request (the section is shown only with a place chosen). */
-function placeFields(sel: Selection | null) {
-  if (!sel) return {}
-  return sel.kind === 'site' ? { site_id: sel.id } : { lat: sel.lat, lon: sel.lon, horizon: 'terrain' as const }
-}
-
 function useRadiationRequest(): RadiationRequest {
   const selection = useApp((s) => s.selection)
   const startMs = useApp((s) => s.startMs)
@@ -204,81 +198,15 @@ function Model() {
   const [error, setError] = useState<string | null>(null)
   const power = usePower()
   const active = MODELS.find((m) => m.id === model)!
-  const level = active.level
   const tooShort = model === 'colony' && durationH < SYNODIC_MONTH_H
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    const num = (k: PowerKey): number | undefined => {
-      const s = ALL_FIELDS.find((x) => x.key === k)!
-      const v = f[k]?.trim()
-      if (!v) {
-        if (s.optional) return undefined
-        throw new Error(`${s.label} is required`)
-      }
-      const n = Number(v)
-      if (!Number.isFinite(n)) throw new Error(`${s.label} must be a number`)
-      return n
-    }
-    const req = (k: PowerKey) => num(k) as number
     try {
-      if (tooShort) throw new Error('The colony analysis needs a window of at least 30 days')
-      const battery =
-        level >= 3
-          ? {
-              battery_capacity_wh: num('battery_capacity_wh'),
-              battery_initial_soc: num('battery_initial_soc'),
-              battery_min_soc: num('battery_min_soc'),
-              charge_efficiency: num('charge_efficiency'),
-              discharge_efficiency: num('discharge_efficiency'),
-            }
-          : {}
-      let extra: Partial<PowerRequest> = {}
-      if (level === 3) extra = { load_w: num('load_w'), night_load_w: num('night_load_w') }
-      if (level === 4) {
-        const tSet = req('t_set_c') + K
-        const tMin = req('t_min_c') + K
-        if (tMin >= tSet) throw new Error('Inside minimum must be below the inside target')
-        extra = {
-          critical_load_w: num('critical_load_w'),
-          deferrable_load_w: num('deferrable_load_w'),
-          comms_load_w: num('comms_load_w'),
-          comms_critical: commsCritical,
-          shed_soc: num('shed_soc'),
-          max_charge_w: num('max_charge_w'),
-          max_discharge_w: num('max_discharge_w'),
-          include_sizing: includeSizing,
-          habitat: {
-            crew_count: req('crew_count'),
-            t_set_k: tSet,
-            t_min_k: tMin,
-            ua_w_k: req('ua_w_k'),
-            area_m2: req('hab_area_m2'),
-            skin_absorptivity: req('skin_absorptivity'),
-            skin_emissivity: req('skin_emissivity'),
-            structure_mass_kg: req('structure_mass_kg'),
-            structure_specific_heat_j_kgk: req('structure_specific_heat_j_kgk'),
-            air_volume_m3: req('air_volume_m3'),
-            air_pressure_pa: req('air_pressure_pa'),
-            ...(f.metabolic_w_per_crew?.trim() ? { metabolic_w_per_crew: req('metabolic_w_per_crew') } : {}),
-          },
-        }
-      }
-      const body: PowerRequest = {
-        ...placeFields(selection),
-        start: isoMinute(startMs),
-        duration_h: durationH,
-        // keep within the API's 20 000-sample limit for long windows
-        step_min: stepFor(durationH),
-        mast_m: mastM,
-        panel: params.panel,
-        level,
-        panel_area_m2: num('panel_area_m2'),
-        cell_efficiency: num('cell_efficiency'),
-        derating: num('derating'),
-        ...battery,
-        ...extra,
-      }
+      const body = buildPowerRequest(
+        { model, fields: f, commsCritical, includeSizing, panel: params.panel, startMs, durationH, mastM },
+        selection,
+      )
       setError(null)
       const forScenario = sid
       power.mutate(body, { onSuccess: (r) => setResult(r, forScenario) })
