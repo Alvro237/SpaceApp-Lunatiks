@@ -22,6 +22,7 @@ import { useApp } from '../state/store'
 import { IconBack, IconMinus, IconPlus } from '../ui/icons'
 import { ToolPortal } from '../ui/ToolSlot'
 import { drawHorizon } from './draw'
+import { loadGroundTexture } from './groundTexture'
 import { starDirections } from './stars'
 import { cameraFor, compass16, wrap180 } from './project'
 import { MOON_R_KM } from '../globe/orbit'
@@ -96,6 +97,16 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
   const tMs = view?.tMs
   const stars = useMemo(() => (frame && tMs !== undefined ? starDirections(tMs, frame) : null), [frame, tMs])
 
+  // the real lunar surface texture of the ground (LROC WAC patch); the illustration is drawn until it arrives
+  const [groundReady, setGroundReady] = useState(false)
+  useEffect(() => {
+    let live = true
+    void loadGroundTexture().then((t) => live && setGroundReady(t !== null))
+    return () => {
+      live = false
+    }
+  }, [])
+
   const tracks = useMemo(() => {
     const samples = series?.samples ?? []
     return {
@@ -127,7 +138,7 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
       showLabels: arrival >= 1,
       stars,
     })
-  }, [camera, view, info, size, tracks, free, arrival, stars])
+  }, [camera, view, info, size, tracks, free, arrival, stars, groundReady])
 
   const turn = (dYaw: number, dPitch: number) => look(cam.yaw + dYaw, cam.pitch + dPitch)
 
@@ -194,6 +205,7 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
         <canvas ref={canvas} aria-hidden="true" style={{ width: '100%', height: '100%' }} />
         <p className="horizon-notice" style={{ left: free.left + 14, bottom: free.bottom + 44 }}>
           Not real moon footage · Real moon horizon line
+          {groundReady && ' · Ground texture: LROC WAC mosaic, another place on the Moon'}
         </p>
         <p id="horizon-help" className="sr-only">
           Drag or use the arrow keys to look around, plus and minus to zoom, S to follow the Sun, E to follow the Earth, F for free look, Escape to go back to

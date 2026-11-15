@@ -10,6 +10,7 @@
  * as well as by day. The view says so on screen ("Not real moon footage"). The decoration is anchored to azimuth, so
  * it turns with the view like the ground would.
  */
+import { type GroundTexture, groundTexture, renderGround } from './groundTexture'
 import { type Camera, wrap180, wrap360 } from './project'
 import { STARS, starColour } from './stars'
 
@@ -104,6 +105,9 @@ export function drawGround(ctx: CanvasRenderingContext2D, W: number, H: number, 
     az[i] = wrap360(c.yaw + (i * step - c.cx) * c.degPerPx)
     sky[i] = s.horizonAt(az[i])
   }
+  const tex = groundTexture()
+  if (tex && drawTexturedGround(ctx, W, H, c, s, tex, sky, step)) return
+
   // the skyline smoothed over wider and wider windows (in degrees): lower bands follow the broad shape only
   const smooth = (deg: number): Float64Array => {
     const half = Math.max(1, Math.round(deg / (c.degPerPx * step)))
@@ -218,6 +222,76 @@ export function drawGround(ctx: CanvasRenderingContext2D, W: number, H: number, 
     ctx.fillRect(0, 0, W, H)
   }
   ctx.restore()
+}
+
+// ------------------------------------------------------------------------------------------------- textured ground
+
+/**
+ * The textured ground is rendered at a reduced resolution, then scaled up: at most about RENDER_BUDGET pixels, so a
+ * frame stays near 20 ms (measured 2026-11-15: 52 ms for 1280 x 800 at half resolution, 23 ms at a third).
+ */
+const RENDER_BUDGET = 150_000
+let buffer: { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; image: ImageData } | null = null
+
+/**
+ * The ground as real lunar surface (groundTexture.ts), with the bright rim on the real skyline and the night veil.
+ * Returns false where an offscreen canvas is not available, so the illustration is drawn instead.
+ */
+function drawTexturedGround(
+  ctx: CanvasRenderingContext2D,
+  W: number,
+  H: number,
+  c: Camera,
+  s: GroundScene,
+  tex: GroundTexture,
+  sky: Float64Array,
+  step: number,
+): boolean {
+  const RENDER_SCALE = Math.max(2, Math.ceil(Math.sqrt((W * H) / RENDER_BUDGET)))
+  const w = Math.max(1, Math.ceil(W / RENDER_SCALE))
+  const h = Math.max(1, Math.ceil(H / RENDER_SCALE))
+  if (!buffer || buffer.image.width !== w || buffer.image.height !== h) {
+    const canvas = document.createElement('canvas')
+    canvas.width = w
+    canvas.height = h
+    const bctx = canvas.getContext('2d')
+    if (!bctx) return false
+    buffer = { canvas, ctx: bctx, image: bctx.createImageData(w, h) }
+  }
+  renderGround(buffer.image, RENDER_SCALE, tex, c.yaw, c.pitch, c.cx, c.cy, c.degPerPx, s.horizonAt)
+  buffer.ctx.putImageData(buffer.image, 0, 0)
+  ctx.save()
+  ctx.imageSmoothingEnabled = true
+  ctx.drawImage(buffer.canvas, 0, 0, w * RENDER_SCALE, h * RENDER_SCALE)
+  ctx.restore()
+
+  const yOf = (el: number) => c.cy - (el - c.pitch) / c.degPerPx
+  const n = sky.length
+  // night: a light veil below the skyline
+  const dim = NIGHT_DIM * (1 - Math.min(1, Math.max(0, s.daylight ?? 1)))
+  if (dim > 0.001) {
+    ctx.save()
+    ctx.beginPath()
+    ctx.moveTo(0, H)
+    for (let i = 0; i < n; i++) ctx.lineTo(i * step, yOf(sky[i]) + 1)
+    ctx.lineTo(W, H)
+    ctx.closePath()
+    ctx.clip()
+    ctx.fillStyle = `rgba(6,5,16,${dim.toFixed(3)})`
+    ctx.fillRect(0, 0, W, H)
+    ctx.restore()
+  }
+  // the real skyline, bright
+  ctx.strokeStyle = RIM
+  ctx.lineWidth = 1.6
+  ctx.beginPath()
+  for (let i = 0; i < n; i++) {
+    const y = yOf(sky[i])
+    if (i === 0) ctx.moveTo(0, y)
+    else ctx.lineTo(i * step, y)
+  }
+  ctx.stroke()
+  return true
 }
 
 // ------------------------------------------------------------------------------------------------- craters
