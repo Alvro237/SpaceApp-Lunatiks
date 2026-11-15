@@ -12,6 +12,7 @@ export function BlockToggle() {
       role="switch"
       aria-checked={blocks}
       className="block-toggle"
+      title="Educational mode"
       // fetch the Educational mode code as soon as the pointer or the focus shows the intent, so the switch does not wait
       onPointerEnter={() => void loadBlockMode()}
       onFocus={() => void loadBlockMode()}
@@ -23,7 +24,7 @@ export function BlockToggle() {
       <span className="track" aria-hidden="true">
         <span className="knob" />
       </span>
-      Educational
+      <span className="block-toggle-label">Educational</span>
     </button>
   )
 }

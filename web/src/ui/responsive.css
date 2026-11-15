@@ -118,3 +118,54 @@ img, video { max-width: 100%; height: auto; }
   .navigator .map-layer.is-dormant > .map-view { position: absolute; top: 0; left: 0; right: 0; height: max(58vh, 240px); flex: none; }
   .navigator .map-layer.is-dormant > :not(.map-view) { display: none; }
 }
+
+/* ---------------------------------------------------------------- phones: touch, notches, a shorter header
+ * Added for the phone version. Everything here is a size, a gap or a touch rule; the colours and the layout
+ * classes stay in the stylesheets above.
+ */
+html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+button, a, summary, [role='switch'], [role='radio'], [role='tab'], select, input { touch-action: manipulation; }
+button, a, summary { -webkit-tap-highlight-color: transparent; }
+
+/* Fingers: every control on a touch screen is at least 44 px tall (the 42 px map buttons grow by 2). */
+@media (pointer: coarse) {
+  .tool-btn,
+  .map-controls button,
+  .layers > button,
+  .toolstrip .map-controls button,
+  .toolstrip .layers > button { min-width: 44px; min-height: 44px; height: 44px; }
+  .app.on-map .mode-switch button,
+  .app.on-map .topbar nav a,
+  .block-toggle,
+  .guide-btn,
+  .tour-x,
+  details.section > summary { min-height: 44px; }
+  .guide-btn, .tour-x { min-width: 44px; }
+  .app.on-map .topbar nav a { display: inline-flex; align-items: center; }
+}
+
+@media (max-width: 760px) {
+  /* a phone's text fields stay at 16 px, or iOS zooms the page when one gets the focus */
+  input, select, textarea { font-size: 16px; }
+
+  /* Notch and home bar: the bars keep clear of them (viewport-fit=cover lets the page reach the screen's edges). */
+  .app.on-map .topbar {
+    padding-left: max(8px, env(safe-area-inset-left));
+    padding-right: max(8px, env(safe-area-inset-right));
+    padding-top: max(6px, env(safe-area-inset-top));
+  }
+  .navigator { padding-bottom: max(8px, env(safe-area-inset-bottom)); }
+
+  /* Header in two rows: mark and navigation, then the mode switch with the Educational switch beside it. */
+  .app.on-map .topbar { row-gap: 2px; }
+  .app.on-map .topbar .bar-tools { flex-wrap: nowrap; gap: 6px; align-items: center; }
+  .app.on-map .mode-switch { flex: 1 1 auto; min-width: 0; display: flex; }
+  .app.on-map .mode-switch button { flex: 1 1 0; min-width: 0; padding: 6px 8px; white-space: nowrap; font-size: 0.9rem; }
+  .app.on-map .block-toggle { flex: none; padding-right: 4px; }
+  .app.on-map .block-toggle-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* The bars above the map pack tighter, so the map starts higher on the screen. */
+  .where-when, .toolstrip, .toolslot, .toolstrip .map-controls { gap: 6px; }
+  .top-left .where-when, .top-left .toolstrip { margin-top: 6px; }
+  .float, .float-left, .float-right, .float-bottom, .quest-card { margin: 6px 8px 0; }
+}
