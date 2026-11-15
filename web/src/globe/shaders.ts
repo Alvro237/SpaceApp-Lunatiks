@@ -334,7 +334,12 @@ void main() {
   bool photo = false;
   // share of the ground where the polar mosaic's photographed shadow is replaced by plain regolith (below)
   float fill = 0.0;
-  if (uPhotoMode > 0.5 && uMaxLevel >= 0.0 && !onlyPolar) {
+  // The polar photo tile under the pixel, if loaded. Until it is (slow network, a phone), the global photo base, which is
+  // always loaded, stands in: skipping it left the whole polar cap as flat grey.
+  vec2 qCell;
+  float qSize;
+  int qSlot = uPhotoMode > 0.5 && pw > 0.0 ? findPolar(uPolarPIndex, pxy, 256.0, qCell, qSize) : -1;
+  if (uPhotoMode > 0.5 && uMaxLevel >= 0.0 && (!onlyPolar || qSlot < 0)) {
     vec2 pCell;
     float pDeg;
     // never coarser than the photo base, which is always loaded: where a pixel spans more ground than a base cell
@@ -358,9 +363,6 @@ void main() {
   }
   // south of 60 S the polar mosaic (same gain as the polar map), eased in from the disc's edge
   if (uPhotoMode > 0.5 && pw > 0.0) {
-    vec2 qCell;
-    float qSize;
-    int qSlot = findPolar(uPolarPIndex, pxy, 256.0, qCell, qSize);
     if (qSlot >= 0) {
       // The mosaic keeps the shadows it was photographed with, nearly black near the pole (median 0.016 within 60 km
       // of it), and a few blocks without data (0). There the ground eases to the plain regolith grey, lit like the
