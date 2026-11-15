@@ -66,24 +66,46 @@ Nothing was renamed or removed; callers that do not use the new options behave e
   Earth's line of sight alone.
 - `api/app/main.py`: one import and one `include_router` line for the link router.
 
-## 4. Notice for the frontend (nothing under `web/` was touched)
+## 4. Frontend (branch `feat/aero2-link-panel`)
 
-`web/src/panels/LinkPanel.tsx` currently shows only the Earth's disc from the browser engine and the text
-"Ground stations and link budget: pending the AERO-2 model". When you are ready:
+The link is now in the interface. The section is still opened with the "Earth link" button of the map tool bar
+(`panels/PlacePanel.tsx`, unchanged); what it shows is new.
 
-- `GET /api/v1/link/stations` lists the networks and antennas (with `limit_source`: `cited` or `owner_estimate`).
-- `POST /api/v1/link` takes the usual window request (`site_id` or `lat`/`lon`, `start`, `duration_h`, `step_min`,
-  `mast_m`) plus `networks`, `custom_stations`, `direction` and `comms_min_fraction`, and returns `contact`
-  (one boolean per sample), `contact_ranges`, `contact_hours`, `longest_blackout_h`, a `stations` list with each
-  antenna's own windows, and `estimated_limits`.
-- Show `estimated_limits` to the user when it is not empty: the result then depends on a value that is not an
-  operator figure.
-- Level 2: send `"level": 2` and a `budget` with `transmit_eirp_dbw` and `data_rate_bps` (required) and, optionally,
-  `band` (S, X, Ka; a selector), `frequency_ghz` (a "type it" field), `required_ebn0_db`, `min_margin_db`,
-  `other_losses_db` and `receive_gt_db_per_k` (an override; required only for uplinks). The response carries
-  `budget.band_used`, `budget.frequency_ghz_used`, `budget.link` (one boolean per sample), `budget.link_ranges`,
-  `budget.best_margin_db`, and `stations[].budget` with `gt_db_per_k`, `gt_basis`, margin, free-space loss and the
-  highest data rate each antenna supports.
-- The ESA estimated-limit warning is not shown in the interface (owner decision).
-- The generated types (`web/src/api/schema.gen.ts`) need regenerating from `/openapi.json` to see the new models.
-- Everything added to the API is new: no existing field was renamed or removed.
+- `panels/LinkPanel.tsx` (rewritten): a Geometry / Budget switch; one status line (link now or why not, and when it
+  changes); four figures (link time, longest gap, Earth up, antennas or margin); the networks as checkboxes (all three
+  selected by default, so all their antennas are used); the best three antennas; a table with every antenna behind a
+  `<details>`; at Budget level the band (S, X, Ka), the lunar EIRP and the data rate, with the other budget fields
+  under "More options" and empty (the API's stated defaults apply); direction and the user's own antennas under
+  "Direction and own antennas". The answer updates by itself after each valid change (a short pause while typing); the previous
+  answer stays on screen, marked "updating", until the new one arrives. While the budget is incomplete the geometry is
+  asked instead, so the panel and the timeline keep showing the contact and the panel says what is missing.
+- `charts/Timeline.tsx`: the single-place strips are now `Sunlit`, optionally `Earth up`, and `Link` (bars only where
+  there is real link). At Budget level a `Margin` chart goes under them: the best Eb/N0 margin at each sample as a line
+  against a dashed line at the margin the user asks for; the link is closed where the line is at or above the dashed one,
+  and a break in the line means no antenna is in contact. The Earth row is hidden while the link answer is available and
+  appears in its place if the API does not answer.
+- Comparison (Multiselect), `charts/Timeline.tsx` and `compare/ComparePanel.tsx`: the Sunlit / Earth switch is now
+  Sunlit / Link, and each place's strip shows only real link (nothing while the budget is incomplete); no margin chart
+  here. The radar axes "Earth contact" and "Steady contact" became **Link** (share of the window with link) and
+  **Steady link** (1 − longest gap without link ÷ window length, the autonomy the lander needs and what `max_blackout`
+  filters; the table and pop-up also list the longest unbroken link). "Link" means
+  the same as the strip: the Earth is in view, an antenna of the chosen networks sees the Moon and, at Budget level,
+  the margin reaches the one asked for (at Geometry level, just the contact). While the link is not available the two
+  axes read "not available" and sit at 0, and the form's problem is written above the radar. The same settings as the
+  single place (level, networks, budget, direction, own antennas) are under "Link settings" in the panel.
+  `LinkSummary.longestLinkH` is new.
+- The "Filters" button of the top bar was removed; the `Earth up` row only appears as the fallback when the link
+  answer is missing.
+- `panels/linkModel.ts` (pure, tested in `linkModel.test.ts`), `state/link.ts` (form state and the shared request),
+  `api/client.ts`, `api/hooks.ts`, `api/types.ts`: the client, hooks and types of `/api/v1/link`.
+- `api/schema.gen.ts` was regenerated with `npm run gen:api` (the committed one was behind the API); `types.ts`
+  `Transition` now points at `app__schemas__state__Transition`, the name the generator gives it.
+- Owner decisions of 2026-11-15: the "Earth contact" slider is gone (the 0.5 stays); the budget level requires what
+  characterises the user's own radio and antennas: lunar EIRP, data rate, the Eb/N0 needed, the lunar G/T for an uplink,
+  and for each own antenna its G/T or its dish diameter. Only generic values keep a default (band X, margin 3 dB, other
+  losses 0 dB). The note under the antenna table was removed. The timeline's Link row draws only real link: with no link,
+  or while the budget is incomplete, it stays empty.
+- Nothing is pre-filled except the networks. The ESA elevation warning is not shown (owner decision); `estimated_limits`
+  and `gt_basis` stay in the API response.
+- Shared frontend files touched, additions only apart from the rewrite of `LinkPanel.tsx` and the strip of
+  `Timeline.tsx`: `app/Layout.tsx` (one component), `ui/panels.css` (new classes at the end), `api/*`.

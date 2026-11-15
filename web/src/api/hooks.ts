@@ -1,7 +1,7 @@
 /** TanStack Query hooks over the API client. Catalogue and metadata are cached for the session. */
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import { type SeriesParams, type StateParams, api, isMissing } from './client'
-import type { AreaSearchRequest, CandidateSearchRequest, PowerRequest, RadiationRequest } from './types'
+import type { AreaSearchRequest, CandidateSearchRequest, LinkRequest, PowerRequest, RadiationRequest } from './types'
 import type { Selection } from '../state/store'
 
 const forever = { staleTime: Infinity, gcTime: Infinity }
@@ -52,6 +52,22 @@ export const useCandidateSearch = () => useMutation({ mutationFn: (body: Candida
 /** Mission mode: paint a region (seconds when window filters trace horizons; repeated asks come from the API's cache). */
 export const useAreaSearch = () => useMutation({ mutationFn: (body: AreaSearchRequest) => api.areaSearch(body) })
 export const usePower = () => useMutation({ mutationFn: (body: PowerRequest) => api.power(body) })
+
+/** Networks and antennas of the radio link (AERO-2), fixed data: asked once. */
+export const useLinkStations = () => useQuery({ queryKey: ['link-stations'], queryFn: ({ signal }) => api.linkStations(signal), ...forever, retry })
+
+/** Radio link over the window; nothing is asked for while the request is incomplete (null). */
+export function useLink(body: LinkRequest | null) {
+  return useQuery({
+    queryKey: ['link', body],
+    queryFn: ({ signal }) => api.link(body!, signal),
+    enabled: !!body,
+    retry,
+    staleTime: 60_000,
+    // keep the last answer on screen while the next one is computed, so the panel and the timeline do not blink
+    placeholderData: keepPreviousData,
+  })
+}
 
 export function useRadiation(body: RadiationRequest | null) {
   return useQuery({

@@ -25,7 +25,6 @@ import { loadBlockMode } from '../blocks/preload'
 import { ComparePanel } from '../compare/ComparePanel'
 import { Timeline } from '../charts/Timeline'
 import { DatePill } from '../panels/DatePill'
-import { MissionPanel } from '../panels/MissionPanel'
 import { PlaceMenu } from '../panels/PlaceMenu'
 import { PlaceTools, SectionDrawer } from '../panels/PlacePanel'
 import { CoordsButton, SiteSearch } from '../panels/SiteSearch'
@@ -37,12 +36,12 @@ import { useUrlSync } from '../state/useUrlSync'
 import { GlobeView } from '../globe/GlobeView'
 import { DiveTarget } from '../horizon/DiveTarget'
 import { HorizonView } from '../horizon/HorizonView'
+import { PlannerPanel } from '../mission/PlannerPanel'
+import { ResultsPanel } from '../mission/ResultsPanel'
 import { DIVE_MS, type HorizonPhase as Phase, RETURN_MS, useHorizonTransition } from '../state/horizon'
 import { TerrainView } from '../terrain/TerrainView'
 import { useClock } from '../time/useClock'
 import { QuestPanel } from '../learn/QuestPanel'
-import { IconFilter } from '../ui/icons'
-import { Popover } from '../ui/Popover'
 import { ToolSlotContext } from '../ui/toolSlotContext'
 
 /**
@@ -87,12 +86,13 @@ export function NavigatorPage() {
   const [slot, setSlot] = useState<HTMLDivElement | null>(null)
   useMeasureInsets(root)
 
+  const mission = !blocks && mode === 'mission'
   return (
     <NowProvider>
       <DiveTarget />
       <ToolSlotContext.Provider value={slot}>
         <div
-          className={`navigator${horizonOn ? ' is-horizon' : ''}${blocks ? ' is-blocks' : ''}${!blocks && phase === 'diving' ? ' is-diving' : ''}${!blocks && phase === 'returning' ? ' is-returning' : ''}`}
+          className={`navigator${horizonOn ? ' is-horizon' : ''}${blocks ? ' is-blocks' : ''}${mission ? ' is-mission' : ''}${!blocks && phase === 'diving' ? ' is-diving' : ''}${!blocks && phase === 'returning' ? ' is-returning' : ''}`}
           ref={root}
         >
           <h1 className="sr-only">Lunar Landing Site Navigator</h1>
@@ -123,33 +123,32 @@ export function NavigatorPage() {
             </p>
           )}
           <div className="top-left">
-            <div className="where-when" role="group" aria-label={blocks || mode === 'study' ? 'Where and when' : 'When'}>
-              {(blocks || mode === 'study') && (
-                <>
-                  <SiteSearch />
-                  <CoordsButton />
-                </>
-              )}
-              <DatePill />
-            </div>
+            {/* In mission mode the date lives inside the planner panel (PlannerBasics), not up here. */}
+            {!mission && (
+              <div className="where-when" role="group" aria-label={blocks || mode === 'study' ? 'Where and when' : 'When'}>
+                {(blocks || mode === 'study') && (
+                  <>
+                    <SiteSearch />
+                    <CoordsButton />
+                  </>
+                )}
+                <DatePill />
+              </div>
+            )}
             <div className="toolstrip" role="toolbar" aria-label="Map tools">
-              {!blocks && mode === 'mission' && (
-                <Popover label="Mission filters" button={<IconFilter size={18} />} buttonClass="tool-btn" align="left" className="mission-pop" persistent>
-                  <h2 className="pop-title">
-                    <IconFilter size={18} /> Mission filters
-                  </h2>
-                  <MissionPanel />
-                </Popover>
-              )}
               <div className="toolslot" ref={setSlot} />
               {!blocks && <PlaceTools />}
             </div>
           </div>
+          {/* Always on the left in mission mode (3.1): no popover, so it never covers the timeline (P2). */}
+          {mission && <PlannerPanel />}
           {/* Educational mode brings its own panels ("The sky now", the days along the bottom) */}
           {!blocks && (
             <>
               {comparing ? (
                 <SidePanel wide>{(titleId) => <ComparePanel titleId={titleId} />}</SidePanel>
+              ) : mission ? (
+                <SidePanel>{(titleId) => <ResultsPanel titleId={titleId} />}</SidePanel>
               ) : (
                 section && hasPlace && <SidePanel wide={section === 'power'}>{(titleId) => <SectionDrawer titleId={titleId} />}</SidePanel>
               )}

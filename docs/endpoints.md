@@ -363,3 +363,26 @@ shielding and CRaTER record. First call about 0.6 s, then cached.
 
 **Status:** texts updated to this product on 2026-11-15 (`docs/demo-script.md`, `docs/submission.md`); the video
 (30 seconds or less) and the form's links and SI paragraph are the team's to finish.
+
+## Mission design: suitability search
+
+**Owner:** to be set (the role was not chosen when PR 1 was prepared). Spec: `docs/mission-design-spec.md` (API) and
+`docs/mission-planner-ui-spec.md` (web).
+**Status:** in progress. PR 1 (`logic/bounds.py`, the ephemeris visibility bound, no endpoint yet) is written, tested
+and validated against the LOLA terrain masks; method and validation output in `docs/data-and-computation.md`
+("Ephemeris visibility bound"). Stage A of the web mission design (the "Mission planner inputs" panel, live preview,
+compare selected areas) is built against the existing `/api/v1/areas/search` and merged. The suitability API
+(Stage B / PR 3 below) is not built: every Stage B input in the web panel is shown disabled with "Comes with the
+suitability search".
+**Files, PR 1 (done):** `api/app/logic/bounds.py`, `api/tests/test_bounds.py`, `api/tests/validation_bounds.py`.
+**Files, PR 2 (crater shape, independent, to do):** `pipeline/lunarnav/crater_shape.py`, `pipeline/tests/test_crater_shape.py`,
+`api/app/db/craters.py` (additive), `data/README.md`, `docs/references.md`.
+**Files, PR 3 (suitability API, to do):** `api/app/schemas/suitability.py`, `api/app/logic/suitability.py`,
+`api/app/suitability_search.py`, `api/app/routers/suitability.py`, `api/app/db/nomenclature.py`, `api/app/db/store.py`
+(additive), `api/app/main.py` (additive), `api/tests/test_suitability_logic.py`, `api/tests/test_suitability.py`,
+`api/tests/bench_suitability.py`.
+**Files, web Stage A (done):** `web/src/mission/*`, plus additive edits to `app/NavigatorPage.tsx`, `globe/GlobeView.tsx`,
+`globe/orbit.ts`, `terrain/TerrainView.tsx`, `terrain/cameraRig.ts`, `terrain/shaders.ts`, `terrain/engine.ts`,
+`ui/Tip.tsx`, `ui/panels.css`, `map/markerArt.ts`, `map/markerSet.ts`, `map/useMapSites.ts`, `state/areas.ts`,
+`scripts/copy_static_data.mjs`. `panels/MissionPanel.tsx` and `panels/missionFilters.ts` are left in place, unmounted.
+**Files, web Stage B (to do, after PR 3):** the mission design spec's section 6 and the UI spec's section 9.

@@ -14,12 +14,18 @@ const files = ['ephemeris.json', ...index.segments.map((s) => s.file), 'sites.js
 // the global LOLA topography for the globe (data/globe, built by pipeline/lunarnav/globe.py)
 mkdirSync(resolve(out, 'globe'), { recursive: true })
 files.push('globe/globe.json', `globe/${JSON.parse(readFileSync(resolve(root, 'data/globe/globe.json'), 'utf8')).file}`)
+// the LROC WAC photo base the globe opens with (data/globe, built by pipeline/lunarnav/globe_photo.py)
+files.push('globe/globe_photo.json', `globe/${JSON.parse(readFileSync(resolve(root, 'data/globe/globe_photo.json'), 'utf8')).file}`)
 // the NASA SVS star map behind the globe (data/sky, built by pipeline/lunarnav/sky.py)
 mkdirSync(resolve(out, 'sky'), { recursive: true })
 const sky = JSON.parse(readFileSync(resolve(root, 'data/sky/sky.json'), 'utf8'))
 files.push('sky/sky.json', ...Object.values(sky.files).map((f) => `sky/${f.file}`))
 for (const f of files) copyFileSync(resolve(root, 'data', f), resolve(out, f))
 console.log(`copied ${files.length} files from data/ to web/public/data/`)
+
+// Past landings on the map (mission planner, section 3.6): the catalogue of measured landing and impact points.
+copyFileSync(resolve(root, 'data/external/sites/landing_sites.csv'), resolve(out, 'landing_sites.csv'))
+console.log('copied landing_sites.csv to web/public/data/')
 
 // Diameters of the catalogue's named features, from the IAU Gazetteer copy in data/external/nomenclature.
 function parseCsv(text) {

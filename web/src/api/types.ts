@@ -13,6 +13,18 @@ export type SiteSummary = S['SiteSummary']
 export type SiteList = S['SiteList']
 export type SiteDetail = S['SiteDetail']
 
+// --------------------------------------------------------------------------- AERO-2 radio link (generated)
+/** POST /api/v1/link: level 1 geometric contact, level 2 adds the link budget. */
+export type LinkRequest = S['LinkRequest']
+export type LinkResponse = S['LinkResponse']
+export type LinkBudgetInput = S['LinkBudgetInput']
+export type LinkCustomStation = S['CustomStation']
+export type LinkStationResult = S['StationResult']
+/** GET /api/v1/link/stations */
+export type StationCatalogue = S['StationCatalogue']
+export type LinkDirection = LinkRequest['direction']
+export type LinkBand = LinkBudgetInput['band']
+
 export interface Health {
   status: string
   version: string
@@ -36,7 +48,7 @@ export type DatasetsMeta = Record<string, unknown>
 // is no power here: power belongs to POST /api/v1/power (MECH) only.
 export type HorizonKind = 'terrain' | 'smooth_sphere'
 export type BodyState = S['BodyState']
-export type Transition = S['Transition']
+export type Transition = S['app__schemas__state__Transition']
 export type EclipseState = S['StateResponse']['eclipse']
 export type TerrainReference = S['TerrainReference']
 /** GET /sites/{id}/state, or /points/state (same shape plus `terrain_reference`). */

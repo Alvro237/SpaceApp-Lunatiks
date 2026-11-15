@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { IDLE_BEFORE_SPIN_MS, MAX_TILT, MOON_R_KM, NEAR_ENTER_KM, NEAR_LEAVE_KM, isNearView, OrbitRig, SURFACE_MAX_R_KM, TILT_3D, cameraPose, nearPlaneKm, RELIEF_MAX, SPIN_DEG_PER_S, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon, zoomOrbitToward } from './orbit'
+import { FLIGHT_S, POLE_LAT_LIMIT, dragOrbit, flightAt, moveOnSphere, IDLE_BEFORE_SPIN_MS, MAX_TILT, MIN_DIST, MOON_R_KM, NEAR_ENTER_KM, NEAR_LEAVE_KM, isNearView, OrbitRig, SURFACE_MAX_R_KM, TILT_3D, cameraPose, missionPickOutcome, nearPlaneKm, RELIEF_MAX, SPIN_DEG_PER_S, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon, zoomOrbitToward } from './orbit'
 
 describe('globe geometry', () => {
   it('puts the north pole up and longitude 0 toward +x', () => {
@@ -32,13 +32,42 @@ describe('orbit controller', () => {
     expect(o.now.dist).toBeCloseTo(MOON_R_KM / Math.sin((20 * Math.PI) / 180), 6)
   })
 
-  it('reports a dive target once the camera arrives, then clears it', () => {
+  it('flies across first, then down, the height falling geometrically, and arrives in FLIGHT_S', () => {
+    const from = { lat: -48, lon: 10, dist: MOON_R_KM + 4000 }
+    const to = { lat: -88, lon: 10, dist: MOON_R_KM + 400 }
+    expect(flightAt(from, to, 0)).toEqual({ orbit: from, tilt: 0 })
+    // a fifth of the way in: moving across, not yet coming down, not tilting
+    const early = flightAt(from, to, FLIGHT_S * 0.2)
+    expect(early.orbit.lat).toBeLessThan(-48)
+    expect(early.orbit.dist).toBeCloseTo(from.dist, 9)
+    expect(early.tilt).toBe(0)
+    // halfway down the descent (x = 0.6): the geometric mean of the two heights, sqrt(4000 * 400) km
+    expect(flightAt(from, to, FLIGHT_S * 0.6).orbit.dist - MOON_R_KM).toBeCloseTo(Math.sqrt(4000 * 400), 6)
+    const end = flightAt(from, to, FLIGHT_S)
+    expect(end.orbit.lat).toBeCloseTo(-88, 9)
+    expect(end.orbit.dist).toBeCloseTo(to.dist, 6)
+    expect(end.tilt).toBe(1)
+  })
+
+  it('ends a flight when the user takes the controls', () => {
     const o = new OrbitRig({ lat: 0, lon: 0, dist: 6000 })
-    o.dive(-85, 30, 2000)
-    expect(o.arrived()).toBeNull()
+    o.flyTo(-88, 0, MOON_R_KM + 400)
+    o.step(0.1, false)
+    expect(o.isFlying).toBe(true)
+    o.zoom(0.5)
+    expect(o.isFlying).toBe(false)
+  })
+
+  it('flies to a point and height, clamped to the orbit limits', () => {
+    const o = new OrbitRig({ lat: 0, lon: 0, dist: 6000 })
+    o.flyTo(-90, 30, MOON_R_KM + 400)
+    expect(o.goal).toEqual({ lat: -POLE_LAT_LIMIT, lon: 30, dist: MOON_R_KM + 400 })
+    o.flyTo(10, 30, 10)
+    expect(o.goal.dist).toBe(MIN_DIST)
     o.step(1, true) // reduced motion: jumps to the goal
-    expect(o.arrived()).toEqual([-85, 30])
-    expect(o.arrived()).toBeNull()
+    expect(o.now.lat).toBeCloseTo(10, 9)
+    expect(o.now.lon).toBeCloseTo(30, 9)
+    expect(o.now.dist).toBeCloseTo(MIN_DIST, 6)
   })
 
   it('takes the short way round in longitude', () => {
@@ -87,17 +116,39 @@ describe('idle spin', () => {
     r.step(5, true, 10 * IDLE_BEFORE_SPIN_MS)
     expect(r.goal.lon).toBe(0)
   })
+
+  it('mission mode forces anchored (section 3.8, P4): isSpinning is false after 20 s idle', () => {
+    const o = rig()
+    // GlobeView calls setAnchored(useGlobe.anchored || mode === 'mission') every frame; mission mode alone is enough
+    o.setAnchored(true)
+    expect(o.isSpinning(IDLE_BEFORE_SPIN_MS)).toBe(false)
+  })
+})
+
+describe('mission picking (section 3.8)', () => {
+  it('south of 60° S sets the region centre; north of it is refused', () => {
+    expect(missionPickOutcome(-84.79)).toBe('centre')
+    expect(missionPickOutcome(-60)).toBe('centre')
+    expect(missionPickOutcome(-59.9)).toBe('refused')
+    expect(missionPickOutcome(10)).toBe('refused')
+  })
 })
 
 describe('zoom toward the pointer', () => {
   const o = { lat: -48, lon: 10, dist: MOON_R_KM + 1000 }
 
-  it('moves the centre toward the point by the share of height the zoom removes', () => {
-    // height 1000 km -> 500 km: half the height removed, so half the way from -48 to -88 and from 10 to 30
-    const z = zoomOrbitToward(o, 0.5, -88, 30)
+  it('moves the centre toward the point by the share of height the zoom removes, along the great circle', () => {
+    // height 1000 km -> 500 km: half the height removed, so half the way; along a meridian, -48 -> -88 gives -68
+    const z = zoomOrbitToward(o, 0.5, -88, 10)
     expect(z.dist).toBeCloseTo(MOON_R_KM + 500, 6)
     expect(z.lat).toBeCloseTo(-68, 6)
-    expect(z.lon).toBeCloseTo(20, 6)
+    expect(z.lon).toBeCloseTo(10, 6)
+  })
+
+  it('zooms toward a point beyond the pole through the pole, not round it', () => {
+    // from 80 S, 0 E toward 80 S, 180 E: the great circle runs over the pole, so halfway is the pole itself
+    const z = zoomOrbitToward({ lat: -80, lon: 0, dist: MOON_R_KM + 1000 }, 0.5, -80, 180)
+    expect(z.lat).toBeCloseTo(-POLE_LAT_LIMIT, 6)
   })
 
   it('takes the short way round in longitude', () => {
@@ -204,5 +255,39 @@ describe('close-up view', () => {
     expect(isNearView(true, between)).toBe(true)
     expect(isNearView(false, between)).toBe(false)
     expect(isNearView(true, NEAR_LEAVE_KM + 1)).toBe(false)
+  })
+})
+
+describe('moving over the pole', () => {
+  const kmPerDeg = (MOON_R_KM * Math.PI) / 180
+
+  it('moves along a meridian by the arc: 10 degrees north from 70 S is 60 S, heading kept', () => {
+    const m = moveOnSphere(-70, 30, 0, 0, 10 * kmPerDeg)
+    expect(m.lat).toBeCloseTo(-60, 9)
+    expect(m.lon).toBeCloseTo(30, 9)
+    expect(m.heading).toBeCloseTo(0, 9)
+  })
+
+  it('crosses the south pole: 20 degrees south from 80 S, 0 E lands on 80 S, 180 E, facing the other way', () => {
+    // heading 180 (facing south, toward the pole); after the pole "south" is the way back, so the transported
+    // direction of travel is now north: heading 0 on the far side. The screen keeps its orientation on the ground.
+    const m = moveOnSphere(-80, 0, 180, 0, -20 * kmPerDeg)
+    expect(m.lat).toBeCloseTo(-80, 6)
+    expect(Math.abs(((m.lon % 360) + 360) % 360 - 180)).toBeLessThan(1e-6)
+    expect(((m.heading % 360) + 360) % 360).toBeCloseTo(0, 6)
+  })
+
+  it('a drag over the pole goes on in the same screen direction', () => {
+    // straight down over 89 S, heading 0 (north up): dragging the ground up the screen moves the centre south, over
+    // the pole and on; two equal drags move the centre equal arcs
+    const o = { lat: -89, lon: 0, dist: MOON_R_KM + 200 }
+    const a = dragOrbit(o, 0, 0, -100, 1000, 35)
+    const b = dragOrbit(a.orbit, a.heading, 0, -100, 1000, 35)
+    const arc = (p: { lat: number; lon: number }, q: { lat: number; lon: number }) => {
+      const r = Math.PI / 180
+      return Math.acos(Math.sin(p.lat * r) * Math.sin(q.lat * r) + Math.cos(p.lat * r) * Math.cos(q.lat * r) * Math.cos((q.lon - p.lon) * r))
+    }
+    expect(arc(o, a.orbit)).toBeCloseTo(arc(a.orbit, b.orbit), 6)
+    expect(arc(o, b.orbit)).toBeCloseTo(2 * arc(o, a.orbit), 6)
   })
 })

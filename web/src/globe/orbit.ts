@@ -61,11 +61,74 @@ export function reliefExaggeration(distKm: number): number {
   return RELIEF_MIN + (RELIEF_MAX - RELIEF_MIN) * Math.max(0, Math.min(1, t))
 }
 
-/** Drag: the surface follows the pointer (degrees per pixel shrink as the camera gets closer). */
-export function dragOrbit(o: Orbit, dxPx: number, dyPx: number, viewHeightPx: number, fovDeg: number): Orbit {
+/**
+ * Closest the centre of the view comes to a pole, degrees of latitude. Movement is worked out on the sphere (below),
+ * so this only keeps longitude and north defined: 0.05° is 1.5 km from the pole.
+ */
+export const POLE_LAT_LIMIT = 89.95
+
+type V3 = [number, number, number]
+const dot3 = (a: V3, b: V3) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+const unitAt = (lat: number, lon: number): V3 => [Math.cos(lat * DEG) * Math.cos(lon * DEG), Math.cos(lat * DEG) * Math.sin(lon * DEG), Math.sin(lat * DEG)]
+const eastAt = (lon: number): V3 => [-Math.sin(lon * DEG), Math.cos(lon * DEG), 0]
+const northAt = (lat: number, lon: number): V3 => [-Math.sin(lat * DEG) * Math.cos(lon * DEG), -Math.sin(lat * DEG) * Math.sin(lon * DEG), Math.cos(lat * DEG)]
+
+/**
+ * Move the centre of the view over the sphere by `eastKm` and `northKm` (along the great circle in that direction)
+ * and carry the heading with it (parallel transport): the screen keeps its orientation relative to the ground, so a
+ * pan straight across a pole goes on in the same screen direction instead of spinning the view round. Longitude is
+ * unwrapped (no jump of 360°) so the camera eases the short way. Mean-Earth axes; pure.
+ */
+export function moveOnSphere(lat: number, lon: number, headingDeg: number, eastKm: number, northKm: number): { lat: number; lon: number; heading: number } {
+  const dist = Math.hypot(eastKm, northKm)
+  if (!(dist > 0)) return { lat, lon, heading: headingDeg }
+  const c = unitAt(lat, lon)
+  const e = eastAt(lon)
+  const n = northAt(lat, lon)
+  const d: V3 = [(e[0] * eastKm + n[0] * northKm) / dist, (e[1] * eastKm + n[1] * northKm) / dist, (e[2] * eastKm + n[2] * northKm) / dist]
+  const h = headingDeg * DEG
+  const a: V3 = [n[0] * Math.cos(h) + e[0] * Math.sin(h), n[1] * Math.cos(h) + e[1] * Math.sin(h), n[2] * Math.cos(h) + e[2] * Math.sin(h)]
+  // b = c × d is fixed by the rotation; a = α d + β b
+  const b: V3 = [c[1] * d[2] - c[2] * d[1], c[2] * d[0] - c[0] * d[2], c[0] * d[1] - c[1] * d[0]]
+  const alpha = dot3(a, d)
+  const beta = dot3(a, b)
+  const th = dist / MOON_R_KM
+  const c2: V3 = [c[0] * Math.cos(th) + d[0] * Math.sin(th), c[1] * Math.cos(th) + d[1] * Math.sin(th), c[2] * Math.cos(th) + d[2] * Math.sin(th)]
+  const d2: V3 = [d[0] * Math.cos(th) - c[0] * Math.sin(th), d[1] * Math.cos(th) - c[1] * Math.sin(th), d[2] * Math.cos(th) - c[2] * Math.sin(th)]
+  const a2: V3 = [alpha * d2[0] + beta * b[0], alpha * d2[1] + beta * b[1], alpha * d2[2] + beta * b[2]]
+  const lat2 = Math.max(-POLE_LAT_LIMIT, Math.min(POLE_LAT_LIMIT, Math.asin(Math.max(-1, Math.min(1, c2[2]))) / DEG))
+  const rawLon = Math.hypot(c2[0], c2[1]) > 1e-12 ? Math.atan2(c2[1], c2[0]) / DEG : lon
+  const lon2 = lon + (((((rawLon - lon + 180) % 360) + 360) % 360) - 180)
+  const heading2 = Math.atan2(dot3(a2, eastAt(lon2)), dot3(a2, northAt(lat2, lon2))) / DEG
+  return { lat: lat2, lon: lon2, heading: headingDeg + (((((heading2 - headingDeg + 180) % 360) + 360) % 360) - 180) }
+}
+
+/** Great-circle distance between two points, km, and the direction from the first to the second (east, north km). */
+function towards(lat: number, lon: number, toLat: number, toLon: number): { km: number; east: number; north: number } {
+  const c = unitAt(lat, lon)
+  const p = unitAt(toLat, toLon)
+  const ang = Math.acos(Math.max(-1, Math.min(1, dot3(c, p))))
+  const east = dot3(p, eastAt(lon))
+  const north = dot3(p, northAt(lat, lon))
+  const len = Math.hypot(east, north)
+  return len > 1e-12 ? { km: ang * MOON_R_KM, east: east / len, north: north / len } : { km: 0, east: 0, north: 0 }
+}
+
+/**
+ * Drag: the surface follows the pointer. `dxPx`, `dyPx` are the pointer's movement on the screen, whose top is the
+ * heading; the centre moves the other way on the ground, by the kilometres a pixel spans (at most 0.5° a pixel).
+ */
+export function dragOrbit(o: Orbit, headingDeg: number, dxPx: number, dyPx: number, viewHeightPx: number, fovDeg: number): { orbit: Orbit; heading: number } {
   const visibleKm = 2 * (o.dist - MOON_R_KM) * Math.tan((fovDeg * DEG) / 2)
-  const degPerPx = Math.min(0.5, (visibleKm / viewHeightPx / MOON_R_KM) / DEG)
-  return { ...o, lon: o.lon - dxPx * degPerPx, lat: Math.max(-88, Math.min(88, o.lat + dyPx * degPerPx)) }
+  const kmPerPx = Math.min(0.5 * DEG * MOON_R_KM, visibleKm / viewHeightPx)
+  const c = Math.cos(headingDeg * DEG)
+  const s = Math.sin(headingDeg * DEG)
+  // the ground follows the pointer, so the centre moves against it: screen right is heading + 90°, screen down is
+  // heading + 180° (a drag down the screen moves the centre toward the heading)
+  const east = (-dxPx * c + dyPx * s) * kmPerPx
+  const north = (dxPx * s + dyPx * c) * kmPerPx
+  const m = moveOnSphere(o.lat, o.lon, headingDeg, east, north)
+  return { orbit: { lat: m.lat, lon: m.lon, dist: o.dist }, heading: m.heading }
 }
 
 export function zoomOrbit(o: Orbit, factor: number): Orbit {
@@ -74,16 +137,18 @@ export function zoomOrbit(o: Orbit, factor: number): Orbit {
 }
 
 /**
- * Zoom in toward a point (degrees): the camera comes closer and its centre moves toward the point by the share of
- * the distance to the surface the zoom removes, so the place under the pointer stays near the pointer. Zooming out
- * (factor >= 1) does not move the centre.
+ * Zoom in toward a point (degrees): the camera comes closer and its centre moves toward the point, along the great
+ * circle, by the share of the distance to the surface the zoom removes, so the place under the pointer stays near
+ * the pointer (over a pole too). The heading is carried along (moveOnSphere). Zooming out (factor >= 1) does not move
+ * the centre.
  */
-export function zoomOrbitToward(o: Orbit, factor: number, lat: number, lon: number): Orbit {
+export function zoomOrbitToward(o: Orbit, factor: number, lat: number, lon: number, headingDeg = 0): Orbit & { heading: number } {
   const z = zoomOrbit(o, factor)
   const w = Math.max(0, 1 - (z.dist - MOON_R_KM) / (o.dist - MOON_R_KM))
-  if (w === 0) return z
-  const dLon = ((((lon - o.lon + 180) % 360) + 360) % 360) - 180
-  return { dist: z.dist, lat: Math.max(-88, Math.min(88, o.lat + (lat - o.lat) * w)), lon: o.lon + dLon * w }
+  if (w === 0) return { ...z, heading: headingDeg }
+  const t = towards(o.lat, o.lon, lat, lon)
+  const m = moveOnSphere(o.lat, o.lon, headingDeg, t.east * t.km * w, t.north * t.km * w)
+  return { dist: z.dist, lat: m.lat, lon: m.lon, heading: m.heading }
 }
 
 /** Steepest tilt of the camera away from straight down, degrees (at 90 it would look along the ground). */
@@ -93,8 +158,7 @@ export const TILT_3D = 58
 
 /**
  * Close-up view of the globe: closer than NEAR_ENTER_KM above the surface the view tilts into 3D by itself and the
- * finest detail tiles are loaded around the place in view, as the polar map does when zooming in over the south pole
- * opens it. 450 km is the height the polar map flies down to when it opens (terrain/TerrainView.tsx, mapEntry). It
+ * finest detail tiles are loaded around the place in view, the south pole included. 450 km is the height the polar map flies down to when it opens (terrain/TerrainView.tsx, mapEntry). It
  * goes back to the straight 2D view above NEAR_LEAVE_KM: the gap keeps a zoom that hovers near one value from
  * flicking between the two.
  */
@@ -154,6 +218,44 @@ export function nearPlaneKm(camera: Vec3, axis: Vec3, cosMaxOffAxis: number, rMa
   return Math.max(1, byAngle, byTangent)
 }
 
+/** South of here a region centre is accepted (mission mode, section 3.8); the search covers the south polar grids. */
+export const REGION_MIN_LAT = -60
+
+/**
+ * In mission mode, a click at this latitude either sets the region centre (south of `regionMinLat`) or is
+ * refused with a toast ("The search covers south of 60° S") that leaves the centre unchanged. Pure decision
+ * shared by the globe's and the map's click handlers, so it can be tested without a WebGL canvas.
+ */
+export function missionPickOutcome(lat: number, regionMinLat = REGION_MIN_LAT): 'centre' | 'refused' {
+  return lat <= regionMinLat ? 'centre' : 'refused'
+}
+
+/** Length of a flight (flyTo), seconds. */
+export const FLIGHT_S = 1.6
+
+const easeInOut = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2)
+const clamp01 = (x: number) => Math.max(0, Math.min(1, x))
+
+/**
+ * Where a flight is after `t` of `FLIGHT_S` seconds. Across the Moon first, then down: the place slides under the
+ * camera over the first 70 % of the time while the height comes down over the last 80 %, eased in and out. The height
+ * above the surface falls geometrically (log-linear), so each second covers the same share of it and the ground does
+ * not rush up at the end. `tilt` is the share of the change of tilt done: it follows the descent's second half, so
+ * the view leans into 3D only as it nears the ground.
+ */
+export function flightAt(from: Orbit, to: Orbit, t: number): { orbit: Orbit; tilt: number } {
+  const x = t / FLIGHT_S
+  const across = easeInOut(clamp01(x / 0.7))
+  const down = easeInOut(clamp01((x - 0.2) / 0.8))
+  const dLon = ((((to.lon - from.lon + 180) % 360) + 360) % 360) - 180
+  const h0 = Math.max(1, from.dist - MOON_R_KM)
+  const h1 = Math.max(1, to.dist - MOON_R_KM)
+  return {
+    orbit: { lat: from.lat + (to.lat - from.lat) * across, lon: from.lon + dLon * across, dist: MOON_R_KM + h0 * (h1 / h0) ** down },
+    tilt: easeInOut(clamp01((x - 0.5) / 0.5)),
+  }
+}
+
 /** Idle time after which the Moon starts turning by itself, ms. */
 export const IDLE_BEFORE_SPIN_MS = 20_000
 /** Slow turn: about two minutes a revolution. */
@@ -172,7 +274,9 @@ export class OrbitRig {
   /** When true the Moon never turns by itself. */
   private anchored = false
   private lastInputMs = 0
-  /** A dive toward a point of the polar cap; when it arrives, the map opens there. */
+  /** A flight under way (flyTo): from where, its start tilt and heading, and the time flown, s. */
+  private flight: { from: Orbit; tilt: number; heading: number; t: number } | null = null
+  /** A dive toward a point of the polar cap (mission mode); when it arrives, the map opens there. */
   private diving: [number, number] | null = null
   private fitted = false
 
@@ -212,19 +316,31 @@ export class OrbitRig {
     this.lastInputMs = nowMs
   }
 
+  /** Taking the controls ends a flight where it is; the camera then eases to the new goal as usual. */
+  private takeOver(): void {
+    this.touch()
+    this.flight = null
+  }
+
+  get isFlying(): boolean {
+    return this.flight !== null
+  }
+
   /** True while the Moon is turning by itself. */
   isSpinning(nowMs = performance.now()): boolean {
     // a tilted or turned view is someone looking at a place: it stays put
-    return !this.anchored && !this.diving && this.viewGoal.tilt < 1 && Math.abs(this.viewGoal.heading) < 1 && nowMs - this.lastInputMs >= IDLE_BEFORE_SPIN_MS
+    return !this.anchored && !this.flight && !this.diving && this.viewGoal.tilt < 1 && Math.abs(this.viewGoal.heading) < 1 && nowMs - this.lastInputMs >= IDLE_BEFORE_SPIN_MS
   }
 
   drag(dxPx: number, dyPx: number, viewHeightPx: number, fovDeg: number, immediate = false): void {
-    this.touch()
-    // the pointer moves on the screen, whose top is the heading: turn the movement into east and north
-    const c = Math.cos(this.view.heading * DEG)
-    const s = Math.sin(this.view.heading * DEG)
-    Object.assign(this.goal, dragOrbit(this.goal, dxPx * c - dyPx * s, dxPx * s + dyPx * c, viewHeightPx, fovDeg))
-    if (immediate) Object.assign(this.now, { lat: this.goal.lat, lon: this.goal.lon })
+    this.takeOver()
+    const m = dragOrbit(this.goal, this.viewGoal.heading, dxPx, dyPx, viewHeightPx, fovDeg)
+    Object.assign(this.goal, m.orbit)
+    this.viewGoal.heading = m.heading
+    if (immediate) {
+      Object.assign(this.now, { lat: this.goal.lat, lon: this.goal.lon })
+      this.view.heading = m.heading
+    }
   }
 
   /** Tilt the view (0 = straight down, up to MAX_TILT). */
@@ -235,7 +351,7 @@ export class OrbitRig {
 
   /** Turn the view around the place under it and tilt it, by these degrees. */
   rotate(dHeadingDeg: number, dTiltDeg = 0, immediate = false): void {
-    this.touch()
+    this.takeOver()
     this.viewGoal.heading += dHeadingDeg
     this.viewGoal.tilt = Math.max(0, Math.min(MAX_TILT, this.viewGoal.tilt + dTiltDeg))
     if (immediate) Object.assign(this.view, this.viewGoal)
@@ -249,18 +365,30 @@ export class OrbitRig {
   }
 
   zoom(factor: number): void {
-    this.touch()
+    this.takeOver()
     Object.assign(this.goal, zoomOrbit(this.goal, factor))
   }
 
   zoomToward(factor: number, lat: number, lon: number): void {
-    this.touch()
-    Object.assign(this.goal, zoomOrbitToward(this.goal, factor, lat, lon))
+    this.takeOver()
+    const z = zoomOrbitToward(this.goal, factor, lat, lon, this.viewGoal.heading)
+    Object.assign(this.goal, { lat: z.lat, lon: z.lon, dist: z.dist })
+    this.viewGoal.heading = z.heading
   }
 
   turnTo(lat: number, lon: number): void {
+    this.takeOver()
+    Object.assign(this.goal, { lat: Math.max(-POLE_LAT_LIMIT, Math.min(POLE_LAT_LIMIT, lat)), lon })
+  }
+
+  /**
+   * Fly to a point at a distance from the centre (km) in FLIGHT_S seconds (flightAt): across, then down, the tilt
+   * following the descent. Any drag, zoom or turn ends it.
+   */
+  flyTo(lat: number, lon: number, dist: number): void {
     this.touch()
-    Object.assign(this.goal, { lat: Math.max(-88, Math.min(88, lat)), lon })
+    this.flight = { from: { ...this.now }, tilt: this.view.tilt, heading: this.view.heading, t: 0 }
+    Object.assign(this.goal, { lat: Math.max(-POLE_LAT_LIMIT, Math.min(POLE_LAT_LIMIT, lat)), lon, dist: Math.max(MIN_DIST, Math.min(MAX_DIST, dist)) })
   }
 
   dive(lat: number, lon: number, dist: number): void {
@@ -283,9 +411,20 @@ export class OrbitRig {
 
   step(dt: number, reducedMotion: boolean, nowMs = performance.now()): void {
     if (!reducedMotion && this.isSpinning(nowMs)) this.goal.lon += SPIN_DEG_PER_S * dt
-    const k = reducedMotion ? 1 : 1 - Math.exp(-dt * 6)
     const n = this.now
     const g = this.goal
+    const f = this.flight
+    if (f) {
+      this.touch(nowMs)
+      f.t = reducedMotion ? FLIGHT_S : f.t + dt
+      const at = flightAt(f.from, g, f.t)
+      Object.assign(n, at.orbit)
+      this.view.tilt = f.tilt + (this.viewGoal.tilt - f.tilt) * at.tilt
+      this.view.heading = f.heading + (this.viewGoal.heading - f.heading) * at.tilt
+      if (f.t >= FLIGHT_S) this.flight = null
+      return
+    }
+    const k = reducedMotion ? 1 : 1 - Math.exp(-dt * 6)
     const dLon = ((((g.lon - n.lon + 180) % 360) + 360) % 360) - 180
     n.lon += dLon * k
     n.lat += (g.lat - n.lat) * k
