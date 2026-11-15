@@ -31,3 +31,6 @@ viewer/
 # Vercel deployment folder (deploy/vercel/stage.sh)
 .vercel-stage/
 .vercel/
+
+# The demo video is served with the site but kept out of git (36 MB): copy demo.mp4 into web/public/media
+web/public/media/*.mp4

@@ -6,8 +6,20 @@
 /** The navigator: '/app' on Vercel, the base path elsewhere (set in vite.config.ts). */
 export const APP_URL: string = import.meta.env.VITE_APP_URL ?? import.meta.env.BASE_URL
 
-/** YouTube id of the 30-second demo (the part after `v=` or after `youtu.be/`). */
+/** YouTube id of the 30-second demo (the part after `v=` or after `youtu.be/`). When set it wins over the file. */
 export const DEMO_YOUTUBE_ID = ''
+
+/**
+ * The demo as a file served with the site (web/public/media, kept out of git: copy demo.mp4 there before building).
+ * DEMO_AI_NOTE is shown over the player at all times: the video contains AI-generated footage, and the Space Apps
+ * rules ask for a visible mark on AI images and video.
+ */
+export const DEMO_VIDEO = `${import.meta.env.BASE_URL}media/demo.mp4`
+export const DEMO_POSTER = `${import.meta.env.BASE_URL}media/demo-poster.jpg`
+export const DEMO_AI_NOTE = 'Contains AI-generated footage'
+
+/** A real screenshot of the navigator on a 390 x 844 phone window (the production site, 2026-11-15). */
+export const PHONE_SCREENSHOT = `${import.meta.env.BASE_URL}media/app-phone.jpg`
 
 /** Public API documentation (FastAPI /docs of the deployed API). */
 export const API_DOCS_URL: string =

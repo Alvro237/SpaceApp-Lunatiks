@@ -10,6 +10,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT="$ROOT/.vercel-stage"
 test -f "$ROOT/web/dist/landing.html" || { echo "web/dist is missing: build the web first (VERCEL=1 npm run build)"; exit 1; }
+# the demo video is kept out of git: copy it to web/public/media/demo.mp4 before building
+test -f "$ROOT/web/dist/media/demo.mp4" || echo "warning: web/dist/media/demo.mp4 is missing, the landing page's demo will not play"
 
 mkdir -p "$OUT"
 rm -rf "$OUT/public" "$OUT/server" "$OUT/data" "$OUT/api"   # keeps $OUT/.vercel (the project link)

@@ -7,7 +7,18 @@
  * Apollo surface journal, the sweep timing, the mission-search agreement).
  */
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { API_DOCS_URL, APP_URL, BACKGROUND_VIDEO, BACKGROUND_VIDEO_CREDIT, DEMO_YOUTUBE_ID, REPO_URL } from './links'
+import {
+  API_DOCS_URL,
+  APP_URL,
+  BACKGROUND_VIDEO,
+  BACKGROUND_VIDEO_CREDIT,
+  DEMO_AI_NOTE,
+  DEMO_POSTER,
+  DEMO_VIDEO,
+  DEMO_YOUTUBE_ID,
+  PHONE_SCREENSHOT,
+  REPO_URL,
+} from './links'
 import { createMoonScene } from './moonScene'
 
 const SECTIONS = [
@@ -17,6 +28,7 @@ const SECTIONS = [
   { id: 'compare', label: 'Compare' },
   { id: 'mission', label: 'Mission planning' },
   { id: 'data', label: 'NASA data' },
+  { id: 'mobile', label: 'On your phone' },
   { id: 'start', label: 'Open the navigator' },
 ] as const
 
@@ -142,6 +154,9 @@ function Nav({ active }: { active: number }) {
           <li>
             <a href="#data" aria-current={active === 5 ? 'true' : undefined}>Data</a>
           </li>
+          <li>
+            <a href="#mobile" aria-current={active === 6 ? 'true' : undefined}>Mobile</a>
+          </li>
         </ul>
       </nav>
       <a className="btn btn-primary btn-sm" href={APP_URL}>
@@ -179,8 +194,11 @@ function Demo() {
   const [playing, setPlaying] = useState(false)
   if (!DEMO_YOUTUBE_ID) {
     return (
-      <div className="video video-empty">
-        <p>The 30-second demo will appear here.</p>
+      <div className="video">
+        <video src={DEMO_VIDEO} poster={DEMO_POSTER} controls playsInline preload="none" aria-label="Lunar Landing Site Navigator: 30-second demo">
+          <a href={DEMO_VIDEO}>Download the 30-second demo (MP4)</a>
+        </video>
+        {DEMO_AI_NOTE && <p className="ai-mark ai-mark-video">{DEMO_AI_NOTE}</p>}
       </div>
     )
   }
@@ -451,6 +469,42 @@ export function Landing() {
                 <span className="stat-label">south-polar sites with LOLA horizon masks from 10 to 240 m maps</span>
               </p>
             </div>
+          </div>
+        </section>
+
+        <section id="mobile" className="section mobile" aria-labelledby="mobile-title">
+          <div className="mobile-inner">
+            <div className="card reveal">
+              <p className="kicker">
+                <span className="mono">05</span> On your phone
+              </p>
+              <h2 id="mobile-title">The same navigator, in your pocket</h2>
+              <div className="feature-body">
+                <p>
+                  There is no app to install: open the link in the phone’s browser and the whole tool is there, with the same data and the same
+                  numbers. On a narrow screen, or a phone on its side, the map, the timeline and the panels stack into one column you scroll with
+                  your thumb.
+                </p>
+                <ul className="ticks">
+                  <li>Drag to turn the Moon, tap a site or any point to study it</li>
+                  <li>Site explorer, Mission planner and Educational mode, all of it</li>
+                  <li>Keyboard, screen reader and light or dark theme on phones too</li>
+                  <li>Share a scenario by link from the field to the control room</li>
+                </ul>
+              </div>
+              <div className="feature-foot">
+                <p className="stat">
+                  <span className="stat-value mono">0</span>
+                  <span className="stat-label">accessibility violations found by axe-core at 375 px wide (phone), five views</span>
+                </p>
+              </div>
+            </div>
+            <figure className="phone reveal">
+              <div className="phone-frame">
+                <img src={PHONE_SCREENSHOT} alt="The navigator on a phone: the search box, the date, the map tools and the Moon lit by the Sun at the chosen time" width="390" height="844" loading="lazy" />
+              </div>
+              <figcaption>Screenshot of the live site at 390 × 844</figcaption>
+            </figure>
           </div>
         </section>
 
