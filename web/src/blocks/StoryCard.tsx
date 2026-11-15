@@ -1,11 +1,13 @@
 /**
- * The missions on screen, built for children: one thing at a time.
+ * The missions on screen, built for children: one thing at a time, pictures first and few words.
  *   - The mission map: every mission as a big picture button, in three groups, with a star on the ones done, the
  *     explorer's rank, and one big button for the next mission.
- *   - A mission: first its story (where, when, what happened, with its source), then the things to do. The step to
- *     do now is the highlighted one, with its tip and, where the tool can do it, one big button (play, fly to a
- *     place, stand here). Steps tick themselves from what the child does. Then one question (a wrong pick is crossed
- *     out and the child tries again), and the answer in the engine's numbers.
+ *   - A mission: first its story as a comic strip (a big picture and a few words per beat, with where, when and the
+ *     source), then the things to do. The step to do now is the highlighted one, with its picture, its tip and,
+ *     where the tool can do it, one big button (play, fly to a place, stand here). Steps tick themselves from what
+ *     the child does, with a pop. Then one question as big picture tiles (a wrong pick shakes, is crossed out and
+ *     the child tries again), and a confetti win with the engine's numbers.
+ * Pictures are emoji, hidden from screen readers: the words next to them always say the same thing.
  * The checklist reads the same state as everything else (place, view, time, the engine's answers), so nothing is
  * typed by hand.
  */
@@ -255,7 +257,9 @@ function MissionMap({ done, headingId, onPick, onHide, onReset }: { done: string
           −
         </button>
       </div>
-      <p className="blk-intro">Go where real spacecraft landed, and see what the Sun and the Earth did there.</p>
+      <p className="blk-intro">
+        <span aria-hidden="true">🚀 </span>Go where real landers went!
+      </p>
 
       <div className="blk-rank">
         <span className="blk-rank-star" aria-hidden="true">
@@ -350,7 +354,7 @@ function Steps({ steps, onLook }: { steps: Step[]; onLook: (i: number) => void }
       {steps.map((s, i) => (
         <li key={i} className={s.done ? 'is-done' : i === now ? 'is-now' : 'is-later'} aria-current={i === now ? 'step' : undefined}>
           <span className="blk-check" aria-hidden="true">
-            {s.done ? '✓' : i + 1}
+            {s.done ? '✓' : i === now ? s.icon : i + 1}
           </span>
           <div className="blk-task-body">
             <p className="blk-task-text">
@@ -367,6 +371,28 @@ function Steps({ steps, onLook }: { steps: Step[]; onLook: (i: number) => void }
         </li>
       ))}
     </ol>
+  )
+}
+
+/** A burst of confetti over the win box: decoration only, still under reduced motion (the stylesheet hides it). */
+const CONFETTI = ['#ffb547', '#6cb2ff', '#7ee2a8', '#ff7aa8', '#ffffff', '#c39bff']
+function Confetti() {
+  return (
+    <span className="blk-confetti" aria-hidden="true">
+      {Array.from({ length: 28 }, (_, i) => (
+        <span
+          key={i}
+          style={
+            {
+              '--x': `${((i * 37) % 100) - 50}`,
+              '--d': `${(i % 7) * 40}ms`,
+              '--r': `${(i * 53) % 360}deg`,
+              background: CONFETTI[i % CONFETTI.length],
+            } as CSSProperties
+          }
+        />
+      ))}
+    </span>
   )
 }
 
@@ -439,21 +465,32 @@ export function StoryCard() {
 
   const story = (
     <>
+      <ol className={`blk-strip n${ch.story.length}`}>
+        {ch.story.map((b, i) => (
+          <li key={b.text} style={{ '--i': i } as CSSProperties}>
+            <span className="blk-strip-icon" aria-hidden="true">
+              {b.icon}
+            </span>
+            <span className="blk-strip-text">{b.text}</span>
+          </li>
+        ))}
+      </ol>
       <dl className="blk-chips">
         <div>
-          <dt>Where</dt>
+          <dt>
+            <span aria-hidden="true">📍</span>
+            <span className="sr-only">Where</span>
+          </dt>
           <dd>{ch.where}</dd>
         </div>
         <div>
-          <dt>When</dt>
+          <dt>
+            <span aria-hidden="true">📅</span>
+            <span className="sr-only">When</span>
+          </dt>
           <dd>{ch.when}</dd>
         </div>
       </dl>
-      <ul className="blk-lines">
-        {ch.story.map((line) => (
-          <li key={line}>{line}</li>
-        ))}
-      </ul>
       {ch.note && <p className="blk-note">{ch.note}</p>}
       <a className="blk-source" href={ch.source.url} target="_blank" rel="noreferrer">
         Source: {ch.source.label}
@@ -518,24 +555,29 @@ export function StoryCard() {
                   <p className="blk-question" id={`${headingId}-q`}>
                     {ch.question.text}
                   </p>
-                  <div className="blk-choices" role="group" aria-labelledby={`${headingId}-q`}>
-                    {ch.question.choices.map((c, k) => {
+                  <div className={`blk-choices n${ch.question.choices.length}`} role="group" aria-labelledby={`${headingId}-q`}>
+                    {ch.question.choices.map((c) => {
                       const wrong = memory.wrong.includes(c.id)
                       return (
                         <button key={c.id} type="button" className={wrong ? 'is-wrong' : ''} disabled={wrong} onClick={() => pick(c.id)}>
-                          <span className="blk-choice-key" aria-hidden="true">
-                            {wrong ? '✗' : 'ABC'[k]}
+                          <span className="blk-choice-icon" aria-hidden="true">
+                            {c.icon}
                           </span>
-                          <span>
+                          <span className="blk-choice-label">
                             {c.label}
                             {wrong && <span className="sr-only"> (not this one)</span>}
                           </span>
+                          {wrong && (
+                            <span className="blk-choice-x" aria-hidden="true">
+                              ✗
+                            </span>
+                          )}
                         </button>
                       )
                     })}
                   </div>
                   <p className="blk-try" role="status">
-                    {memory.wrong.length > 0 ? 'Not quite. Try another one!' : ''}
+                    {memory.wrong.length > 0 ? 'Oops! Try again!' : ''}
                   </p>
                 </div>
               )}
@@ -545,18 +587,25 @@ export function StoryCard() {
           <div role="status" aria-live="polite">
             {complete && (
               <div className="blk-win">
+                <Confetti />
                 <p className="blk-win-h">
                   <span className="blk-win-star" aria-hidden="true">
                     ★
                   </span>
                   Mission complete!
+                  <span className="blk-win-plus" aria-hidden="true">
+                    +1 ★
+                  </span>
                 </p>
                 {found && found.stats.length > 0 && (
                   <>
-                    <p className="blk-found-h">What NASA data says</p>
+                    <p className="blk-found-h">NASA data says</p>
                     <ul className="blk-stats">
-                      {found.stats.map((s) => (
-                        <li key={s.label}>
+                      {found.stats.map((s, i) => (
+                        <li key={s.label} style={{ '--i': i } as CSSProperties}>
+                          <span className="blk-stat-icon" aria-hidden="true">
+                            {s.icon}
+                          </span>
                           <span className="blk-stat-v">{s.value}</span>
                           <span className="blk-stat-l">{s.label}</span>
                         </li>
@@ -564,8 +613,9 @@ export function StoryCard() {
                     </ul>
                   </>
                 )}
-                {found && <p>{found.note}</p>}
+                {found && <p className="blk-found-note">{found.note}</p>}
                 <p className="blk-lesson">
+                  <span aria-hidden="true">💡 </span>
                   <strong>Remember:</strong> {ch.lesson}
                 </p>
               </div>

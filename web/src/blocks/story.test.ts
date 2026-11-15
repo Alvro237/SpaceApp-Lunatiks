@@ -47,7 +47,7 @@ const ch = (id: string) => CHAPTERS.find((c) => c.id === id)!
 const H = 3_600_000
 
 describe('mission log', () => {
-  it('has twelve missions, four in each group, each with a place, a date, short facts, a source, a task and a short lesson', () => {
+  it('has twelve missions, four in each group, each with a place, a date, a picture story, a source, a task and a short lesson', () => {
     expect(CHAPTERS).toHaveLength(12)
     expect(new Set(CHAPTERS.map((c) => c.id)).size).toBe(12)
     for (const g of GROUPS) expect(CHAPTERS.filter((c) => c.group === g.id)).toHaveLength(4)
@@ -61,18 +61,23 @@ describe('mission log', () => {
       expect(c.when.length).toBeGreaterThan(2)
       expect(c.story.length).toBeGreaterThanOrEqual(2)
       expect(c.story.length).toBeLessThanOrEqual(3)
-      // one idea per line: no paragraphs
-      for (const line of c.story) expect(line.length).toBeLessThanOrEqual(70)
-      expect(c.lesson.length).toBeLessThanOrEqual(90)
+      // a comic strip: a picture and a few words per beat, never a sentence to read
+      for (const beat of c.story) {
+        expect(beat.icon.length).toBeGreaterThan(0)
+        expect(beat.text.length).toBeLessThanOrEqual(30)
+      }
+      expect(c.lesson.length).toBeLessThanOrEqual(50)
       expect(c.source.url).toMatch(/^https:\/\//)
       expect(c.lesson.length).toBeGreaterThan(10)
       const steps = c.steps(base)
       expect(steps.length).toBeGreaterThan(0)
       expect(steps.length).toBeLessThanOrEqual(3)
       for (const s of steps) {
-        // every step says how to do it, in one short line
+        // every step has a picture, a few words, and says how to do it in one short line
+        expect(s.icon.length).toBeGreaterThan(0)
+        expect(s.text.length).toBeLessThanOrEqual(40)
         expect(s.tip.length).toBeGreaterThan(5)
-        expect(s.tip.length).toBeLessThanOrEqual(70)
+        expect(s.tip.length).toBeLessThanOrEqual(40)
         // a step the child only looks at is ticked by its own button, never by itself
         if (s.action?.kind === 'look') expect(s.done).toBe(false)
       }
@@ -80,6 +85,12 @@ describe('mission log', () => {
       if (c.question) {
         expect(c.question.choices.length).toBeGreaterThanOrEqual(2)
         expect(c.question.choices.length).toBeLessThanOrEqual(3)
+        expect(c.question.text.length).toBeLessThanOrEqual(30)
+        // each choice is a picture tile with a few words
+        for (const k of c.question.choices) {
+          expect(k.icon.length).toBeGreaterThan(0)
+          expect(k.label.length).toBeLessThanOrEqual(22)
+        }
       }
     }
   })
@@ -115,8 +126,8 @@ describe('mission log', () => {
     const later = { ...start, tMs: 13.6 * 24 * H, sunUp: false }
     expect(chapterDone(c, later)).toBe(true)
     expect(c.found(later)?.stats).toEqual([
-      { value: '13.5 days', label: 'of sunshine, from sunrise to sunset' },
-      { value: '14 days', label: 'of night, the longest one' },
+      { icon: '☀️', value: '13.5 days', label: 'of sunshine' },
+      { icon: '🌑', value: '14 days', label: 'of night' },
     ])
   })
 
@@ -137,7 +148,7 @@ describe('mission log', () => {
     expect(questionReady(c, aDay)).toBe(true)
     expect(c.question!.answer(aDay)).toBe('around')
     expect(c.question!.answer({ ...aDay, sunElMax: 40 })).toBe('over')
-    expect(c.found({ ...aDay, memory: { ...aDay.memory, answer: 'around' } })?.stats[0]).toEqual({ value: '6.2°', label: 'the highest the Sun gets in 30 days (90° is straight up)' })
+    expect(c.found({ ...aDay, memory: { ...aDay.memory, answer: 'around' } })?.stats[0]).toEqual({ icon: '🔝', value: '6.2°', label: 'the highest in 30 days' })
   })
 
   it('Peaks of light: visit both places, then the answer is the one with more sunlight', () => {
@@ -153,8 +164,8 @@ describe('mission log', () => {
     const done = { ...ctx, memory: { ...ctx.memory, answer: MALAPERT } }
     expect(chapterDone(c, done)).toBe(true)
     expect(c.found(done)?.stats).toEqual([
-      { value: '21 days', label: 'of sunshine on Mons Malapert, out of 30' },
-      { value: '0 days', label: 'of sunshine in Shackleton crater, out of 30' },
+      { icon: '⛰️', value: '21 days', label: 'sunny on Mons Malapert, of 30' },
+      { icon: '🕳️', value: '0 days', label: 'sunny in Shackleton crater, of 30' },
     ])
   })
 
@@ -185,7 +196,7 @@ describe('mission log', () => {
     const ready = { ...start, selection: point, sunUp: true, earthContact: true, view: 'ground' as const, horizonKind: 'smooth_sphere' as const, placeName: '70.000° S, 10.000° E' }
     expect(chapterDone(c, ready)).toBe(true)
     expect(c.found(ready)?.note).toContain('70.000° S, 10.000° E: ready to land!')
-    expect(c.found(ready)?.note).toContain('Nobody has mapped the hills here yet')
+    expect(c.found(ready)?.note).toContain('No hill map here')
     expect(c.found({ ...ready, horizonKind: 'terrain' })?.note).toContain('real hills')
     expect(c.found(ready)?.stats).toHaveLength(4)
   })
@@ -214,8 +225,8 @@ describe('mission log', () => {
     expect(c.question!.answer(later)).toBe('stayed')
     expect(c.question!.answer({ ...later, metrics: { ...later.metrics, commsPct: 80 } })).toBe('hid')
     expect(c.found(later)).toEqual({
-      stats: [{ value: '45.3°', label: 'how high the Earth was. Straight up is 90°' }],
-      note: 'The Earth never set! From here it always stays in the same part of the sky.',
+      stats: [{ icon: '🌍', value: '45.3°', label: 'Earth height (straight up is 90°)' }],
+      note: 'The Earth never set! It just stays there.',
     })
     // no claim that it never set where the engine says it did
     expect(c.found({ ...later, metrics: { ...later.metrics, commsPct: 80 } })?.note).not.toContain('never set')
@@ -279,7 +290,7 @@ describe('mission log', () => {
     const all = { ...two, memory: { ...two.memory, visited: { ...visited, [SHACKLETON]: { sunPct: 0, earthPct: 0 } } } }
     expect(questionReady(c, all)).toBe(true)
     expect(c.question!.answer(all)).toBe(MALAPERT)
-    expect(c.found(all)?.note).toBe('Mons Malapert has the most Sun and Earth together. A good spot for a base!')
+    expect(c.found(all)?.note).toBe('Mons Malapert wins: the most Sun and Earth!')
     // the engine decides, not the text: a sunnier, better-connected crater would win
     const other = { ...all, memory: { ...all.memory, visited: { ...all.memory.visited, [NOBILE]: { sunPct: 90, earthPct: 90 } } } }
     expect(c.question!.answer(other)).toBe(NOBILE)
