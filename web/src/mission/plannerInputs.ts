@@ -238,7 +238,7 @@ export const PLANNER_CATEGORIES: PlannerCategory[] = [
         unit: '%',
         min: 0,
         max: 100,
-        tip: 'Share of the landing ellipse (or of the cell, without an ellipse) that lies inside craters larger than the cell (Robbins 2018 catalogue).',
+        tip: 'Share of the landing ellipse (or of the cell, without an ellipse) that lies inside craters at least twice the cell size (Robbins 2018 catalogue).',
       },
       {
         id: 'rim_margin',
@@ -248,7 +248,7 @@ export const PLANNER_CATEGORIES: PlannerCategory[] = [
         unit: 'radii',
         min: 0,
         max: 5,
-        tip: 'Keep at least this many crater radii away from the rim of every crater larger than the cell, inside or outside it. Rims are steep, and the rocks thrown out by the impact lie mostly within about one radius beyond the rim.',
+        tip: 'Keep at least this many crater radii away from the rim of every crater at least twice the cell size, inside or outside it. Rims are steep, and the rocks thrown out by the impact lie mostly within about one radius beyond the rim.',
       },
       { id: 'roughness', kind: 'unavailable', label: 'Roughness', tip: '', reason: 'The LOLA roughness map in the data has no confirmed units, so it is not used.' },
       { id: 'rocks', kind: 'unavailable', label: 'Rocks', tip: '', reason: 'No open boulder map covers the pole (LROC counts exist for single sites only).' },
