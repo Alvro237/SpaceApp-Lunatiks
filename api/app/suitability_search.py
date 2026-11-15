@@ -37,7 +37,9 @@ from .logic import bounds as B
 from .logic import suitability as S
 from .logic.eclipse import obscuration
 from .logic.engine import AnalysisParams, compute_metrics, make_model, time_grid
+from .logic.ephemeris import OutOfCoverage
 from .logic.horizon import ray_distances
+from .logic.link import longest_gap_h, min_daily_contact_h, planner_contact, shortest_complete_pass_h
 from .logic.power import array_power_w, energy_balance, load_series_w, params_from_flat
 from .logic.projection import great_circle_km, south_polar_latlon, south_polar_xy
 from .schemas.areas import GridInfo, WindowInfo
@@ -48,8 +50,13 @@ FAIL_BOUND = 5
 STAGE_ORDER = ("geometry", "regional", "medium", "fine")
 #: window criterion id -> key of the per-sample values
 WINDOW_KEY = {"battery_autonomy_h": "dark", "recharge_h": "recharge", "battery_model": "battery_ok",
-              "blackout_h": "blackout", "sun_el_at_landing_deg": "sun_el0", "earth_at_landing": "earth0"}
-WINDOW_VALUE_KEYS = ("sunlit", "comms", "dark", "blackout", "sun_el0", "earth0", "recharge", "battery_ok", "min_soc")
+              "blackout_h": "blackout", "sun_el_at_landing_deg": "sun_el0", "earth_at_landing": "earth0",
+              "link_min_daily_h": "link_daily", "link_min_pass_h": "link_pass"}
+WINDOW_VALUE_KEYS = ("sunlit", "comms", "dark", "blackout", "sun_el0", "earth0", "recharge", "battery_ok", "min_soc",
+                     "link_daily", "link_pass")
+#: criteria that only make sense with the radio link settings, and every criterion the link settings change
+LINK_ONLY_CRITERIA = ("link_min_daily_h", "link_min_pass_h")
+LINK_CRITERIA = ("blackout_h", "earth_at_landing") + LINK_ONLY_CRITERIA
 PSR_MAX_GRID = 1400        # most cells per side of the padded PSR distance grid
 NEAR_FEATURE_KM = 100.0
 
@@ -82,6 +89,19 @@ def search(store: DataStore, req: SuitabilityRequest) -> SuitabilityResponse:
     n = int(math.ceil(2.0 * radius_m / cell_m))
     if n * n > MAX_CELLS:
         errors.append(f"{n * n} cells: make cell_km larger or the region smaller (limit {MAX_CELLS})")
+    # radio link (AERO-2): the antennas of the chosen networks, only when an Earth criterion or score uses them
+    link_stations = None
+    if req.link is None:
+        errors += [f"{cid}: needs the radio link settings (request field `link`)" for cid in LINK_ONLY_CRITERIA if cid in crit]
+    elif "earth" in req.categories or any(cid in crit for cid in LINK_CRITERIA):
+        try:
+            link_stations = services.link_stations(store, req.link.networks, req.link.direction, req.link.custom_stations)
+        except KeyError as exc:
+            errors.append(f"link: unknown network {exc.args[0]!r}")
+        except (LookupError, ValueError) as exc:
+            errors.append(f"link: {exc}")
+    if "link_min_daily_h" in crit and req.duration_h < 24.0:
+        errors.append("link_min_daily_h: needs a mission window of at least 24 h (one full day)")
     if errors:
         raise SuitabilityInputError(errors)
 
@@ -308,6 +328,24 @@ def search(store: DataStore, req: SuitabilityRequest) -> SuitabilityResponse:
         assumptions.append("Battery model: the same hour-by-hour balance as POST /api/v1/power level 3 (eclipses "
                            f"included, {req.panel} panel); a sample passes when no load is ever left unserved.")
 
+    # radio link: at each start the antennas' view of the Moon, one array for every site (it depends on time only)
+    link_masks: dict[float, np.ndarray] | None = None
+    if link_stations is not None:
+        starts = [start_ms] + ([start_ms + req.robust_delay_h * 3_600_000.0] if req.robust_delay_h is not None else [])
+        try:
+            link_masks = {s: services.link_antenna_mask(store, link_stations, time_grid(s, req.duration_h, req.step_min))
+                          for s in starts}
+        except OutOfCoverage:
+            raise SuitabilityInputError(["link: the window is outside the Moon table used for the ground antennas "
+                                         "(2025-2035); see GET /api/v1/meta/datasets"]) from None
+        used = len(link_stations.specs)
+        assumptions.append(
+            f"Radio link: contact = some part of the Earth's disc above the site's horizon AND at least one of {used} "
+            f"antennas ({', '.join(req.link.networks + [c.id for c in req.link.custom_stations])}; "
+            f"{req.link.direction}) sees the Moon above its elevation limit. Geometry only, no link budget. The direction "
+            "to each antenna is to the Moon's centre (the site's position, up to 0.26 deg, is ignored). The share of the "
+            "Earth's disc (comms_min_fraction) is not used.")
+
     def window_values(model, t0_ms: float) -> dict[str, float]:
         series = services.evaluate_window(store, model, t0_ms, req.duration_h, req.step_min, params)
         met = compute_metrics(series, params)
@@ -316,7 +354,12 @@ def search(store: DataStore, req: SuitabilityRequest) -> SuitabilityResponse:
         v = {"sunlit": met.sunlight_pct / 100.0, "comms": met.comms_pct / 100.0, "dark": met.longest_dark_h,
              "blackout": met.longest_blackout_h, "sun_el0": float(series.sun_el[0]),
              "earth0": float(series.comms(params)[0]), "recharge": math.inf if run is None else run * step_h,
-             "battery_ok": math.nan, "min_soc": math.nan}
+             "battery_ok": math.nan, "min_soc": math.nan, "link_daily": math.nan, "link_pass": math.nan}
+        if link_masks is not None:
+            contact = planner_contact(series.earth_frac, link_masks[t0_ms])
+            v.update({"comms": float(contact.mean()), "blackout": longest_gap_h(contact, series.t_ms),
+                      "earth0": float(contact[0]), "link_daily": min_daily_contact_h(contact, series.t_ms),
+                      "link_pass": shortest_complete_pass_h(contact, series.t_ms)})
         if battery is not None:
             array, bat, load = battery
             pw = array_power_w(series.power_w_m2, array) * (1.0 - obscuration(series))

@@ -10,9 +10,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from .areas import GridInfo, WindowInfo
+from .link import CustomStation, Direction
 
 CategoryId = Literal["search", "power", "earth", "topography", "landing", "science", "radiation", "schedule"]
 
@@ -35,6 +36,29 @@ class CriterionInput(BaseModel):
         "battery_initial_soc, battery_min_soc, charge_efficiency, discharge_efficiency, optional night_load_w)"))
 
 
+class SuitabilityLink(BaseModel):
+    """Radio link settings (AERO-2). When given, Earth contact means a radio link: some part of the Earth's disc is above
+    the site's horizon AND an antenna of the chosen networks sees the Moon above its elevation limit. It replaces the
+    share-of-disc rule (`comms_min_fraction`), which is then not used. Geometry only: no link budget in the search
+    (the margin is the same at every site; ask POST /api/v1/link for the proposed sites)."""
+    networks: list[str] = Field(default_factory=lambda: ["dsn", "estrack", "jaxa"], description=(
+        "Antenna networks to use (GET /api/v1/link/stations lists them): dsn, estrack, jaxa. May be empty when "
+        "custom_stations is given"))
+    custom_stations: list[CustomStation] = Field(default_factory=list, max_length=20, description="Antennas you add")
+    direction: Direction = Field("downlink", description=(
+        "downlink = receive limits; uplink_low_power and uplink_high_power = the antenna must be able to send commands "
+        "(transmit limits; DSN only, the other antennas have none and are left out)"))
+
+    @model_validator(mode="after")
+    def _some_station(self):
+        if not self.networks and not self.custom_stations:
+            raise ValueError("select at least one network or add a custom station")
+        ids = [c.id for c in self.custom_stations]
+        if len(set(ids)) != len(ids):
+            raise ValueError("custom station ids must be unique")
+        return self
+
+
 class SuitabilityRequest(BaseModel):
     region: SuitabilityRegion
     start: datetime = Field(description="Start of the mission window (landing), ISO 8601 UTC")
@@ -54,7 +78,10 @@ class SuitabilityRequest(BaseModel):
     step_min: float = Field(60.0, ge=10.0, le=1440.0, description="Time step of the window criteria and of the bound, minutes")
     mast_m: float = Field(2.0, ge=0.0, le=10.0, description="Height of panel and antenna above the ground, m")
     panel: Literal["tracking", "vertical", "horizontal"] = Field("vertical", description="Panel orientation (battery model)")
-    comms_min_fraction: float = Field(0.5, gt=0.0, le=1.0, description="Share of the Earth's disc above the horizon that counts as contact (team parameter, 0.5)")
+    comms_min_fraction: float = Field(0.5, gt=0.0, le=1.0, description="Share of the Earth's disc above the horizon that counts as contact (team parameter, 0.5); not used when `link` is given")
+    link: SuitabilityLink | None = Field(None, description=(
+        "Radio link settings. Given: the Earth criteria (longest blackout, Earth in view at landing, the Earth score) and "
+        "the link criteria use contact with the antennas of these networks instead of the share of the Earth's disc"))
     horizon_az_step_deg: float = Field(0.5, ge=0.25, le=5.0, description="Azimuth step of the traced horizons, degrees")
     horizon_radius_km: float = Field(150.0, ge=20.0, le=250.0, description="How far each horizon ray goes, km")
     max_window_samples: int = Field(300, ge=1, le=2000, description="Most quadtree samples for the window criteria")

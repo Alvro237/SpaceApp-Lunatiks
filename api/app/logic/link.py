@@ -159,3 +159,77 @@ def scale_gt_db_per_k(reference_gt_db_per_k: float, reference_diameter_m: float,
     and the system noise temperature of a cryogenic deep-space receiver is about the same, so
     G/T = G/T_ref + 20 log10(D / D_ref). An estimate, flagged as such wherever it is used."""
     return reference_gt_db_per_k + 20.0 * np.log10(diameter_m / reference_diameter_m)
+
+
+# ---------------------------------------------------------------------------- mission planner: contact over many sites
+
+#: The mission planner's contact asks only that some part of the Earth's disc is above the lunar site's horizon
+#: (the engine's disc fraction is positive), not a share of it: the antennas decide the rest (owner decision of
+#: 2026-11-15). A tiny positive number because the engine's fraction is a weighted count of disc slices, so any visible
+#: slice is far above it. ``POST /api/v1/link`` accepts the same value as its ``comms_min_fraction``.
+ANY_EARTH_FRACTION = 1e-6
+
+
+def any_antenna_sees_moon(views: dict[str, StationView]) -> np.ndarray:
+    """Bool (n,): at least one antenna sees the Moon at each sample. It does not depend on the lunar site (each antenna
+    looks at the Moon's centre), so one array serves every site of a search over the same times."""
+    if not views:
+        raise ValueError("at least one antenna is needed")
+    return np.logical_or.reduce([np.asarray(v.sees_moon, dtype=bool) for v in views.values()])
+
+
+def planner_contact(earth_frac: np.ndarray, antenna_mask: np.ndarray) -> np.ndarray:
+    """Contact at each sample for the planner: some part of the Earth is above the site's horizon AND an antenna sees the
+    Moon. ``earth_frac`` is the engine's visible fraction of the Earth's disc at the site, ``antenna_mask`` the output of
+    ``any_antenna_sees_moon`` on the same times."""
+    earth = np.asarray(earth_frac, dtype=np.float64) >= ANY_EARTH_FRACTION
+    mask = np.asarray(antenna_mask, dtype=bool)
+    if earth.shape != mask.shape:
+        raise ValueError("the Earth series and the antenna mask must have the same number of samples")
+    return earth & mask
+
+
+def _runs(flags: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Start and end (exclusive) sample indices of the runs of True."""
+    f = np.asarray(flags, dtype=bool)
+    edges = np.diff(np.concatenate(([0], f.astype(np.int8), [0])))
+    return np.flatnonzero(edges == 1), np.flatnonzero(edges == -1)
+
+
+def _step_h(t_ms: np.ndarray) -> float:
+    return float(t_ms[1] - t_ms[0]) / 3_600_000.0 if len(t_ms) > 1 else 0.0
+
+
+def longest_gap_h(contact: np.ndarray, t_ms: np.ndarray) -> float:
+    """Longest stretch without contact, hours (whole samples x step, as the engine counts blackouts)."""
+    starts, ends = _runs(~np.asarray(contact, dtype=bool))
+    return float((ends - starts).max()) * _step_h(t_ms) if starts.size else 0.0
+
+
+def min_daily_contact_h(contact: np.ndarray, t_ms: np.ndarray, day_h: float = 24.0) -> float:
+    """Contact hours of the poorest complete day. Days are consecutive blocks of ``day_h`` hours from the first sample;
+    only blocks that fit entirely in the window count (a part-day at the end would look poorer than it is). Hours are
+    contact samples x step. NaN when the window holds no complete day."""
+    c = np.asarray(contact, dtype=bool)
+    t = np.asarray(t_ms, dtype=np.float64)
+    day_ms = day_h * 3_600_000.0
+    n_days = int(np.floor((t[-1] - t[0]) / day_ms + 1e-9))
+    if n_days < 1:
+        return float("nan")
+    day = np.floor((t - t[0]) / day_ms + 1e-9).astype(np.int64)
+    per_day = np.bincount(day[(day < n_days)], weights=c[day < n_days].astype(np.float64), minlength=n_days)
+    return float(per_day.min()) * _step_h(t)
+
+
+def shortest_complete_pass_h(contact: np.ndarray, t_ms: np.ndarray) -> float:
+    """Shortest pass (stretch of contact) that starts and ends inside the window, hours (samples x step). A pass cut by
+    the first or the last sample is longer than it looks and is not checked. 0 when there is no contact at all (no pass
+    to speak of); infinity when there is contact but every pass is cut by the window's edges."""
+    c = np.asarray(contact, dtype=bool)
+    if not c.any():
+        return 0.0
+    starts, ends = _runs(c)
+    whole = (starts > 0) & (ends < c.size)
+    if not whole.any():
+        return float("inf")
+    return float((ends[whole] - starts[whole]).min()) * _step_h(t_ms)
