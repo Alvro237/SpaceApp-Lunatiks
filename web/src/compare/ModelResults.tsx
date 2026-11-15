@@ -1,12 +1,11 @@
 /**
- * What the power model and the radio link answered for each compared place, under the parameters applied in the
- * parameters panel. A real table (one row per place), shown only once something is applied. A value the API did
- * not give is a dash, never an estimate; the horizon kind of each answer is shown because a smooth-sphere result
- * is not a bound.
+ * What the power model answered for each compared place, under the parameters applied in the parameters panel. A real
+ * table (one row per place), shown only once something is applied. A value the API did not give is a dash, never an
+ * estimate; a smooth-sphere horizon is flagged because it is not a bound.
  */
-import type { LinkResponse, PowerResponse } from '../api/types'
+import type { PowerResponse } from '../api/types'
 import { useApplied } from './applied'
-import { type PlaceModels, useCompareModels } from './useCompareModels'
+import { usePowerCompare } from './usePowerCompare'
 import type { ComparedPlace } from './useComparePlaces'
 
 const dash = '—'
@@ -47,21 +46,6 @@ function powerCols(level: number): Col<PowerResponse>[] {
   return cols
 }
 
-function linkCols(level: number): Col<LinkResponse>[] {
-  const cols: Col<LinkResponse>[] = [
-    { head: 'Earth in view', cell: (r) => pct(r.earth_visible_fraction) },
-    { head: 'Contact with an antenna', cell: (r) => pct(r.contact_window_fraction) },
-    { head: 'Longest blackout (h)', cell: (r) => fixed(r.longest_blackout_h, 1) },
-  ]
-  if (level === 2) {
-    cols.push(
-      { head: 'Link closed', cell: (r) => pct(r.budget?.link_window_fraction) },
-      { head: 'Longest gap without link (h)', cell: (r) => fixed(r.budget?.longest_link_blackout_h, 1) },
-    )
-  }
-  return cols
-}
-
 function status(a: { loading: boolean; error: string | null }) {
   if (a.error) return a.error
   if (a.loading) return 'Computing…'
@@ -69,42 +53,22 @@ function status(a: { loading: boolean; error: string | null }) {
 }
 
 export function ModelResults({ places }: { places: ComparedPlace[] }) {
-  const applied = useApplied()
-  const { models } = useCompareModels(places)
-  if (!applied.power && !applied.link) return null
+  const applied = useApplied((s) => s.power)
+  const answers = usePowerCompare(places)
+  if (!applied) return null
 
-  const pCols = applied.power ? powerCols({ array: 2, battery: 3, colony: 4 }[applied.power.model]) : []
-  const lCols = applied.link ? linkCols(applied.link.level) : []
-  const smooth = models.some((m) => m.power.data?.horizon_kind === 'smooth_sphere' || m.link.data?.horizon_kind === 'smooth_sphere')
-  const estimated = new Set(models.flatMap((m) => m.link.data?.estimated_limits ?? []))
-
-  const cells = <T,>(cols: Col<T>[], a: PlaceModels['power'] | PlaceModels['link']) => {
-    const msg = status(a)
-    const d = a.data as T | null
-    if (msg || !d) {
-      return (
-        <td key="msg" colSpan={cols.length} className={a.error ? 'error' : 'muted'}>
-          {msg ?? dash}
-        </td>
-      )
-    }
-    return cols.map((c) => <td key={c.head}>{c.cell(d)}</td>)
-  }
+  const cols = powerCols({ array: 2, battery: 3, colony: 4 }[applied.model])
+  const smooth = answers.some((a) => a.data?.horizon_kind === 'smooth_sphere')
 
   return (
-    <section className="cmp-models" aria-label="Power and link results">
-      <div className="table-scroll" tabIndex={0} role="region" aria-label="Power and link results for each place">
+    <section className="cmp-models" aria-label="Power results">
+      <div className="table-scroll" tabIndex={0} role="region" aria-label="Power results for each place">
         <table>
-          <caption>Power and radio link under the applied parameters</caption>
+          <caption>Power under the applied parameters</caption>
           <thead>
             <tr>
               <th scope="col">Place</th>
-              {pCols.map((c) => (
-                <th key={c.head} scope="col">
-                  {c.head}
-                </th>
-              ))}
-              {lCols.map((c) => (
+              {cols.map((c) => (
                 <th key={c.head} scope="col">
                   {c.head}
                 </th>
@@ -112,24 +76,28 @@ export function ModelResults({ places }: { places: ComparedPlace[] }) {
             </tr>
           </thead>
           <tbody>
-            {places.map((p, i) => (
-              <tr key={p.num}>
-                <th scope="row">
-                  {p.num} {p.info.name}
-                </th>
-                {applied.power && cells(pCols, models[i].power)}
-                {applied.link && cells(lCols, models[i].link)}
-              </tr>
-            ))}
+            {places.map((p, i) => {
+              const a = answers[i]
+              const msg = status(a)
+              return (
+                <tr key={p.num}>
+                  <th scope="row">
+                    {p.num} {p.info.name}
+                  </th>
+                  {msg || !a.data ? (
+                    <td colSpan={cols.length} className={a.error ? 'error' : 'muted'}>
+                      {msg ?? dash}
+                    </td>
+                  ) : (
+                    cols.map((c) => <td key={c.head}>{c.cell(a.data!)}</td>)
+                  )}
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </div>
-      {(estimated.size > 0 || smooth) && (
-        <p className="muted small">
-          {estimated.size > 0 ? `Some antenna elevation limits are project estimates, not operator values (${[...estimated].join(', ')}). ` : ''}
-          {smooth ? 'A place without LOLA terrain uses a smooth-sphere horizon: an estimate, not a bound.' : ''}
-        </p>
-      )}
+      {smooth && <p className="muted small">A place without LOLA terrain uses a smooth-sphere horizon: an estimate, not a bound.</p>}
     </section>
   )
 }
