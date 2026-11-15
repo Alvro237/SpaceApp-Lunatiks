@@ -43,7 +43,7 @@ export type PowerFields = Partial<Record<PowerKey, string>>
 export type PowerModel = 'array' | 'battery' | 'colony'
 
 export interface ScenarioKey {
-  selection: Selection
+  selection: Selection | null
   startMs: number
   durationH: number
   mastM: number

@@ -103,8 +103,9 @@ export function MissionPanel() {
     setExample(true)
   }
 
-  const picked =
-    selection.kind === 'point'
+  const picked = !selection
+    ? null
+    : selection.kind === 'point'
       ? { lat: selection.lat, lon: selection.lon, name: coord(selection.lat, selection.lon) }
       : (() => {
           const s = sites.find((x) => x.id === selection.id)

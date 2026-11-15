@@ -14,11 +14,12 @@ export const useDatasets = () => useQuery({ queryKey: ['datasets'], queryFn: ({ 
 export const useConstraints = () =>
   useQuery({ queryKey: ['constraints'], queryFn: ({ signal }) => api.constraints(signal), ...forever, retry })
 
-export function useApiState(sel: Selection, p: StateParams, enabled: boolean) {
+/** Sun and Earth now at the place; nothing is asked for while no place is chosen. */
+export function useApiState(sel: Selection | null, p: StateParams, enabled: boolean) {
   return useQuery({
     queryKey: ['state', sel, p],
-    queryFn: ({ signal }) => (sel.kind === 'site' ? api.siteState(sel.id, p, signal) : api.pointState(sel.lat, sel.lon, p, signal)),
-    enabled,
+    queryFn: ({ signal }) => (sel!.kind === 'site' ? api.siteState(sel!.id, p, signal) : api.pointState(sel!.lat, sel!.lon, p, signal)),
+    enabled: enabled && !!sel,
     retry,
     staleTime: 60_000,
   })
@@ -36,11 +37,12 @@ export function usePointHorizon(coords: { lat: number; lon: number } | null, mas
   })
 }
 
-export function useApiSeries(sel: Selection, p: SeriesParams, enabled: boolean) {
+/** Series over the window at the place; nothing is asked for while no place is chosen. */
+export function useApiSeries(sel: Selection | null, p: SeriesParams, enabled: boolean) {
   return useQuery({
     queryKey: ['series', sel, p],
-    queryFn: ({ signal }) => (sel.kind === 'site' ? api.siteSeries(sel.id, p, signal) : api.pointSeries(sel.lat, sel.lon, p, signal)),
-    enabled,
+    queryFn: ({ signal }) => (sel!.kind === 'site' ? api.siteSeries(sel!.id, p, signal) : api.pointSeries(sel!.lat, sel!.lon, p, signal)),
+    enabled: enabled && !!sel,
     retry,
     staleTime: 60_000,
   })

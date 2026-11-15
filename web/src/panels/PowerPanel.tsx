@@ -20,7 +20,7 @@ import { isMissing } from '../api/client'
 import { usePower, useRadiation } from '../api/hooks'
 import type { PowerRequest, PowerResponse, RadiationRequest } from '../api/types'
 import { type PowerKey, type PowerModel, useCurrentPowerResult, usePowerStore, useScenarioId } from '../state/power'
-import { useApp } from '../state/store'
+import { type Selection, useApp } from '../state/store'
 import { formatDuration, formatUtc, isoMinute } from '../time/clock'
 import { useParams } from '../time/hooks'
 import { ApiStatus, SourceTag } from '../ui/ApiStatus'
@@ -139,6 +139,12 @@ function Stat({ icon, tone, label, value, unit, sub }: { icon?: ReactNode; tone:
   )
 }
 
+/** The place part of a /power or /radiation request (the section is shown only with a place chosen). */
+function placeFields(sel: Selection | null) {
+  if (!sel) return {}
+  return sel.kind === 'site' ? { site_id: sel.id } : { lat: sel.lat, lon: sel.lon, horizon: 'terrain' as const }
+}
+
 function useRadiationRequest(): RadiationRequest {
   const selection = useApp((s) => s.selection)
   const startMs = useApp((s) => s.startMs)
@@ -148,7 +154,7 @@ function useRadiationRequest(): RadiationRequest {
   return useMemo(() => {
     const q = Number(qf)
     return {
-      ...(selection.kind === 'site' ? { site_id: selection.id } : { lat: selection.lat, lon: selection.lon, horizon: 'terrain' as const }),
+      ...placeFields(selection),
       start: isoMinute(startMs),
       duration_h: durationH,
       step_min: stepFor(durationH),
@@ -259,7 +265,7 @@ function Model() {
         }
       }
       const body: PowerRequest = {
-        ...(selection.kind === 'site' ? { site_id: selection.id } : { lat: selection.lat, lon: selection.lon, horizon: 'terrain' as const }),
+        ...placeFields(selection),
         start: isoMinute(startMs),
         duration_h: durationH,
         // keep within the API's 20 000-sample limit for long windows

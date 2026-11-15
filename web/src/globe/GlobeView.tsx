@@ -17,7 +17,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type KeyboardEvent, type MouseEvent, type PointerEvent, type WheelEvent, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { useInsets } from '../state/layout'
-import { type MarkerStyle, useApp } from '../state/store'
+import { type MarkerStyle, type ViewMode, useApp } from '../state/store'
 import { MarkerSet } from '../map/markerSet'
 import { type MapSite, useMapSites } from '../map/useMapSites'
 import { TileLoader } from '../terrain/loader'
@@ -25,7 +25,7 @@ import { prefetchMap } from '../terrain/prefetch'
 import { useEphemeris, useMasks } from '../time/hooks'
 import { DATA_BASE } from '../time/staticData'
 import { GlobeDetail } from './detail/globeDetail'
-import { MIN_DIST, MOON_R_KM, type Orbit, OrbitRig, RELIEF_MAX, TILT_3D, cameraPose, latLonToScene, nearPlaneKm, raySphere, reliefExaggeration, sceneToLatLon } from './orbit'
+import { MIN_DIST, MOON_R_KM, type Orbit, OrbitRig, RELIEF_MAX, TILT_3D, cameraPose, isNearView, latLonToScene, nearPlaneKm, raySphere, reliefExaggeration, sceneToLatLon } from './orbit'
 import { PATCH_LEVELS, holeOf, patchGeometry, patchWindows } from './patch'
 import { GLOBE_FRAG, GLOBE_VERT, PATCH_VERT } from './shaders'
 
@@ -41,7 +41,10 @@ const ENTER_MAP_DIST = MOON_R_KM * 1.8
 /** Slope exaggeration of the shading where 118 m detail heights are loaded (the shipped 7.6 km grid uses 3). */
 const DETAIL_SHADE_EXAGGERATION = 1.5
 
-/** What the globe's surface shows: LOLA heights lit by the Sun at the chosen time, or the LROC WAC photo mosaic. */
+/**
+ * What the globe's surface shows: LOLA heights lit by the Sun at the chosen time, or the same lit relief with the
+ * LROC WAC photo mosaic as its colour.
+ */
 export type GlobeSurface = 'relief' | 'photo'
 
 export interface GlobeMeta {
@@ -97,17 +100,23 @@ export function GlobeView() {
   const openMenu = usePlaceStyles((s) => s.openMenu)
   const enterMap = useApp((s) => s.enterMap)
   const [orbit] = useState(() => new OrbitRig(START))
-  const [surface, setSurface] = useState<GlobeSurface>('relief')
+  const [surface, setSurface] = useState<GlobeSurface>('photo')
   /** The mesh's relief exaggeration, to half a unit (for the caption and the markers' height). */
   const [exag, setExag] = useState(RELIEF_MAX)
   const anchored = useGlobe((s) => s.anchored)
-  /** Whether the view is tilted (the 3D button's state; the camera itself lives in the orbit rig). */
-  const [tilted, setTilted] = useState(false)
-  const toggleTilt = () => {
-    const on = orbit.viewGoal.tilt < 1
-    orbit.setTilt(on ? TILT_3D : 0)
-    setTilted(on)
-  }
+  // 2D or 3D: the app's view, shared with the polar map and kept in the address (the camera lives in the orbit rig).
+  // 3D tilts the view; 2D sets it straight down with north up again, whatever turn it had.
+  const view = useApp((s) => s.view)
+  const setApp = useApp((s) => s.set)
+  /** The view the orbit already shows: a change made on the orbit itself (a tilting drag) is not applied again. */
+  const shownView = useRef<ViewMode | null>(null)
+  useEffect(() => {
+    if (shownView.current === view) return
+    shownView.current = view
+    if (view === '3d') orbit.setTilt(TILT_3D)
+    else orbit.resetView()
+  }, [view, orbit])
+  const toggleTilt = () => setApp({ view: useApp.getState().view === '3d' ? '2d' : '3d' })
   /** A click on the surface waits to see whether it is the first half of a double click. */
   const pendingClick = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => () => void (pendingClick.current && clearTimeout(pendingClick.current)), [])
@@ -127,8 +136,8 @@ export function GlobeView() {
       phase = t.phase
       if (phase === 'diving') {
         const sel = useApp.getState().selection
-        const site = sel.kind === 'site' ? masks?.site(sel.id) : null
-        const ll = sel.kind === 'point' ? [sel.lat, sel.lon] : site ? [site.lat, site.lon] : null
+        const site = sel?.kind === 'site' ? masks?.site(sel.id) : null
+        const ll = sel?.kind === 'point' ? [sel.lat, sel.lon] : site ? [site.lat, site.lon] : null
         if (!ll) return
         before = { ...orbit.goal }
         orbit.turnTo(ll[0], ll[1])
@@ -150,8 +159,8 @@ export function GlobeView() {
       if (s.focusSeq === seq) return
       seq = s.focusSeq
       const sel = s.selection
-      const site = sel.kind === 'site' ? masks?.site(sel.id) : null
-      const ll = sel.kind === 'point' ? [sel.lat, sel.lon] : site ? [site.lat, site.lon] : null
+      const site = sel?.kind === 'site' ? masks?.site(sel.id) : null
+      const ll = sel?.kind === 'point' ? [sel.lat, sel.lon] : site ? [site.lat, site.lon] : null
       if (ll) orbit.turnTo(ll[0], ll[1])
     })
   }, [masks, orbit])
@@ -180,7 +189,7 @@ export function GlobeView() {
       e: () => orbit.rotate(15),
       r: () => {
         orbit.resetView()
-        setTilted(false)
+        setApp({ view: '2d' })
       },
       Enter: () => goTo(orbit.goal.lat <= MAP_DISC_LAT ? orbit.goal.lat : -90, orbit.goal.lat <= MAP_DISC_LAT ? orbit.goal.lon : 0),
     }
@@ -206,7 +215,12 @@ export function GlobeView() {
     if (d.rotate) {
       if (d.moved) {
         orbit.rotate(-dx * 0.3, dy * 0.3, true)
-        setTilted(orbit.viewGoal.tilt >= 1)
+        // the button follows the tilt, without snapping the turn or the tilt the drag just set
+        const v: ViewMode = orbit.viewGoal.tilt >= 1 ? '3d' : '2d'
+        if (v !== useApp.getState().view) {
+          shownView.current = v
+          setApp({ view: v })
+        }
       }
     } else orbit.drag(dx, dy, e.currentTarget.clientHeight, FOV, true)
     d.x = e.clientX
@@ -300,7 +314,8 @@ export function GlobeView() {
         )}
         <p id="globe-help" className="sr-only">
           Arrow keys turn the Moon, plus and minus zoom, T tilts the view to 3D, Q and E turn it, R sets it straight
-          again, Enter opens the detailed south-polar map; zooming in over the south pole opens it too. A click on
+          again, Enter opens the detailed south-polar map; zooming in over the south pole opens it too. Zooming in
+          close anywhere else tilts the view to 3D and loads the finest detail; zooming back out sets it straight. A click on
           the surface marks that point; a double click comes closer to it. Right click a place for its options: rename, pointer colour, remove. Sites are listed, with the same information, in the panels.
         </p>
       </div>
@@ -314,7 +329,13 @@ export function GlobeView() {
             <IconMinus />
           </button>
         </div>
-        <button type="button" aria-pressed={tilted} onClick={toggleTilt} aria-label="3D tilt" title="3D tilt (T); shift-drag or right-drag turns and tilts">
+        <button
+          type="button"
+          aria-pressed={view === '3d'}
+          onClick={toggleTilt}
+          aria-label="3D tilt"
+          title="3D tilt (T); off sets the view straight down, north up. Zooming in close turns it on. Shift-drag or right-drag turns and tilts"
+        >
           <IconCube />
         </button>
         <button type="button" onClick={() => enterMap()} aria-label="South pole map" title="Detailed south-polar map">
@@ -336,7 +357,7 @@ export function GlobeView() {
           type="button"
           aria-pressed={surface === 'photo'}
           onClick={() => setSurface(surface === 'photo' ? 'relief' : 'photo')}
-          title="Show the LROC WAC photo mosaic instead of the relief lit by the Sun"
+          title="Drape the LROC WAC photo mosaic over the 3D relief lit by the Sun"
         >
           Photo
         </button>
@@ -344,8 +365,9 @@ export function GlobeView() {
       </ToolPortal>
       <p className="globe-caption">
         {surface === 'photo'
-          ? `LROC WAC photo mosaic, 100 m, from NASA Moon Trek (lighting as photographed; night side from the chosen time) · LOLA relief ×${exag}`
-          : `Global LOLA topography (relief ×${exag}; 118 m detail from NASA Moon Trek as you zoom) · lit by the Sun at the chosen time`}
+          ? `LROC WAC photo mosaic, 100 m, from NASA Moon Trek, over global LOLA topography (relief ×${exag}; 118 m detail as you zoom)`
+          : `Global LOLA topography (relief ×${exag}; 118 m detail from NASA Moon Trek as you zoom)`}
+        {' · lit by the Sun at the chosen time'}
       </p>
     </>
   )
@@ -414,7 +436,7 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
   const { camera, size, scene, gl, setDpr, viewport } = useThree()
   const [markersSet] = useState(() => new MarkerSet())
   /** What the last drawn frame showed (camera, canvas, Sun, relief, detail tiles): a frame is drawn when it differs. */
-  const drawn = useRef({ sig: new Float64Array(36), at: Infinity, was: false })
+  const drawn = useRef({ sig: new Float64Array(40), at: Infinity, was: false })
   const sceneVersion = useRef(0)
   /** Frame rate over continuous drawing, to lower the pixel ratio on a slow GPU (the pixel ratio the canvas started with first). */
   const perf = useRef({ frames: 0, time: 0, age: 0, dpr: viewport.dpr })
@@ -548,12 +570,26 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
 
   const camDir = useMemo(() => new THREE.Vector3(), [])
   const toPoint = useMemo(() => new THREE.Vector3(), [])
+  /** Whether the view is the close-up one (orbit.ts, isNearView); null before the first frame. */
+  const near = useRef<boolean | null>(null)
 
   useFrame((_, dt) => {
     orbit.setAnchored(useGlobe.getState().anchored)
     orbit.fit(size.width, size.height, useInsets.getState(), FOV)
     orbit.step(dt, reduced)
     const n = orbit.now
+
+    // Close-up view, judged where the camera is going so the tilt starts with the zoom: crossing into it tilts the
+    // view to 3D, crossing out of it sets it straight (2D); between crossings the 3D button decides. The first frame
+    // is a crossing too, so the globe opens on the whole Moon in 2D even if the polar map was left in 3D. Not while
+    // the horizon view opens or closes: the camera comes down over the place on purpose then.
+    const isNear = isNearView(near.current, orbit.goal.dist - MOON_R_KM)
+    if (isNear !== near.current) {
+      near.current = isNear
+      const app = useApp.getState()
+      const want = isNear ? '3d' : '2d'
+      if (useHorizonTransition.getState().phase === 'map' && app.view !== want) app.set({ view: want })
+    }
 
     const cam = camera as THREE.PerspectiveCamera
     placeCamera(cam, n, orbit.view.tilt, orbit.view.heading, size.width, size.height)
@@ -591,7 +627,7 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
     const g = orbit.goal
     const dpr = gl.getPixelRatio()
     const view = { fovDeg: FOV, widthPx: size.width * dpr, heightPx: size.height * dpr }
-    detail.update(dt, { ...view, lat: n.lat, lon: n.lon, distKm: n.dist }, { ...view, lat: g.lat, lon: g.lon, distKm: g.dist }, material)
+    detail.update(dt, { ...view, lat: n.lat, lon: n.lon, distKm: n.dist }, { ...view, lat: g.lat, lon: g.lon, distKm: g.dist }, material, isNear)
 
     // enter the polar map once the flight down has arrived, or when zoomed in over the cap
     // (not while the horizon view opens or closes: then the camera comes down over the place on purpose)
@@ -639,9 +675,10 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
     put(sun.x); put(sun.y); put(sun.z)
     put(u.uExag.value as number); put(u.uMaxLevel.value as number); put(u.uPhotoMode.value as number)
     // a detail tile that arrives is written into these textures, which raises their version
-    const tiles = u.uDetail.value as THREE.Texture
-    const index = u.uIndex.value as THREE.Texture
-    put(tiles.id); put(tiles.version); put(index.id); put(index.version)
+    for (const name of ['uDetail', 'uIndex', 'uPhoto', 'uPhotoIndex']) {
+      const t = u[name].value as THREE.Texture
+      put(t.id); put(t.version)
+    }
     put(sceneVersion.current)
     d.at += dt
     const draw = changed || d.at >= IDLE_REDRAW_S

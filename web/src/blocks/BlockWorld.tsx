@@ -102,6 +102,7 @@ function useSelectedLatLon(): [number, number] | null {
   const sel = useApp((s) => s.selection)
   const masks = useMasks().data
   return useMemo(() => {
+    if (!sel) return null
     if (sel.kind === 'point') return [sel.lat, sel.lon]
     const site = masks?.site(sel.id)
     return site ? [site.lat, site.lon] : null

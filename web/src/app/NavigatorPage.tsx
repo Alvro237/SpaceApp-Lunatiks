@@ -63,8 +63,11 @@ export function NavigatorPage() {
   const section = usePanels((s) => s.section)
   const comparing = useApp((s) => s.compareMode && s.compare.length >= 2)
   const blocks = useApp((s) => s.blocks)
+  // With no place chosen there is nothing for the bottom bar (the place's sunlight and Earth over the window) or
+  // the place's sections to show: they wait until a place is picked on the map or in the search.
+  const hasPlace = useApp((s) => s.selection !== null)
   // the horizon view belongs to the planner: it waits (section kept) while Educational mode is on
-  const horizonOn = section === 'horizon' && !blocks
+  const horizonOn = section === 'horizon' && !blocks && hasPlace
   const root = useRef<HTMLDivElement>(null)
   // Transition between the map and the horizon view, derived from the section while rendering (no effect needed
   // to start it); timers only end a phase.
@@ -148,14 +151,16 @@ export function NavigatorPage() {
               {comparing ? (
                 <SidePanel wide>{(titleId) => <ComparePanel titleId={titleId} />}</SidePanel>
               ) : (
-                section && <SidePanel wide={section === 'power'}>{(titleId) => <SectionDrawer titleId={titleId} />}</SidePanel>
+                section && hasPlace && <SidePanel wide={section === 'power'}>{(titleId) => <SectionDrawer titleId={titleId} />}</SidePanel>
               )}
               <RemovedToast />
               <PlaceMenu />
               <QuestPanel />
-              <div className="float float-bottom">
-                <Timeline />
-              </div>
+              {(hasPlace || comparing) && (
+                <div className="float float-bottom">
+                  <Timeline />
+                </div>
+              )}
             </>
           )}
         </div>

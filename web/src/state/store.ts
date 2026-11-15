@@ -14,7 +14,7 @@ export type Mode = 'study' | 'mission'
 export type ViewMode = '2d' | '3d'
 /** The whole Moon as a globe, or the polar DEM map. */
 export type Scale = 'globe' | 'map'
-export type LayerId = 'none' | 'elevation' | 'slope' | 'sun_illumination' | 'earth_visibility' | 'permanent_shadow'
+export type LayerId = 'none' | 'photo' | 'elevation' | 'slope' | 'sun_illumination' | 'earth_visibility' | 'permanent_shadow'
 export type Lighting = 'sun' | 'relief'
 
 export const MASTS_M = [0, 2, 5, 10] as const
@@ -40,7 +40,9 @@ export interface Scene {
   mode: Mode
   scale: Scale
   view: ViewMode
-  selection: Selection
+  /** The place being studied, or null when none is chosen (the app opens with none; the bottom bar and the place's
+   * sections wait for one). */
+  selection: Selection | null
   /** Active instant, Unix ms (UTC). */
   tMs: number
   /** Start of the analysis window (timeline, metrics), Unix ms. */
@@ -103,7 +105,7 @@ export interface AppState extends Scene, Prefs {
   removeCompare: (i: number) => void
   clearCompare: () => void
   /** Take a place off the map (right click): out of the comparison, and if it was the selection, back to the
-   * previous place. */
+   * previous place, or to none. */
   removePlace: (s: Selection, name: string) => void
   undoRemove: () => void
 }
@@ -116,22 +118,24 @@ export function defaultScene(now = nowHour()): Scene {
     mode: 'study',
     scale: 'globe',
     view: '2d',
-    selection: { kind: 'site', id: 'im-2' },
+    selection: null,
     tMs: now,
     startMs: now,
     durationH: 24 * 30,
     mastM: 2,
     panel: 'vertical',
     commsMinFraction: 0.5,
-    layer: 'none',
+    layer: 'photo',
     lighting: 'sun',
     craters: false,
     compare: [],
   }
 }
 
-export const sameSelection = (a: Selection, b: Selection) =>
-  a.kind === 'site' && b.kind === 'site'
+export const sameSelection = (a: Selection | null, b: Selection | null): boolean =>
+  !a || !b
+    ? a === b
+    : a.kind === 'site' && b.kind === 'site'
     ? a.id === b.id
     : a.kind === 'point' && b.kind === 'point' && a.lat === b.lat && a.lon === b.lon
 
@@ -159,7 +163,10 @@ export const useApp = create<AppState>()((set, get) => ({
     set((s) => ({
       selection,
       focusSeq: s.focusSeq + 1,
-      history: sameSelection(s.selection, selection) ? s.history : [...s.history.filter((h) => !sameSelection(h, selection)), s.selection].slice(-10),
+      history:
+        !s.selection || sameSelection(s.selection, selection)
+          ? s.history
+          : [...s.history.filter((h) => !sameSelection(h, selection)), s.selection].slice(-10),
     }))
     if (get().compareMode) get().addCompare(selection)
   },
@@ -176,13 +183,13 @@ export const useApp = create<AppState>()((set, get) => ({
   setCompareMode: (compareMode) => {
     // Multiselect on: the current place is the first one picked, and the single-place sections step aside.
     // Off: back to one place, and the comparison is cleared so the map shows one place again.
-    set({ compareMode, compare: compareMode ? (get().compare.length ? get().compare : [get().selection]) : [] })
+    set({ compareMode, compare: compareMode ? (get().compare.length ? get().compare : [get().selection].filter((x): x is Selection => !!x)) : [] })
     usePanels.getState().setSection(null)
   },
   addCompare: (sel) =>
     set((s) => {
       const item = sel ?? s.selection
-      if (s.compare.some((c) => sameSelection(c, item))) return s
+      if (!item || s.compare.some((c) => sameSelection(c, item))) return s
       return { compare: [...s.compare, item].slice(-MAX_COMPARE) }
     }),
   removeCompare: (i) => set((s) => ({ compare: s.compare.filter((_, k) => k !== i) })),
@@ -196,9 +203,11 @@ export const useApp = create<AppState>()((set, get) => ({
     const history = s.history.filter((h) => !sameSelection(h, sel))
     let selection = s.selection
     if (wasCurrent) {
-      // the last place still compared, else the place picked before, else the default site
-      selection = compare[compare.length - 1] ?? history[history.length - 1] ?? defaultScene().selection
+      // the last place still compared, else the place picked before, else none
+      selection = compare[compare.length - 1] ?? history[history.length - 1] ?? null
     }
+    // the last place gone: no place's section stays open
+    if (!selection) usePanels.getState().setSection(null)
     set({
       compare,
       selection,
@@ -215,7 +224,7 @@ export const useApp = create<AppState>()((set, get) => ({
     set({
       compare: compare.slice(0, MAX_COMPARE),
       selection: r.wasCurrent ? r.sel : s.selection,
-      history: r.wasCurrent ? [...s.history, s.selection].slice(-10) : s.history,
+      history: r.wasCurrent && s.selection ? [...s.history, s.selection].slice(-10) : s.history,
       lastRemoved: null,
     })
   },

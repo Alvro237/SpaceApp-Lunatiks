@@ -46,6 +46,26 @@ A fifth commit on the new branch adds this file.
   module `lunarnav/ground_stations.py` loads kernels by relative name; the older pipeline code does not, so build the
   data from a path without accents.
 
+- **Level 2 asks for the least possible (owner decision, 2026-11-15):** only the lunar terminal's EIRP and the data
+  rate are required. The band (S, X or Ka, default X) picks the frequency, or the user types one. Each antenna uses
+  its own downlink G/T: DSN from 810-005, Misasa from JAXA's specification, and the rest (ESA, Usuda, Uchinoura, DSS-36
+  in Ka, custom dishes with a diameter) scaled from the DSN 34 m mean by 20 log10(D / 34 m), flagged `estimated`.
+  Defaults: required Eb/N0 9.6 dB (uncoded BPSK at BER 1e-5, conservative), minimum margin 3 dB.
+- **No warning icon for the ESA elevation estimate in the interface (owner decision).** The API still returns
+  `estimated_limits` and the per-antenna `limit_source` / `gt_basis`, so the information is there if it is needed.
+
+## 3b. Additive edits to shared backend files (team notice)
+
+Nothing was renamed or removed; callers that do not use the new options behave exactly as before.
+
+- `api/app/db/store.py`: new optional field `DataStore.stations` (and one line in `load_store`).
+- `api/app/logic/constraints/base.py`: new optional field `ConstraintContext.contact` (bool series, default `None`).
+- `api/app/services.py`: new functions `link_stations`, `link_views`, `link_contact` (end of file) and two optional
+  parameters of `constraint_context`, `link_networks` and `link_direction`. SW-2: pass `link_networks=[...]` when the
+  user selected antenna networks and `comms_hours` / `max_blackout` will use ground-antenna contact instead of the
+  Earth's line of sight alone.
+- `api/app/main.py`: one import and one `include_router` line for the link router.
+
 ## 4. Notice for the frontend (nothing under `web/` was touched)
 
 `web/src/panels/LinkPanel.tsx` currently shows only the Earth's disc from the browser engine and the text
@@ -58,5 +78,12 @@ A fifth commit on the new branch adds this file.
   antenna's own windows, and `estimated_limits`.
 - Show `estimated_limits` to the user when it is not empty: the result then depends on a value that is not an
   operator figure.
+- Level 2: send `"level": 2` and a `budget` with `transmit_eirp_dbw` and `data_rate_bps` (required) and, optionally,
+  `band` (S, X, Ka; a selector), `frequency_ghz` (a "type it" field), `required_ebn0_db`, `min_margin_db`,
+  `other_losses_db` and `receive_gt_db_per_k` (an override; required only for uplinks). The response carries
+  `budget.band_used`, `budget.frequency_ghz_used`, `budget.link` (one boolean per sample), `budget.link_ranges`,
+  `budget.best_margin_db`, and `stations[].budget` with `gt_db_per_k`, `gt_basis`, margin, free-space loss and the
+  highest data rate each antenna supports.
+- The ESA estimated-limit warning is not shown in the interface (owner decision).
 - The generated types (`web/src/api/schema.gen.ts`) need regenerating from `/openapi.json` to see the new models.
 - Everything added to the API is new: no existing field was renamed or removed.

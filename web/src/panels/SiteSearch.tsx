@@ -41,8 +41,10 @@ export function SiteSearch() {
   }, [shown])
   const ordered = useMemo(() => groups.flatMap((g) => shown.filter((s) => s.group === g)), [groups, shown])
 
-  const current =
-    names.get(placeKey(selection)) ??
+  // with no place chosen the box says how to choose one
+  const current = !selection
+    ? 'Search a site or click the Moon'
+    : names.get(placeKey(selection)) ??
     (selection.kind === 'site' ? (sites.find((s) => s.id === selection.id)?.name ?? selection.id) : pointName(selection.lat, selection.lon))
 
   useEffect(() => {
@@ -131,7 +133,7 @@ export function SiteSearch() {
                 .filter((s) => s.group === g)
                 .map((s) => {
                   const i = ordered.indexOf(s)
-                  const isCurrent = selection.kind === 'site' && selection.id === s.id
+                  const isCurrent = selection?.kind === 'site' && selection.id === s.id
                   return (
                     <div
                       key={s.id}
@@ -186,8 +188,8 @@ function ManualPoint({ onDone }: { onDone: () => void }) {
   const id = useId()
   const select = useApp((s) => s.select)
   const selection = useApp((s) => s.selection)
-  const [lat, setLat] = useState(selection.kind === 'point' ? String(selection.lat) : '-89.45')
-  const [lon, setLon] = useState(selection.kind === 'point' ? String(selection.lon) : '137.3')
+  const [lat, setLat] = useState(selection?.kind === 'point' ? String(selection.lat) : '-89.45')
+  const [lon, setLon] = useState(selection?.kind === 'point' ? String(selection.lon) : '137.3')
   const [error, setError] = useState<string | null>(null)
   const submit = (e: FormEvent) => {
     e.preventDefault()

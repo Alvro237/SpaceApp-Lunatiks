@@ -49,6 +49,7 @@ export function LayersControl({ tileset, exaggeration, onExaggeration, craterErr
   const set = useApp((s) => s.set)
   const options: { id: LayerId; name: string }[] = [
     { id: 'none', name: 'Relief only' },
+    { id: 'photo', name: 'Photo (LROC WAC) on the relief' },
     { id: 'elevation', name: 'Elevation' },
     ...Object.entries(tileset.layers).map(([k, m]) => ({ id: k as LayerId, name: m.name })),
   ]
@@ -126,6 +127,15 @@ export function LayersControl({ tileset, exaggeration, onExaggeration, craterErr
 
 export function LegendChip({ tileset }: { tileset: Tileset }) {
   const layer = useApp((s) => s.layer)
+  if (layer === 'photo') {
+    return (
+      <figure className="legend-chip">
+        <figcaption>
+          <strong>Photo</strong> <span className="muted">· LROC WAC south polar mosaic, 100 m, NASA Moon Trek (brightness and shadows as photographed) · on LOLA relief lit by the chosen light</span>
+        </figcaption>
+      </figure>
+    )
+  }
   const meta = layer !== 'none' && layer !== 'elevation' ? tileset.layers[layer] : null
   const scale: { name: string; cmap: ColormapId; min: number; max: number; unit: string; source: string } | null =
     layer === 'elevation'

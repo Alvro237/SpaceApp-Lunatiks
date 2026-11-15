@@ -18,6 +18,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Literal
 
+import numpy as np
+
 from ..engine import AnalysisParams, Metrics, Series
 
 Basis = Literal["computed", "dataset", "unavailable"]
@@ -38,6 +40,10 @@ class ConstraintContext:
     # Known keys: slope_deg, slope_source, sun_illumination_avg, earth_visibility_avg,
     # permanent_shadow_fraction, sky_visibility_sr, crater_density_per_km2.
     lookups: dict[str, float | str | None] = field(default_factory=dict)
+    # Optional radio-link contact series (bool per sample): the lunar site sees the Earth AND a selected ground antenna
+    # sees the Moon (AERO-2, app/logic/link.py). None = not requested; the communication filters then use the Earth's
+    # line of sight alone, as before. Filled by services.constraint_context(link_networks=...).
+    contact: np.ndarray | None = None
 
 
 @dataclass(frozen=True)

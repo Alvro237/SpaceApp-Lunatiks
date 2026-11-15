@@ -76,6 +76,10 @@ simple cylindrical, row 0 at 90 N, column 0 at longitude 0, longitude growing ea
   coordinates are those of the GNSS station on each site (IGS site logs), a few hundred metres from the dish at most.
   A limit is geometry only: visible does not mean scheduled, and the bands are `null` where no source states them.
   The Earth orientation is high-precision until 2027-02 and a lower-accuracy prediction afterwards.
+  `receive_gt` gives the downlink G/T per lunar band (S, X, Ka = 25.5-27 GHz): DSN values are gain minus
+  10 log10(Top) from 810-005 modules 101/103/104 (zenith, clear weather), Misasa is JAXA's design specification
+  ("at least"), and antennas that receive in a band without a published figure are marked `unpublished` (the API
+  estimates them from the dish diameter). A band that is absent means no receiver there.
 - **Ephemeris tables** use SPICE correction `LT+S` (matches Horizons "airless apparent"); 4-point cubic Lagrange
   interpolation between hourly samples.
 

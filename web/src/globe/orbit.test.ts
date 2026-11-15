@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { IDLE_BEFORE_SPIN_MS, MAX_TILT, MOON_R_KM, OrbitRig, SURFACE_MAX_R_KM, TILT_3D, cameraPose, nearPlaneKm, RELIEF_MAX, SPIN_DEG_PER_S, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon, zoomOrbitToward } from './orbit'
+import { IDLE_BEFORE_SPIN_MS, MAX_TILT, MOON_R_KM, NEAR_ENTER_KM, NEAR_LEAVE_KM, isNearView, OrbitRig, SURFACE_MAX_R_KM, TILT_3D, cameraPose, nearPlaneKm, RELIEF_MAX, SPIN_DEG_PER_S, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon, zoomOrbitToward } from './orbit'
 
 describe('globe geometry', () => {
   it('puts the north pole up and longitude 0 toward +x', () => {
@@ -51,9 +51,9 @@ describe('orbit controller', () => {
 
 describe('relief exaggeration', () => {
   it('is x1 close in, x4 for the whole Moon, and grows with distance in between', () => {
-    expect(reliefExaggeration(MOON_R_KM + 200)).toBe(1)
+    expect(reliefExaggeration(MOON_R_KM + 200)).toBe(2)
     expect(reliefExaggeration(MOON_R_KM * 3.4)).toBe(RELIEF_MAX)
-    expect(reliefExaggeration(MOON_R_KM + 1_375)).toBeCloseTo(2.5, 6)
+    expect(reliefExaggeration(MOON_R_KM + 1_375)).toBeCloseTo(3, 6)
   })
 })
 
@@ -190,5 +190,19 @@ describe('near clipping plane', () => {
 
   it('never goes under 1 km', () => {
     expect(nearPlaneKm([0, R - 10, 0], [0, -1, 0], 0.9)).toBe(1)
+  })
+})
+
+describe('close-up view', () => {
+  it('starts below NEAR_ENTER_KM and ends only above NEAR_LEAVE_KM', () => {
+    // the whole Moon, and a first frame (nothing known yet), are not close up
+    expect(isNearView(null, MOON_R_KM * 2.4)).toBe(false)
+    expect(isNearView(false, NEAR_ENTER_KM + 1)).toBe(false)
+    expect(isNearView(false, NEAR_ENTER_KM - 1)).toBe(true)
+    // between the two heights it stays as it was, so a zoom hovering there does not flick between 2D and 3D
+    const between = (NEAR_ENTER_KM + NEAR_LEAVE_KM) / 2
+    expect(isNearView(true, between)).toBe(true)
+    expect(isNearView(false, between)).toBe(false)
+    expect(isNearView(true, NEAR_LEAVE_KM + 1)).toBe(false)
   })
 })
