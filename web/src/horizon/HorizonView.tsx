@@ -84,6 +84,20 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
     () => ({ left: insets.left, right: insets.right, top: insets.top, bottom: insets.bottom }),
     [insets.left, insets.right, insets.top, insets.bottom],
   )
+  // the on-screen notice sits just above the time bar (the bar is drawn by the navigator over this view)
+  const [noticeBottom, setNoticeBottom] = useState(0)
+  useEffect(() => {
+    const view = wrap.current
+    const bar = document.querySelector<HTMLElement>('.timeline')
+    if (!view || !bar) return
+    const place = () => setNoticeBottom(Math.max(0, view.getBoundingClientRect().bottom - bar.getBoundingClientRect().top + 8))
+    place()
+    const ro = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(place)
+    ro?.observe(bar)
+    ro?.observe(view)
+    return () => ro?.disconnect()
+  }, [])
+
   const freeW = Math.max(120, size.w - free.left - free.right)
   const cx = free.left + freeW / 2
   const cy = free.top + Math.max(120, size.h - free.top - free.bottom) * 0.58
@@ -203,7 +217,7 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
         onKeyDown={onKeyDown}
       >
         <canvas ref={canvas} aria-hidden="true" style={{ width: '100%', height: '100%' }} />
-        <p className="horizon-notice" style={{ left: free.left + 14, bottom: free.bottom + 44 }}>
+        <p className="horizon-notice" style={{ left: free.left + 14, bottom: Math.max(free.bottom + 44, noticeBottom), maxWidth: `calc(100% - ${free.left + 28}px)` }}>
           Not real moon footage · Real moon horizon line
           {groundReady && ' · Ground texture: LROC WAC mosaic, another place on the Moon'}
         </p>
