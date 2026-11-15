@@ -23,20 +23,27 @@
  */
 import { R_M } from '../../terrain/tileset'
 import type { GroundTexture } from '../groundTexture'
-import { type GroundStack, bilinear } from './light'
+import { type GroundStack, bilinear, lightFromHorizon } from './light'
 import { RING_N } from './rings'
 
 export interface ReliefScene {
   stack: GroundStack
   normals: Float32Array[]
-  /** Direct sunlight factor per ring (light.ts ringSunlight); null until the worker has answered. */
+  /**
+   * Height of the terrain horizon towards the Sun over the Sun's centre, degrees, per ring sample (light.ts
+   * ringLightHorizon); null until the worker has answered. Interpolated per pixel, then turned into the visible
+   * share of the disc, so the edges of shadows are smooth and fall where the geometry puts them.
+   */
   sunlight: Float32Array[] | null
   /** Eye level above the sphere, metres. */
   eyeM: number
   /** Sun direction in the observer's frame (east, north, up), for the emission and phase angles. */
   sun: [number, number, number]
+  /** Angular radii of the Sun and the Earth, degrees (defaults 0.2666 and 0.95). */
+  sunRadiusDeg?: number
+  earthRadiusDeg?: number
   /**
-   * Earthshine: direct-light factor of the Earth's disc per ring (as `sunlight`; null by day or with the Earth down),
+   * Earthshine: horizon over the Earth per ring (as `sunlight`; null by day or with the Earth down),
    * the Earth's direction, and its irradiance as a fraction of sunlight (light.ts earthshineRatio).
    */
   earthlight?: Float32Array[] | null
@@ -74,6 +81,9 @@ const FIRST_STEP_M = 0.3
 /** Grain: metres per level-0 texel, and how strongly it modulates the albedo. */
 const GRAIN_M = 0.04
 const GRAIN_GAIN = 0.55
+/** Grain fades out linearly to nothing at this distance, metres; eye height used for its footprint, metres. */
+const GRAIN_REACH_M = 60
+const GRAIN_EYE_M = 1.7
 const LOG_GRAIN = Math.log2(GRAIN_M)
 
 
@@ -85,14 +95,34 @@ function mirror(t: number, n: number): number {
   return p < n ? p : 2 * n - 1 - p
 }
 
-function grainAt(tex: GroundTexture, logFoot: number, u: number, v: number): number {
-  const lv = logFoot <= 0 ? 0 : Math.round(logFoot)
-  if (lv >= tex.levels.length - 1) return 1
+/** Bilinear sample of one mip level at level-0 texel coordinates (mirrored repeat, so no seams). */
+function grainLevel(tex: GroundTexture, lv: number, u: number, v: number): number {
   const s = tex.sizes[lv]
   const k = 1 << lv
-  const x = Math.floor(u / k)
-  const y = Math.floor(v / k)
-  return tex.levels[lv][mirror(y, s) * s + mirror(x, s)]
+  const x = u / k - 0.5
+  const y = v / k - 0.5
+  const x0 = Math.floor(x)
+  const y0 = Math.floor(y)
+  const fx = x - x0
+  const fy = y - y0
+  const L = tex.levels[lv]
+  const xa = mirror(x0, s)
+  const xb = mirror(x0 + 1, s)
+  const ya = mirror(y0, s) * s
+  const yb = mirror(y0 + 1, s) * s
+  return (L[ya + xa] * (1 - fx) + L[ya + xb] * fx) * (1 - fy) + (L[yb + xa] * (1 - fx) + L[yb + xb] * fx) * fy
+}
+
+/** Trilinear: the two mip levels around the pixel's footprint, each bilinear, blended; 1 (no grain) past the last. */
+function grainAt(tex: GroundTexture, logFoot: number, u: number, v: number): number {
+  const top = tex.levels.length - 1
+  const l = Math.max(0, logFoot)
+  if (l >= top) return 1
+  const l0 = Math.floor(l)
+  const f = l - l0
+  const a = grainLevel(tex, l0, u, v)
+  const b = l0 + 1 >= top ? 1 : grainLevel(tex, l0 + 1, u, v)
+  return a + (b - a) * f
 }
 
 /**
@@ -131,21 +161,57 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
    * Radiance of the ground at a step (k, u, v in ring k), t metres out, `up` metres above the eye, in units of a
    * sunlit surface, times the exposure: sunlight plus earthshine scaled by its share of sunlight.
    */
-  const radiance = (k: number, u: number, v: number, t: number, up: number, sa: number, ca: number): number => {
-    const mu0 = s.sunlight ? bilinear(s.sunlight[k], u, v) : 0
-    const me = s.earthlight && earthRatio > 0 ? bilinear(s.earthlight[k], u, v) : 0
-    if (!(mu0 > 0) && !(me > 0)) return 0
-    const o = 3 * (Math.min(NM1, Math.round(v)) * RING_N + Math.min(NM1, Math.round(u)))
+  const rSun = s.sunRadiusDeg ?? 0.2666
+  const rEarth = s.earthRadiusDeg ?? 0.95
+  const nrm = new Float64Array(3)
+  /** Bilinear normal of ring k at (u, v), normalised, into nrm. */
+  const normalAt = (k: number, u: number, v: number) => {
     const N = s.normals[k]
+    const i0 = u < NM1 ? Math.floor(u) : NM1 - 1
+    const j0 = v < NM1 ? Math.floor(v) : NM1 - 1
+    const fu = u - i0
+    const fv = v - j0
+    const o = 3 * (j0 * RING_N + i0)
+    const o1 = o + 3
+    const o2 = o + 3 * RING_N
+    const o3 = o2 + 3
+    const w0 = (1 - fu) * (1 - fv)
+    const w1 = fu * (1 - fv)
+    const w2 = (1 - fu) * fv
+    const w3 = fu * fv
+    const x = N[o] * w0 + N[o1] * w1 + N[o2] * w2 + N[o3] * w3
+    const y = N[o + 1] * w0 + N[o1 + 1] * w1 + N[o2 + 1] * w2 + N[o3 + 1] * w3
+    const z = N[o + 2] * w0 + N[o1 + 2] * w1 + N[o2 + 2] * w2 + N[o3 + 2] * w3
+    const il = 1 / Math.sqrt(x * x + y * y + z * z)
+    nrm[0] = x * il
+    nrm[1] = y * il
+    nrm[2] = z * il
+  }
+  const radiance = (k: number, u: number, v: number, t: number, up: number, sa: number, ca: number): number => {
+    const hasEarth = s.earthlight && earthRatio > 0
+    if (!s.sunlight && !hasEarth) return 0
+    normalAt(k, u, v)
     // towards the eye
     const il = 1 / Math.sqrt(t * t + up * up)
     const vx = -t * sa * il
     const vy = -t * ca * il
     const vz = -up * il
-    const mu = Math.max(0, N[o] * vx + N[o + 1] * vy + N[o + 2] * vz)
+    const mu = Math.max(0, nrm[0] * vx + nrm[1] * vy + nrm[2] * vz)
     let R = 0
-    if (mu0 > 0) R += lunarLambert(mu0, mu, S[0], S[1], S[2], vx, vy, vz)
-    if (me > 0) R += earthRatio * lunarLambert(me, mu, E[0], E[1], E[2], vx, vy, vz)
+    if (s.sunlight) {
+      const cosI = nrm[0] * S[0] + nrm[1] * S[1] + nrm[2] * S[2]
+      if (cosI > 0) {
+        const mu0 = cosI * lightFromHorizon(bilinear(s.sunlight[k], u, v), rSun)
+        if (mu0 > 0) R += lunarLambert(mu0, mu, S[0], S[1], S[2], vx, vy, vz)
+      }
+    }
+    if (hasEarth) {
+      const cosI = nrm[0] * E[0] + nrm[1] * E[1] + nrm[2] * E[2]
+      if (cosI > 0) {
+        const me = cosI * lightFromHorizon(bilinear(s.earthlight![k], u, v), rEarth)
+        if (me > 0) R += earthRatio * lunarLambert(me, mu, E[0], E[1], E[2], vx, vy, vz)
+      }
+    }
     return R * exposure
   }
   for (let i = 0; i < w; i++) {
@@ -253,10 +319,12 @@ function writePixel(
   // partial edge pixels keep the higher alpha already written
   if (alpha < 255 && px[o + 3] >= alpha) return
   let b = TONE_LUT[R > 0 ? (R < TONE_MAX ? (R * TONE_STEPS) | 0 : TONE_MAX * TONE_STEPS) : 0]
-  if (grain !== null && t < 60) {
-    const logFoot = Math.log2(Math.max(1e-6, 2 * t * dTheta)) - LOG_GRAIN
-    const g = grainAt(grain, logFoot, e / GRAIN_M + 311, n / GRAIN_M + 517)
-    b *= 1 + (g - 1) * GRAIN_GAIN
+  if (grain !== null && t < GRAIN_REACH_M) {
+    // footprint of the pixel on the ground: t dTheta across the ray, about t^2 dTheta / h along it at grazing
+    // incidence (h: eye height); their geometric mean picks the mip level, so far grain blurs out instead of aliasing
+    const foot = t * dTheta * Math.sqrt(Math.max(1, t / GRAIN_EYE_M))
+    const g = grainAt(grain, Math.log2(Math.max(1e-6, foot)) - LOG_GRAIN, e / GRAIN_M + 311, n / GRAIN_M + 517)
+    b *= 1 + (g - 1) * GRAIN_GAIN * (1 - t / GRAIN_REACH_M)
   }
   // Uint8ClampedArray rounds and clamps
   px[o] = TINT_R * b

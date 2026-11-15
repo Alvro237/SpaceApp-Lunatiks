@@ -23,12 +23,13 @@
 import { fromArrayBuffer } from 'geotiff'
 import { TREK_EXTRA_ROWS, TREK_IMAGE_SERVER } from '../../terrain/live/config'
 import { R_M, polarXY, scaleFactor } from '../../terrain/tileset'
+import FINE_CATALOGUE from './fineDems.json'
 
 /** Samples across a ring. */
 export const RING_N = 512
 /** Each ring's cell is this many times the one inside it. */
 export const RING_RATIO = 4
-export const RING_COUNT = 5
+export const RING_COUNT = 6
 /** No ring is added once the previous one reaches this far from the observer, metres. */
 export const MAX_REACH_M = 250_000
 
@@ -71,11 +72,41 @@ export const RELIEF_SOURCES: ReliefSource[] = [
   { file: 'LRO_LOLA_DEM_Global_128ppd_v04', pixelM: 960, demM: 237, pole: null, halfExtentM: Infinity, minCellM: 960 },
 ]
 
+/**
+ * A high-resolution DTM on Moon Trek (fineDems.json, built by scripts/build_fine_dems.mjs): LROC NAC stereo DTMs
+ * (1.5-2.8 m), Apollo 15 Panoramic Camera DTMs (3-5 m) and the Apollo 17 NAC DTM (5 m). Each covers a strip of a few
+ * tens of kilometres; its extent here is the bounding box in degrees, the data inside it has gaps.
+ */
+export interface FineDem {
+  file: string
+  lat0: number
+  lat1: number
+  lon0: number
+  lon1: number
+  cellM: number
+}
+
+export const FINE_DEMS: FineDem[] = (FINE_CATALOGUE as { dems: FineDem[] }).dems
+/** A fine DTM serves the rings up to this many times its own cell. */
+export const FINE_RING_FACTOR = 16
+
+/** The finest DTM whose box holds the place, or null. */
+export function fineDemAt(lat: number, lon: number): FineDem | null {
+  let best: FineDem | null = null
+  for (const d of FINE_DEMS) {
+    const inLon = d.lon0 <= d.lon1 ? lon >= d.lon0 && lon <= d.lon1 : lon >= d.lon0 || lon <= d.lon1
+    if (lat >= d.lat0 && lat <= d.lat1 && inLon && (!best || d.cellM < best.cellM)) best = d
+  }
+  return best
+}
+
 export interface RingSpec {
   /** Cell size, metres (local stereographic plane: true metres at the observer). */
   cellM: number
   source: ReliefSource
   url: string
+  /** A high-resolution DTM read for this ring too, merged over the LOLA heights where it has data. */
+  fine?: { dem: FineDem; url: string }
 }
 
 export interface Ring extends RingSpec {
@@ -83,6 +114,9 @@ export interface Ring extends RingSpec {
   heights: Float32Array
   min: number
   max: number
+  /** Share of the ring's samples taken from the fine DTM, and its mean offset from LOLA removed there, metres. */
+  fineShare?: number
+  fineOffsetM?: number
 }
 
 /** Observer frame in the plane: position, scale factor and the east and north unit vectors there. */
@@ -134,12 +168,17 @@ function covers(s: ReliefSource, lat: number, lon: number, half: number): boolea
 export function ringSpecs(lat: number, lon: number): RingSpec[] | null {
   if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90) return null
   const base = RELIEF_SOURCES.find((s) => covers(s, lat, lon, ringHalf(s.pixelM)))!
+  // where a high-resolution DTM covers the place, the rings start at its cell
+  const fine = fineDemAt(lat, lon)
+  const firstCell = fine && fine.cellM < base.pixelM ? Math.round(fine.cellM * 100) / 100 : base.pixelM
   const specs: RingSpec[] = []
   for (let j = 0; j < RING_COUNT; j++) {
-    const cellM = base.pixelM * RING_RATIO ** j
+    const cellM = firstCell * RING_RATIO ** j
     if (j > 0 && ringHalf(cellM / RING_RATIO) >= MAX_REACH_M) break
     const source = RELIEF_SOURCES.find((s) => covers(s, lat, lon, ringHalf(cellM)))!
-    specs.push({ cellM, source, url: ringUrl(source, lat, lon, cellM) })
+    const spec: RingSpec = { cellM, source, url: ringUrl(source.file, lat, lon, cellM) }
+    if (fine && cellM <= FINE_RING_FACTOR * fine.cellM) spec.fine = { dem: fine, url: ringUrl(fine.file, lat, lon, cellM) }
+    specs.push(spec)
   }
   return specs
 }
@@ -159,15 +198,97 @@ export function localStereoWkt(lat: number, lon: number): string {
  * exportImage URL of a ring: the box is the ring's cells (sample centres on the grid) in the place's own
  * stereographic plane, widened downwards by TREK_EXTRA_ROWS cells.
  */
-export function ringUrl(source: ReliefSource, lat: number, lon: number, cellM: number): string {
+export function ringUrl(service: string, lat: number, lon: number, cellM: number): string {
   const h = ringHalf(cellM)
   const sr = encodeURIComponent(JSON.stringify({ wkt: localStereoWkt(lat, lon) }))
   const bbox = [-h, -h - TREK_EXTRA_ROWS * cellM, h, h].join(',')
   return (
-    `${TREK_IMAGE_SERVER}${source.file}/ImageServer/exportImage?bbox=${bbox}&bboxSR=${sr}&imageSR=${sr}` +
+    `${TREK_IMAGE_SERVER}${service}/ImageServer/exportImage?bbox=${bbox}&bboxSR=${sr}&imageSR=${sr}` +
     `&size=${RING_N},${RING_N + TREK_EXTRA_ROWS}` +
     '&format=tiff&pixelType=F32&compression=LZ77&interpolation=RSP_BilinearInterpolation&f=image'
   )
+}
+
+/**
+ * Decode one fine-DTM answer: heights with NaN where the DTM has no data (outside its strip Moon Trek answers
+ * -3.4e38, the float32 minimum, measured 2026-11-15).
+ */
+export async function decodeFine(buf: ArrayBuffer): Promise<Float32Array> {
+  const tiff = await fromArrayBuffer(buf)
+  const image = await tiff.getImage(0)
+  const n = RING_N
+  if (image.getWidth() !== n || image.getHeight() !== n + TREK_EXTRA_ROWS) throw new Error('fine DTM answer has the wrong size')
+  const raster = (await image.readRasters({ samples: [0], interleave: true })) as unknown as ArrayLike<number>
+  const noData = image.getGDALNoData()
+  const out = new Float32Array(n * n)
+  for (let i = 0; i < n * n; i++) {
+    const v = raster[i]
+    out[i] = Number.isNaN(v) || v === noData || v < -1e30 || v > 1e30 || v === 0 ? NaN : v
+  }
+  return out
+}
+
+/** Width of the blend from the LOLA heights into the fine DTM at the edges of its data, samples. */
+export const FINE_FEATHER = 12
+/** A fine DTM covering less than this share of a ring is not used for it. */
+export const FINE_MIN_SHARE = 0.01
+
+/**
+ * Merge a fine DTM into LOLA heights, in place. The fine heights are first normalised to LOLA by removing their mean
+ * difference over the samples where both exist (NAC and Panoramic Camera DTMs are controlled to LOLA, but offsets of
+ * metres to tens of metres remain), then blended in with a weight that grows from 0 at the edge of the fine data to
+ * 1 at FINE_FEATHER samples inside it (chamfer distance), so no step shows at the seam. Returns the share of samples
+ * taken from the fine DTM (weight > 0) and the offset removed, metres.
+ */
+export function mergeFine(lola: Float32Array, fine: Float32Array): { share: number; offsetM: number } {
+  const n = RING_N
+  let sum = 0
+  let count = 0
+  for (let i = 0; i < n * n; i++)
+    if (!Number.isNaN(fine[i])) {
+      sum += fine[i] - lola[i]
+      count++
+    }
+  if (count < FINE_MIN_SHARE * n * n) return { share: 0, offsetM: 0 }
+  const offsetM = sum / count
+  // chamfer distance (in samples) from each valid sample to the nearest gap; the ring's border is not a gap
+  const dist = new Float32Array(n * n)
+  for (let i = 0; i < n * n; i++) dist[i] = Number.isNaN(fine[i]) ? 0 : 1e6
+  const D2 = Math.SQRT2
+  for (let j = 0; j < n; j++)
+    for (let i = 0; i < n; i++) {
+      const o = j * n + i
+      if (dist[o] === 0) continue
+      let d = dist[o]
+      if (i > 0) d = Math.min(d, dist[o - 1] + 1)
+      if (j > 0) {
+        d = Math.min(d, dist[o - n] + 1)
+        if (i > 0) d = Math.min(d, dist[o - n - 1] + D2)
+        if (i < n - 1) d = Math.min(d, dist[o - n + 1] + D2)
+      }
+      dist[o] = d
+    }
+  for (let j = n - 1; j >= 0; j--)
+    for (let i = n - 1; i >= 0; i--) {
+      const o = j * n + i
+      if (dist[o] === 0) continue
+      let d = dist[o]
+      if (i < n - 1) d = Math.min(d, dist[o + 1] + 1)
+      if (j < n - 1) {
+        d = Math.min(d, dist[o + n] + 1)
+        if (i < n - 1) d = Math.min(d, dist[o + n + 1] + D2)
+        if (i > 0) d = Math.min(d, dist[o + n - 1] + D2)
+      }
+      dist[o] = d
+    }
+  let used = 0
+  for (let i = 0; i < n * n; i++) {
+    if (dist[i] === 0) continue
+    const w = Math.min(1, dist[i] / FINE_FEATHER)
+    lola[i] += w * (fine[i] - offsetM - lola[i])
+    used++
+  }
+  return { share: used / (n * n), offsetM }
 }
 
 /** Decode and check one ring answer: size, no-data, no row of exact zeros (the Moon Trek fault). */
@@ -204,13 +325,29 @@ const cache = new Map<string, Promise<Ring>>()
 export function loadRing(spec: RingSpec, fetchFn: typeof fetch = (u, i) => fetch(u, i)): Promise<Ring> {
   const hit = cache.get(spec.url)
   if (hit) return hit
+  const fetchBuf = async (url: string): Promise<ArrayBuffer> => {
+    const res = await fetchFn(url)
+    if (!res.ok) throw new Error(`Moon Trek answered HTTP ${res.status}`)
+    return res.arrayBuffer()
+  }
+  // the fine DTM is asked for alongside; if it fails or has no data here, the ring is LOLA alone
+  const fine = spec.fine ? fetchBuf(spec.fine.url).then(decodeFine, () => null) : Promise.resolve(null)
   const p = (async () => {
     let last: unknown = null
     for (let a = 0; a < 3; a++) {
       try {
-        const res = await fetchFn(spec.url)
-        if (!res.ok) throw new Error(`Moon Trek answered HTTP ${res.status}`)
-        return await decodeRing(await res.arrayBuffer(), spec)
+        const ring = await decodeRing(await fetchBuf(spec.url), spec)
+        const f = await fine.catch(() => null)
+        if (!f) return ring
+        const { share, offsetM } = mergeFine(ring.heights, f)
+        if (share === 0) return ring
+        let min = Infinity
+        let max = -Infinity
+        for (const v of ring.heights) {
+          if (v < min) min = v
+          if (v > max) max = v
+        }
+        return { ...ring, min, max, fineShare: share, fineOffsetM: offsetM }
       } catch (e) {
         last = e
       }

@@ -32,6 +32,7 @@ asks for this list; keep it current when something is added.
 | NAIF Earth orientation binary PCKs `earth_000101_270208_261113.bpc` (high precision, to 2027-02-08) and `earth_2026_260806_2126_predict.bpc` (predicted, lower accuracy, to 2126) | Where each station is relative to the Moon at a given time (Earth rotation and polar motion); needed to decide when the Moon is above a station's horizon | https://naif.jpl.nasa.gov/pub/naif/generic_kernels/pck/ |
 | Moon Trek, QuickMap | Context and cross-checks while designing | https://trek.nasa.gov/moon/ , https://quickmap.lroc.asu.edu/ |
 | VIPER lunar operations, Artemis III candidate regions | Lessons on what real missions plan for | https://science.nasa.gov/mission/viper/lunar-operations/ , https://www.nasa.gov/news-release/nasa-identifies-candidate-regions-for-landing-next-americans-on-moon/ |
+| NASA Moon Trek (JPL) ImageServer: high-resolution DTMs `LRO_NAC_DEM_*` (LROC NAC stereo DTMs, 1.5-2.8 m; Henriksen et al. 2017, Icarus 283, 122-137), `Apollo15_PanCam_DEM_*` (Apollo 15 Panoramic Camera, 3-5 m) and `NAC_DTM_APOLLO17` (5 m); and the LOLA global DEM `LRO_LOLA_DEM_Global_128ppd_v04` (237 m) | The Horizon view's ground (`web/src/horizon/relief`): where one of 44 DTMs covers the place (catalogue `fineDems.json`, built from the services' descriptions by `web/scripts/build_fine_dems.mjs` on 2026-11-15) the inner rings start at its cell and its heights are merged over LOLA, normalised by their mean offset and feathered over 12 samples at the edges of its data; the 128 px/deg DEM serves the rings of 960 m cells and coarser | https://trek.nasa.gov/moon/trekarcgis/rest/services/ |
 
 ## Other data
 
@@ -53,6 +54,10 @@ asks for this list; keep it current when something is added.
 
 ## Papers and documents consulted
 
+- Russell, H. N. (1916). On the albedo of the planets and their satellites. ApJ 43, 173-196 (Lambert-sphere phase
+  law, used for the earthshine that lights the Horizon view's ground at night)
+- Stephens, G. L., et al. (2015). The albedo of Earth. Reviews of Geophysics 53, 141-163. doi:10.1002/2014RG000449
+  (Earth's Bond albedo 0.29, for the earthshine)
 - McEwen, A. S. (1991). Photometric functions for photoclinometry and other applications. Icarus 92, 298-311.
   doi:10.1016/0019-1035(91)90053-V (lunar-Lambert function used to shade the Horizon view's LOLA ground; the
   limb-darkening weight is approximated as falling linearly with phase angle)

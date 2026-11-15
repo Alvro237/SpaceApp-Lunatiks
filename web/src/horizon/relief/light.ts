@@ -156,13 +156,20 @@ export const STEP_GROWTH = 1.09
 /** Longest shadow-ray step, in cells of the ring it crosses. */
 export const STEP_CELLS = 3
 
+/** Range kept of the horizon's height over the light, degrees: beyond it the disc is wholly up or wholly hidden. */
+export const HORIZON_CLAMP_DEG = 10
+
 /**
- * Direct sunlight factor of every sample of every ring: visible disc share x max(0, cos incidence), 0..1.
+ * For every sample of every ring: how far the terrain horizon towards the light rises above the light's centre,
+ * degrees (positive: the centre is hidden), clamped to ±HORIZON_CLAMP_DEG; +HORIZON_CLAMP_DEG where the slope faces
+ * away from the light. This angle is continuous across a shadow's edge, so the renderer interpolates it between
+ * samples and turns it into the visible share of the disc per pixel (lightFromHorizon): the edge of a shadow then
+ * falls between samples where the geometry puts it, instead of following the cells.
  * Samples of a ring that lie inside the next finer ring are not computed (0): the finer ring answers there.
  * `rowOffset` and `rowStride` share the work between workers: only rows j with j % rowStride === rowOffset are
  * computed (the others stay 0), so several workers each take every rowStride-th row and the results are merged.
  */
-export function ringSunlight(stack: GroundStack, normals: Float32Array[], sun: SunDir, rowOffset = 0, rowStride = 1): Float32Array[] {
+export function ringLightHorizon(stack: GroundStack, normals: Float32Array[], sun: SunDir, rowOffset = 0, rowStride = 1): Float32Array[] {
   const f = stack.frame
   const D = Math.PI / 180
   const ce = Math.cos(sun.el * D)
@@ -192,7 +199,10 @@ export function ringSunlight(stack: GroundStack, normals: Float32Array[], sun: S
         if (skipRow && i > lo && i < hi) continue
         const o = j * n + i
         const cosI = N[3 * o] * S[0] + N[3 * o + 1] * S[1] + N[3 * o + 2] * S[2]
-        if (cosI <= 0 || sun.el < -r - 5) continue
+        if (cosI <= -0.02 || sun.el < -r - 5) {
+          out[o] = HORIZON_CLAMP_DEG
+          continue
+        }
         const [e, no] = sampleEnu(f, ring.cellM, i, j)
         // the Sun's elevation over this sample's own level (its vertical leans by e / R, n / R)
         const iu = 1 / Math.sqrt(1 + (e * e + no * no) / (R_M * R_M))
@@ -239,12 +249,15 @@ export function ringSunlight(stack: GroundStack, normals: Float32Array[], sun: S
           s += ds
         }
         const a = maxTan === -Infinity ? -90 : Math.atan(maxTan) / D
-        out[o] = discFractionAbove(elP, a, r) * cosI
+        out[o] = Math.max(-HORIZON_CLAMP_DEG, Math.min(HORIZON_CLAMP_DEG, a - elP))
       }
     }
     return out
   })
 }
+
+/** Visible share of a disc of angular radius r whose centre lies `rel` degrees below the horizon (ringLightHorizon). */
+export const lightFromHorizon = (rel: number, r: number) => discFractionAbove(0, rel, r)
 
 /** Earth's Bond albedo (Stephens et al. 2015, CERES: 0.29) and mean radius, km. */
 export const EARTH_BOND_ALBEDO = 0.29

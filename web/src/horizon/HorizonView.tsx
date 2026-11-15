@@ -251,7 +251,7 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
         <canvas ref={canvas} aria-hidden="true" style={{ width: '100%', height: '100%' }} />
         <p className="horizon-notice" style={{ left: free.left + 14, bottom: Math.max(free.bottom + 44, noticeBottom), maxWidth: `calc(100% - ${free.left + 28}px)` }}>
           {relief.status === 'ready'
-            ? `Rendered from LOLA heights, not footage · Relief: LOLA ${relief.cellM?.toFixed(0)} m DEM to ${relief.reachKm?.toFixed(0)} km, ${relief.night === 'earthshine' ? 'night, lit by earthshine (exposure raised)' : relief.night === 'dark' ? 'night, neither the Sun nor the Earth up' : 'lit by the Sun at this instant'} · Skyline: horizon mask`
+            ? `Rendered from LOLA heights, not footage · Relief: ${relief.sourceLabel ?? `LOLA ${relief.cellM?.toFixed(0)} m DEM`} to ${relief.reachKm?.toFixed(0)} km, ${relief.night === 'earthshine' ? 'night, lit by earthshine (exposure raised)' : relief.night === 'dark' ? 'night, neither the Sun nor the Earth up' : 'lit by the Sun at this instant'} · Skyline: horizon mask`
             : 'Not real moon footage · Real moon horizon line'}
           {relief.status === 'loading' && ' · Loading the LOLA relief around this place…'}
           {relief.status !== 'ready' && groundReady && ' · Ground texture: LROC WAC mosaic, another place on the Moon'}

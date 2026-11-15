@@ -14,6 +14,8 @@ import { groundTexture } from '../groundTexture'
 export const EYE_MIN_M = 1.7
 /** Sun motion that triggers a new lighting pass, degrees (elevation, azimuth). */
 const SUN_EPS = { el: 0.02, az: 0.15 }
+/** Rings arriving within this many ms are lit as one set. */
+const BATCH_MS = 250
 /** Most workers that share a lighting pass. */
 const MAX_WORKERS = 4
 
@@ -29,6 +31,17 @@ export interface Relief {
   lightMs: number | null
   /** At night: lit by earthshine (exposure raised) or dark (neither the Sun nor the Earth up). */
   night?: 'earthshine' | 'dark' | null
+  /** The data under the observer, in words: "LOLA 5 m DEM", or "LROC NAC 1.6 m DTM + LOLA" where one is merged in. */
+  sourceLabel?: string | null
+}
+
+/** Words for the data a ring was built from (rings.ts). */
+export function ringSourceLabel(r: Ring): string {
+  if (r.fine && (r.fineShare ?? 0) > 0) {
+    const kind = r.fine.dem.file.startsWith('Apollo15_PanCam') ? 'Apollo 15 Panoramic Camera' : 'LROC NAC'
+    return `${kind} ${r.fine.dem.cellM.toFixed(1)} m DTM + LOLA`
+  }
+  return `LOLA ${r.source.demM} m DEM`
 }
 
 const D = Math.PI / 180
@@ -54,14 +67,14 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
   const sun = lights?.sun ?? null
   const specs = useMemo(() => (lat === undefined || lon === undefined ? null : ringSpecs(lat, lon)), [lat, lon])
   const key = specs?.map((s) => s.url).join('|') ?? ''
-  // rings as they arrive (progressive: the view draws the inner ones while the outer ones load)
-  const [loaded, setLoaded] = useState<{ key: string; rings: (Ring | undefined)[]; failedAt: number }>({ key: '', rings: [], failedAt: Infinity })
+  // rings as they arrive (progressive: the view draws whatever has arrived, the finest ring at each point)
+  const [loaded, setLoaded] = useState<{ key: string; rings: (Ring | undefined)[]; failed: number }>({ key: '', rings: [], failed: 0 })
 
   useEffect(() => {
     if (!specs || specs.length === 0) return
     let live = true
     // state of another place is replaced on the first answer for this one
-    const fresh = (prev: typeof loaded) => (prev.key === key ? prev : { key, rings: [], failedAt: Infinity })
+    const fresh = (prev: typeof loaded) => (prev.key === key ? prev : { key, rings: [], failed: 0 })
     specs.forEach((s, i) =>
       loadRing(s).then(
         (r) =>
@@ -72,8 +85,8 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
             rings[i] = r
             return { ...base, rings }
           }),
-        // an outer ring that fails leaves the inner ones on screen; the first one failing means no relief here
-        () => live && setLoaded((prev) => ({ ...fresh(prev), failedAt: Math.min(fresh(prev).failedAt, i) })),
+        // a ring that fails leaves the others on screen; all of them failing means no relief here
+        () => live && setLoaded((prev) => ({ ...fresh(prev), failed: fresh(prev).failed + 1 })),
       ),
     )
     return () => {
@@ -81,12 +94,20 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
     }
   }, [specs, key])
 
-  // the rings loaded so far without a gap from the innermost one
-  let prefix = 0
-  if (loaded.key === key) while (prefix < loaded.failedAt && loaded.rings[prefix]) prefix++
+  // rings arriving within BATCH_MS of each other are lit together (each new set is lit once before it is shown)
+  const [batch, setBatch] = useState(loaded)
+  useEffect(() => {
+    const id = setTimeout(() => setBatch(loaded), BATCH_MS)
+    return () => clearTimeout(id)
+  }, [loaded])
   const frame = useMemo(() => (lat === undefined || lon === undefined ? null : planeFrame(lat, lon)), [lat, lon])
-  const rings = loaded.rings
-  const stack = useMemo(() => (prefix > 0 && frame ? new GroundStack(rings.slice(0, prefix) as Ring[], frame) : null), [prefix, frame, rings])
+  const stack = useMemo(() => {
+    if (batch.key !== key || !frame) return null
+    // finest first, whatever has arrived: the outer rings give the far ground and the skyline's foreground at once,
+    // the inner ones sharpen it as they come
+    const have = batch.rings.filter((r): r is Ring => !!r).sort((a, b) => a.cellM - b.cellM)
+    return have.length > 0 ? new GroundStack(have, frame) : null
+  }, [batch, key, frame])
 
   // what is on screen: a stack with its normals and its sunlight, swapped only once a larger stack is fully lit
   const [shown, setShown] = useState<{
@@ -103,7 +124,7 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
 
   useEffect(() => {
     if (!stack || typeof Worker === 'undefined') return
-    // a small pool: each worker lights every n-th row (light.ts ringSunlight), the parts are summed
+    // a small pool: each worker lights every n-th row (light.ts ringLightHorizon), the parts are summed
     const count = Math.max(1, Math.min(MAX_WORKERS, (navigator.hardwareConcurrency || 2) - 1))
     const pool = Array.from({ length: count }, () => new Worker(new URL('./light.worker.ts', import.meta.url), { type: 'module' }))
     job.current = { busy: false, sent: null, want: job.current.want, id: 0 }
@@ -195,7 +216,7 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
     const cellM = specs[0].source.demM
     const live = shown && shown.key === key ? shown : null
     if (!live) {
-      const failed = loaded.key === key && loaded.failedAt === 0
+      const failed = loaded.key === key && loaded.failed === specs.length
       return { status: failed ? 'failed' : 'loading', scene: null, cellM, reachKm: null, lightMs: null }
     }
     const reachKm = (live.stack.rings[live.stack.rings.length - 1].cellM * 256) / 1000
@@ -215,6 +236,8 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
         sunlight: live.sunlight,
         eyeM: ground + Math.max(mastM, EYE_MIN_M),
         sun: dir,
+        sunRadiusDeg: lit?.sun.radiusDeg,
+        earthRadiusDeg: lit?.earth?.radiusDeg,
         earthlight: live.earthlight,
         earth: lit?.earth ? unit(lit.earth) : undefined,
         earthRatio: lit?.earthRatio ?? 0,
@@ -225,6 +248,8 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
       cellM,
       reachKm,
       lightMs: live.ms,
+      // the finest ring on screen is what the observer stands on
+      sourceLabel: ringSourceLabel(live.stack.rings[0] as Ring),
     }
   }, [specs, key, shown, loaded, mastM, sun, lights])
 }

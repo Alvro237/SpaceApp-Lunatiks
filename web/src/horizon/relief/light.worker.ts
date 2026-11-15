@@ -3,9 +3,9 @@
  * Light on the horizon view's rings off the main thread (light.ts). The rings arrive once ('rings', answered with
  * their normals); every 'sun' message is answered with the direct-light factor of every ring sample for the Sun
  * and, at night, for the Earth (earthshine: the same computation with the Earth's direction and disc). Buffers are
- * transferred, not copied. Several workers share a pass by rows (light.ts ringSunlight, rowOffset and rowStride).
+ * transferred, not copied. Several workers share a pass by rows (light.ts ringLightHorizon, rowOffset and rowStride).
  */
-import { GroundStack, ringNormals, ringSunlight, type RingGrid, type SunDir } from './light'
+import { GroundStack, ringNormals, ringLightHorizon, type RingGrid, type SunDir } from './light'
 import type { PlaneFrame } from './rings'
 
 export type LightRequest =
@@ -31,8 +31,8 @@ ctx.onmessage = (e: MessageEvent<LightRequest>) => {
   }
   if (!stack) return
   const t0 = performance.now()
-  const sunlight = ringSunlight(stack, normals, m.sun, m.rowOffset, m.rowStride)
-  const earthlight = m.earth ? ringSunlight(stack, normals, m.earth, m.rowOffset, m.rowStride) : null
+  const sunlight = ringLightHorizon(stack, normals, m.sun, m.rowOffset, m.rowStride)
+  const earthlight = m.earth ? ringLightHorizon(stack, normals, m.earth, m.rowOffset, m.rowStride) : null
   const buffers = [...sunlight, ...(earthlight ?? [])].map((s) => s.buffer)
   ctx.postMessage({ type: 'sunlight', id: m.id, sunlight, earthlight, ms: performance.now() - t0 } satisfies LightResponse, buffers)
 }
