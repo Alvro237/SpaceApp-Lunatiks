@@ -111,7 +111,7 @@ export function GlobeView() {
   const pendingClick = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => () => void (pendingClick.current && clearTimeout(pendingClick.current)), [])
   // In the horizon view the globe is hidden and paused: it must not start turning there, nor right after.
-  // paused (no frames drawn) while the horizon view or Learn mode covers the map; it keeps its camera and tiles
+  // paused (no frames drawn) while the horizon view or Educational mode covers the map; it keeps its camera and tiles
   const underHorizon = useHorizonTransition((s) => s.phase === 'horizon')
   const underBlocks = useApp((s) => s.blocks)
   const covered = underHorizon || underBlocks

@@ -19,7 +19,7 @@ import { colorAt, luminance, textOn } from '../terrain/colormaps'
 
 vi.mock('../terrain/TerrainView', () => ({ TerrainView: () => <div role="img" aria-label="Map (test stub)" /> }))
 vi.mock('../globe/GlobeView', () => ({ GlobeView: () => <div role="img" aria-label="Globe (test stub)" /> }))
-vi.mock('../blocks/BlockMode', () => ({ default: () => <div role="img" aria-label="Learn mode (test stub)" /> }))
+vi.mock('../blocks/BlockMode', () => ({ default: () => <div role="img" aria-label="Educational mode (test stub)" /> }))
 
 const ROOT = resolve(__dirname, '../../..')
 const sitesDoc = JSON.parse(readFileSync(resolve(ROOT, 'data/sites.json'), 'utf8')) as {
@@ -168,13 +168,13 @@ describe('navigator', () => {
     expect(document.querySelector('.side-panel')).toBeNull()
    }, 30_000)
 
-  it('Learn mode loads on demand; the planner sleeps under it and comes back without being rebuilt', async () => {
+  it('Educational mode loads on demand; the planner sleeps under it and comes back without being rebuilt', async () => {
     const user = userEvent.setup()
     renderAt('/')
     const globe = await screen.findByRole('img', { name: 'Globe (test stub)' })
-    const toggle = screen.getByRole('switch', { name: 'Learn' })
+    const toggle = screen.getByRole('switch', { name: 'Educational' })
     await user.click(toggle)
-    expect(await screen.findByRole('img', { name: 'Learn mode (test stub)' })).toBeInTheDocument()
+    expect(await screen.findByRole('img', { name: 'Educational mode (test stub)' })).toBeInTheDocument()
     // the planner is still mounted (same node), hidden from assistive technology and out of the tab order
     const layer = document.querySelector('.map-layer')!
     expect(layer).toHaveClass('is-dormant')
@@ -182,7 +182,7 @@ describe('navigator', () => {
     expect(layer.contains(globe)).toBe(true)
     expect(screen.queryByRole('region', { name: /Place/ })).not.toBeInTheDocument()
     await user.click(toggle)
-    expect(screen.queryByRole('img', { name: 'Learn mode (test stub)' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: 'Educational mode (test stub)' })).not.toBeInTheDocument()
     expect(screen.getByRole('img', { name: 'Globe (test stub)' })).toBe(globe)
     expect(layer).not.toHaveClass('is-dormant')
   })

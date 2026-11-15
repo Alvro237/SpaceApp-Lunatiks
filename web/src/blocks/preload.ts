@@ -1,5 +1,5 @@
 /**
- * One shared load of the Learn mode chunk: the switch prefetches it when the pointer or the focus reaches it, and
+ * One shared load of the Educational mode chunk: the switch prefetches it when the pointer or the focus reaches it, and
  * the navigator's lazy() uses the same promise, so the code is fetched once. A failed load is forgotten, so the
  * next attempt retries instead of replaying the error.
  */

@@ -1,5 +1,5 @@
 /**
- * Learn mode: turns the same LOLA heights the navigator uses into a world of cubes, for the educational mode.
+ * Educational mode: turns the same LOLA heights the navigator uses into a world of cubes, for children and classrooms.
  *
  * Two worlds, both pure functions over arrays (no three.js, no fetch), so they are testable:
  *   - Ground: the polar DEM overview (LOLA, PGDA product 90, 960 m cells) around the chosen place, as columns
@@ -33,7 +33,7 @@ export interface HeightGrid {
 /**
  * Samples a square of n × n cells centred on (lat, lon), axes east and north at that point, on the south polar
  * stereographic map (x = r sin lon, y = r cos lon). Returns null when any sample falls outside the map.
- * `curvature` scales the curvature drop: 1 is the true drop; Learn mode passes 1 / exaggeration so the stretched
+ * `curvature` scales the curvature drop: 1 is the true drop; Educational mode passes 1 / exaggeration so the stretched
  * relief does not turn a 150 km world into a dome that hides its own horizon.
  */
 export function sampleGround(
