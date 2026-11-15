@@ -84,6 +84,10 @@ asks for this list; keep it current when something is added.
 - Hoffleit, D., Warren, W. H. Jr. (1991). The Bright Star Catalogue, 5th revised edition (BSC5P), from NASA HEASARC
   (table `heasarc_bsc5p`): the 2 887 stars of V magnitude 5.5 or brighter drawn in the horizon view
   (`pipeline/lunarnav/stars.py`, `web/src/horizon/stars.json`). https://heasarc.gsfc.nasa.gov/W3Browse/star-catalog/bsc5p.html
+- NASA Goddard Space Flight Center Scientific Visualization Studio (2020, updated 2022). Deep Star Maps 2020,
+  visualization 4851 (Ernie Wright): all-sky star map in celestial coordinates from Hipparcos-2, Tycho-2 and Gaia DR2
+  (ESA/Gaia/DPAC), `starmap_2020_8k.exr`, drawn behind the web globe at 8k or 4k (`pipeline/lunarnav/sky.py`,
+  `data/sky/`, `web/src/globe/skyMap.ts`). https://svs.gsfc.nasa.gov/4851/
 - Archinal, B. A., et al. (2018). Report of the IAU Working Group on Cartographic Coordinates and Rotational
   Elements: 2015. Celest. Mech. Dyn. Astron. 130:22: pole and prime meridian of the Moon, to place the stars in the
   lunar sky (`web/src/horizon/stars.ts`; checked against the app's JPL tables in `stars.test.ts`).

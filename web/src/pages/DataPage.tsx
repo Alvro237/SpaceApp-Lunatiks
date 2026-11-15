@@ -152,6 +152,16 @@ export function DataPage() {
               <td>NASA NSSDCA, LROC, USGS/IAU Gazetteer</td>
               <td>Catalogue of 21 sites, each with its citation</td>
             </tr>
+            <tr>
+              <th scope="row">The sky behind the Moon</th>
+              <td>
+                <a href="https://svs.gsfc.nasa.gov/4851/">NASA SVS Deep Star Maps 2020</a> (about 1.7 billion stars from Hipparcos-2, Tycho-2 and
+                Gaia DR2; J2000, 4k or 8k) and the{' '}
+                <a href="https://heasarc.gsfc.nasa.gov/W3Browse/star-catalog/bsc5p.html">Bright Star Catalogue</a> (NASA HEASARC, 2 887 stars to
+                magnitude 5.5); the 25 brightest catalogue stars fall within 0.33 pixels of their place on the map
+              </td>
+              <td>The Milky Way and the stars behind the globe and in the horizon view, turned with the Moon (IAU orientation) at the chosen time</td>
+            </tr>
           </tbody>
         </table>
       </div>
