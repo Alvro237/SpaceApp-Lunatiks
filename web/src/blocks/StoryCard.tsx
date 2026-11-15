@@ -491,7 +491,6 @@ export function StoryCard() {
           <dd>{ch.when}</dd>
         </div>
       </dl>
-      {ch.note && <p className="blk-note">{ch.note}</p>}
       <a className="blk-source" href={ch.source.url} target="_blank" rel="noreferrer">
         Source: {ch.source.label}
       </a>

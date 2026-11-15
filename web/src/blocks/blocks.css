@@ -68,12 +68,6 @@
 .blk-when { font-size: 0.82rem; color: var(--muted); }
 .blk-when strong { color: var(--text); font-family: var(--mono); font-weight: 600; }
 .blk-note { margin: 10px 0 0; padding: 8px 10px; background: var(--warn-bg); border: 1px solid var(--sun); border-radius: 10px; font-size: 0.84rem; line-height: 1.4; }
-.blk-real { margin-top: 12px; font-size: 0.85rem; }
-.blk-real summary { cursor: pointer; font-weight: 600; min-height: 32px; display: flex; align-items: center; }
-.blk-why { margin: 6px 0 0; font-size: 0.9rem; line-height: 1.45; }
-.blk-real dl { margin: 8px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; font-family: var(--mono); font-size: 0.78rem; }
-.blk-real dt { font-weight: 600; }
-.blk-real dd { margin: 0; color: var(--muted); }
 
 /* ---------------------------------------------------------------- day by day (bottom) */
 .blk-bottom.float-bottom { right: calc(var(--inset-right) + 10px); }
@@ -204,7 +198,6 @@
 .blk-chips > div { display: flex; gap: 6px; align-items: center; padding: 4px 10px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--border); font-size: 0.85rem; }
 .blk-chips dt { line-height: 1; }
 .blk-chips dd { margin: 0; }
-.blk-story .blk-note { margin: 10px 0 0; padding: 0; background: none; border: 0; font-size: 0.8rem; line-height: 1.4; color: var(--muted); }
 .blk-source { display: inline-block; margin-top: 8px; font-size: 0.8rem; color: var(--muted); }
 .blk-again { margin-top: 12px; font-size: 0.9rem; }
 .blk-again summary { cursor: pointer; font-weight: 600; min-height: 44px; display: flex; align-items: center; color: var(--muted); }

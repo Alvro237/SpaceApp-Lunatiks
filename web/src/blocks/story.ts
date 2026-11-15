@@ -184,8 +184,6 @@ export interface Chapter {
   when: string
   /** What happened: two or three beats, a picture and a few words each, read like a comic strip. */
   story: Beat[]
-  /** A caveat about how the chapter is replayed, shown small. */
-  note?: string
   source: { label: string; url: string }
   scene: Scene
   steps: (c: StoryCtx) => Step[]
@@ -243,7 +241,6 @@ const PLAY: StepAction = { kind: 'play' }
 const LOOK: StepAction = { kind: 'look', label: 'I see it!' }
 const TO_SHACKLETON: StepAction = { kind: 'site', id: SHACKLETON, label: 'Fly to Shackleton crater' }
 const DRAG = 'Drag the picture sideways'
-const REPLAY = 'Replayed in today’s sky (our Sun data starts in 2025)'
 /** Time played since the scene was set, hours (0 until the scene is set). */
 const played = (c: StoryCtx) => (c.memory.startTMs === null ? 0 : Math.abs(c.tMs - c.memory.startTMs) / H)
 
@@ -295,7 +292,6 @@ export const CHAPTERS: Chapter[] = [
       { icon: '☀️', text: 'It worked all day long' },
       { icon: '😴', text: 'Night came. It never woke up' },
     ],
-    note: REPLAY,
     source: { label: 'ISRO', url: 'https://www.isro.gov.in/Chandrayaan3_Details.html' },
     scene: { site: CHANDRAYAAN3, view: 'ground', atSunrise: true, speed: '1d' },
     lesson: 'A Moon day lasts two weeks!',
@@ -324,7 +320,6 @@ export const CHAPTERS: Chapter[] = [
       { icon: '😴', text: 'No Sun on its panels: sleep' },
       { icon: '⏰', text: '9 days later: awake!' },
     ],
-    note: REPLAY,
     source: { label: 'JAXA, SLIM landing', url: 'https://global.jaxa.jp/press/2024/01/20240125-1_e.html' },
     // a day after sunrise the Sun is about 12° up (engine), clear of the skyline and easy to find, as on SLIM's landing morning
     scene: { site: SLIM, view: 'ground', atSunrise: true, afterSunriseH: 24, lookAway: true, speed: '1d' },
@@ -474,7 +469,6 @@ export const CHAPTERS: Chapter[] = [
       { icon: '📡', text: 'It sent photos by radio' },
       { icon: '🤔', text: 'Can every place see Earth?' },
     ],
-    note: REPLAY,
     source: { label: 'NASA, IM-1 science', url: 'https://www.nasa.gov/missions/artemis/clps/nasa-collects-first-surface-science-in-decades-via-commercial-moon-mission/' },
     scene: { site: IM1, view: 'ground' },
     lesson: 'Land where you can see the Earth.',
@@ -606,7 +600,6 @@ export const CHAPTERS: Chapter[] = [
       { icon: '🛰️', text: 'A probe flew through the dust' },
       { icon: '💧', text: 'It found water!' },
     ],
-    note: REPLAY,
     source: { label: 'NASA, LCROSS', url: 'https://science.nasa.gov/mission/lcross/' },
     scene: { site: CABEUS, view: 'ground', speed: '1d' },
     lesson: 'No Sun, so the ice never melts.',
