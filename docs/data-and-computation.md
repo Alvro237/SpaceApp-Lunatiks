@@ -132,7 +132,10 @@ No Space Agency Partner dataset is used in the calculations yet. That is stated 
 
 ## Limits to keep in mind
 
-- No terrain south of 60° S excluded sites (Apollo, SLIM, Blue Ghost): smooth sphere, stated in the UI.
+- Outside the polar grids (north of 60° S: Apollo, SLIM, Blue Ghost, any manual point there) the ray-traced
+  horizon reads the whole-Moon LOLA grid at 8 px/deg (`lola_elevation_global`, ~3.8 km cells): real large-scale
+  relief (basin rims, mountain ranges), but anything narrower than a few cells is smoothed away in both
+  directions. The UI and the API report the DEM cell size (`near_cell_m`) with every traced skyline.
 - Height uncertainty (0.3-0.5 m at the best 5 m maps, more elsewhere; ~90 % of pixels interpolated) is **not yet propagated**
   to a confidence band on the windows.
 - Uniform solar disc, no limb darkening, no reflected light, no Earthshine; idealised panel; level lander.

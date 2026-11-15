@@ -334,7 +334,13 @@ def horizon_invariants(r: dict) -> list[str]:
     need(n == 720 and step == 0.5 and r["az"] == [i * step for i in range(n)], "azimuth grid is not 720 x 0.5 deg")
     bad += _profile_summary_errors("site", r, r["elevation_deg"], step)
     by_mast, by_zone = _raw_masks(r["site_id"])
-    if r["horizon_kind"] == "terrain":
+    if r["horizon_kind"] == "terrain" and not by_mast:
+        # no stored mask: the skyline is ray-traced over the elevation grids at the exact mast asked
+        need(r["mast_used_m"] == r["mast_m"], "traced skyline must use the requested mast")
+        need(r["masts_available_m"] == [] and not r["zone_available"] and r["zone"] is None,
+             "traced skyline reporting stored masks")
+        need(all(-90.0 < v < 90.0 for v in r["elevation_deg"]), "traced skyline out of range")
+    elif r["horizon_kind"] == "terrain":
         need(r["mast_used_m"] == min(by_mast, key=lambda m: abs(m - r["mast_m"])), "mast_used_m is not the nearest mask")
         need(r["elevation_deg"] == by_mast[r["mast_used_m"]], "values differ from an independent read of horizons.i16")
         need(r["masts_available_m"] == sorted(by_mast), "masts_available_m wrong")
@@ -470,9 +476,11 @@ def points_horizons_comparisons(client) -> list[dict]:
 
 
 def point_equals_site(client, site_id: str, t: str) -> list[str]:
-    """At a smooth-sphere catalogue site the point endpoint gives the site endpoint's answer, except site_id."""
+    """At a catalogue site without a stored mask (traced skyline) the point endpoint with ``horizon=terrain``
+    gives the site endpoint's answer, except site_id: both ray-trace the same grids at the same coordinates."""
     site = client.get(STATE.format(site_id=site_id), params={"t": t, "mast_m": 2}).json()
-    pt = client.get(POINT_STATE, params={"lat": site["lat"], "lon": site["lon"], "t": t, "mast_m": 2}).json()
+    pt = client.get(POINT_STATE, params={"lat": site["lat"], "lon": site["lon"], "t": t, "mast_m": 2,
+                                         "horizon": "terrain"}).json()
     diff = [k for k in site if k != "site_id" and site[k] != pt[k]]
     return [f"{site_id} {t}: point differs from site in {diff}"] if diff else []
 
@@ -513,14 +521,21 @@ def lower_skyline_sees_more(client, site_id: str, times: list[str], mast_m: floa
 
 
 def point_ground_checks(client) -> list[str]:
-    """ground_m and ground_source: the LOLA grid inside 60 S, the reference sphere elsewhere."""
+    """ground_m and ground_source: bilinear height from the finest LOLA grid covering the point (the polar
+    grids inside 60 S, the whole-Moon grid elsewhere, so every point reports 'lola_grid')."""
+    import numpy as np
+
     from app.db.store import get_store
     grids = get_store().grids
     bad = []
     for lat, lon in ((-85.0, 20.0), (-84.7906, 29.1957), (-60.5, 0.0), (-59.9, 0.0), (0.0, 0.0), (45.0, -120.0)):
         r = client.get(POINT_STATE, params={"lat": lat, "lon": lon, "t": SWEEP_TIMES[0]}).json()
-        g = grids.sample("lola_elevation_60s", lat, lon)
-        want = ("lola_grid", g) if g is not None else ("reference_sphere", 0.0)
+        want = ("reference_sphere", 0.0)
+        for gid in ("lola_elevation_80s", "lola_elevation_60s", "lola_elevation_global"):
+            g = grids.bilinear_many(gid, np.array([lat]), np.array([lon]))[0]
+            if not np.isnan(g):
+                want = ("lola_grid", float(g))
+                break
         if (r["ground_source"], r["ground_m"]) != want:
             bad.append(f"({lat}, {lon}): ground {r['ground_source']} {r['ground_m']} vs {want}")
     return bad
@@ -572,10 +587,11 @@ def points_series_horizons_comparisons(client) -> list[dict]:
 
 
 def point_series_equals_site(client, site_id: str, start: str, hours: float) -> list[str]:
-    """At a smooth-sphere catalogue site points/series equals sites/{id}/series except site_id."""
+    """At a catalogue site without a stored mask points/series with ``horizon=terrain`` equals
+    sites/{id}/series except site_id (both ray-trace the same grids)."""
     q = {"start": start, "duration_h": hours, "mast_m": 2}
     site = client.get(SERIES.format(site_id=site_id), params=q).json()
-    pt = client.get(POINT_SERIES, params={"lat": site["lat"], "lon": site["lon"], **q}).json()
+    pt = client.get(POINT_SERIES, params={"lat": site["lat"], "lon": site["lon"], "horizon": "terrain", **q}).json()
     diff = [k for k in site if k != "site_id" and site[k] != pt[k]]
     return [f"{site_id}: points/series differs from sites/series in {diff}"] if diff else []
 

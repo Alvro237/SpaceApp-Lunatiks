@@ -91,7 +91,7 @@ def test_accuracy_against_the_catalogue_fine_masks():
     assert max(rms, key=rms.get) == "mons-malapert" and rms["mons-malapert"] <= 3.5   # measured 3.25
 
 
-def test_endpoint_terrain_inside_the_grids_and_smooth_sphere_outside():
+def test_endpoint_uses_the_finest_grid_covering_the_point():
     r = client.get("/api/v1/points/horizon", params={"lat": -85.5, "lon": 10, "mast_m": 2})
     assert r.status_code == 200
     b = r.json()
@@ -101,8 +101,10 @@ def test_endpoint_terrain_inside_the_grids_and_smooth_sphere_outside():
     # farther from the pole only the 960 m grid covers the point
     b = client.get("/api/v1/points/horizon", params={"lat": -70, "lon": 10}).json()
     assert b["horizon_kind"] == "terrain" and b["near_grid"] == "lola_elevation_60s"
+    # outside the polar grids the whole-Moon 8 ppd grid closes the chain: terrain everywhere
     b = client.get("/api/v1/points/horizon", params={"lat": 0, "lon": 0}).json()
-    assert b["horizon_kind"] == "smooth_sphere" and b["near_grid"] is None and b["ground_source"] == "reference_sphere"
+    assert b["horizon_kind"] == "terrain" and b["near_grid"] == "lola_elevation_global" and b["ground_source"] == "lola_grid"
+    assert b["near_cell_m"] == pytest.approx(3790.4, abs=0.1) and b["terrain_range_km"] > 249
     assert client.get("/api/v1/points/horizon", params={"lat": -95, "lon": 0}).status_code == 422
 
 
