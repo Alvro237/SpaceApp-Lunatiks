@@ -93,7 +93,7 @@ export function ResultsPanel({ titleId }: { titleId: string }) {
   return <Results r={a.suit} titleId={titleId} />
 }
 
-/** The link budget at one proposed site, for the user's radio (Earth contact, "Show the link budget"): the hours with a closed link
+/** The link budget at one proposed site, for the user's radio (Earth link, "Show the link budget"): the hours with a closed link
  * and the margin. The margin is the same at every site (the search cannot rank by it); here it says whether this one closes. */
 function SiteLink({ link }: { link: LinkSummary }) {
   const pctText = (f: number) => `${f * 100 >= 99.95 || f * 100 < 0.05 ? (f * 100).toFixed(0) : (f * 100).toFixed(1)} %`
@@ -251,7 +251,7 @@ function Results({ r, titleId }: { r: SuitabilityResponse; titleId: string }) {
 
       <h3 className="ios-header">Score</h3>
       {r.layers.length === 0 ? (
-        <p className="fine">No category with a score is on: every viable cell scores 1. Switch on Power or Earth contact, or set a limit that scores.</p>
+        <p className="fine">No category with a score is on: every viable cell scores 1. Switch on Power or Earth link, or set a limit that scores.</p>
       ) : (
         <ul className="fine score-weights">
           {r.layers.map((l) => (

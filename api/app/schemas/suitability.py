@@ -37,7 +37,7 @@ class CriterionInput(BaseModel):
 
 
 class SuitabilityLink(BaseModel):
-    """Radio link settings (AERO-2). When given, Earth contact means a radio link: some part of the Earth's disc is above
+    """Radio link settings (AERO-2). When given, the Earth link means a radio link: some part of the Earth's disc is above
     the site's horizon AND an antenna of the chosen networks sees the Moon above its elevation limit. It replaces the
     share-of-disc rule (`comms_min_fraction`), which is then not used. Geometry only: no link budget in the search
     (the margin is the same at every site; ask POST /api/v1/link for the proposed sites)."""

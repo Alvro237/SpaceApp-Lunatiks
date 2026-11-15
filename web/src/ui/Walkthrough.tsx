@@ -41,7 +41,7 @@ export const STEPS: Step[] = [
   {
     target: '.mode-switch',
     title: 'Two ways to work',
-    text: 'Site explorer: you choose the places and study them. Mission planner: you set filters (slope, light, Earth contact…) and the tool paints the areas where all of them pass.',
+    text: 'Site explorer: you choose the places and study them. Mission planner: you set filters (slope, light, Earth link…) and the tool paints the areas where all of them pass.',
   },
   {
     target: '.site-search',

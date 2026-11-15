@@ -6,7 +6,7 @@
  * catalogue, `api/app/logic/suitability.py`, or one of its three request-level parameters); "unavailable" inputs
  * show the data-gap reason. Thresholds have no defaults (CLAUDE.md) except the region radius: a category contributes
  * to the request only once the planner switches it on, and within it a field left empty is simply inactive (not sent),
- * per section 3.3. Earth contact is the radio link (AERO-2): the networks, direction and own antennas come from the link
+ * per section 3.3. Earth link is the radio link (AERO-2): the networks, direction and own antennas come from the link
  * settings and go as the request's `link`; the Earth's disc share is no longer an input.
  */
 
@@ -134,7 +134,7 @@ export const PLANNER_CATEGORIES: PlannerCategory[] = [
         id: 'side',
         kind: 'side',
         label: 'Near or far side',
-        tip: 'Off: the search can include the boundary between the near and far side. On: keeps only the side chosen (near: longitude within 90° of the sub-Earth meridian). At the south pole the two sides meet, so this is a coarse screen; the Earth contact inputs compute real visibility for the mission dates.',
+        tip: 'Off: the search can include the boundary between the near and far side. On: keeps only the side chosen (near: longitude within 90° of the sub-Earth meridian). At the south pole the two sides meet, so this is a coarse screen; the Earth link inputs compute real visibility for the mission dates.',
       },
     ],
   },
@@ -181,7 +181,7 @@ export const PLANNER_CATEGORIES: PlannerCategory[] = [
   },
   {
     id: 'earth',
-    title: 'Earth contact',
+    title: 'Earth link',
     scoreNote: 'share of the window with radio contact',
     hasSwitch: true,
     fields: [
@@ -295,7 +295,7 @@ export const PLANNER_CATEGORIES: PlannerCategory[] = [
         kind: 'switch',
         criterion: 'earth_at_landing',
         label: 'Earth in view at landing',
-        tip: 'The Earth must be in contact at touchdown, for live telemetry: above the site’s horizon and seen by an antenna of the networks set in Earth contact.',
+        tip: 'The Earth must be in contact at touchdown, for live telemetry: above the site’s horizon and seen by an antenna of the networks set in Earth link.',
       },
     ],
   },

@@ -29,7 +29,7 @@ import numpy as np
 CATEGORIES: tuple[tuple[str, str, str | None], ...] = (
     ("search", "Search area", None),
     ("power", "Power and sunlight", "Share of the mission window with any part of the Sun visible"),
-    ("earth", "Earth contact", "Share of the mission window with Earth contact"),
+    ("earth", "Earth link", "Share of the mission window with radio contact with the Earth"),
     ("topography", "Topography and landing safety", "1 - slope / maximum slope, averaged with 1 - crater cover / maximum cover when that limit is set"),
     ("landing", "Landing conditions", None),
     ("science", "Science and resources", "Mean closeness to the science targets set (1 - distance / limit; hydrogen relative to the best in the region)"),
@@ -92,7 +92,7 @@ _POWER_PARAMS = (
 CATALOGUE_LIST: tuple[CriterionSpec, ...] = (
     CriterionSpec("side", "search", "Near or far side", None, "choice", None, "geometry", "everywhere",
                   "MOON_ME longitude", "Keeps only the side chosen (near: longitude within 90 deg of the sub-Earth meridian); "
-                  "a coarse screen, the Earth contact criteria compute real visibility.", options=("near", "far")),
+                  "a coarse screen, the Earth link criteria compute real visibility.", options=("near", "far")),
     CriterionSpec("battery_autonomy_h", "power", "Battery autonomy", "h", "value", "<=", "window", "south of 60 S",
                   "Engine series over traced LOLA horizons", "No stretch of darkness during the mission may be longer "
                   "than the hours the battery keeps the lander alive.", limit_min=0.0, bounded=True),
@@ -174,7 +174,7 @@ FIXED_INPUTS = (
 )
 REQUEST_PARAMETERS = (
     ("landing_radius_km", "Landing ellipse radius", "Topography: a spot is kept only if no failing cell lies within this distance."),
-    ("comms_min_fraction", "Earth disc needed for contact", "Earth contact: share of the Earth's disc above the horizon that counts as contact (team parameter 0.5); not used when the radio link settings are given."),
+    ("comms_min_fraction", "Earth disc needed for contact", "Earth link: share of the Earth's disc above the horizon that counts as contact (team parameter 0.5); not used when the radio link settings are given."),
     ("robust_delay_h", "Robust to a landing delay", "Schedule: every window criterion must still pass if the landing slips by this many hours."),
 )
 

@@ -76,7 +76,7 @@ export function LinkSettings({ showProblem = true }: { showProblem?: boolean } =
 }
 
 /**
- * The link settings inside the mission planner's Earth contact category. The search itself is geometry (the networks,
+ * The link settings inside the mission planner's Earth link category. The search itself is geometry (the networks,
  * the direction and the user's own antennas decide what counts as contact); the budget is only for the proposed sites:
  * the margin is the same at every site, so it cannot rank them, but it says whether each proposed site closes the link.
  */

@@ -403,7 +403,7 @@ export function Priorities() {
         </Tip>
       </h3>
       {order.length === 0 ? (
-        <p className="fine pad">Switch on Power, Earth contact, or set a slope, crater cover, science target or dose limit to score the cells.</p>
+        <p className="fine pad">Switch on Power, Earth link, or set a slope, crater cover, science target or dose limit to score the cells.</p>
       ) : (
         <ol className="ios-list priority-list">
           {order.map((c, i) => (
