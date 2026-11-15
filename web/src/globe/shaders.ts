@@ -10,7 +10,7 @@
  * grid, interpolated bilinearly, its exaggeration easing from x4 (whole Moon) to x2 (closest zoom, orbit.ts); the
  * patches (below) lift the ground by the detail heights in both modes.
  */
-import { MAX_LEVEL } from './detail/grid'
+import { MAX_LEVEL, PHOTO_BASE_LEVEL } from './detail/grid'
 import { POLAR_MAX_Z } from './detail/polar'
 
 // bilinear between the centres of the shipped height grid's cells, longitude wrapping
@@ -137,6 +137,7 @@ export const GLOBE_FRAG = /* glsl */ `
 precision highp float;
 precision highp sampler2DArray;
 #define DETAIL_MAX_LEVEL ${MAX_LEVEL}
+#define PHOTO_BASE_LEVEL ${PHOTO_BASE_LEVEL}
 #define POLAR_MAX_Z ${POLAR_MAX_Z}
 uniform sampler2D uHeight;
 uniform vec3 uSun;          // unit vector to the Sun, Moon Mean-Earth axes
@@ -330,11 +331,15 @@ void main() {
   if (uPhotoMode > 0.5 && uMaxLevel >= 0.0 && !onlyPolar) {
     vec2 pCell;
     float pDeg;
-    int pSlot = findTile(uPhotoIndex, degrees(lon), degrees(lat), maxLevel, pCell, pDeg);
+    // never coarser than the photo base, which is always loaded: where a pixel spans more ground than a base cell
+    // (the whole Moon far away, the foreshortened limbs, slopes facing the camera) the pixel's own level is 0 and
+    // holds no photo, and the ground showed the plain relief grey in its place
+    int photoLevel = max(maxLevel, PHOTO_BASE_LEVEL);
+    int pSlot = findTile(uPhotoIndex, degrees(lon), degrees(lat), photoLevel, pCell, pDeg);
     if (pSlot >= 0) {
       // faded into the coarser photo tile toward a lone edge (edgeWeight)
       float raw = tileAt(uPhoto, pSlot, pCell);
-      float w = edgeWeight(uPhotoIndex, degrees(lon), degrees(lat), maxLevel, pCell, pDeg);
+      float w = edgeWeight(uPhotoIndex, degrees(lon), degrees(lat), photoLevel, pCell, pDeg);
       if (w < 1.0) {
         vec2 cCell;
         float cDeg;
@@ -457,6 +462,7 @@ export const PATCH_VERT = /* glsl */ `
 precision highp float;
 precision highp sampler2DArray;
 #define DETAIL_MAX_LEVEL ${MAX_LEVEL}
+#define PHOTO_BASE_LEVEL ${PHOTO_BASE_LEVEL}
 uniform sampler2D uHeight;
 uniform float uExag;
 uniform sampler2DArray uDetail;
