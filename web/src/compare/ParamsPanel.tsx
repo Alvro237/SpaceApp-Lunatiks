@@ -118,11 +118,6 @@ export function ParamsPanel() {
         <span className="opt-count">{applied.power || applied.link ? 'applied' : 'not applied'}</span>
       </summary>
       <div className="opt-body">
-        <p className="muted small">
-          Applied to every place in the comparison at once. The power inputs are the same as in the Power section. Nothing is pre-filled: no panel,
-          battery, load or link-budget value has a cited default.
-        </p>
-
         <label className="check-row">
           <input type="checkbox" checked={useP} onChange={(e) => setUseP(e.target.checked)} />
           <span>Compare power</span>

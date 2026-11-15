@@ -5,7 +5,6 @@
  * is not a bound.
  */
 import type { LinkResponse, PowerResponse } from '../api/types'
-import { useApp } from '../state/store'
 import { useApplied } from './applied'
 import { type PlaceModels, useCompareModels } from './useCompareModels'
 import type { ComparedPlace } from './useComparePlaces'
@@ -71,12 +70,12 @@ function status(a: { loading: boolean; error: string | null }) {
 
 export function ModelResults({ places }: { places: ComparedPlace[] }) {
   const applied = useApplied()
-  const comms = useApp((s) => s.commsMinFraction)
   const { models } = useCompareModels(places)
   if (!applied.power && !applied.link) return null
 
   const pCols = applied.power ? powerCols({ array: 2, battery: 3, colony: 4 }[applied.power.model]) : []
   const lCols = applied.link ? linkCols(applied.link.level) : []
+  const smooth = models.some((m) => m.power.data?.horizon_kind === 'smooth_sphere' || m.link.data?.horizon_kind === 'smooth_sphere')
   const estimated = new Set(models.flatMap((m) => m.link.data?.estimated_limits ?? []))
 
   const cells = <T,>(cols: Col<T>[], a: PlaceModels['power'] | PlaceModels['link']) => {
@@ -125,13 +124,12 @@ export function ModelResults({ places }: { places: ComparedPlace[] }) {
           </tbody>
         </table>
       </div>
-      <p className="muted small">
-        Same window, mast height and panel for every place. {applied.link ? `Contact needs at least ${Math.round(comms * 100)} % of the Earth's disc above the horizon and an antenna that sees the Moon. ` : ''}
-        {estimated.size > 0 ? `Some antenna elevation limits are project estimates, not operator values (${[...estimated].join(', ')}). ` : ''}
-        {models.some((m) => m.power.data?.horizon_kind === 'smooth_sphere' || m.link.data?.horizon_kind === 'smooth_sphere')
-          ? 'A place without LOLA terrain uses a smooth-sphere horizon: an estimate, not a bound in either direction.'
-          : ''}
-      </p>
+      {(estimated.size > 0 || smooth) && (
+        <p className="muted small">
+          {estimated.size > 0 ? `Some antenna elevation limits are project estimates, not operator values (${[...estimated].join(', ')}). ` : ''}
+          {smooth ? 'A place without LOLA terrain uses a smooth-sphere horizon: an estimate, not a bound.' : ''}
+        </p>
+      )}
     </section>
   )
 }
