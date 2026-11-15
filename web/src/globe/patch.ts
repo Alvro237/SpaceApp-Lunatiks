@@ -63,6 +63,50 @@ export function patchWindows(lat: number, lon: number, rangeKm: number): PatchWi
 }
 
 /**
+ * Poleward of this latitude (south) the grids are laid out in south polar stereographic metres instead
+ * (polarPatchWindows), lifted by the polar map's tiles (detail/polar.ts).
+ */
+export const POLAR_PATCH_LAT = -75
+
+/**
+ * Largest polar grid cell, km. Larger than PATCH_MAX_CELL_KM: a tilted view from a few hundred kilometres sees past
+ * the grid that limit allows (1 000 km across), and beyond it the globe's own mesh has no detail heights; 16 km cells
+ * (4 200 km across) reach the horizon and still beat its 21 km rows.
+ */
+export const POLAR_PATCH_MAX_CELL_KM = 16.4
+
+export interface PolarPatchWindow {
+  /** Centre, south polar stereographic metres. */
+  x: number
+  y: number
+  /** Cell size, metres of the map (ground metres × the scale factor, 1.00 to 1.04 south of 75° S). */
+  cellM: number
+}
+
+/**
+ * The polar grids for a camera `rangeKm` from the point (x, y) it looks at, finest first: the same sizes as
+ * patchWindows (cells a power of two of metres, each grid PATCH_RATIO times the one inside, cells up to
+ * POLAR_PATCH_MAX_CELL_KM), centres snapped to the grid's cell so a vertex stays over the same ground while the camera
+ * moves.
+ */
+export function polarPatchWindows(x: number, y: number, rangeKm: number): PolarPatchWindow[] {
+  if (!(rangeKm > 0)) return []
+  const finest = pow2((2 * PATCH_REACH * rangeKm * 1000) / PATCH_CELLS)
+  const out: PolarPatchWindow[] = []
+  for (let l = 0; l < PATCH_LEVELS; l++) {
+    const cellM = finest * PATCH_RATIO ** l
+    if (cellM > POLAR_PATCH_MAX_CELL_KM * 1000) break
+    out.push({ x: Math.round(x / cellM) * cellM, y: Math.round(y / cellM) * cellM, cellM })
+  }
+  return out
+}
+
+/** The square a polar grid draws, smaller by `margin` cells each side: centre x, y and half-width, metres. */
+export function polarHoleOf(w: PolarPatchWindow, margin = 1): [number, number, number] {
+  return [w.x, w.y, (PATCH_CELLS / 2 - margin) * w.cellM]
+}
+
+/**
  * The part of the Moon a grid covers that the mesh around it leaves out: the grid's box, smaller by `margin` cells
  * each side so the two overlap (the grid's skirt hides what little gap is left). As the shader takes it: centre
  * longitude, half-width in longitude, south and north latitude.

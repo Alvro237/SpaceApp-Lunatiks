@@ -1,8 +1,10 @@
 /**
  * The whole Moon, from global LOLA topography, lit by the Sun at the chosen instant. Drag turns it, the wheel
- * brings it closer toward the place under the pointer; zooming in over the south-polar cap hands over to the
- * detailed polar map there (finer tiles, top-down, with its 3D tilt). A click on the surface marks that point
- * (study mode, as on the map) and turns the Moon toward it; a click on a place selects it.
+ * brings it closer toward the place under the pointer, the south pole included: south of 60° S the globe draws the
+ * polar map's own LOLA tiles and WAC polar mosaic (detail/polar.ts) on a mesh laid out in polar coordinates, so it
+ * stays sharp and movable over the pole without switching to another view. A click on the surface marks that point
+ * (study mode, as on the map) and turns the Moon toward it; a click on a place selects it. In mission mode, a search
+ * region centre still flies down into the polar map, where the areas are painted.
  * Catalogue sites are buttons over the globe; the panels hold the same information as text.
  */
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
@@ -31,8 +33,11 @@ import { DATA_BASE } from '../time/staticData'
 import { GlobeDetail } from './detail/globeDetail'
 import { type PhotoBase, loadPhotoBase } from './detail/photoBase'
 import { MIN_DIST, MOON_R_KM, type Orbit, OrbitRig, RELIEF_MAX, TILT_3D, cameraPose, isNearView, latLonToScene, missionPickOutcome, nearPlaneKm, raySphere, reliefExaggeration, sceneToLatLon } from './orbit'
-import { PATCH_LEVELS, holeOf, patchGeometry, patchWindows } from './patch'
-import { GLOBE_FRAG, GLOBE_VERT, PATCH_VERT } from './shaders'
+import { PATCH_LEVELS, POLAR_PATCH_LAT, type PolarPatchWindow, holeOf, patchGeometry, patchWindows, polarHoleOf, polarPatchWindows } from './patch'
+import { GLOBE_FRAG, GLOBE_VERT, PATCH_VERT, POLAR_PATCH_VERT } from './shaders'
+import { PolarDetail } from './detail/polar'
+import { TILES_BASE, loadTileset } from '../terrain/TerrainView'
+import { polarXY } from '../terrain/tileset'
 import { IconCrosshair } from '../ui/icons'
 import { WebGLGuard } from '../ui/WebGLGuard'
 
@@ -45,6 +50,17 @@ export const MAP_DISC_LAT = -60
  * beat the globe's. The map then flies on down to 450 km over the place (TerrainView).
  */
 const ENTER_MAP_DIST = MOON_R_KM * 1.8
+/**
+ * The south-pole button (and Enter) flies the globe down to this height over the pole, km: under NEAR_ENTER_KM
+ * (orbit.ts), so the view tilts to 3D and the polar tiles sharpen on the way.
+ */
+const POLE_VIEW_ALT_KM = 400
+/**
+ * The morphologic look of the polar cap in photo mode (shaders.ts, MORPH_*) eases in as the camera comes down from
+ * MORPH_FROM_KM to MORPH_FULL_KM above the surface; higher up, the whole Moon shows its real day and night.
+ */
+const MORPH_FROM_KM = 2500
+const MORPH_FULL_KM = 1200
 /** Slope exaggeration of the shading where 118 m detail heights are loaded (the shipped 7.6 km grid uses 3). */
 const DETAIL_SHADE_EXAGGERATION = 1.5
 
@@ -182,11 +198,16 @@ export function GlobeView() {
     })
   }, [masks, orbit])
 
-  /** Fly down to a point and open the map there (polar cap), or just turn toward it (elsewhere). */
+  /**
+   * Turn toward a point. In mission mode a point of the polar cap flies down into the polar map instead, where the
+   * search's areas are painted.
+   */
   const goTo = (lat: number, lon: number) => {
-    if (lat <= MAP_DISC_LAT) orbit.dive(lat, lon, ENTER_MAP_DIST * 0.98)
+    if (mode === 'mission' && lat <= MAP_DISC_LAT) orbit.dive(lat, lon, ENTER_MAP_DIST * 0.98)
     else orbit.turnTo(lat, lon)
   }
+  /** Fly down over the south pole along the meridian in view (no turn round the Moon on the way), staying on the globe. */
+  const flyToPole = () => orbit.flyTo(-90, orbit.goal.lon, MOON_R_KM + POLE_VIEW_ALT_KM)
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.target !== e.currentTarget) return
@@ -208,7 +229,7 @@ export function GlobeView() {
         orbit.resetView()
         setApp({ view: '2d' })
       },
-      Enter: () => goTo(orbit.goal.lat <= MAP_DISC_LAT ? orbit.goal.lat : -90, orbit.goal.lat <= MAP_DISC_LAT ? orbit.goal.lon : 0),
+      Enter: flyToPole,
       ...(mode === 'mission' && useAreas.getState().center ? { c: centreOnRegion, C: centreOnRegion } : {}),
     }
     const fn = keys[e.key]
@@ -303,8 +324,6 @@ export function GlobeView() {
     if (!ll) return
     orbit.turnTo(ll[0], ll[1])
     orbit.zoom(DOUBLE_CLICK_ZOOM)
-    // close enough over the polar cap: hand over to the map there, as the wheel does
-    if (!orbit.isDiving && orbit.goal.dist < ENTER_MAP_DIST && ll[0] <= MAP_DISC_LAT && useHorizonTransition.getState().phase === 'map') goTo(ll[0], ll[1])
   }
   // zooming in goes toward the place under the pointer, so zooming over the pole reaches the polar map there
   const onWheel = (e: WheelEvent<HTMLDivElement>) => {
@@ -313,8 +332,6 @@ export function GlobeView() {
     const ll = factor < 1 ? pickRef.current?.((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height) : null
     if (!ll) return orbit.zoom(factor)
     orbit.zoomToward(factor, ll[0], ll[1])
-    // close enough over the polar cap: fly down to the place under the pointer and hand over to the map there
-    if (!orbit.isDiving && orbit.goal.dist < ENTER_MAP_DIST && ll[0] <= MAP_DISC_LAT && useHorizonTransition.getState().phase === 'map') goTo(ll[0], ll[1])
   }
 
   return (
@@ -358,8 +375,8 @@ export function GlobeView() {
         )}
         <p id="globe-help" className="sr-only">
           Arrow keys turn the Moon, plus and minus zoom, T tilts the view to 3D, Q and E turn it, R sets it straight
-          again, Enter opens the detailed south-polar map; zooming in over the south pole opens it too. Zooming in
-          close anywhere else tilts the view to 3D and loads the finest detail; zooming back out sets it straight. A click on
+          again, Enter flies down to the south pole. Zooming in close anywhere, the south pole included, tilts the view
+          to 3D and loads the finest detail; zooming back out sets it straight. A click on
           the surface marks that point; a double click comes closer to it. Right click a place for its options: rename, pointer colour, remove. Sites are listed, with the same information, in the panels.
         </p>
       </div>
@@ -382,7 +399,7 @@ export function GlobeView() {
         >
           <IconCube />
         </button>
-        <button type="button" onClick={() => enterMap()} aria-label="South pole map" title="Detailed south-polar map">
+        <button type="button" onClick={flyToPole} aria-label="Fly to the south pole" title="Fly down to the south pole (Enter)">
           <IconPole />
         </button>
         <button
@@ -455,6 +472,24 @@ function placeCamera(cam: THREE.PerspectiveCamera, n: Orbit, tiltDeg: number, he
 const CORNERS = [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const
 const corner = new THREE.Vector3()
 const axis = new THREE.Vector3()
+
+/** The square a polar grid draws (patch.ts, polarHoleOf), left out by the mesh around it; w = 0 when there is none. */
+function setPolarHole(v: THREE.Vector4, w: PolarPatchWindow | undefined) {
+  if (!w) return void v.set(0, 0, 0, 0)
+  const [x, y, half] = polarHoleOf(w)
+  v.set(x, y, half, 1)
+}
+
+/**
+ * The morphologic look of the polar cap (shaders.ts, MORPH_*): its share at this camera height, and its light toward
+ * the top left of the screen (the camera's up minus its right, scene axes turned to Mean-Earth axes: x, -z, y).
+ */
+function setMorph(m: THREE.ShaderMaterial, cam: THREE.PerspectiveCamera, altKm: number) {
+  m.uniforms.uMorph.value = Math.min(1, Math.max(0, (MORPH_FROM_KM - altKm) / (MORPH_FROM_KM - MORPH_FULL_KM)))
+  cam.updateMatrixWorld()
+  const e = cam.matrixWorld.elements
+  ;(m.uniforms.uMorphLight.value as THREE.Vector3).set(e[4] - e[0], -(e[6] - e[2]), e[5] - e[1]).normalize()
+}
 
 function setExaggeration(m: THREE.ShaderMaterial, e: number) {
   m.uniforms.uExag.value = e
@@ -543,13 +578,16 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
     regionRing.visible = true
   }, [region, regionRing])
   /** What the last drawn frame showed (camera, canvas, Sun, relief, detail tiles): a frame is drawn when it differs. */
-  const drawn = useRef({ sig: new Float64Array(40), at: Infinity, was: false })
+  const drawn = useRef({ sig: new Float64Array(64), at: Infinity, was: false })
   const sceneVersion = useRef(0)
   /** Frame rate over continuous drawing, to lower the pixel ratio on a slow GPU (the pixel ratio the canvas started with first). */
   const perf = useRef({ frames: 0, time: 0, age: 0, dpr: viewport.dpr })
   const eph = useEphemeris().data
   const [reduced] = useState(() => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
   const [detail] = useState(() => new GlobeDetail(data.photoBase))
+  // south of 60 S: the polar map's tiles (detail/polar.ts), once its tileset is known
+  const [polar] = useState(() => new PolarDetail())
+  const tileset = useQuery({ queryKey: ['static', 'tileset'], queryFn: loadTileset, staleTime: Infinity, retry: 1 }).data
   const [material] = useState(() => {
     const tex = new THREE.DataTexture(data.heights, data.meta.width, data.meta.height, THREE.RedFormat, THREE.FloatType)
     tex.minFilter = tex.magFilter = THREE.NearestFilter
@@ -564,8 +602,10 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
         uSun: { value: new THREE.Vector3(1, 0, 0) },
         uDiscLat: { value: MAP_DISC_LAT },
         ...detail.uniforms(),
+        ...polar.uniforms(),
         uDetailShade: { value: DETAIL_SHADE_EXAGGERATION },
         uHole: { value: new THREE.Vector4() },
+        uPolarHole: { value: new THREE.Vector4() },
       },
     })
   })
@@ -579,7 +619,7 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
         vertexShader: PATCH_VERT,
         fragmentShader: GLOBE_FRAG,
         side: THREE.DoubleSide,
-        uniforms: { ...material.uniforms, uWin: { value: new THREE.Vector4() }, uSkirtKm: { value: 1 }, uHole: { value: new THREE.Vector4() } },
+        uniforms: { ...material.uniforms, uWin: { value: new THREE.Vector4() }, uSkirtKm: { value: 1 }, uHole: { value: new THREE.Vector4() }, uPolarHole: { value: new THREE.Vector4() } },
       })
       const mesh = new THREE.Mesh(grid, m)
       mesh.frustumCulled = false // its vertices are placed by the shader
@@ -587,6 +627,29 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
       return mesh
     })
   })
+  // The same grids laid out in polar stereographic metres, used instead when the view is poleward of
+  // POLAR_PATCH_LAT (patch.ts, polarPatchWindows): a latitude/longitude grid folds up at the pole.
+  const [polarPatches] = useState(() =>
+    patches.map((p) => {
+      const m = new THREE.ShaderMaterial({
+        glslVersion: THREE.GLSL3,
+        vertexShader: POLAR_PATCH_VERT,
+        fragmentShader: GLOBE_FRAG,
+        side: THREE.DoubleSide,
+        uniforms: { ...material.uniforms, uPWin: { value: new THREE.Vector4() }, uSkirtKm: { value: 1 }, uHole: { value: new THREE.Vector4() }, uPolarHole: { value: new THREE.Vector4() } },
+      })
+      const mesh = new THREE.Mesh(p.geometry, m)
+      mesh.frustumCulled = false
+      mesh.visible = false
+      return mesh
+    }),
+  )
+  useEffect(() => {
+    if (tileset) polar.setTileset(tileset, TILES_BASE, material, gl.extensions.has('OES_texture_float_linear'))
+  }, [tileset, polar, material, gl])
+  const frustum = useMemo(() => new THREE.Frustum(), [])
+  const projView = useMemo(() => new THREE.Matrix4(), [])
+  const sphere = useMemo(() => new THREE.Sphere(), [])
   const [geometry] = useState(() => new THREE.SphereGeometry(MOON_R_KM, 512, 256))
   useEffect(
     () => () => {
@@ -594,24 +657,30 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
       material.dispose()
       geometry.dispose()
       detail.dispose()
+      polar.dispose()
       patches[0].geometry.dispose()
       patches.forEach((p) => p.material.dispose())
+      polarPatches.forEach((p) => p.material.dispose())
     },
-    [material, geometry, detail, patches],
+    [material, geometry, detail, polar, patches, polarPatches],
   )
 
   // the surface shown picks which detail tiles the shader reads; work out the wanted tiles again at once
   useEffect(() => detail.setKind(material, surface === 'photo' ? 'photo' : 'dem'), [surface, material, detail])
+  /** Whether the polar photo tiles are asked for (set in the frame loop: not when the morphologic look covers them). */
+  const polarPhoto = useRef<boolean | null>(null)
 
   useEffect(() => {
     scene.add(markersSet.group)
     patches.forEach((p) => scene.add(p))
+    polarPatches.forEach((p) => scene.add(p))
     return () => {
       scene.remove(markersSet.group)
       patches.forEach((p) => scene.remove(p))
+      polarPatches.forEach((p) => scene.remove(p))
       markersSet.dispose()
     }
-  }, [scene, markersSet, patches])
+  }, [scene, markersSet, patches, polarPatches])
 
   // the real stars behind the Moon (starField.ts), over the NASA SVS star map with the Milky Way (skyMap.ts)
   const [stars] = useState(() => new StarField(gl.getPixelRatio()))
@@ -713,12 +782,36 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
       setSun(material, s[0] / len, s[1] / len, s[2] / len)
     }
 
+    setMorph(material, cam, n.dist - MOON_R_KM)
+    // close in, photo mode draws the polar cap in the morphologic look, which shows no photo: none is downloaded
+    const wantPolarPhoto = surface === 'photo' && material.uniforms.uMorph.value < 0.999
+    if (polarPhoto.current !== wantPolarPhoto) {
+      polarPhoto.current = wantPolarPhoto
+      polar.setPhoto(wantPolarPhoto)
+    }
+
     // detail tiles for the part of the Moon in view
     const e = reliefExaggeration(n.dist)
     setExaggeration(material, e)
 
-    // the grids of relief around the place in view; the globe leaves out what the outermost one draws
-    const windows = patchWindows(n.lat, n.lon, n.dist - MOON_R_KM)
+    // the grids of relief around the place in view; the globe leaves out what the outermost one draws. Near the south
+    // pole they are laid out in polar metres instead (and the latitude/longitude ones are not drawn).
+    const polarView = n.lat < POLAR_PATCH_LAT
+    const [px, py] = polarXY(n.lat, n.lon)
+    const pWindows = polarView ? polarPatchWindows(px, py, n.dist - MOON_R_KM) : []
+    polarPatches.forEach((mesh, l) => {
+      const w = pWindows[l]
+      mesh.visible = !!w
+      if (!w) return
+      const u = mesh.material.uniforms
+      ;(u.uPWin.value as THREE.Vector4).set(w.x, w.y, w.cellM, l === pWindows.length - 1 ? 1 : 0)
+      u.uSkirtKm.value = Math.max(0.5, (2 * w.cellM) / 1000)
+      const inner = pWindows[l - 1]
+      setPolarHole(u.uPolarHole.value as THREE.Vector4, inner)
+    })
+    const pOuter = pWindows[pWindows.length - 1]
+    setPolarHole(material.uniforms.uPolarHole.value as THREE.Vector4, pOuter)
+    const windows = polarView ? [] : patchWindows(n.lat, n.lon, n.dist - MOON_R_KM)
     patches.forEach((mesh, l) => {
       const w = windows[l]
       mesh.visible = !!w
@@ -736,18 +829,24 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
     const g = orbit.goal
     const dpr = gl.getPixelRatio()
     const view = { fovDeg: FOV, widthPx: size.width * dpr, heightPx: size.height * dpr }
-    detail.update(dt, { ...view, lat: n.lat, lon: n.lon, distKm: n.dist }, { ...view, lat: g.lat, lon: g.lon, distKm: g.dist }, material, isNear)
+    // over the pole the latitude/longitude tiles are not needed (the polar ones are drawn there) and would squeeze
+    // into hundreds of slivers; elsewhere they load as before
+    if (!polarView) detail.update(dt, { ...view, lat: n.lat, lon: n.lon, distKm: n.dist }, { ...view, lat: g.lat, lon: g.lon, distKm: g.dist }, material, isNear)
+    // the polar tiles for what the camera sees (culled to the view, finer nearer the camera)
+    cam.updateMatrixWorld()
+    frustum.setFromProjectionMatrix(projView.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse))
+    polar.update(dt, {
+      position: [cam.position.x, cam.position.y, cam.position.z],
+      pixelRad: ((FOV * Math.PI) / 180) / Math.max(1, size.height),
+      visible: (c, r) => frustum.intersectsSphere(sphere.set(sphere.center.set(c[0], c[1], c[2]), r)),
+    })
 
-    // enter the polar map once the flight down has arrived, or when zoomed in over the cap
-    // (not while the horizon view opens or closes: then the camera comes down over the place on purpose)
+    // mission mode: enter the polar map once the flight down to a region centre has arrived (not while the horizon
+    // view opens or closes: then the camera comes down over the place on purpose)
     if (useHorizonTransition.getState().phase === 'map') {
       const target = orbit.arrived()
       if (target) {
         onEnter(target[0], target[1])
-        return
-      }
-      if (!orbit.isDiving && orbit.goal.dist < ENTER_MAP_DIST && n.lat <= MAP_DISC_LAT + 2) {
-        onEnter(Math.min(n.lat, MAP_DISC_LAT - 1), n.lon)
         return
       }
     }
@@ -783,8 +882,11 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
     const sun = u.uSun.value as THREE.Vector3
     put(sun.x); put(sun.y); put(sun.z)
     put(u.uExag.value as number); put(u.uMaxLevel.value as number); put(u.uPhotoMode.value as number)
+    put(u.uPolarMaxZ.value as number); put(u.uPolarShadow.value as number); put(u.uMorph.value as number)
+    const ml = u.uMorphLight.value as THREE.Vector3
+    put(ml.x); put(ml.y); put(ml.z)
     // a detail tile that arrives is written into these textures, which raises their version
-    for (const name of ['uDetail', 'uIndex', 'uPhoto', 'uPhotoIndex']) {
+    for (const name of ['uDetail', 'uIndex', 'uPhoto', 'uPhotoIndex', 'uPolarH', 'uPolarHIndex', 'uPolarP', 'uPolarPIndex']) {
       const t = u[name].value as THREE.Texture
       put(t.id); put(t.version)
     }

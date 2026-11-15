@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { MOON_R_KM } from './orbit'
-import { PATCH_CELLS, PATCH_MAX_CELL_KM, holeOf, patchGeometry, patchWindows } from './patch'
+import { PATCH_CELLS, PATCH_MAX_CELL_KM, holeOf, patchGeometry, patchWindows, polarHoleOf, polarPatchWindows } from './patch'
 
 const KM_PER_DEG = (MOON_R_KM * Math.PI) / 180
 
@@ -57,5 +57,22 @@ describe('relief grids around the place in view', () => {
     expect(Math.min(...x)).toBe(-2)
     expect(Math.max(...x)).toBe(2)
     expect(g.getIndex()!.count).toBe(4 * 4 * 6 + 16 * 6)
+  })
+})
+
+describe('polar grids', () => {
+  it('match the latitude/longitude grids in size: 400 km away, 2 × 1.5 × 400 km / 256 = 4 688 m → 4 096 m cells', () => {
+    // then × 4 while at most POLAR_PATCH_MAX_CELL_KM (16.4 km): 16 384 m, so the grids reach 4 194 km across
+    expect(polarPatchWindows(12_345, -67_890, 400).map((v) => v.cellM)).toEqual([4096, 16384])
+    // 40 km away: 469 m → 512 m, then 2 048 and 8 192 m (three levels at most)
+    const close = polarPatchWindows(0, 0, 40)
+    expect(close.map((v) => v.cellM)).toEqual([512, 2048, 8192])
+  })
+
+  it('snap their centres to the cell, and their holes are a cell inside their edges', () => {
+    const [w] = polarPatchWindows(12_345, -67_890, 40)
+    expect(Math.abs(w.x % w.cellM)).toBe(0)
+    expect(Math.abs(w.y % w.cellM)).toBe(0)
+    expect(polarHoleOf(w)).toEqual([w.x, w.y, 127 * w.cellM])
   })
 })
