@@ -53,7 +53,8 @@ def test_ground_comes_from_the_grid_or_says_it_is_assumed():
 
 def test_site_endpoints_report_their_ground_source():
     assert client.get("/api/v1/sites/im-2/state", params={"t": T}).json()["ground_source"] == "lola_site"
-    assert client.get("/api/v1/sites/apollo-11/state", params={"t": T}).json()["ground_source"] == "reference_sphere"
+    # no pipeline mask at Apollo 11: modelled with the elevation grid's height and traced skyline
+    assert client.get("/api/v1/sites/apollo-11/state", params={"t": T}).json()["ground_source"] == "lola_grid"
     series = client.get("/api/v1/sites/im-2/series", params={"start": T, "duration_h": 1}).json()
     assert series["ground_source"] == "lola_site"
 

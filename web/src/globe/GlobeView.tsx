@@ -1,32 +1,42 @@
 /**
  * The whole Moon, from global LOLA topography, lit by the Sun at the chosen instant. Drag turns it, the wheel
- * brings it closer; a click on the south-polar cap (or zooming in over it) enters the detailed polar map there.
+ * brings it closer toward the place under the pointer; zooming in over the south-polar cap hands over to the
+ * detailed polar map there (finer tiles, top-down, with its 3D tilt). A click on the surface marks that point
+ * (study mode, as on the map) and turns the Moon toward it; a click on a place selects it.
  * Catalogue sites are buttons over the globe; the panels hold the same information as text.
  */
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { StarField } from './starField'
 import { ToolPortal } from '../ui/ToolSlot'
-import { IconMinus, IconPin, IconPlus, IconPole } from '../ui/icons'
+import { usePlaceStyles } from '../state/placeStyle'
+import { IconCube, IconMinus, IconPin, IconPlus, IconPole } from '../ui/icons'
 import { useGlobe } from '../state/globe'
 import { useHorizonTransition } from '../state/horizon'
-import { useQuery } from '@tanstack/react-query'
-import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { type KeyboardEvent, type MouseEvent, type PointerEvent, type WheelEvent, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { useInsets } from '../state/layout'
 import { type MarkerStyle, useApp } from '../state/store'
 import { MarkerSet } from '../map/markerSet'
 import { type MapSite, useMapSites } from '../map/useMapSites'
 import { TileLoader } from '../terrain/loader'
+import { prefetchMap } from '../terrain/prefetch'
 import { useEphemeris, useMasks } from '../time/hooks'
 import { DATA_BASE } from '../time/staticData'
 import { GlobeDetail } from './detail/globeDetail'
-import { MIN_DIST, MOON_R_KM, type Orbit, OrbitRig, RELIEF_MAX, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon } from './orbit'
-import { GLOBE_FRAG, GLOBE_VERT } from './shaders'
+import { MIN_DIST, MOON_R_KM, type Orbit, OrbitRig, RELIEF_MAX, TILT_3D, cameraPose, latLonToScene, nearPlaneKm, raySphere, reliefExaggeration, sceneToLatLon } from './orbit'
+import { PATCH_LEVELS, holeOf, patchGeometry, patchWindows } from './patch'
+import { GLOBE_FRAG, GLOBE_VERT, PATCH_VERT } from './shaders'
 
 const FOV = 35
 /** The polar map covers the disc south of this latitude (the LOLA polar grids). */
 export const MAP_DISC_LAT = -60
-/** Zooming in closer than this over the polar cap enters the map. */
-const ENTER_MAP_DIST = MOON_R_KM * 1.18
+/**
+ * Zooming in closer than this over the polar cap enters the map: about 1 400 km above the surface, where the view
+ * spans roughly the polar cap (the map's disc to 60 S is about 1 800 km across) and the map's 20 m to 240 m tiles
+ * beat the globe's. The map then flies on down to 450 km over the place (TerrainView).
+ */
+const ENTER_MAP_DIST = MOON_R_KM * 1.8
 /** Slope exaggeration of the shading where 118 m detail heights are loaded (the shipped 7.6 km grid uses 3). */
 const DETAIL_SHADE_EXAGGERATION = 1.5
 
@@ -52,23 +62,56 @@ export async function loadGlobe(): Promise<{ meta: GlobeMeta; heights: Float32Ar
   }
 }
 
+/** A second click within this time (ms) is a double click: the first one waits that long before it marks a point. */
+const DOUBLE_CLICK_MS = 260
+/** A double click comes this much closer (the height above the ground is multiplied by it). */
+const DOUBLE_CLICK_ZOOM = 0.4
+
+const NO_HOLE = [0, 0, 0, 0]
+
+/** With nothing changing, a frame is still drawn this often (s). */
+const IDLE_REDRAW_S = 0.5
+const WINDOW_S = 2
+const SLOW_FPS = 45
+const GRACE_S = 3
+
 /** A first view of the whole Moon, turned so the south pole faces the viewer. */
 const START: Orbit = { lat: -48, lon: 10, dist: MOON_R_KM * 3.4 }
 
 export function GlobeView() {
   const globe = useQuery({ queryKey: ['static', 'globe'], queryFn: loadGlobe, staleTime: Infinity, gcTime: Infinity, retry: 1 })
   const masks = useMasks().data
+  const queryClient = useQueryClient()
+  // once the globe has its own data, bring in what the polar map opens with (terrain/prefetch.ts)
+  const globeReady = !!globe.data
+  useEffect(() => {
+    if (!globeReady) return
+    const t = setTimeout(() => prefetchMap(queryClient), 1500)
+    return () => clearTimeout(t)
+  }, [globeReady, queryClient])
   const sites = useMapSites()
   const markerStyle = useApp((s) => s.markerStyle)
   const select = useApp((s) => s.select)
+  const mode = useApp((s) => s.mode)
+  const openMenu = usePlaceStyles((s) => s.openMenu)
   const enterMap = useApp((s) => s.enterMap)
   const [orbit] = useState(() => new OrbitRig(START))
   const [surface, setSurface] = useState<GlobeSurface>('relief')
   /** The mesh's relief exaggeration, to half a unit (for the caption and the markers' height). */
   const [exag, setExag] = useState(RELIEF_MAX)
   const anchored = useGlobe((s) => s.anchored)
+  /** Whether the view is tilted (the 3D button's state; the camera itself lives in the orbit rig). */
+  const [tilted, setTilted] = useState(false)
+  const toggleTilt = () => {
+    const on = orbit.viewGoal.tilt < 1
+    orbit.setTilt(on ? TILT_3D : 0)
+    setTilted(on)
+  }
+  /** A click on the surface waits to see whether it is the first half of a double click. */
+  const pendingClick = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => void (pendingClick.current && clearTimeout(pendingClick.current)), [])
   // In the horizon view the globe is hidden and paused: it must not start turning there, nor right after.
-  // paused (no frames drawn) while the horizon view or Block Moon covers the map; it keeps its camera and tiles
+  // paused (no frames drawn) while the horizon view or Educational mode covers the map; it keeps its camera and tiles
   const underHorizon = useHorizonTransition((s) => s.phase === 'horizon')
   const underBlocks = useApp((s) => s.blocks)
   const covered = underHorizon || underBlocks
@@ -96,7 +139,7 @@ export function GlobeView() {
       }
     })
   }, [masks, orbit])
-  const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null)
+  const drag = useRef<{ x: number; y: number; moved: boolean; rotate: boolean } | null>(null)
   const pickRef = useRef<((cx: number, cy: number) => [number, number] | null) | null>(null)
 
   // Picking a place in the panels turns the globe toward it.
@@ -130,6 +173,14 @@ export function GlobeView() {
       '+': () => orbit.zoom(0.7),
       '=': () => orbit.zoom(0.7),
       '-': () => orbit.zoom(1 / 0.7),
+      t: toggleTilt,
+      T: toggleTilt,
+      q: () => orbit.rotate(-15),
+      e: () => orbit.rotate(15),
+      r: () => {
+        orbit.resetView()
+        setTilted(false)
+      },
       Enter: () => goTo(orbit.goal.lat <= MAP_DISC_LAT ? orbit.goal.lat : -90, orbit.goal.lat <= MAP_DISC_LAT ? orbit.goal.lon : 0),
     }
     const fn = keys[e.key]
@@ -141,7 +192,8 @@ export function GlobeView() {
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     orbit.touch()
     if ((e.target as HTMLElement).closest('button, select, input, a')) return
-    drag.current = { x: e.clientX, y: e.clientY, moved: false }
+    // shift- or right-drag turns and tilts the view, as on the polar map
+    drag.current = { x: e.clientX, y: e.clientY, moved: false, rotate: e.button === 2 || e.shiftKey }
     e.currentTarget.setPointerCapture(e.pointerId)
   }
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
@@ -150,7 +202,12 @@ export function GlobeView() {
     const dx = e.clientX - d.x
     const dy = e.clientY - d.y
     if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true
-    orbit.drag(dx, dy, e.currentTarget.clientHeight, FOV, true)
+    if (d.rotate) {
+      if (d.moved) {
+        orbit.rotate(-dx * 0.3, dy * 0.3, true)
+        setTilted(orbit.viewGoal.tilt >= 1)
+      }
+    } else orbit.drag(dx, dy, e.currentTarget.clientHeight, FOV, true)
     d.x = e.clientX
     d.y = e.clientY
   }
@@ -160,14 +217,49 @@ export function GlobeView() {
     if (!d || d.moved) return
     const rect = e.currentTarget.getBoundingClientRect()
     const site = orbit.markerAt(e.clientX - rect.left, e.clientY - rect.top) as MapSite | null
+    // right click on a place opens its menu (rename, pointer colour, remove)
+    if (e.button === 2) {
+      if (site) openMenu({ sel: site.sel, name: site.name, x: e.clientX, y: e.clientY, returnTo: e.currentTarget })
+      return
+    }
     if (site) {
       select(site.sel)
       return goTo(site.lat, site.lon)
     }
+    // the surface under the pointer: mark it as the chosen point (study mode, like the map) and turn toward it,
+    // unless a second click follows (a double click only comes closer)
     const ll = pickRef.current?.((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height)
-    if (ll) goTo(ll[0], ll[1])
+    if (!ll) return
+    if (pendingClick.current) clearTimeout(pendingClick.current)
+    pendingClick.current = setTimeout(() => {
+      pendingClick.current = null
+      if (mode === 'study') select({ kind: 'point', lat: Math.round(ll[0] * 1e4) / 1e4, lon: Math.round(ll[1] * 1e4) / 1e4 })
+      else orbit.turnTo(ll[0], ll[1])
+    }, DOUBLE_CLICK_MS)
   }
-  const onWheel = (e: WheelEvent<HTMLDivElement>) => orbit.zoom(Math.exp(e.deltaY * 0.0012))
+  // a double click comes closer to the place under the pointer, anywhere on the Moon
+  const onDoubleClick = (e: MouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button, select, input, a')) return
+    if (pendingClick.current) clearTimeout(pendingClick.current)
+    pendingClick.current = null
+    const rect = e.currentTarget.getBoundingClientRect()
+    const ll = pickRef.current?.((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height)
+    if (!ll) return
+    orbit.turnTo(ll[0], ll[1])
+    orbit.zoom(DOUBLE_CLICK_ZOOM)
+    // close enough over the polar cap: hand over to the map there, as the wheel does
+    if (!orbit.isDiving && orbit.goal.dist < ENTER_MAP_DIST && ll[0] <= MAP_DISC_LAT && useHorizonTransition.getState().phase === 'map') goTo(ll[0], ll[1])
+  }
+  // zooming in goes toward the place under the pointer, so zooming over the pole reaches the polar map there
+  const onWheel = (e: WheelEvent<HTMLDivElement>) => {
+    const factor = Math.exp(e.deltaY * 0.0012)
+    const rect = e.currentTarget.getBoundingClientRect()
+    const ll = factor < 1 ? pickRef.current?.((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height) : null
+    if (!ll) return orbit.zoom(factor)
+    orbit.zoomToward(factor, ll[0], ll[1])
+    // close enough over the polar cap: fly down to the place under the pointer and hand over to the map there
+    if (!orbit.isDiving && orbit.goal.dist < ENTER_MAP_DIST && ll[0] <= MAP_DISC_LAT && useHorizonTransition.getState().phase === 'map') goTo(ll[0], ll[1])
+  }
 
   return (
     <>
@@ -180,8 +272,10 @@ export function GlobeView() {
         aria-describedby="globe-help"
         onKeyDown={onKeyDown}
         onPointerDown={onPointerDown}
+        onContextMenu={(e) => e.preventDefault()}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onDoubleClick={onDoubleClick}
         onWheel={onWheel}
       >
         {globe.data ? (
@@ -204,7 +298,9 @@ export function GlobeView() {
           </p>
         )}
         <p id="globe-help" className="sr-only">
-          Arrow keys turn the Moon, plus and minus zoom, Enter opens the detailed south-polar map. Sites are listed, with the same information, in the panels.
+          Arrow keys turn the Moon, plus and minus zoom, T tilts the view to 3D, Q and E turn it, R sets it straight
+          again, Enter opens the detailed south-polar map; zooming in over the south pole opens it too. A click on
+          the surface marks that point; a double click comes closer to it. Right click a place for its options: rename, pointer colour, remove. Sites are listed, with the same information, in the panels.
         </p>
       </div>
       <ToolPortal>
@@ -217,6 +313,9 @@ export function GlobeView() {
             <IconMinus />
           </button>
         </div>
+        <button type="button" aria-pressed={tilted} onClick={toggleTilt} aria-label="3D tilt" title="3D tilt (T); shift-drag or right-drag turns and tilts">
+          <IconCube />
+        </button>
         <button type="button" onClick={() => enterMap()} aria-label="South pole map" title="Detailed south-polar map">
           <IconPole />
         </button>
@@ -252,19 +351,33 @@ export function GlobeView() {
 }
 
 /** Camera on the orbit, the Moon's centre in the middle of the space the panels leave free. */
-function placeCamera(cam: THREE.PerspectiveCamera, n: Orbit, w: number, h: number) {
+function placeCamera(cam: THREE.PerspectiveCamera, n: Orbit, tiltDeg: number, headingDeg: number, w: number, h: number) {
   const ins = useInsets.getState()
   const cx = ins.left + (w - ins.left - ins.right) / 2
   const cy = ins.top + (h - ins.top - ins.bottom) / 2
   cam.setViewOffset(w, h, w / 2 - cx, h / 2 - cy, w, h)
-  const p = latLonToScene(n.lat, n.lon, n.dist)
-  cam.position.set(p[0], p[1], p[2])
-  cam.up.set(0, 1, 0)
-  cam.lookAt(0, 0, 0)
-  cam.near = Math.max(1, n.dist - MOON_R_KM * 1.05)
-  cam.far = n.dist + MOON_R_KM * 2
+  // straight above the place with north up, or tilted and turned around it (orbit.ts, cameraPose)
+  const pose = cameraPose(n, tiltDeg, headingDeg)
+  cam.position.set(...pose.position)
+  cam.up.set(...pose.up)
+  cam.lookAt(...pose.target)
+  // the near plane clips by depth along the view axis: bound it by the widest corner of the view (orbit.ts,
+  // nearPlaneKm), or a tilted view from far out loses the ground below the camera
+  const fromCentre = cam.position.length()
+  cam.far = fromCentre + MOON_R_KM * 2
+  cam.updateProjectionMatrix()
+  let cosMax = 1
+  for (const [x, y] of CORNERS) {
+    const v = corner.set(x, y, -1).applyMatrix4(cam.projectionMatrixInverse)
+    cosMax = Math.min(cosMax, -v.z / v.length())
+  }
+  cam.getWorldDirection(axis)
+  cam.near = nearPlaneKm([cam.position.x, cam.position.y, cam.position.z], [axis.x, axis.y, axis.z], cosMax)
   cam.updateProjectionMatrix()
 }
+const CORNERS = [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const
+const corner = new THREE.Vector3()
+const axis = new THREE.Vector3()
 
 function setExaggeration(m: THREE.ShaderMaterial, e: number) {
   m.uniforms.uExag.value = e
@@ -297,8 +410,13 @@ function globeHeight(data: SceneProps['data'], lat: number, lon: number): number
 }
 
 function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, onExag, onEnter }: SceneProps) {
-  const { camera, size, scene, gl } = useThree()
+  const { camera, size, scene, gl, setDpr, viewport } = useThree()
   const [markersSet] = useState(() => new MarkerSet())
+  /** What the last drawn frame showed (camera, canvas, Sun, relief, detail tiles): a frame is drawn when it differs. */
+  const drawn = useRef({ sig: new Float64Array(36), at: Infinity, was: false })
+  const sceneVersion = useRef(0)
+  /** Frame rate over continuous drawing, to lower the pixel ratio on a slow GPU (the pixel ratio the canvas started with first). */
+  const perf = useRef({ frames: 0, time: 0, age: 0, dpr: viewport.dpr })
   const eph = useEphemeris().data
   const [reduced] = useState(() => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
   const [detail] = useState(() => new GlobeDetail())
@@ -317,7 +435,26 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
         uDiscLat: { value: MAP_DISC_LAT },
         ...detail.uniforms(),
         uDetailShade: { value: DETAIL_SHADE_EXAGGERATION },
+        uHole: { value: new THREE.Vector4() },
       },
+    })
+  })
+  // Dense grids around the place the camera looks at, finest first (patch.ts). They share the globe's uniforms (the
+  // same objects), so the Sun, the relief and the detail tiles reach them too; each has its own window and hole.
+  const [patches] = useState(() => {
+    const grid = patchGeometry()
+    return Array.from({ length: PATCH_LEVELS }, () => {
+      const m = new THREE.ShaderMaterial({
+        glslVersion: THREE.GLSL3,
+        vertexShader: PATCH_VERT,
+        fragmentShader: GLOBE_FRAG,
+        side: THREE.DoubleSide,
+        uniforms: { ...material.uniforms, uWin: { value: new THREE.Vector4() }, uSkirtKm: { value: 1 }, uHole: { value: new THREE.Vector4() } },
+      })
+      const mesh = new THREE.Mesh(grid, m)
+      mesh.frustumCulled = false // its vertices are placed by the shader
+      mesh.visible = false
+      return mesh
     })
   })
   const [geometry] = useState(() => new THREE.SphereGeometry(MOON_R_KM, 512, 256))
@@ -327,8 +464,10 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
       material.dispose()
       geometry.dispose()
       detail.dispose()
+      patches[0].geometry.dispose()
+      patches.forEach((p) => p.material.dispose())
     },
-    [material, geometry, detail],
+    [material, geometry, detail, patches],
   )
 
   // the surface shown picks which detail tiles the shader reads; work out the wanted tiles again at once
@@ -336,11 +475,23 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
 
   useEffect(() => {
     scene.add(markersSet.group)
+    patches.forEach((p) => scene.add(p))
     return () => {
       scene.remove(markersSet.group)
+      patches.forEach((p) => scene.remove(p))
       markersSet.dispose()
     }
-  }, [scene, markersSet])
+  }, [scene, markersSet, patches])
+
+  // the real stars behind the Moon (starField.ts)
+  const [stars] = useState(() => new StarField(gl.getPixelRatio()))
+  useEffect(() => {
+    scene.add(stars.points)
+    return () => {
+      scene.remove(stars.points)
+      stars.dispose()
+    }
+  }, [scene, stars])
 
   // Places on the globe, just above the (exaggerated) relief; crater outlines as small circles on the sphere. `exag`
   // is the mesh's exaggeration to half a unit (the mesh's own is within ±0.25 of it, and the places are rebuilt only
@@ -376,6 +527,7 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
       },
     })
     orbit.setMarkerPicker((px, py) => markersSet.pick(px, py, camera as THREE.PerspectiveCamera, size.width, size.height))
+    sceneVersion.current++
   }, [markersSet, sites, markerStyle, data, camera, size, orbit, exag])
 
   useEffect(() => {
@@ -399,10 +551,11 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
     const n = orbit.now
 
     const cam = camera as THREE.PerspectiveCamera
-    placeCamera(cam, n, size.width, size.height)
+    placeCamera(cam, n, orbit.view.tilt, orbit.view.heading, size.width, size.height)
 
     // the Sun at the active instant
     const { tMs } = useApp.getState()
+    stars.update(tMs, gl.getPixelRatio())
     if (eph?.table.covers(tMs)) {
       const s = eph.table.positions(tMs)
       const len = Math.hypot(s[0], s[1], s[2])
@@ -412,6 +565,21 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
     // detail tiles for the part of the Moon in view
     const e = reliefExaggeration(n.dist)
     setExaggeration(material, e)
+
+    // the grids of relief around the place in view; the globe leaves out what the outermost one draws
+    const windows = patchWindows(n.lat, n.lon, n.dist - MOON_R_KM)
+    patches.forEach((mesh, l) => {
+      const w = windows[l]
+      mesh.visible = !!w
+      if (!w) return
+      const u = mesh.material.uniforms
+      ;(u.uWin.value as THREE.Vector4).set(w.lon, w.lat, w.cellLon, w.cellLat)
+      u.uSkirtKm.value = Math.max(0.5, 2 * w.cellKm)
+      const inner = windows[l - 1]
+      ;(u.uHole.value as THREE.Vector4).fromArray(inner ? holeOf(inner) : NO_HOLE)
+    })
+    const outer = windows[windows.length - 1]
+    ;(material.uniforms.uHole.value as THREE.Vector4).fromArray(outer ? holeOf(outer) : NO_HOLE)
     const half = Math.round(e * 2) / 2
     if (half !== exag) onExag(half)
     const g = orbit.goal
@@ -439,7 +607,67 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
       toPoint.copy(camDir).sub(p)
       return p.dot(toPoint) > 0
     })
-  })
+
+    // Draw only when the picture changed (this callback has a priority, so React Three Fiber leaves the drawing to
+    // it): the camera, the canvas, the Sun, the relief, the detail tiles or the places. A pinned or just-touched
+    // Moon costs the GPU two frames a second instead of sixty; a frame is still drawn every IDLE_REDRAW_S in case a
+    // change went uncounted.
+    const d = drawn.current
+    const sig = d.sig
+    let i = 0
+    let changed = false
+    const put = (v: number) => {
+      if (sig[i] !== v) {
+        sig[i] = v
+        changed = true
+      }
+      i++
+    }
+    cam.updateMatrixWorld()
+    for (const v of cam.matrixWorld.elements) put(v)
+    const pm = cam.projectionMatrix.elements
+    put(pm[0]); put(pm[5]); put(pm[8]); put(pm[9]); put(pm[10]); put(pm[14])
+    put(size.width); put(size.height); put(gl.getPixelRatio())
+    const u = material.uniforms
+    const sun = u.uSun.value as THREE.Vector3
+    put(sun.x); put(sun.y); put(sun.z)
+    put(u.uExag.value as number); put(u.uMaxLevel.value as number); put(u.uPhotoMode.value as number)
+    // a detail tile that arrives is written into these textures, which raises their version
+    const tiles = u.uDetail.value as THREE.Texture
+    const index = u.uIndex.value as THREE.Texture
+    put(tiles.id); put(tiles.version); put(index.id); put(index.version)
+    put(sceneVersion.current)
+    d.at += dt
+    const draw = changed || d.at >= IDLE_REDRAW_S
+    if (draw) {
+      gl.render(scene, cam)
+      d.at = 0
+    }
+
+    // A slow GPU gets fewer pixels: below SLOW_FPS over WINDOW_S of continuous drawing the pixel ratio goes down a
+    // step (to 1.5, then 1). Not judged in the first GRACE_S, on a hidden page or after a stall.
+    const p = perf.current
+    const streak = draw && d.was
+    d.was = draw
+    p.age += dt
+    if (document.visibilityState !== 'visible' || dt > 0.25 || !streak) {
+      p.frames = 0
+      p.time = 0
+      return
+    }
+    p.frames++
+    p.time += dt
+    if (p.time < WINDOW_S) return
+    const fps = p.frames / p.time
+    p.frames = 0
+    p.time = 0
+    if (p.age > GRACE_S && fps < SLOW_FPS && p.dpr > 1) {
+      p.dpr = p.dpr > 1.5 ? 1.5 : 1
+      // resizing the canvas clears it: draw again at once, so no empty frame is shown
+      setDpr(p.dpr)
+      gl.render(scene, cam)
+    }
+  }, 1)
 
   return <mesh geometry={geometry} material={material} />
 }

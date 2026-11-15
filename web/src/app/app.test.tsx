@@ -13,11 +13,13 @@ import { RouterProvider, createMemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { routes } from './routes'
 import { defaultScene, useApp } from '../state/store'
+import { useAreas } from '../state/areas'
+import { usePlaceStyles } from '../state/placeStyle'
 import { colorAt, luminance, textOn } from '../terrain/colormaps'
 
 vi.mock('../terrain/TerrainView', () => ({ TerrainView: () => <div role="img" aria-label="Map (test stub)" /> }))
 vi.mock('../globe/GlobeView', () => ({ GlobeView: () => <div role="img" aria-label="Globe (test stub)" /> }))
-vi.mock('../blocks/BlockMode', () => ({ default: () => <div role="img" aria-label="Block Moon (test stub)" /> }))
+vi.mock('../blocks/BlockMode', () => ({ default: () => <div role="img" aria-label="Educational mode (test stub)" /> }))
 
 const ROOT = resolve(__dirname, '../../..')
 const sitesDoc = JSON.parse(readFileSync(resolve(ROOT, 'data/sites.json'), 'utf8')) as {
@@ -43,6 +45,19 @@ const constraints = {
   soft_score_default_weights: { sunlight: 0.5, comms: 0.3, continuity: 0.2 },
 }
 
+/** A 4 x 4 answer of POST /api/v1/areas/search: one viable area of four cells. */
+const areaAnswer = {
+  grid: { projection: 'south polar stereographic', x_left_m: 0, y_top_m: 4000, cell_m: 960, nx: 4, ny: 4 },
+  codes_b64: btoa(String.fromCharCode(0, 1, 1, 0, 1, 3, 3, 1, 1, 3, 3, 2, 0, 1, 2, 0)),
+  score_b64: btoa(String.fromCharCode(0, 0, 0, 0, 0, 200, 210, 0, 0, 190, 220, 0, 0, 0, 0, 0)),
+  counts: { outside: 4, failed_static: 6, failed_window: 2, viable: 4, unknown: 0 },
+  funnel: [{ id: 'max_slope_deg', stage: 'static', cells_in: 12, cells_out: 6, cells_unknown: 0 }],
+  areas: [{ id: 1, cells: 4, area_km2: 3.69, centroid_lat: -84.79, centroid_lon: 29.2, best_lat: -84.79, best_lon: 29.21, best_score: 0.86, mean_score: 0.81, sites: ['IM-2 Athena'] }],
+  window: null,
+  seconds: 0.4,
+  assumptions: ['Static filters read a k x k sub-grid per cell.'],
+}
+
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 const file = (name: string) => {
   const b = readFileSync(resolve(ROOT, 'data', name))
@@ -60,6 +75,7 @@ function fakeFetch(apiUp = true) {
     if (url.endsWith('/api/v1/sites')) return json(apiSites)
     if (url.endsWith('/api/v1/meta/constraints')) return json(constraints)
     if (url.endsWith('/api/v1/meta/datasets')) return json({ frame: 'MOON_ME', correction: 'LT+S' })
+    if (url.endsWith('/api/v1/areas/search')) return json(areaAnswer)
     return json({ detail: 'Not Found' }, 404)
   })
 }
@@ -87,6 +103,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fakeFetch())
   window.location.hash = ''
   useApp.setState({ ...defaultScene(T), playing: false })
+  usePlaceStyles.setState({ styles: {}, menu: null })
 })
 afterEach(() => vi.unstubAllGlobals())
 
@@ -98,21 +115,28 @@ describe('navigator', () => {
     const search = await screen.findByRole('combobox', { name: 'Search sites and missions' })
     await waitFor(() => expect(search).toHaveAttribute('placeholder', expect.stringMatching(/IM-2/)))
     expect(screen.getByRole('button', { name: 'Coordinates' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Date and duration' })).toBeInTheDocument()
-    const sun = await screen.findByRole('article', { name: 'Sun' }, { timeout: 5000 })
+    expect(screen.getByRole('button', { name: /^Date and duration/ })).toBeInTheDocument()
+    // no side panel until a section is asked for: the timeline shows when the place is sunlit and sees the Earth
+    expect(await screen.findByRole('img', { name: /Sunlit .*% and Earth in view/ }, { timeout: 5000 })).toBeInTheDocument()
+    expect(document.querySelector('.side-panel')).toBeNull()
+    const tools = screen.getByRole('group', { name: 'Place tools' })
+    expect(within(tools).getByRole('button', { name: 'Multiselect' })).toHaveAttribute('aria-pressed', 'false')
+    await noAxeViolations(container)
+    // the sections are buttons in the map tool bar; each opens the side panel, Escape or a second press closes it
+    const user = userEvent.setup()
+    const horizonBtn = within(tools).getByRole('button', { name: 'Horizon' })
+    await user.click(horizonBtn)
+    expect(horizonBtn).toHaveAttribute('aria-pressed', 'true')
+    // Horizon opens the first-person view on the place: it takes the focus and the keyboard; the side panel steers
+    // it and adds the Sun and Earth cards (after the short dive into the place)
+    const hv = await screen.findByRole('application', { name: /Horizon view from IM-2/ }, { timeout: 3000 })
+    expect(hv).toHaveFocus()
+    expect(screen.getByRole('heading', { level: 2, name: 'Horizon' })).toBeInTheDocument()
+    const sun = screen.getByRole('article', { name: 'Sun' })
     expect(within(sun).getByText('Elevation')).toBeInTheDocument()
     expect(screen.getByRole('article', { name: 'Earth' })).toBeInTheDocument()
     expect(screen.getAllByText('Browser engine').length).toBeGreaterThan(0)
     expect(screen.getByText(/LOLA horizon · 2 m/)).toBeInTheDocument()
-    expect(screen.getByRole('img', { name: /Sunlit .*% and Earth in view/ })).toBeInTheDocument()
-    await noAxeViolations(container)
-    // the sections are square buttons; each opens in place with a way back
-    const user = userEvent.setup()
-    await user.click(within(screen.getByRole('group', { name: 'Sections' })).getByRole('button', { name: /Horizon/ }))
-    // Horizon opens the first-person view on the place: it takes the focus and the keyboard; the panel steers it
-    // (after the short dive into the place)
-    const hv = await screen.findByRole('application', { name: /Horizon view from IM-2/ }, { timeout: 3000 })
-    expect(hv).toHaveFocus()
     const camera = screen.getByRole('radiogroup', { name: 'Camera' })
     expect(within(camera).getByRole('radio', { name: /Sun/ })).toBeChecked()
     await user.keyboard('{ArrowRight}')
@@ -122,7 +146,10 @@ describe('navigator', () => {
     expect(hv).toHaveAccessibleName(/facing .* Earth at azimuth .*in view/)
     await user.keyboard('{Escape}')
     expect(screen.queryByRole('application', { name: /Horizon view/ })).not.toBeInTheDocument()
-    await user.click(within(screen.getByRole('group', { name: 'Sections' })).getByRole('button', { name: /Power/ }))
+    expect(document.querySelector('.side-panel')).toBeNull()
+    await waitFor(() => expect(horizonBtn).toHaveFocus())
+    await user.click(within(tools).getByRole('button', { name: 'Power' }))
+    expect(screen.getByRole('heading', { level: 2, name: 'Power' })).toHaveFocus()
     // the engine parameters live in the section they change
     expect(screen.getByRole('radiogroup', { name: 'Panel' })).toBeInTheDocument()
     expect(screen.getByText('Power per m²')).toBeInTheDocument()
@@ -136,17 +163,18 @@ describe('navigator', () => {
     expect(screen.getByRole('radiogroup', { name: 'Model' })).toBeInTheDocument()
     await user.click(screen.getAllByRole('button', { name: /^About / })[0])
     expect(screen.getByRole('note')).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: 'All sections' }))
     await noAxeViolations(container)
+    await user.click(screen.getByRole('button', { name: 'Close Power' }))
+    expect(document.querySelector('.side-panel')).toBeNull()
    }, 30_000)
 
-  it('Block Moon loads on demand; the planner sleeps under it and comes back without being rebuilt', async () => {
+  it('Educational mode loads on demand; the planner sleeps under it and comes back without being rebuilt', async () => {
     const user = userEvent.setup()
     renderAt('/')
     const globe = await screen.findByRole('img', { name: 'Globe (test stub)' })
-    const toggle = screen.getByRole('switch', { name: 'Block Moon' })
+    const toggle = screen.getByRole('switch', { name: 'Educational' })
     await user.click(toggle)
-    expect(await screen.findByRole('img', { name: 'Block Moon (test stub)' })).toBeInTheDocument()
+    expect(await screen.findByRole('img', { name: 'Educational mode (test stub)' })).toBeInTheDocument()
     // the planner is still mounted (same node), hidden from assistive technology and out of the tab order
     const layer = document.querySelector('.map-layer')!
     expect(layer).toHaveClass('is-dormant')
@@ -154,7 +182,7 @@ describe('navigator', () => {
     expect(layer.contains(globe)).toBe(true)
     expect(screen.queryByRole('region', { name: /Place/ })).not.toBeInTheDocument()
     await user.click(toggle)
-    expect(screen.queryByRole('img', { name: 'Block Moon (test stub)' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: 'Educational mode (test stub)' })).not.toBeInTheDocument()
     expect(screen.getByRole('img', { name: 'Globe (test stub)' })).toBe(globe)
     expect(layer).not.toHaveClass('is-dormant')
   })
@@ -196,6 +224,8 @@ describe('navigator', () => {
     await user.click(screen.getByRole('button', { name: 'Analyse this point' }))
     // a valid point closes the coordinates panel
     expect(useApp.getState().selection).toEqual({ kind: 'point', lat: -89.5, lon: 137.3 })
+    // the horizon it is computed over is stated in the Horizon section
+    await user.click(within(screen.getByRole('group', { name: 'Place tools' })).getByRole('button', { name: 'Horizon' }))
     expect((await screen.findAllByText(/Smooth sphere · 2 m/)).length).toBeGreaterThan(0)
   })
 
@@ -210,50 +240,104 @@ describe('navigator', () => {
     expect(useApp.getState().playing).toBe(false)
     // the second icon cycles the playback speed
     const before = useApp.getState().speed
-    await user.click(screen.getByRole('button', { name: /^Speed:/ }))
+    await user.click(screen.getByRole('button', { name: /^Speed / }))
     expect(useApp.getState().speed).not.toBe(before)
   })
 
-  it('mission mode: filters need a value, and a missing endpoint is reported, not faked', async () => {
+  it('mission mode: a region, filters with values, then the areas painted and listed', async () => {
     const user = userEvent.setup()
     useApp.setState({ mode: 'mission' })
+    useAreas.setState({ center: null, enabled: {}, values: {}, result: null, raster: null })
     const { container } = renderAt('/')
-    // the filters open from the tool bar at the top right
+    // the filters open from the tool bar at the top left
     await user.click(await screen.findByRole('button', { name: 'Mission filters' }))
-    const slope = await screen.findByRole('switch', { name: /Maximum slope/ })
+    await user.click(screen.getByRole('button', { name: 'Find areas' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Place the search region first')
+    await user.click(await screen.findByRole('button', { name: /^Centre on / }))
+    const slope = screen.getByRole('switch', { name: /Maximum slope/ })
     await user.click(slope)
-    await user.click(screen.getByRole('button', { name: 'Find viable sites' }))
-    expect(screen.getByRole('alert')).toHaveTextContent('Steepest slope is required')
     expect(slope).toHaveAttribute('aria-checked', 'true')
-    await user.type(screen.getByLabelText('Steepest slope'), '8')
-    await user.click(screen.getByRole('button', { name: 'Find viable sites' }))
-    expect(await screen.findByText(/Candidate search: not available yet/)).toBeInTheDocument()
-    expect(screen.getByRole('slider', { name: 'Sunlight' })).toHaveValue('0.5')
+    await user.click(screen.getByRole('button', { name: /^Find areas/ }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Maximum slope: steepest slope is required')
+    await user.type(screen.getByRole('textbox', { name: /Maximum slope.*Steepest slope/ }), '8')
+    // filters the data cannot answer are listed with the reason, not hidden
+    expect(screen.getByText(/No open boulder map covers the pole/)).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /^Find areas/ }))
+    expect(await screen.findByText(/#1 · 3.69 km²/)).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Cells removed by each filter' })).toHaveTextContent('Maximum slope')
+    expect(useAreas.getState().raster?.codes[5]).toBe(3)
+    const body = JSON.parse(String((fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.find((c) => String(c[0]).endsWith('/areas/search'))![1].body))
+    expect(body.filters).toEqual({ max_slope_deg: 8 })
+    expect(body.region.radius_km).toBe(30)
+    // Study opens the best spot of the area in study mode
+    await user.click(screen.getByRole('button', { name: 'Study the best spot of area 1' }))
+    expect(useApp.getState().mode).toBe('study')
+    expect(useApp.getState().selection).toEqual({ kind: 'point', lat: -84.79, lon: 29.21 })
     await noAxeViolations(container)
   })
 
-  it('compares places live: each pick while Compare is on adds a numbered column', async () => {
+  it('multiselect: two places open the comparison with a radar, strips over time and removal with undo', async () => {
     const user = userEvent.setup()
     const { container } = renderAt('/')
-    await screen.findByRole('article', { name: 'Sun' }, { timeout: 5000 })
-    await user.click(screen.getByRole('button', { name: /^Compare$/ }))
+    await screen.findByRole('img', { name: /Sunlit .*% and Earth in view/ }, { timeout: 5000 })
+    const tools = screen.getByRole('group', { name: 'Place tools' })
+    await user.click(within(tools).getByRole('button', { name: 'Multiselect' }))
+    // the single-place sections step aside; with one place the bar says what to do next
+    expect(within(tools).queryByRole('button', { name: 'Power' })).toBeNull()
+    expect(within(tools).getByRole('status')).toHaveTextContent(/Pick another place/)
     const search = screen.getByRole('combobox', { name: 'Search sites and missions' })
     for (const [q, name] of [['malapert', /Mons Malapert/], ['shackle', /Shackleton crater/]] as const) {
       await user.click(search)
       await user.type(search, q)
       await user.click(await screen.findByRole('option', { name }))
     }
-    // the comparison is a section of the place panel: one card per place, numbers also in a table behind them
-    expect(await screen.findByRole('heading', { level: 3, name: /Compare/ })).toBeInTheDocument()
-    const card = await screen.findByRole('article', { name: /Shackleton crater/ })
-    expect(within(card).getByText('Sunlit')).toBeInTheDocument()
-    const table = await screen.findByRole('table', { name: /Places side by side/ })
-    const heads = within(table).getAllByRole('columnheader').map((h) => h.textContent)
-    expect(heads.join('|')).toMatch(/Metric\|1 IM-2.*\|2 Mons Malapert.*\|3 Shackleton crater/)
-    expect(within(table).getByRole('rowheader', { name: 'Sunlit' })).toBeInTheDocument()
     expect(useApp.getState().compare).toHaveLength(3)
+    expect(await screen.findByRole('heading', { level: 2, name: 'Comparing 3 places' })).toBeInTheDocument()
+    expect(await screen.findByRole('img', { name: /Radar of 3 places/ })).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: /When each place is sunlit: 1 IM-2.*2 Mons Malapert.*3 Shackleton crater/ })).toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: /Earth/ }))
+    expect(screen.getByRole('img', { name: /When each place is in view of the Earth/ })).toBeInTheDocument()
+    const table = screen.getByRole('table', { name: /Places compared over the window/ })
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent).join('|')).toMatch(/Place\|Sunlight\|Earth contact\|Short nights\|Steady contact\|Power/)
+    await noAxeViolations(container)
+    // the place menu (right click on the map, or ⋯ here): rename and pointer colour
+    await user.click(screen.getByRole('button', { name: 'Options for Mons Malapert' }))
+    const menu = screen.getByRole('dialog', { name: 'Options for Mons Malapert' })
+    await user.click(within(menu).getByRole('button', { name: /Rename/ }))
+    const field = within(menu).getByLabelText('Name')
+    await user.clear(field)
+    await user.type(field, 'Base camp{Enter}')
+    expect(await screen.findByRole('button', { name: 'Base camp' })).toBeInTheDocument()
+    await user.click(within(screen.getByRole('dialog', { name: 'Options for Base camp' })).getByRole('radio', { name: 'Blue' }))
+    expect(usePlaceStyles.getState().styles['mons-malapert']).toEqual({ name: 'Base camp', colour: '#4c8dff' })
+    await noAxeViolations(container)
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: /Options for/ })).toBeNull()
+    // removing a place (also in the menu) can be undone
     await user.click(screen.getByRole('button', { name: 'Remove Shackleton crater' }))
     expect(useApp.getState().compare).toHaveLength(2)
+    expect(await screen.findByText(/Removed Shackleton crater/)).toBeInTheDocument()
+    await user.click(await screen.findByRole('button', { name: 'Undo' }))
+    expect(useApp.getState().compare).toHaveLength(3)
+    // leaving multiselect clears the comparison and closes its panel
+    await user.click(screen.getByRole('button', { name: /Close comparison/ }))
+    expect(useApp.getState().compareMode).toBe(false)
+    expect(useApp.getState().compare).toHaveLength(0)
+    expect(screen.queryByRole('heading', { name: /Comparing/ })).toBeNull()
+  })
+
+  it('mission mode: an example mission fills the region, the window and four filters in one click', async () => {
+    const user = userEvent.setup()
+    useApp.setState({ mode: 'mission' })
+    useAreas.setState({ center: null, enabled: {}, values: {}, result: null, raster: null })
+    const { container } = renderAt('/')
+    await user.click(await screen.findByRole('button', { name: 'Mission filters' }))
+    await user.click(screen.getByRole('button', { name: /Load example mission/ }))
+    expect(screen.getByText(/Example mission loaded/)).toHaveTextContent(/not requirements/)
+    expect(useAreas.getState().center).toEqual({ lat: -89.45, lon: 137.3 })
+    expect(useApp.getState().durationH).toBe(168)
+    expect(screen.getByRole('switch', { name: /Maximum slope/ })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('textbox', { name: /Maximum slope.*Steepest slope/ })).toHaveValue('10')
     await noAxeViolations(container)
   })
 
@@ -261,7 +345,7 @@ describe('navigator', () => {
     vi.stubGlobal('fetch', fakeFetch(false))
     const user = userEvent.setup()
     renderAt('/')
-    expect(await screen.findByRole('article', { name: 'Sun' }, { timeout: 5000 })).toBeInTheDocument()
+    expect(await screen.findByRole('img', { name: /Sunlit .*% and Earth in view/ }, { timeout: 5000 })).toBeInTheDocument()
     // the catalogue comes from the static copy, and the search list says so
     await user.click(screen.getByRole('combobox', { name: 'Search sites and missions' }))
     expect(await screen.findByText(/Site catalogue: the API did not answer/, undefined, { timeout: 5000 })).toBeInTheDocument()

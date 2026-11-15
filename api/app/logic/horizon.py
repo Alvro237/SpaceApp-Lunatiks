@@ -88,6 +88,38 @@ def destination(lat0_rad: float, lon0_rad: float, az_rad: np.ndarray, dist_m: np
     return lat, (lon + np.pi) % (2 * np.pi) - np.pi
 
 
+def destination_south_polar_xy(lat0_rad: float, lon0_rad: float, az_rad: np.ndarray, dist_m: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """destination() straight to south polar stereographic x, y (metres), with no inverse trigonometry: the same
+    great-circle point, r = 2 R cos(lat) / (1 - sin(lat)), longitude rotated by the bearing's (X, Y) components.
+    For tracing many rays over the polar grids (area search)."""
+    delta = dist_m / R_M
+    s0, c0 = np.sin(lat0_rad), np.cos(lat0_rad)
+    sd, cd = np.sin(delta), np.cos(delta)
+    sin_lat = np.clip(s0 * cd + c0 * sd * np.cos(az_rad), -1.0, 1.0)
+    yy = np.sin(az_rad) * sd * c0
+    xx = cd - s0 * sin_lat
+    h = np.hypot(xx, yy)
+    h = np.where(h == 0.0, 1.0, h)
+    sl, cl = np.sin(lon0_rad), np.cos(lon0_rad)
+    sin_lon = (sl * xx + cl * yy) / h
+    cos_lon = (cl * xx - sl * yy) / h
+    r = 2.0 * R_M * np.sqrt(np.maximum(0.0, 1.0 - sin_lat * sin_lat)) / (1.0 - sin_lat + 1e-300)
+    return r * sin_lon, r * cos_lon
+
+
+def skyline_from_heights(dist_m: np.ndarray, heights: np.ndarray, ground_m: float, mast_m: float) -> np.ndarray:
+    """horizon_from_heights() without the terrain range: the skyline (degrees) per azimuth. The elevation is
+    atan2(a, b) with b = r_s sin(theta) > 0, monotonic in a / b, so the maximum is taken on the ratio and one arctan
+    per azimuth is enough. Azimuths with no data at all get the smooth-sphere dip."""
+    theta = dist_m / R_M
+    r_s = R_M + heights
+    r_o = R_M + ground_m + mast_m
+    ratio = (r_s * np.cos(theta)[None, :] - r_o) / (r_s * np.sin(theta)[None, :])
+    best = np.max(np.where(np.isnan(ratio), -np.inf, ratio), axis=1)
+    dip = spherical_horizon_deg(mast_m, ground_m)
+    return np.where(np.isfinite(best), np.degrees(np.arctan(best)), dip)
+
+
 def horizon_from_heights(dist_m: np.ndarray, heights: np.ndarray, ground_m: float, mast_m: float) -> tuple[np.ndarray, np.ndarray]:
     """Skyline elevation (degrees) per azimuth and the farthest distance with terrain data per azimuth (metres).
 

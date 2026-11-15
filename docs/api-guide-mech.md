@@ -14,9 +14,11 @@ cd api
 
 - **Place**: `site_id` from `GET /api/v1/sites`, **or** `lat` + `lon` (degrees, MOON_ME, east-positive,
   -180..180). Not both.
-- **Window**: `start` (ISO 8601 UTC, e.g. `2027-10-05T00:00:00Z`), `duration_h`, `step_min` (default 60),
-  `mast_m` (default 2; terrain masks exist for 0, 2, 5 and 10 m, `mast_m_used` says which one was used).
+- **Window**: `start` (ISO 8601 UTC, e.g. `2027-10-05T00:00:00Z`), `duration_h`, `step_min` (default 60).
   At most 20 000 samples per request (`duration_h * 60 / step_min + 1`), else 422.
+- **Height above the ground: fixed at 2 m** for panels, antenna and habitat in every MECH endpoint (team decision
+  2026-11-14: most panels sit on structures). It is not an input: a `mast_m` sent is ignored, and `mast_m_used`
+  in the response reports 2. Do not show a mast control for these results.
 - **Times** come back as ISO 8601 UTC strings. `t[]` is the sample grid; every other array has the same length.
 - **Ranges** are lists of `{start, end}` (ISO UTC).
 - **`horizon_kind`** is in every response: `terrain` (LOLA horizon mask, 13 south-polar catalogue sites) or
@@ -120,7 +122,7 @@ An extension beyond the team's API rules, for the advanced view. Send the level-
 | `shed_soc` | SoC below which the deferrable loads are off (>= `battery_min_soc`) |
 | `max_charge_w`, `max_discharge_w` | Battery power limits, W |
 | `habitat` | `crew_count`, `t_set_k`, `t_min_k`, `ua_w_k`, `area_m2`, `skin_absorptivity`, `skin_emissivity`, `structure_mass_kg`, `structure_specific_heat_j_kgk`, `air_volume_m3`, `air_pressure_pa`, optional `metabolic_w_per_crew` (default 140.6 W, NASA BVAD) |
-| `regolith` | As in `/thermal` |
+| `regolith` | Optional: lunar values by default (Hayne et al. 2017). Do not ask the user for it |
 | `include_sizing` | Default true: also returns `min_battery_capacity_wh` and `min_panel_area_m2` (adds about 1 s) |
 
 The window must be at least one synodic month (708.7 h); use a year at the poles. A year at one-hour steps
@@ -156,8 +158,9 @@ there is none within 45 days. `/sun` `eclipses[]`: `{start, end, duration_h, kin
 
 ## POST /api/v1/thermal
 
-Window + `regolith` (all required, no cited defaults yet: `albedo`, `emissivity`, `conductivity_w_mk`,
-`density_kg_m3`, `heat_capacity_j_kgk`, `geothermal_flux_w_m2`). Optional `equipment` (lumped box:
+Window, and optionally `regolith` (`albedo`, `emissivity`, `conductivity_w_mk`, `density_kg_m3`,
+`heat_capacity_j_kgk`, `geothermal_flux_w_m2`; default lunar values from Hayne et al. 2017, so the interface
+does not ask for them). Optional `equipment` (lumped box:
 `absorptivity`, `emissivity`, `sun_area_m2`, `radiator_area_m2`, `ground_view_factor`, `heat_capacity_j_k`,
 `internal_power_w`) and `limits` (`max_k`, `min_k`, `mode` discrete | continuous, `max_hours_beyond`). With
 equipment, the limits apply to it (`limits_apply_to`). Known limit: no infrared from the surrounding terrain, so
@@ -183,7 +186,7 @@ prototype values, not yet decided with a source: show them as adjustable.
 | `max_slope` | `{"max_deg": 10}` |
 | `continuous_light` | `{"min_fraction": 0.7, "max_dark_h": null}` |
 | `max_dose` | `{"max_mgy_si": 10}` |
-| `max_temperature` | `{"max_k": 400, "mode": "discrete", "max_hours_above": 0, "regolith": {...}, "equipment": {...}}` |
+| `max_temperature` | `{"max_k": 400, "mode": "discrete", "max_hours_above": 0}` (`regolith`, `equipment` optional) |
 | `battery_survives` | the level-3 flat fields of `/power` |
 
 The numbers above are examples, not recommended limits. Full list: `GET /api/v1/meta/constraints`.
@@ -191,7 +194,7 @@ The numbers above are examples, not recommended limits. Full list: `GET /api/v1/
 ## POST /api/v1/sweep
 
 `places` (1-25, each `site_id` or `lat`/`lon`), `first_landing`, `landings` (up to 2000), `landing_step_h`
-(default 24), `stay_h`, `step_min` (must divide `landing_step_h` and `stay_h`), `panel`, `mast_m`,
+(default 24), `stay_h`, `step_min` (must divide `landing_step_h` and `stay_h`), `panel`,
 `comms_min_fraction`, and optionally the `/power` panel fields (adds `mean_array_w`) and battery fields (adds
 `battery_survived`, `battery_min_soc`, `unserved_energy_wh`). Response: `landings[]` (ISO UTC) and, per place,
 one array per metric with one value per landing, plus `gcr_dose_mgy_si` for one stay. Good for a heatmap

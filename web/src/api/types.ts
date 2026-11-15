@@ -317,3 +317,54 @@ export interface PointHorizon {
   min_deg: number
   mean_deg: number
 }
+
+/** POST /api/v1/areas/search (SW-1, mission mode): which cells of a bounded region pass every filter switched on. */
+export interface AreaSearchRequest {
+  region: { center_lat: number; center_lon: number; radius_km: number }
+  filters: Record<string, number | boolean | string>
+  cell_km: number
+  landing_radius_km?: number
+  start?: string
+  duration_h?: number
+  step_min?: number
+  mast_m: number
+  panel: 'tracking' | 'vertical' | 'horizontal'
+  comms_min_fraction: number
+  horizon_az_step_deg: number
+  horizon_radius_km: number
+  max_window_samples: number
+  unknown_passes: boolean
+}
+
+export interface AreaFilterCount {
+  id: string
+  stage: 'static' | 'landing_radius' | 'window'
+  cells_in: number
+  cells_out: number
+  cells_unknown: number
+}
+
+export interface FoundArea {
+  id: number
+  cells: number
+  area_km2: number
+  centroid_lat: number
+  centroid_lon: number
+  best_lat: number
+  best_lon: number
+  best_score: number
+  mean_score: number
+  sites: string[]
+}
+
+export interface AreaSearchResponse {
+  grid: { projection: string; x_left_m: number; y_top_m: number; cell_m: number; nx: number; ny: number }
+  codes_b64: string
+  score_b64: string
+  counts: Record<'outside' | 'failed_static' | 'failed_window' | 'viable' | 'unknown', number>
+  funnel: AreaFilterCount[]
+  areas: FoundArea[]
+  window: { samples: number; finest_tile_km: number; coarsest_tile_km: number; horizon_az_step_deg: number; horizon_radius_km: number } | null
+  seconds: number
+  assumptions: string[]
+}

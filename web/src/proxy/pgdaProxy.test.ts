@@ -1,6 +1,8 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { MAX_RANGE_BYTES, UPSTREAM, handle } from './pgdaProxy'
+import { LIVE_LEVELS } from '../terrain/live/config'
+import { LIVE_LAYERS } from '../terrain/live/layers'
+import { ALLOWED_FILES, MAX_RANGE_BYTES, UPSTREAM, handle } from './pgdaProxy'
 
 const FILE = 'LOLA_20mpp/LDEM_83S_10MPP_ADJ.TIF'
 const TOTAL = 5_116_709_568
@@ -80,5 +82,14 @@ describe('PGDA CORS proxy', () => {
     expect(bad.status).toBe(502)
     expect(await cache.match(new Request(`https://pgda-proxy.cache/${FILE}?bytes=0-999`))).toBeUndefined()
     expect((await handle(get(FILE, { range: 'bytes=0-999' }), {}, upstream({ status: 500 }).fetcher)).status).toBe(502)
+  })
+})
+
+describe('allowed files', () => {
+  it('lets through every PGDA file the web app reads, live DEMs and live layers', () => {
+    const used = new Set<string>()
+    for (const l of LIVE_LEVELS) for (const s of l.sources) if (s.kind === 'cog') used.add(s.file)
+    for (const sources of Object.values(LIVE_LAYERS)) for (const s of sources) used.add(s.file)
+    expect([...used].filter((f) => !ALLOWED_FILES.has(f))).toEqual([])
   })
 })

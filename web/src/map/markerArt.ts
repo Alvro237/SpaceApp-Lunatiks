@@ -32,8 +32,20 @@ export interface Art {
 
 export const PIN = { w: 28, h: 38 }
 
+/** Relative luminance of a #rrggbb colour (WCAG). */
+function luminance(hex: string): number {
+  const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4))
+  return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]
+}
+
+/** The same colour scaled towards black (k < 1). */
+function darker(hex: string, k: number): string {
+  const v = [1, 3, 5].map((i) => Math.round(parseInt(hex.slice(i, i + 2), 16) * k))
+  return `rgb(${v[0]}, ${v[1]}, ${v[2]})`
+}
+
 /** A teardrop pin with a dark core; the tip is the place. A number goes in the core when compared. */
-export function pinArt(opts: { selected: boolean; number: number | null; muted: boolean }): Art {
+export function pinArt(opts: { selected: boolean; number: number | null; muted: boolean; colour?: string | null }): Art {
   const { w, h } = PIN
   const [c, ctx] = canvas(w, h)
   const cx = w / 2
@@ -45,17 +57,19 @@ export function pinArt(opts: { selected: boolean; number: number | null; muted: 
   ctx.arc(cx, cy, r, Math.PI, 0)
   ctx.bezierCurveTo(cx + r, cy + r * 0.7, cx + 3, h - 10, cx, h - 1)
   ctx.closePath()
-  ctx.fillStyle = opts.muted ? '#8d93a0' : '#ea4335'
+  const fill = opts.muted ? '#8d93a0' : (opts.colour ?? '#ea4335')
+  ctx.fillStyle = fill
   ctx.fill()
   ctx.lineWidth = opts.selected ? 2.5 : 1
   ctx.strokeStyle = opts.selected ? '#ffffff' : 'rgba(0,0,0,0.55)'
   ctx.stroke()
   ctx.beginPath()
   ctx.arc(cx, cy, r * 0.48, 0, Math.PI * 2)
-  ctx.fillStyle = opts.muted ? '#4b505a' : '#7a2a21'
+  const light = !opts.muted && luminance(fill) > 0.45
+  ctx.fillStyle = opts.muted ? '#4b505a' : opts.colour ? darker(opts.colour, light ? 0.62 : 0.45) : '#7a2a21'
   ctx.fill()
   if (opts.number !== null) {
-    ctx.fillStyle = '#ffffff'
+    ctx.fillStyle = light ? '#111214' : '#ffffff'
     ctx.font = '700 11px system-ui, sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
@@ -65,10 +79,10 @@ export function pinArt(opts: { selected: boolean; number: number | null; muted: 
 }
 
 /** A plus-shaped cross with a dark outline, centred on the place. */
-export function crossArt(opts: { selected: boolean; number: number | null; pass: boolean | null }): Art {
+export function crossArt(opts: { selected: boolean; number: number | null; pass: boolean | null; colour?: string | null }): Art {
   const s = opts.selected ? 26 : 20
   const [c, ctx] = canvas(s, s)
-  const colour = opts.selected ? '#ffd166' : opts.pass === true ? '#34d399' : '#00d8ff'
+  const colour = opts.colour ?? (opts.selected ? '#ffd166' : opts.pass === true ? '#34d399' : '#00d8ff')
   const arm = s / 2 - 1
   const draw = (width: number, style: string) => {
     ctx.strokeStyle = style

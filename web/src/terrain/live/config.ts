@@ -47,15 +47,22 @@ export const TREK_5M: LiveSource = { kind: 'trek', file: 'LRO_LOLA_DEM_SPole875_
 
 /**
  * Per level, the sources to try (finest first). z4-z6 (480-120 m cells) fill the disc outside the 80 m DEM from the
- * 100 m DEM; z7 (60 m) there comes from the 30 m DEM; z8-z10 (30-7.5 m) from PGDA's 20 m and 10 m DEMs, with the
- * 30 m DEM for the ring between the 20 m square and 75 S; z11 (3.75 m) from the 5 m DEM.
+ * 100 m DEM; z7 (60 m) there comes from the 30 m DEM; z8 (30 m) from the 30 m DEM everywhere it reaches (75 S);
+ * z9-z10 (15-7.5 m) from PGDA's 10 m DEM; z11 (3.75 m) from the 5 m DEM.
+ *
+ * z8 used to read PGDA's 20 m DEM inside its square. A z8 tile from it is about 2.5 MB of 512 x 512 float32 blocks
+ * against about 0.29 MB for the same tile cut and resampled by Moon Trek (measured 2026-11-14), and PGDA answered at
+ * 0.35-0.9 MB/s that day, so the z8 tiles took the bandwidth that the 10 m tiles of the view needed (zoomed in at
+ * Shackleton: 10 MB and 10 s for four z8 tiles). Moon Trek is another server with its own connections. The cost is
+ * accuracy at that one level: 4.70 m at most from the catalogue heights for the 30 m DEM against 0.61 m for the 20 m
+ * DEM (12 sites); from z9 on, the 10 m DEM (0.05 m) takes over.
  */
 export const LIVE_LEVELS: { z: number; sources: LiveSource[] }[] = [
   { z: 4, sources: [TREK_100M] },
   { z: 5, sources: [TREK_100M] },
   { z: 6, sources: [TREK_100M] },
   { z: 7, sources: [TREK_30M] },
-  { z: 8, sources: [DEM_20M, TREK_30M] },
+  { z: 8, sources: [TREK_30M] },
   { z: 9, sources: [DEM_10M] },
   { z: 10, sources: [DEM_10M] },
   { z: 11, sources: [TREK_5M] },
@@ -63,6 +70,59 @@ export const LIVE_LEVELS: { z: number; sources: LiveSource[] }[] = [
 
 /** Height range assumed for a live tile before it loads (its nearest known ancestor's, widened): used for culling. */
 export const LIVE_RANGE_PAD_M = 250
+
+/**
+ * Levels below a loaded tile whose live descendants take their height range from its samples (descendantRanges).
+ * Four levels down a descendant covers 16 × 16 of the tile's 256 cells.
+ */
+export const REFINE_DEPTH = 4
+/** Smallest margin added to a range estimated from an ancestor's samples, metres. */
+export const REFINE_PAD_MIN_M = 25
+
+/**
+ * Height range of each descendant of a loaded tile (down to `depth` levels), from the tile's own samples over the
+ * descendant's square, widened by twice the tile's cell size (at least REFINE_PAD_MIN_M) for relief between samples.
+ *
+ * Why: until a live tile loads, the quadtree only knows its ancestor's range. At the deepest levels that range spans
+ * the whole relief of a 15 km tile (kilometres near Shackleton), so a camera a few hundred metres above the ground
+ * sits inside every such box, its distance reads as zero and every tile splits to the finest level: measured on
+ * 2026-11-14, 130-190 tiles asked for while panning in 3D where 22 were drawn once the real ranges arrived. The
+ * loaded ancestor's samples bound the descendant to within a cell's worth of relief instead.
+ *
+ * `heights` are `samples` × `samples` vertices, row 0 at the top (north) of the tile, as the decoder returns them.
+ */
+export function descendantRanges(
+  t: TileKey,
+  heights: ArrayLike<number>,
+  samples: number,
+  cellM: number,
+  depth = REFINE_DEPTH,
+): Map<string, [number, number]> {
+  const out = new Map<string, [number, number]>()
+  const cells = samples - 1
+  const pad = Math.max(REFINE_PAD_MIN_M, 2 * cellM)
+  for (let d = 1; d <= depth; d++) {
+    const span = cells >> d
+    if (span < 1) break
+    const n = 1 << d
+    for (let j = 0; j < n; j++) {
+      for (let i = 0; i < n; i++) {
+        let lo = Infinity
+        let hi = -Infinity
+        for (let r = j * span; r <= (j + 1) * span; r++) {
+          const row = r * samples
+          for (let c = i * span; c <= (i + 1) * span; c++) {
+            const v = heights[row + c]
+            if (v < lo) lo = v
+            if (v > hi) hi = v
+          }
+        }
+        out.set(keyOf({ z: t.z + d, x: t.x * n + i, y: t.y * n + j }), [lo - pad, hi + pad])
+      }
+    }
+  }
+  return out
+}
 
 export interface LiveConfig {
   /** Base URL that stands for https://pgda.gsfc.nasa.gov/data/ (the proxy), ending in '/'; null = no PGDA sources. */
@@ -141,6 +201,27 @@ export function withLiveLevels(ts: Tileset, cfg: LiveConfig | null): LiveTiles {
     }
   }
   return { tileset: { ...ts, levels, height: { ...ts.height, tiles } }, live }
+}
+
+const liveTables = new WeakMap<Tileset, Map<string, LiveTiles>>()
+
+/**
+ * `withLiveLevels`, built once per tileset and configuration. The table has about 100 000 entries and the map
+ * view is created again on every entry from the globe, so building it each time stalls the main thread. An engine
+ * replaces the ranges of its tileset as tiles load, so every caller gets its own range table: an empty object
+ * that inherits the shared one, which costs nothing to make. Look a tile up by key or with `in` and assign to it
+ * (all the engine and the LOD do); `Object.keys` would only list the caller's own replacements. The shared table
+ * and the `live` map are read-only.
+ */
+export function cachedLiveLevels(ts: Tileset, cfg: LiveConfig | null): LiveTiles {
+  let byConfig = liveTables.get(ts)
+  if (!byConfig) liveTables.set(ts, (byConfig = new Map()))
+  const key = JSON.stringify(cfg)
+  let built = byConfig.get(key)
+  if (!built) byConfig.set(key, (built = withLiveLevels(ts, cfg)))
+  if (built.tileset === ts) return built
+  const tiles = Object.create(built.tileset.height.tiles) as Tileset['height']['tiles']
+  return { live: built.live, tileset: { ...built.tileset, height: { ...built.tileset.height, tiles } } }
 }
 
 /**

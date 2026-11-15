@@ -74,9 +74,24 @@ def test_equipment_node_through_the_api_and_errors():
     assert r.status_code == 200, r.text
     b = r.json()
     assert b["limits_apply_to"] == "equipment" and len(b["equipment_k"]) == len(b["t"])
-    assert client.post("/api/v1/thermal", json=BASE).status_code == 422                       # regolith missing
     assert client.post("/api/v1/thermal", json={**BASE, "site_id": "nowhere", "lat": None, "lon": None,
                                                 "regolith": REG}).status_code == 404
+
+
+def test_lunar_regolith_default_reproduces_hayne_2017():
+    # Hayne et al. 2017: global thermal inertia 55 J m-2 K-1 s-1/2 at 273 K, c_p(T) polynomial (Table A1),
+    # density profile 1800 - 700 exp(-z / 0.06 m) taken at one diurnal skin depth
+    from app.logic.thermal import LUNAR_REGOLITH as R, skin_depth_m
+    t = 273.0
+    cp = -3.6125 + 2.7431 * t + 2.3616e-3 * t**2 - 1.2340e-5 * t**3 + 8.9093e-9 * t**4
+    assert R.heat_capacity_j_kgk == pytest.approx(cp, abs=0.1)
+    assert (R.conductivity_w_mk * R.density_kg_m3 * R.heat_capacity_j_kgk) ** 0.5 == pytest.approx(55.0, abs=0.1)
+    assert R.density_kg_m3 == pytest.approx(1800 - 700 * np.exp(-skin_depth_m(R) / 0.06), abs=1.0)
+    assert (R.albedo, R.emissivity, R.geothermal_flux_w_m2) == (0.12, 0.95, 0.018)
+    # without regolith the endpoint uses these values instead of failing
+    r = client.post("/api/v1/thermal", json={**BASE, "duration_h": 24 * 30})
+    assert r.status_code == 200, r.text
+    assert 350 < r.json()["surface"]["max_k"] < 420 and r.json()["surface"]["min_k"] < 150
 
 
 def test_max_temperature_filter():

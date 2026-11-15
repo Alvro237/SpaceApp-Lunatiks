@@ -19,6 +19,17 @@ const tileAt = (z: number, x: number, y: number) => {
 }
 
 describe('live layer sources', () => {
+  it('reads the 80 m slope down to 30 m cells and the 10 m slope below, near the pole', () => {
+    expect(liveLayerSource('slope', ts, tileAt(7, 50_000, 50_000))?.pixelM).toBe(80)
+    expect(liveLayerSource('slope', ts, tileAt(8, 50_000, 50_000))?.pixelM).toBe(80)
+    expect(liveLayerSource('slope', ts, tileAt(9, 50_000, 50_000))?.pixelM).toBe(10)
+    expect(liveLayerSource('slope', ts, tileAt(10, 50_000, 50_000))?.pixelM).toBe(10)
+    // outside the 10 m square (216 km) the finest is the 80 m slope at z8; nothing below it there
+    expect(liveLayerSource('slope', ts, tileAt(8, 250_000, 0))?.pixelM).toBe(80)
+    expect(liveLayerSource('slope', ts, tileAt(9, 250_000, 0))).toBeNull()
+    expect(liveLayerSource('slope', ts, tileAt(11, 50_000, 50_000))).toBeNull()
+  })
+
   it('reads the 80 m slope near the pole, the 240 m slope farther out, and nothing finer than each allows', () => {
     expect(liveLayerSource('slope', ts, tileAt(6, 50_000, 50_000))?.file).toBe('LOLA_20mpp/LDSM_80S_80MPP_ADJ.TIF')
     expect(liveLayerSource('slope', ts, tileAt(5, 600_000, 0))?.file).toBe('LOLA_20mpp/LDSM_60S_240MPP_ADJ.TIF')
@@ -26,7 +37,7 @@ describe('live layer sources', () => {
     // at 480 m and 240 m cells near the pole the 240 m slope is read, not 16 or 4 times as many 80 m pixels
     expect(liveLayerSource('slope', ts, tileAt(4, 50_000, 50_000))?.pixelM).toBe(240)
     expect(liveLayerSource('slope', ts, tileAt(5, 50_000, 50_000))?.pixelM).toBe(240)
-    expect(liveLayerMaxZ('slope')).toBe(6)
+    expect(liveLayerMaxZ('slope')).toBe(10)
     expect(liveLayerMaxZ('sun_illumination')).toBe(5)
     expect(liveLayerMaxZ('no_such_layer')).toBe(-1)
   })

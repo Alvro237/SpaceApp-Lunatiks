@@ -9,14 +9,15 @@ asks for this list; keep it current when something is added.
 | --- | --- | --- |
 | JPL SPICE kernels (NAIF): `de440s.bsp`, `moon_pa_de440_200625.bpc`, `moon_de440_250416.tf`, `naif0012.tls`, `pck00011.tpc` | Sun and Earth positions in the Moon Mean-Earth frame | https://naif.jpl.nasa.gov/pub/naif/generic_kernels/ |
 | JPL Horizons System / API | Independent validation reference (never a runtime dependency) | https://ssd.jpl.nasa.gov/horizons/ , https://ssd.jpl.nasa.gov/api/horizons.api |
-| LOLA south-pole digital elevation and slope models, PGDA product 90 (Barker et al.): `LDEM_*`, `LDSM_60S_240MPP_ADJ`, `LDSM_80S_80MPP_ADJ` | Terrain horizon, ground height, slope, hillshade basemap, slope and elevation screening grids; the map's live slope layer (80 m and 240 m, read block by block through the PGDA proxy) | https://pgda.gsfc.nasa.gov/products/90 |
+| LOLA south-pole digital elevation and slope models, PGDA product 90 (Barker et al.): `LDEM_*`, `LDSM_60S_240MPP_ADJ`, `LDSM_80S_80MPP_ADJ`, `LDSM_83S_10MPP_ADJ` | Terrain horizon, ground height, slope, hillshade basemap, slope and elevation screening grids; the map's live slope layer (240, 80 and 10 m, read block by block through the PGDA proxy) | https://pgda.gsfc.nasa.gov/products/90 |
 | LOLA 80 m south-pole DEM `LDEM_80S_80MPP_ADJ.TIF`, PGDA product 90 (Barker et al.) | Web terrain tiles z4-z7 (480 to 60 m cells) within about 300 km of the pole; downloaded to `data/raw/dem_full/`, not committed | https://pgda.gsfc.nasa.gov/data/LOLA_20mpp/LDEM_80S_80MPP_ADJ.TIF , https://pgda.gsfc.nasa.gov/products/90 |
 | LOLA south-pole DEMs `LDEM_80S_20MPP_ADJ.TIF` (20 m) and `LDEM_83S_10MPP_ADJ.TIF` (10 m), PGDA product 90 (Barker et al.) | Live terrain levels z8-z10 (30, 15, 7.5 m cells): Cloud Optimized GeoTIFFs read block by block by the browser through a CORS proxy | https://pgda.gsfc.nasa.gov/data/LOLA_20mpp/LDEM_80S_20MPP_ADJ.TIF , https://pgda.gsfc.nasa.gov/data/LOLA_20mpp/LDEM_83S_10MPP_ADJ.TIF |
 | NASA Moon Trek (JPL) ArcGIS ImageServer: LOLA DEMs `LRO_LOLA_DEM_SPole45_100mp_v04` (100 m), `LRO_LOLA_DEM_SPole75_30mp_v04` (30 m), `LRO_LOLA_DEM_SPole875_5mp_v04` (5 m) | Live terrain levels z4-z7 outside the 80 m DEM and z11 (3.75 m) near the pole, read by the browser with `exportImage` | https://trek.nasa.gov/moon/trekarcgis/rest/services/ , https://trek.nasa.gov/tiles/apidoc/trekAPI.html?body=moon |
-| NASA Moon Trek (JPL): ImageServer DEMs `LRO_LOLA_DEM_Global_256ppd_v06` (LOLA, 256 px/deg, 118 m), `LRO_LOLA_DEM_SPole45_100mp_v04_EQ` and `LRO_LOLA_DEM_NPole45_100mp_v04_EQ` (LOLA polar DEMs, 100 m, geographic), and the WMTS tiles of `LRO_WAC_Mosaic_Global_303ppd_v02` (LROC WAC global morphologic mosaic, 303 px/deg, 100 m; Speyerer et al. 2011, LPSC XLII abstract 2387) | Live detail tiles of the web globe while zooming (`web/src/globe/detail`): DEMs for the relief shading (global between 45° S and 45° N, polar beyond), WAC mosaic for the optional photo view. Measured on 2026-11-14: tile means within 0.25 m (global) and 13 m (south polar) of LDEM_16 over the same boxes | https://trek.nasa.gov/moon/trekarcgis/rest/services/ , https://trek.nasa.gov/tiles/Moon/EQ/LRO_WAC_Mosaic_Global_303ppd_v02/1.0.0/WMTSCapabilities.xml |
-| LOLA Gridded Data Record `LDEM_16` v3.1 (PDS `LRO-L-LOLA-4-GDR-V1.0`), NASA PDS Geosciences Node | Global topography of the web globe (`data/globe`, 4 px/deg) | https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/cylindrical/img/ |
+| NASA Moon Trek (JPL): ImageServer DEMs `LRO_LOLA_DEM_Global_256ppd_v06` (LOLA, 256 px/deg, 118 m), `LRO_LOLA_DEM_SPole45_100mp_v04_EQ` and `LRO_LOLA_DEM_NPole45_100mp_v04_EQ` (LOLA polar DEMs, 100 m, geographic), and the WMTS tiles of `LRO_WAC_Mosaic_Global_303ppd_v02` (LROC WAC global morphologic mosaic, 303 px/deg, 100 m; Speyerer et al. 2011, LPSC XLII abstract 2387) | Live detail tiles of the web globe while zooming (`web/src/globe/detail`): DEMs for the relief shading (global between 45° S and 45° N, polar beyond), WAC mosaic for the optional photo view and, as a fixed patch of 16 tiles (WMTS matrix 7, 11.25-16.875 S, 0-5.625 E), for the ground texture of the Horizon view (labelled on screen as another place on the Moon). Measured on 2026-11-14: tile means within 0.25 m (global) and 13 m (south polar) of LDEM_16 over the same boxes | https://trek.nasa.gov/moon/trekarcgis/rest/services/ , https://trek.nasa.gov/tiles/Moon/EQ/LRO_WAC_Mosaic_Global_303ppd_v02/1.0.0/WMTSCapabilities.xml |
+| LOLA Gridded Data Record `LDEM_16` v3.1 (PDS `LRO-L-LOLA-4-GDR-V1.0`), NASA PDS Geosciences Node | Global topography of the web globe (`data/globe`, 4 px/deg) and the whole-Moon elevation grid of the ray-traced horizon (`data/grids/lola_elevation_global`, 8 px/deg): terrain skylines anywhere on the Moon, not only south of 60 S | https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/cylindrical/img/ |
 | LOLA high-resolution site topography, PGDA product 78 | Background on uncertainty (not yet read by the pipeline) | https://pgda.gsfc.nasa.gov/products/78 |
 | Lunar polar illumination, PGDA product 69 (Mazarico et al.): `AVGVISIB_65S_240M_201608`, `AVGVISIB_65S_240M_201608_EARTH`, `LPSR_65S_240M_201608`, `SKYV_65S_240M` | Screening grids: long-term Sun illumination, Earth visibility, permanent shadow, sky visibility (`data/grids`); the map's live 240 m colour layers (read block by block through the PGDA proxy); method reference; independent validation of the terrain horizon masks (`api/tests/sw1_validation.py`); `terrain_reference` of the manual-coordinates endpoints | https://pgda.gsfc.nasa.gov/products/69 |
+| Lunar Prospector neutron spectrometer, half-degree hydrogen abundance `hydrogenhd.txt` (LP Spectrometer Team, LANL; PDS Geosciences Node special products, not a peer-reviewed PDS archive) | Hydrogen grid `lp_hydrogen_60s` and the hydrogen filter of the area search | https://pds-geosciences.wustl.edu/missions/lunarp/reduced_special.html |
 | NSSDCA Apollo landing site coordinates (Wagner et al. 2017) | Apollo catalogue coordinates | https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html |
 | Apollo Lunar Surface Journal, Earth and Sun altitude/azimuth tables (E. Scotti) | Historical validation, 43 events | https://www.nasa.gov/wp-content/uploads/static/history/alsj/Scotti_AltAz.txt |
 | LROC featured images: IM-1 (1360), IM-2 (1401), Blue Ghost (1400), Chandrayaan-3 (1314), SLIM (1358) | Landing coordinates and reference elevations | https://www.lroc.asu.edu/images/ |
@@ -63,6 +64,7 @@ asks for this list; keep it current when something is added.
   engine (Three.js on polar-stereographic tiles instead of a geographic globe). https://community.cesium.com/
 
 - Mazarico, E., et al. (2011). Illumination conditions of the lunar polar regions using LOLA topography. Icarus 211, 1066-1081. https://ntrs.nasa.gov/citations/20120010094
+- Feldman, W. C., et al. (2001). Evidence for water ice near the lunar poles. JGR Planets 106(E10), 23231-23251. doi:10.1029/2000JE001444 (derivation of the Lunar Prospector hydrogen map)
 - Robbins, S. J. (2018). A new global database of lunar impact craters >1-2 km: 1. Crater locations and sizes, comparisons with published databases, and global analysis. JGR Planets 124. doi:10.1029/2018JE005592
 - Barker, M. K., et al. (2021). High-resolution LOLA topography for lunar south pole sites. Planetary and Space Science.
 - Wagner, R. V., et al. (2017). Coordinates of anthropogenic features on the Moon. Icarus 283, 92-103.
@@ -72,13 +74,23 @@ asks for this list; keep it current when something is added.
 - Anderson, M. S., Ewert, M. K., Keener, J. F. (2018). Life Support Baseline Values and Assumptions Document
   (BVAD), NASA/TP-2015-218570 Rev 1, Table 3-21 "Human Metabolic Rates" (40-year-old male 12.996 and female
   11.292 MJ/CM-d): default crew metabolic heat of `/power` level 4 (mean, 140.6 W). https://ntrs.nasa.gov/citations/20180001338
+- Hayne, P. O., et al. (2017). Global regolith thermophysical properties of the Moon from the Diviner Lunar
+  Radiometer Experiment. JGR Planets 122, doi:10.1002/2017JE005387 (arXiv:1711.00977). Table A1 (albedo 0.12,
+  emissivity 0.95 after Keihm 1984, heat flow 0.018 W/m2 after Langseth et al. 1976, c_p(T) polynomial) and the
+  global thermal inertia 55 J m-2 K-1 s-1/2 at 273 K: default lunar regolith of `/thermal` and `/power` level 4.
+- Hoffleit, D., Warren, W. H. Jr. (1991). The Bright Star Catalogue, 5th revised edition (BSC5P), from NASA HEASARC
+  (table `heasarc_bsc5p`): the 2 887 stars of V magnitude 5.5 or brighter drawn in the horizon view
+  (`pipeline/lunarnav/stars.py`, `web/src/horizon/stars.json`). https://heasarc.gsfc.nasa.gov/W3Browse/star-catalog/bsc5p.html
+- Archinal, B. A., et al. (2018). Report of the IAU Working Group on Cartographic Coordinates and Rotational
+  Elements: 2015. Celest. Mech. Dyn. Astron. 130:22: pole and prime meridian of the Moon, to place the stars in the
+  lunar sky (`web/src/horizon/stars.ts`; checked against the app's JPL tables in `stars.test.ts`).
 - Incropera, F. P., DeWitt, D. P., Bergman, T. L., Lavine, A. S. Fundamentals of Heat and Mass Transfer, Table A.4
   (air at 300 K, c_p = 1.007 kJ/kg K): habitat air heat capacity, `/power` level 4.
 - U.S. Standard Atmosphere, 1976 (NOAA/NASA/USAF): molar mass of dry air 28.9644 g/mol. CODATA 2018: gas constant
   R = 8.314462618 J/mol K and Stefan-Boltzmann constant.
 
-Mission facts told in Block Moon's mission log (`web/src/blocks/story.ts`); every number in its answers comes from
-the engine, these only support the short historical texts:
+Mission facts told in Educational mode's missions (`web/src/blocks/story.ts`); every number in its answers comes
+from the engine, these only support the short historical texts:
 
 - NASA SP-4214, *Where No Man Has Gone Before*, ch. 6 "Mission and science planning": sun elevation at landing as
   the main driver of Apollo launch times, landings near the sunrise terminator.
@@ -94,6 +106,26 @@ the engine, these only support the short historical texts:
   https://science.nasa.gov/mission/lcross/ ; Colaprete, A., et al. (2010). Detection of water in the LCROSS ejecta
   plume. Science 330, 463-468. doi:10.1126/science.1186986
 - NASA Scientific Visualization Studio, Moon Phase and Libration 2026 (south up). https://svs.gsfc.nasa.gov/5588
+- NASA, Apollo 17 Mission Details (landing on 11 December 1972 in Taurus-Littrow, 75 hours on the surface, Lunar
+  Roving Vehicle). https://www.nasa.gov/missions/apollo/apollo-17-mission-details/
+- JAXA press release (25 January 2024), SLIM landing results: touchdown on 20 January 2024 at 0:20 JST, not at the
+  planned attitude, solar cells facing west and not generating.
+  https://global.jaxa.jp/press/2024/01/20240125-1_e.html ; power back on 28 January 2024 (NBC News:
+  https://www.nbcnews.com/news/world/japans-slim-probe-regains-power-week-moon-landing-rcna136119)
+- NASA, "NASA Collects First Surface Science in Decades via Commercial Moon Mission" (IM-1 Odysseus, landing on
+  22 February 2024, data returned for seven days).
+  https://www.nasa.gov/missions/artemis/clps/nasa-collects-first-surface-science-in-decades-via-commercial-moon-mission/
+  ; landing place near Malapert A: https://www.nasa.gov/missions/lro/nasas-lro-images-intuitive-machines-odysseus-lander/
+- Firefly Aerospace, Blue Ghost Mission 1 live updates (landing on 2 March 2025 in Mare Crisium; total solar
+  eclipse seen from the Moon on 14 March 2025, about 2 h 16 min of totality; end of mission on 16 March after
+  lunar sunset). https://fireflyspace.com/news/blue-ghost-mission-1-live-updates/ ; NASA summary:
+  https://www.nasa.gov/news-release/nasa-science-continues-after-fireflys-first-moon-mission-concludes/
+  The app's own eclipse times (total from 06:20 to 08:35 UTC at the catalogue point) come from the engine.
+- NASA (28 October 2024), "NASA Provides Update on Artemis III Moon Landing Regions" (nine candidate regions near
+  the south pole, among them Malapert Massif, Mons Mouton, Nobile Rim and Haworth).
+  https://www.nasa.gov/news-release/nasa-provides-update-on-artemis-iii-moon-landing-regions/
+- NASA (28 October 2020), "Lunar Living: NASA's Artemis Base Camp Concept" (a long-term camp near the south pole).
+  https://www.nasa.gov/blogs/artemis/2020/10/28/lunar-living-nasas-artemis-base-camp-concept/
 
 ## Software (all open source)
 

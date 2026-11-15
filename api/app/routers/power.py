@@ -12,7 +12,7 @@ from ..db.store import DataStore, get_store
 from ..logic import colony
 from ..logic.eclipse import obscuration
 from ..logic.power import BatteryParams
-from ..logic.thermal import Regolith, absorbed_flux, direct_sun, surface_implicit
+from ..logic.thermal import LUNAR_REGOLITH, Regolith, absorbed_flux, direct_sun, surface_implicit
 from ..logic.engine import AnalysisParams, compute_metrics
 from ..logic.power import (array_power_w, energy_balance, energy_margin_wh, energy_wh, load_series_w, night_energy_wh,
                            params_from_flat, usable_capacity_wh)
@@ -26,13 +26,15 @@ ASSUMPTIONS = [
     "Eclipses: power x (1 - fraction of the solar disc covered by the Earth), uniform solar disc, independent of the horizon cut.",
     "Values are constant over each step (left Riemann sum); accuracy is of the order of one step.",
     "Battery: no ageing, no temperature or voltage/current limits; losses only through the given efficiencies.",
+    "Panels, antenna and habitat 2 m above the ground (fixed, team decision: most panels sit on structures).",
 ]
 COLONY_ASSUMPTIONS = [
     "Level 4 habitat: two nodes, interior (air + structure) held at t_set_k, massless skin radiating to space and "
     "the ground; sun-facing area 0.5 x area and ground view factor 0.5 (team decision); constant UA.",
     "Every watt of electrical load served and the crew metabolic heat end as heat inside; resistive heater; the "
     "electrical cost of rejecting surplus heat is not modelled; no air leaks, no conduction through the footings.",
-    "Ground temperature from the 1-D regolith model of /thermal on flat ground (no terrain infrared).",
+    "Ground temperature from the 1-D regolith model of /thermal on flat ground (no terrain infrared); lunar regolith "
+    "properties from Hayne et al. 2017 unless given (constant-property equivalent of their thermal inertia).",
     "Battery power limited by max_charge_w and max_discharge_w; critical loads (with the heater) served first; "
     "deferrable loads switched off below shed_soc.",
     "survives_independently = no critical failure and the battery ends the last whole synodic month at least as "
@@ -93,7 +95,7 @@ def _colony(req: PowerRequest, s, t, q, p, occ, out: PowerResponse) -> PowerResp
                                comms_w=req.comms_load_w, comms_critical=req.comms_critical, shed_soc=req.shed_soc,
                                max_charge_w=req.max_charge_w, max_discharge_w=req.max_discharge_w)
     hab = colony.Habitat(**req.habitat.model_dump())
-    reg = Regolith(**req.regolith.model_dump())
+    reg = Regolith(**req.regolith.model_dump()) if req.regolith is not None else LUNAR_REGOLITH
     direct = direct_sun(s.irradiance_w_m2, s.sun_frac, occ)
     on_ground = direct * np.maximum(np.sin(np.radians(s.sun_el)), 0.0)
     ground = surface_implicit(t, absorbed_flux(s.irradiance_w_m2, s.sun_frac, occ, s.sun_el, reg.albedo), reg)

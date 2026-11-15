@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends
 from .. import services
 from ..db.store import DataStore, get_store
 from ..logic.eclipse import obscuration
-from ..logic.thermal import (Equipment, Regolith, absorbed_flux, check_max, direct_sun, simulate, skin_depth_m)
+from ..logic.thermal import (LUNAR_REGOLITH, Equipment, Regolith, absorbed_flux, check_max, direct_sun, simulate, skin_depth_m)
 from ..schemas.thermal import LimitResult, Stats, ThermalRequest, ThermalResponse
 from .common import ranges, resolve_model, window_fields, window_ms
 
@@ -39,7 +39,7 @@ def thermal(req: ThermalRequest, store: DataStore = Depends(get_store)) -> Therm
     start_ms = window_ms(req, store)
     s = services.evaluate_window(store, model, start_ms, req.duration_h, req.step_min)
     occ = obscuration(s)
-    reg = Regolith(**req.regolith.model_dump())
+    reg = Regolith(**req.regolith.model_dump()) if req.regolith is not None else LUNAR_REGOLITH
     eq = Equipment(**req.equipment.model_dump()) if req.equipment is not None else None
     res = simulate(s.t_ms, absorbed_flux(s.irradiance_w_m2, s.sun_frac, occ, s.sun_el, reg.albedo), reg, eq,
                    direct_sun(s.irradiance_w_m2, s.sun_frac, occ))

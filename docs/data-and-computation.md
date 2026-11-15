@@ -101,6 +101,23 @@ No Space Agency Partner dataset is used in the calculations yet. That is stated 
   to 1e-9 (`tests/core.test.ts`). No Web Worker is needed: the whole planner (21 sites × 365 days) is computed on the
   main thread in about 0.3 s (283 ms measured), so a worker would add complexity for no visible gain.
 
+### Area search (mission mode, API)
+
+- The planner bounds the search to a disc (centre and radius) and a cell size; the API paints which cells pass
+  instead of testing points one by one (`api/app/area_search.py`, method in `api/app/logic/areas.py`).
+- Map filters read, for each cell, every pixel of the finest grid inside it (k x k samples); slope and permanent
+  shadow take the worst sample (a cell fails if any part of it fails), heights and long-term maps the mean.
+- Landing radius: a cell survives only if no cell failing a map filter lies within the radius (disc dilation by FFT).
+- Window filters: each sample gets its own horizon, ray-traced like the point horizon (exact curvature, finest LOLA
+  grid at each ray point, quarter-cell steps near the observer) every 0.5° out to 150 km by default, with 2 % range
+  growth instead of 0.8 %: against the point tracer, mean difference 0.003-0.008°, max 0.06-0.13° at 5 test points.
+  Samples are placed by a quadtree: coarse tiles (a quarter of the budget), then tiles whose neighbourhood mixes pass
+  and fail are split, largest first; when no boundary is left, tiles whose long-term Sun or Earth map (PGDA 69) spans
+  more than 0.1 are split too. Measured on a 40 km region at 0.96 km cells (2027-01-10, 240-336 h windows): 300
+  samples agree with a 1718-sample reference on 91 % of the cells reaching the window stage (82 % at 100 samples);
+  boundary-only splitting beat mixing in the proxy splits at the same budget (91.2 % vs 89.7 %). Speed: about 20
+  samples per second on 8 threads (300 samples in 13 s for a 150 km region).
+
 ## Verified results (2026-11-13)
 
 | Check | Result |
@@ -115,7 +132,10 @@ No Space Agency Partner dataset is used in the calculations yet. That is stated 
 
 ## Limits to keep in mind
 
-- No terrain south of 60° S excluded sites (Apollo, SLIM, Blue Ghost): smooth sphere, stated in the UI.
+- Outside the polar grids (north of 60° S: Apollo, SLIM, Blue Ghost, any manual point there) the ray-traced
+  horizon reads the whole-Moon LOLA grid at 8 px/deg (`lola_elevation_global`, ~3.8 km cells): real large-scale
+  relief (basin rims, mountain ranges), but anything narrower than a few cells is smoothed away in both
+  directions. The UI and the API report the DEM cell size (`near_cell_m`) with every traced skyline.
 - Height uncertainty (0.3-0.5 m at the best 5 m maps, more elsewhere; ~90 % of pixels interpolated) is **not yet propagated**
   to a confidence band on the windows.
 - Uniform solar disc, no limb darkening, no reflected light, no Earthshine; idealised panel; level lander.

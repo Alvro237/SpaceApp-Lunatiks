@@ -1,5 +1,5 @@
 /**
- * Block Moon: turns the same LOLA heights the navigator uses into a world of cubes, for the educational mode.
+ * Educational mode: turns the same LOLA heights the navigator uses into a world of cubes, for children and classrooms.
  *
  * Two worlds, both pure functions over arrays (no three.js, no fetch), so they are testable:
  *   - Ground: the polar DEM overview (LOLA, PGDA product 90, 960 m cells) around the chosen place, as columns
@@ -33,7 +33,7 @@ export interface HeightGrid {
 /**
  * Samples a square of n × n cells centred on (lat, lon), axes east and north at that point, on the south polar
  * stereographic map (x = r sin lon, y = r cos lon). Returns null when any sample falls outside the map.
- * `curvature` scales the curvature drop: 1 is the true drop; Block Moon passes 1 / exaggeration so the stretched
+ * `curvature` scales the curvature drop: 1 is the true drop; Educational mode passes 1 / exaggeration so the stretched
  * relief does not turn a 150 km world into a dome that hides its own horizon.
  */
 export function sampleGround(
@@ -189,6 +189,21 @@ export function groundBlocks(grid: HeightGrid, exaggeration = GROUND_EXAGGERATIO
     }
   }
   return out
+}
+
+/**
+ * Top of the tallest column within `reach` cells of the scene point (x east, z south, in cubes from the centre), in
+ * the scene's height units (the upper face of its top cube). Null outside the island. Keeps the camera out of the ground.
+ */
+export function groundTopNear(columns: Int16Array, x: number, z: number, reach = 2): number | null {
+  const n = Math.round(Math.sqrt(columns.length))
+  const half = (n - 1) / 2
+  const i0 = Math.round(x + half)
+  const j0 = Math.round(z + half)
+  let top: number | null = null
+  for (let j = Math.max(0, j0 - reach); j <= Math.min(n - 1, j0 + reach); j++)
+    for (let i = Math.max(0, i0 - reach); i <= Math.min(n - 1, i0 + reach); i++) top = Math.max(top ?? -Infinity, columns[j * n + i] + 0.5)
+  return top
 }
 
 /**

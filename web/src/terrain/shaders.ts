@@ -78,11 +78,20 @@ uniform sampler2D uLut;      // 256 x 1 colour map
 uniform vec2 uElevRange;
 uniform vec3 uHighlight;     // x, y (m) and radius (m) of the selected place ring
 uniform float uDiscR;        // the map is the disc of this projected radius (m) around the pole
+uniform sampler2D uArea;     // mission mode: r = code (0 outside, 1 fails static, 2 fails window, 3 viable, 4 unknown), g = score
+uniform vec4 uAreaXf;        // x left, y top, width, height of the search raster (m)
+uniform float uHasArea;
+uniform vec3 uRegion;        // x, y (m) and radius (m) of the search region ring
 in vec2 vUv;
 in vec2 vMap;
 in float vHeight;
 in vec3 vSunScene;
 layout(location = 0) out highp vec4 fragColor;
+
+int areaCode(ivec2 c, ivec2 n) {
+  if (c.x < 0 || c.y < 0 || c.x >= n.x || c.y >= n.y) return 0;
+  return int(texelFetch(uArea, c, 0).r * 255.0 + 0.5);
+}
 
 // Heights between samples, bilinear. The slope below is the difference of two such reads one sample apart on either
 // side, which equals the central-difference gradients at the four samples around the fragment blended bilinearly:
@@ -101,14 +110,44 @@ float hBil(vec2 uv) {
 }
 #endif
 
+// Visible share of the solar disc from the shadow texture. One shadow texel is about a kilometre: zoomed in it covers
+// many pixels, and plain bilinear reading draws a shadow's edge as a staircase of texel-sized steps. There the texture
+// is read with a cubic B-spline (four bilinear reads; Sigg and Hadwiger, GPU Gems 2, ch. 20), which gives a smooth
+// edge and never leaves the 0..1 range. Where a texel is about a pixel or less the single read is kept.
+float shadowAt(vec2 uv) {
+  vec2 size = vec2(textureSize(uShadow, 0));
+  vec2 st = uv * size - 0.5;
+  if (max(fwidth(st.x), fwidth(st.y)) > 0.75) return textureLod(uShadow, uv, 0.0).r;
+  vec2 i = floor(st);
+  vec2 f = st - i;
+  vec2 f2 = f * f;
+  vec2 f3 = f2 * f;
+  vec2 w0 = (1.0 - 3.0 * f + 3.0 * f2 - f3) / 6.0;
+  vec2 w1 = (4.0 - 6.0 * f2 + 3.0 * f3) / 6.0;
+  vec2 w3 = f3 / 6.0;
+  vec2 w2 = 1.0 - w0 - w1 - w3;
+  vec2 g0 = w0 + w1;
+  vec2 g1 = w2 + w3;
+  vec2 p0 = (i - 0.5 + w1 / g0) / size;   // between texels i - 1 and i
+  vec2 p1 = (i + 1.5 + w3 / g1) / size;   // between texels i + 1 and i + 2
+  return g0.y * (g0.x * textureLod(uShadow, p0, 0.0).r + g1.x * textureLod(uShadow, vec2(p1.x, p0.y), 0.0).r)
+       + g1.y * (g0.x * textureLod(uShadow, vec2(p0.x, p1.y), 0.0).r + g1.x * textureLod(uShadow, p1, 0.0).r);
+}
+
 void main() {
   float rMap = length(vMap);
 #ifdef DISC_EDGE
   if (rMap > uDiscR) discard;
 #endif
+  // The two reads are one sample apart on either side, except within a sample of the tile's edge, where the far
+  // one stops at the edge: divide by the distance actually spanned. (Dividing by two cells there halved the slope
+  // along every tile edge, which showed as a thin line of flatter shading around each tile.)
   float du = 1.0 / 256.0;
-  float hx = (hBil(vUv + vec2(du, 0.0)) - hBil(vUv - vec2(du, 0.0))) / (2.0 * uCellM);
-  float hy = (hBil(vUv - vec2(0.0, du)) - hBil(vUv + vec2(0.0, du))) / (2.0 * uCellM);
+  vec2 lo = max(vUv - du, 0.0);
+  vec2 hi = min(vUv + du, 1.0);
+  vec2 span = (hi - lo) * 256.0 * uCellM;
+  float hx = (hBil(vec2(hi.x, vUv.y)) - hBil(vec2(lo.x, vUv.y))) / span.x;
+  float hy = (hBil(vec2(vUv.x, lo.y)) - hBil(vec2(vUv.x, hi.y))) / span.y;
   vec3 nrm = normalize(vec3(-hx, 1.0, hy));   // scene axes: X = x, Y = up, Z = -y
 
   float lambert = max(0.0, dot(nrm, normalize(vSunScene)));
@@ -116,7 +155,7 @@ void main() {
   float visible = 1.0;
   if (uShadowReady > 0.5) {
     vec2 suv = vec2((vMap.x - uExtent.x) / uExtent.z, (uExtent.y - vMap.y) / uExtent.z);
-    visible = texture(uShadow, suv).r;
+    visible = shadowAt(suv);
   }
   float sunLight = visible * lambert;
   float relief = 0.30 + 0.70 * max(0.0, dot(nrm, normalize(vec3(-0.55, 0.75, -0.40))));
@@ -141,6 +180,39 @@ void main() {
   if (uLighting > 0.5) light = coloured ? 0.32 + 0.68 * sunLight : 0.34 * relief + 0.66 * sunLight;
   else light = coloured ? 0.55 + 0.45 * relief : relief;
   vec3 colour = base * light;
+
+  // Mission mode: the area search painted cell by cell. Never colour alone: viable areas get a solid outline,
+  // cells failing a window filter diagonal hatching, unknown cells dots, cells failing a static filter are dimmed
+  // (the legend and the panel's table say the same in words).
+  if (uHasArea > 0.5) {
+    ivec2 n = textureSize(uArea, 0);
+    vec2 p = vec2((vMap.x - uAreaXf.x) / uAreaXf.z, (uAreaXf.y - vMap.y) / uAreaXf.w) * vec2(n);
+    vec2 fw = max(fwidth(p) * 1.6, vec2(1e-4));   // outline width: about 1.6 px whatever the zoom (uniform flow here)
+    ivec2 c = ivec2(floor(p));
+    int code = areaCode(c, n);
+    if (code > 0) {
+      float hatch = step(mod(gl_FragCoord.x + gl_FragCoord.y, 7.0), 1.5);
+      float dots = step(length(mod(gl_FragCoord.xy, 6.0) - 3.0), 1.2);
+      if (code == 3) {
+        float s = texelFetch(uArea, c, 0).g;
+        colour = mix(colour, mix(vec3(0.10, 0.55, 0.42), vec3(0.36, 0.92, 0.62), s), 0.62);
+        vec2 f = fract(p);
+        bool edge = (f.x < fw.x && areaCode(c - ivec2(1, 0), n) != 3) || (f.x > 1.0 - fw.x && areaCode(c + ivec2(1, 0), n) != 3)
+                 || (f.y < fw.y && areaCode(c - ivec2(0, 1), n) != 3) || (f.y > 1.0 - fw.y && areaCode(c + ivec2(0, 1), n) != 3);
+        if (edge) colour = vec3(0.93, 1.0, 0.96);
+      } else if (code == 2) {
+        colour = mix(colour * 0.8, vec3(0.93, 0.62, 0.22), 0.14 + 0.4 * hatch);
+      } else if (code == 4) {
+        colour = mix(colour * 0.8, vec3(0.72, 0.74, 0.92), 0.15 + 0.55 * dots);
+      } else {
+        colour *= 0.55;
+      }
+    }
+  }
+  if (uRegion.z > 0.0) {
+    float dReg = length(vMap - uRegion.xy);
+    if (abs(dReg - uRegion.z) < fwidth(dReg) * 1.8) colour = mix(colour, vec3(0.98, 0.86, 0.45), 0.9);
+  }
 
   // Ring around the selected place (drawn in the terrain so it follows the relief).
   float d = length(vMap - uHighlight.xy);
