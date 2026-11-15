@@ -250,8 +250,7 @@ function PlaceStrip({ id, data, link, showEarth, left, x, ticks, durationH, star
           <line x1="0" y1="0" x2="0" y2="6" className="hatch-line" />
         </pattern>
         <pattern id={`${id}-dots`} width="5" height="5" patternUnits="userSpaceOnUse">
-          <rect width="5" height="5" className="hatch-bg" />
-          <circle cx="2.5" cy="2.5" r="1.1" className="dot-link" />
+          <circle cx="2.5" cy="2.5" r="1.2" className="dot-link" />
         </pattern>
       </defs>
       {rows.map((r, i) => {

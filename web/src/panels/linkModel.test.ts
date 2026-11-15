@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LinkResponse } from '../api/types'
-import { DEFAULT_FORM, type LinkForm, buildLinkRequest, formatRate, inRanges, linkStepMin, nextChange, noLinkReason, rankStations, summarize } from './linkModel'
+import { DEFAULT_FORM, type LinkForm, buildLinkRequest, buildLinkRequestWithFallback, formatRate, inRanges, linkStepMin, nextChange, noLinkReason, rankStations, summarize } from './linkModel'
 
 const HOUR = 3_600_000
 const win = { startIso: '2027-03-01T00:00', durationH: 720, commsMinFraction: 0.5 }
@@ -29,35 +29,56 @@ describe('buildLinkRequest', () => {
     expect(buildLinkRequest(site, win, form({ networks: [] })).problem).toBe('Pick a network or add an antenna')
   })
 
-  it('level 2 needs only the EIRP and the data rate, and converts kbit/s to bit/s', () => {
-    expect(buildLinkRequest(site, win, form({ level: 2 })).problem).toBe('Enter the EIRP and the data rate')
-    const { body } = buildLinkRequest(site, win, form({ level: 2, eirp: '20', rateKbps: '256' }))
-    expect(body?.budget).toEqual({ band: 'X', transmit_eirp_dbw: 20, data_rate_bps: 256_000 })
+  it('level 2 needs the radio data: EIRP, data rate and the Eb/N0 needed; kbit/s become bit/s', () => {
+    expect(buildLinkRequest(site, win, form({ level: 2 })).problem).toBe('Enter your EIRP, data rate and the Eb/N0 you need')
+    expect(buildLinkRequest(site, win, form({ level: 2, eirp: '20', rateKbps: '256' })).problem).toBe('Enter your EIRP, data rate and the Eb/N0 you need')
+    const { body } = buildLinkRequest(site, win, form({ level: 2, eirp: '20', rateKbps: '256', ebn0: '2.5' }))
+    expect(body?.budget).toEqual({ band: 'X', transmit_eirp_dbw: 20, required_ebn0_db: 2.5, data_rate_bps: 256_000 })
   })
 
-  it('sends the optional budget fields only when typed', () => {
-    const { body } = buildLinkRequest(site, win, form({ level: 2, eirp: '15', rateKbps: '1000', band: 'Ka', freq: '26,2', margin: '4' }))
-    expect(body?.budget).toEqual({ band: 'Ka', transmit_eirp_dbw: 15, data_rate_bps: 1_000_000, frequency_ghz: 26.2, min_margin_db: 4 })
+  it('sends the generic budget fields only when typed', () => {
+    const { body } = buildLinkRequest(site, win, form({ level: 2, eirp: '15', rateKbps: '1000', ebn0: '3', band: 'Ka', freq: '26,2', margin: '4' }))
+    expect(body?.budget).toEqual({ band: 'Ka', transmit_eirp_dbw: 15, required_ebn0_db: 3, data_rate_bps: 1_000_000, frequency_ghz: 26.2, min_margin_db: 4 })
   })
-
   it('an uplink needs the lunar G/T', () => {
-    const f = form({ level: 2, eirp: '60', rateKbps: '2', direction: 'uplink_low_power' })
+    const f = form({ level: 2, eirp: '60', rateKbps: '2', ebn0: '5', direction: 'uplink_low_power' })
     expect(buildLinkRequest(site, win, f).problem).toMatch(/lunar terminal/)
     expect(buildLinkRequest(site, win, { ...f, gt: '-20' }).body?.budget).toMatchObject({ receive_gt_db_per_k: -20 })
   })
 
   it('rejects text where a number is expected', () => {
-    expect(buildLinkRequest(site, win, form({ level: 2, eirp: 'high', rateKbps: '1' })).problem).toMatch(/numbers/)
-    expect(buildLinkRequest(site, win, form({ level: 2, eirp: '1', rateKbps: '0' })).problem).toMatch(/above 0/)
+    expect(buildLinkRequest(site, win, form({ level: 2, eirp: 'high', rateKbps: '1', ebn0: '2' })).problem).toMatch(/numbers/)
+    expect(buildLinkRequest(site, win, form({ level: 2, eirp: '1', rateKbps: '0', ebn0: '2' })).problem).toMatch(/above 0/)
   })
 
   it('validates and converts own antennas', () => {
-    const own = { key: 1, lat: '40.4', lon: '-4.2', height: '', minEl: '6', diameter: '34' }
+    const own = { key: 1, lat: '40.4', lon: '-4.2', height: '', minEl: '6', diameter: '34', gt: '' }
     const { body } = buildLinkRequest(site, win, form({ networks: [], custom: [own] }))
     expect(body?.custom_stations).toEqual([{ id: 'own-1', name: 'My antenna 1', lat_deg: 40.4, lon_deg: -4.2, min_elevation_deg: 6, height_m: 0, diameter_m: 34 }])
     expect(buildLinkRequest(site, win, form({ custom: [{ ...own, minEl: '' }] })).problem).toMatch(/minimum elevation are needed/)
     expect(buildLinkRequest(site, win, form({ custom: [{ ...own, lat: '95' }] })).problem).toMatch(/latitude is between/)
     expect(buildLinkRequest(site, win, form({ custom: [{ ...own, minEl: '90' }] })).problem).toMatch(/under 90/)
+  })
+
+  it('at the budget level an own antenna must give its G/T or its dish diameter', () => {
+    const budget = { level: 2 as const, eirp: '20', rateKbps: '256', ebn0: '2.5', networks: [] }
+    const bare = { key: 1, lat: '40.4', lon: '-4.2', height: '', minEl: '6', diameter: '', gt: '' }
+    expect(buildLinkRequest(site, win, form({ ...budget, custom: [bare] })).problem).toBe('Antenna 1: give its G/T or its dish diameter')
+    expect(buildLinkRequest(site, win, form({ custom: [bare], networks: [] })).problem).toBeNull() // geometry does not need it
+    const withGt = buildLinkRequest(site, win, form({ ...budget, custom: [{ ...bare, gt: '52.5' }] }))
+    expect(withGt.body?.custom_stations).toEqual([{ id: 'own-1', name: 'My antenna 1', lat_deg: 40.4, lon_deg: -4.2, min_elevation_deg: 6, height_m: 0, gt_db_per_k: 52.5 }])
+    expect(buildLinkRequest(site, win, form({ ...budget, custom: [{ ...bare, diameter: '35' }] })).problem).toBeNull()
+  })
+
+  it('while the budget is incomplete the geometry is asked instead, and the problem is kept', () => {
+    const { body, problem } = buildLinkRequestWithFallback(site, win, form({ level: 2 }))
+    expect(body?.level).toBe(1)
+    expect(body).not.toHaveProperty('budget')
+    expect(problem).toBe('Enter your EIRP, data rate and the Eb/N0 you need')
+    const done = buildLinkRequestWithFallback(site, win, form({ level: 2, eirp: '20', rateKbps: '256', ebn0: '2.5' }))
+    expect(done.problem).toBeNull()
+    expect(done.body?.level).toBe(2)
+    expect(buildLinkRequestWithFallback(site, win, form({ level: 2, networks: [] })).body).toBeNull() // nothing to ask for
   })
 })
 

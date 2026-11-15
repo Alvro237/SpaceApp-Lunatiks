@@ -1,5 +1,5 @@
 /** TanStack Query hooks over the API client. Catalogue and metadata are cached for the session. */
-import { useMutation, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query'
 import { type SeriesParams, type StateParams, api, isMissing } from './client'
 import type { AreaSearchRequest, CandidateSearchRequest, LinkRequest, PowerRequest, RadiationRequest } from './types'
 import type { Selection } from '../state/store'
@@ -64,6 +64,8 @@ export function useLink(body: LinkRequest | null) {
     enabled: !!body,
     retry,
     staleTime: 60_000,
+    // keep the last answer on screen while the next one is computed, so the panel and the timeline do not blink
+    placeholderData: keepPreviousData,
   })
 }
 

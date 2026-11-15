@@ -22,7 +22,6 @@ import { openMenuFrom } from './PlaceMenu'
 import { fmtLat, fmtLon } from './format'
 import { LinkPanel } from './LinkPanel'
 import { HorizonPanel } from './HorizonPanel'
-import { ContactSetting } from './Settings'
 import { NowCards } from './NowPanel'
 import { PowerPanel } from './PowerPanel'
 import { useNow } from './useNow'
@@ -179,12 +178,7 @@ export function SectionDrawer({ titleId }: { titleId: string }) {
             <HorizonPanel />
           </>
         )}
-        {active.id === 'link' && (
-          <>
-            <ContactSetting />
-            <LinkPanel />
-          </>
-        )}
+        {active.id === 'link' && <LinkPanel />}
       </div>
     </div>
   )

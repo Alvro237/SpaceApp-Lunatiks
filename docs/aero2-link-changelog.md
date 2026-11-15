@@ -76,7 +76,9 @@ The link is now in the interface. The section is still opened with the "Earth li
   selected by default, so all their antennas are used); the best three antennas; a table with every antenna behind a
   `<details>`; at Budget level the band (S, X, Ka), the lunar EIRP and the data rate, with the other budget fields
   under "More options" and empty (the API's stated defaults apply); direction and the user's own antennas under
-  "Direction and own antennas".
+  "Direction and own antennas". The answer updates by itself after each valid change (a short pause while typing); the previous
+  answer stays on screen, marked "updating", until the new one arrives. While the budget is incomplete the geometry is
+  asked instead, so the panel and the timeline keep showing the contact and the panel says what is missing.
 - `charts/Timeline.tsx`: the single-place strips are now `Sunlit`, optionally `Earth up`, and `Link` (solid bars are
   link; at Budget level dotted bars are contact without enough margin). The Earth row is hidden while the link answer
   is available and appears in its place if the API does not answer. The comparison strips are unchanged.
@@ -86,6 +88,11 @@ The link is now in the interface. The section is still opened with the "Earth li
   `api/client.ts`, `api/hooks.ts`, `api/types.ts`: the client, hooks and types of `/api/v1/link`.
 - `api/schema.gen.ts` was regenerated with `npm run gen:api` (the committed one was behind the API); `types.ts`
   `Transition` now points at `app__schemas__state__Transition`, the name the generator gives it.
+- Owner decisions of 2026-11-15: the "Earth contact" slider is gone (the 0.5 stays); the budget level requires what
+  characterises the user's own radio and antennas: lunar EIRP, data rate, the Eb/N0 needed, the lunar G/T for an uplink,
+  and for each own antenna its G/T or its dish diameter. Only generic values keep a default (band X, margin 3 dB, other
+  losses 0 dB). The note under the antenna table was removed. In the timeline, solid green bars are link and green dotted
+  bars are contact without enough margin.
 - Nothing is pre-filled except the networks. The ESA elevation warning is not shown (owner decision); `estimated_limits`
   and `gt_basis` stay in the API response.
 - Shared frontend files touched, additions only apart from the rewrite of `LinkPanel.tsx` and the strip of

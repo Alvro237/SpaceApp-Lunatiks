@@ -1327,3 +1327,4 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
 .filters-btn[aria-expanded='true'] { background: var(--accent); color: var(--on-accent); }
 .filters-pop { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 220px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--glass); backdrop-filter: blur(8px); }
 .filters-pop .check-row { margin: 6px 0 2px; }
+.link-hint { margin: 0; font-size: 0.85rem; }

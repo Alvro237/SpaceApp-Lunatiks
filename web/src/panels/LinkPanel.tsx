@@ -17,7 +17,7 @@ import type { LinkResponse } from '../api/types'
 import { type CustomForm, DIRECTIONS, BANDS, NETWORK_IDS, NETWORK_LABEL, formatRate, nextChange, noLinkReason, rankStations, summarize } from './linkModel'
 import { useLinkStore, useLinkResult } from '../state/link'
 import { useApp } from '../state/store'
-import { formatDuration, formatUtc } from '../time/clock'
+import { formatDuration } from '../time/clock'
 import { useThrottledTime } from '../time/hooks'
 import { Tip } from '../ui/Tip'
 import { IconAntenna, IconClock, IconElevation, IconGlobe, IconTrash } from '../ui/icons'
@@ -28,22 +28,24 @@ export function LinkPanel() {
   return (
     <div className="panel-section link-body">
       <LevelSwitch />
-      {result.problem ? (
-        <p className="muted" role="status">
+      {result.problem && (
+        <p className="muted link-hint" role="status">
           {result.problem}
         </p>
-      ) : result.error ? (
+      )}
+      {result.error ? (
         <p className="error" role="alert">
           {isMissing(result.error) ? 'The link API is not deployed on this server yet.' : result.error instanceof ApiError ? result.error.message : 'No answer from the API.'}
         </p>
       ) : result.data ? (
-        <Result r={result.data} busy={result.isFetching} />
+        <Result r={result.data} busy={result.updating} />
       ) : (
-        <p className="muted" role="status">
-          {result.isLoading ? 'Asking the API…' : 'Choose a place to see the link.'}
-        </p>
-      )}
-      <Networks />
+        !result.problem && (
+          <p className="muted" role="status">
+            {result.isLoading ? 'Asking the API…' : 'Choose a place to see the link.'}
+          </p>
+        )
+      )}      <Networks />
       {level === 2 && <Budget />}
       {result.data && <Antennas r={result.data} />}
       <Advanced />
@@ -121,7 +123,7 @@ function Result({ r, busy }: { r: LinkResponse; busy: boolean }) {
       <p className={`link-status ${reason === null ? 'on' : 'off'}`} role="status">
         <IconAntenna size={18} />
         <span>
-          <strong>{reason === null ? 'Link now' : 'No link now'}</strong>
+          <strong>{reason === null ? 'Link now' : 'No link now'}</strong>{busy && <span className="muted"> · updating…</span>}
           <span className="muted"> · {when}</span>
           {reason !== null && <span className="link-why">{reason}</span>}
         </span>
@@ -136,6 +138,9 @@ function Result({ r, busy }: { r: LinkResponse; busy: boolean }) {
           <Stat icon={<IconAntenna size={18} />} tone="neutral" label="Antennas" value={pct(s.antennaFraction)} unit="%" sub="see the Moon" />
         )}
       </ul>
+      {s.level2 && (
+        <p className="muted small">Timeline: solid bars are link, dots are contact without enough margin.</p>
+      )}
       {r.skipped_stations.length > 0 && (
         <p className="muted small">
           {r.skipped_stations.length} antenna{r.skipped_stations.length === 1 ? '' : 's'} left out: no transmit limit published.
@@ -225,9 +230,6 @@ function Antennas({ r }: { r: LinkResponse }) {
             </tbody>
           </table>
         </div>
-        <p className="muted small">
-          Computed {formatUtc(Date.parse(r.start))} · {r.horizon_kind === 'terrain' ? 'real terrain' : 'estimated horizon'}. {r.assumptions[0]}
-        </p>
       </details>
     </section>
   )
@@ -273,24 +275,17 @@ function Budget() {
         </div>
         <Seg labelId={`${id}-b`} value={f.band} options={BANDS.map((b) => ({ value: b, label: b }))} onChange={(v) => set({ band: v as (typeof BANDS)[number] })} />
       </div>
-      <NumField label="Lunar EIRP" unit="dBW" value={f.eirp} onChange={(v) => set({ eirp: v })} hint="Transmit power times antenna gain of your lunar terminal (an uplink: of the ground antenna), in dBW." />
+      <NumField label="Lunar EIRP" unit="dBW" value={f.eirp} onChange={(v) => set({ eirp: v })} hint={uplink ? 'Transmit power times antenna gain of the ground antenna, in dBW.' : 'Transmit power times the gain of your lunar antenna, in dBW.'} />
       <NumField label="Data rate" unit="kbit/s" value={f.rateKbps} onChange={(v) => set({ rateKbps: v })} hint="The information rate you want to send." />
+      <NumField label="Eb/N0 needed" unit="dB" value={f.ebn0} onChange={(v) => set({ ebn0: v })} hint="What your modulation and coding need to decode. It comes from your radio’s specification." />
+      {uplink && <NumField label="Lunar G/T" unit="dB/K" value={f.gt} onChange={(v) => set({ gt: v })} hint="The sensitivity of your lunar receiver: its antenna gain minus 10·log10 of its noise temperature." />}
       <details className="link-more">
         <summary>More options</summary>
         <NumField label="Exact frequency" unit="GHz" value={f.freq} onChange={(v) => set({ freq: v })} optional placeholder="band centre" hint="Type your mission’s channel instead of the band centre." />
-        <NumField label="Eb/N0 needed" unit="dB" value={f.ebn0} onChange={(v) => set({ ebn0: v })} optional placeholder="9.6" hint="What your modulation and coding need. 9.6 dB is uncoded BPSK, a cautious value." />
         <NumField label="Margin wanted" unit="dB" value={f.margin} onChange={(v) => set({ margin: v })} optional placeholder="3" hint="Extra signal above the need for the link to count as closed." />
         <NumField label="Other losses" unit="dB" value={f.losses} onChange={(v) => set({ losses: v })} optional placeholder="0" hint="Pointing, polarisation, atmosphere: losses this model does not include." />
-        <NumField
-          label="Lunar G/T"
-          unit="dB/K"
-          value={f.gt}
-          onChange={(v) => set({ gt: v })}
-          optional={!uplink}
-          hint={uplink ? 'Required for an uplink: the sensitivity of your lunar terminal.' : 'Replaces every antenna’s own value. Leave empty to use each antenna’s.'}
-        />
-      </details>
-    </section>
+        {!uplink && <NumField label="Ground G/T" unit="dB/K" value={f.gt} onChange={(v) => set({ gt: v })} optional placeholder="each antenna’s own" hint="Replaces the sensitivity of every ground antenna. Leave empty to use each antenna’s own." />}
+      </details>    </section>
   )
 }
 
@@ -302,7 +297,7 @@ function Advanced() {
   const custom = useLinkStore((s) => s.custom)
   const set = useLinkStore((s) => s.set)
   const update = (key: number, patch: Partial<CustomForm>) => set({ custom: custom.map((c) => (c.key === key ? { ...c, ...patch } : c)) })
-  const add = () => set({ custom: [...custom, { key: Math.max(0, ...custom.map((c) => c.key)) + 1, lat: '', lon: '', height: '', minEl: '', diameter: '' }] })
+  const add = () => set({ custom: [...custom, { key: Math.max(0, ...custom.map((c) => c.key)) + 1, lat: '', lon: '', height: '', minEl: '', diameter: '', gt: '' }] })
 
   return (
     <details className="link-more link-advanced">
@@ -323,7 +318,8 @@ function Advanced() {
             <NumField label="Longitude" unit="°" value={c.lon} onChange={(v) => update(c.key, { lon: v })} hint="Degrees, east positive." />
             <NumField label="Lowest elevation" unit="°" value={c.minEl} onChange={(v) => update(c.key, { minEl: v })} hint="The lowest angle above the horizon at which it can point at the Moon." />
             <NumField label="Height" unit="m" value={c.height} onChange={(v) => update(c.key, { height: v })} optional hint="Above the ellipsoid; 0 if unknown." />
-            <NumField label="Dish diameter" unit="m" value={c.diameter} onChange={(v) => update(c.key, { diameter: v })} optional hint="Budget level only: its sensitivity is estimated from the diameter." />
+            <NumField label="Dish diameter" unit="m" value={c.diameter} onChange={(v) => update(c.key, { diameter: v })} optional hint="Budget level: give this or the G/T. Without the G/T, the sensitivity is estimated from the diameter." />
+            <NumField label="Receive G/T" unit="dB/K" value={c.gt} onChange={(v) => update(c.key, { gt: v })} optional hint="Budget level: give this or the dish diameter. Its sensitivity in the band you chose." />
             <button type="button" className="link-remove" onClick={() => set({ custom: custom.filter((x) => x.key !== c.key) })} aria-label={`Remove antenna ${i + 1}`}>
               <IconTrash size={16} /> Remove
             </button>

@@ -3,9 +3,10 @@
  * the small calculations the panel and the timeline share (ranges, next change, ranking). No React here, so it is
  * tested on its own (linkModel.test.ts).
  *
- * Nothing physical is pre-filled: the lunar terminal's EIRP and the data rate are the only budget values the user must
- * give (level 2). Every other budget field is left empty to use the API's stated default (Eb/N0 9.6 dB, margin 3 dB,
- * band X) and is only sent when typed.
+ * Nothing physical is pre-filled. At the budget level the user must give what characterises their own radio and
+ * antennas: the lunar EIRP, the data rate, the Eb/N0 their modulation needs, the lunar G/T for an uplink, and for each
+ * antenna they add its G/T or dish diameter. Only the generic values keep a default, sent when typed: band X, margin 3 dB,
+ * other losses 0 dB, the band-centre frequency.
  */
 import type { LinkBand, LinkBudgetInput, LinkCustomStation, LinkDirection, LinkRequest, LinkResponse, LinkStationResult } from '../api/types'
 import type { Selection } from '../state/store'
@@ -27,6 +28,8 @@ export interface CustomForm {
   height: string
   minEl: string
   diameter: string
+  /** Receive G/T in dB/K (budget level): this or the diameter is required there. */
+  gt: string
 }
 
 export interface LinkForm {
@@ -88,12 +91,14 @@ export function buildLinkRequest(place: Selection | null, win: { startIso: strin
     const minEl = parse(c.minEl)
     const height = parse(c.height)
     const diameter = parse(c.diameter)
+    const gt = parse(c.gt)
     if (lat === undefined || lon === undefined || minEl === undefined) return { body: null, problem: `${label}: latitude, longitude and minimum elevation are needed` }
-    if ([lat, lon, minEl, height, diameter].includes(BAD)) return { body: null, problem: `${label}: use numbers` }
+    if ([lat, lon, minEl, height, diameter, gt].includes(BAD)) return { body: null, problem: `${label}: use numbers` }
     if ((lat as number) < -90 || (lat as number) > 90) return { body: null, problem: `${label}: latitude is between -90 and 90` }
     if ((lon as number) < -180 || (lon as number) > 180) return { body: null, problem: `${label}: longitude is between -180 and 180` }
     if ((minEl as number) < 0 || (minEl as number) >= 90) return { body: null, problem: `${label}: minimum elevation is from 0 to under 90°` }
     if (diameter !== undefined && (diameter as number) <= 0) return { body: null, problem: `${label}: diameter must be above 0` }
+    if (f.level === 2 && diameter === undefined && gt === undefined) return { body: null, problem: `${label}: give its G/T or its dish diameter` }
     customs.push({
       id: `own-${c.key}`,
       name: `My antenna ${i + 1}`,
@@ -102,6 +107,7 @@ export function buildLinkRequest(place: Selection | null, win: { startIso: strin
       min_elevation_deg: minEl as number,
       height_m: (height as number | undefined) ?? 0,
       ...(diameter !== undefined ? { diameter_m: diameter as number } : {}),
+      ...(f.level === 2 && gt !== undefined ? { gt_db_per_k: gt as number } : {}),
     })
   }
   if (f.networks.length === 0 && customs.length === 0) return { body: null, problem: 'Pick a network or add an antenna' }
@@ -110,19 +116,19 @@ export function buildLinkRequest(place: Selection | null, win: { startIso: strin
   if (f.level === 2) {
     const eirp = parse(f.eirp)
     const rate = parse(f.rateKbps)
-    if (eirp === undefined || rate === undefined) return { body: null, problem: 'Enter the EIRP and the data rate' }
-    if (eirp === BAD || rate === BAD) return { body: null, problem: 'EIRP and data rate must be numbers' }
+    const need = parse(f.ebn0)
+    if (eirp === undefined || rate === undefined || need === undefined) return { body: null, problem: 'Enter your EIRP, data rate and the Eb/N0 you need' }
+    if (eirp === BAD || rate === BAD || need === BAD) return { body: null, problem: 'EIRP, data rate and Eb/N0 must be numbers' }
     if ((rate as number) <= 0) return { body: null, problem: 'The data rate must be above 0' }
     const opt = (text: string, name: string): { v?: number; err?: string } => {
       const n = parse(text)
       return n === BAD ? { err: `${name} must be a number` } : { v: n as number | undefined }
     }
     const freq = opt(f.freq, 'Frequency')
-    const ebn0 = opt(f.ebn0, 'Required Eb/N0')
     const margin = opt(f.margin, 'Margin')
     const losses = opt(f.losses, 'Other losses')
     const gt = opt(f.gt, 'Lunar G/T')
-    const err = [freq, ebn0, margin, losses, gt].find((x) => x.err)?.err
+    const err = [freq, margin, losses, gt].find((x) => x.err)?.err
     if (err) return { body: null, problem: err }
     if (freq.v !== undefined && (freq.v <= 0 || freq.v > 100)) return { body: null, problem: 'Frequency is between 0 and 100 GHz' }
     if ((margin.v ?? 0) < 0 || (losses.v ?? 0) < 0) return { body: null, problem: 'Margin and other losses cannot be negative' }
@@ -130,9 +136,9 @@ export function buildLinkRequest(place: Selection | null, win: { startIso: strin
     budget = {
       band: f.band,
       transmit_eirp_dbw: eirp as number,
+      required_ebn0_db: need as number,
       data_rate_bps: (rate as number) * 1000,
       ...(freq.v !== undefined ? { frequency_ghz: freq.v } : {}),
-      ...(ebn0.v !== undefined ? { required_ebn0_db: ebn0.v } : {}),
       ...(margin.v !== undefined ? { min_margin_db: margin.v } : {}),
       ...(losses.v !== undefined ? { other_losses_db: losses.v } : {}),
       ...(gt.v !== undefined ? { receive_gt_db_per_k: gt.v } : {}),
@@ -155,6 +161,17 @@ export function buildLinkRequest(place: Selection | null, win: { startIso: strin
       ...(budget ? { budget } : {}),
     } as LinkRequest,
   }
+}
+
+/**
+ * The request to run for the form. At the budget level, while the budget is incomplete, the geometry (level 1) is asked
+ * instead so the panel and the timeline keep showing the contact; `problem` still says what the budget needs.
+ */
+export function buildLinkRequestWithFallback(place: Selection | null, win: { startIso: string; durationH: number; commsMinFraction: number }, f: LinkForm): BuiltRequest {
+  const built = buildLinkRequest(place, win, f)
+  if (built.body || !built.problem || f.level !== 2) return built
+  const geometry = buildLinkRequest(place, win, { ...f, level: 1 })
+  return { body: geometry.body, problem: built.problem }
 }
 
 // ---------------------------------------------------------------------------------------------- time ranges
