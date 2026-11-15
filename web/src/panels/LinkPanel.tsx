@@ -29,7 +29,7 @@ export function LinkPanel() {
     <div className="panel-section link-body">
       <LevelSwitch />
       {result.problem && (
-        <p className="muted link-hint" role="status">
+        <p className="error link-hint" role="status">
           {result.problem}
         </p>
       )}
@@ -305,7 +305,9 @@ function Advanced() {
       <div className="pfield">
         <div className="pfield-top">
           <span id={`${id}-d`}>Direction</span>
-          <Tip label="the direction">Downlink: the Moon sends, the antenna receives. Uplink: the antenna sends. Only the DSN has transmit limits, so other antennas are left out of an uplink.</Tip>
+          <Tip label="the direction">
+            Downlink: the Moon sends, the antenna receives. Uplink: the antenna sends. Low: transmitter up to 20 kW, the Moon must be above about 10°. High: above 20 kW, the Moon must be above about 14°.
+          </Tip>
         </div>
         <Seg labelId={`${id}-d`} value={direction} options={DIRECTIONS.map((d) => ({ value: d.id, label: d.label }))} onChange={(v) => set({ direction: v as typeof direction })} />
       </div>
