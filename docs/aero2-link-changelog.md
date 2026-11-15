@@ -87,7 +87,8 @@ The link is now in the interface. The section is still opened with the "Earth li
 - Comparison (Multiselect), `charts/Timeline.tsx` and `compare/ComparePanel.tsx`: the Sunlit / Earth switch is now
   Sunlit / Link, and each place's strip shows only real link (nothing while the budget is incomplete); no margin chart
   here. The radar axes "Earth contact" and "Steady contact" became **Link** (share of the window with link) and
-  **Steady link** (longest unbroken link ÷ window length; before it was 1 − longest blackout ÷ window). "Link" means
+  **Steady link** (1 − longest gap without link ÷ window length, the autonomy the lander needs and what `max_blackout`
+  filters; the table and pop-up also list the longest unbroken link). "Link" means
   the same as the strip: the Earth is in view, an antenna of the chosen networks sees the Moon and, at Budget level,
   the margin reaches the one asked for (at Geometry level, just the contact). While the link is not available the two
   axes read "not available" and sit at 0, and the form's problem is written above the radar. The same settings as the

@@ -59,8 +59,8 @@ const AXES: Axis[] = [
   {
     key: 'steady',
     label: 'Steady link',
-    value: (w, l) => (l ? Math.min(1, l.longestLinkH / Math.max(1, w.metrics.windowHours)) : 0),
-    text: (_, l) => (l ? `longest unbroken link ${l.longestLinkH.toFixed(0)} h` : NO_LINK),
+    value: (w, l) => (l ? 1 - Math.min(1, l.gapHours / Math.max(1, w.metrics.windowHours)) : 0),
+    text: (_, l) => (l ? `longest gap ${l.gapHours.toFixed(0)} h · longest link ${l.longestLinkH.toFixed(0)} h` : NO_LINK),
   },
   {
     key: 'power',
@@ -89,9 +89,10 @@ const HELP: Record<string, { what: () => string; better: string; worse: string }
     worse: 'Long nights: the battery and the thermal design must last through them.',
   },
   steady: {
-    what: () => 'Longest unbroken time with link in the window. On the radar: longest unbroken link ÷ window length.',
-    better: 'Long unbroken stretches: commands and data flow without interruption.',
-    worse: 'Short passes: the link keeps breaking and the lander waits for the next one.',
+    what: () =>
+      'Longest continuous time without link in the window (the gap the lander must bridge on its own). On the radar: 1 − longest gap ÷ window length. The longest unbroken link is listed beside it.',
+    better: 'Short gaps: commands and data flow steadily.',
+    worse: 'Long gaps: the lander must work on its own for that long.',
   },
   power: {
     what: () => `Mean sunlight reaching the solar panel over the window, as a share of the solar constant (${SOLAR_CONSTANT_W_M2} W/m²).`,
