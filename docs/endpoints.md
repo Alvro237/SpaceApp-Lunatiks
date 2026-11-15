@@ -358,3 +358,18 @@ shielding and CRaTER record. First call about 0.6 s, then cached.
 
 **Status:** to do. `docs/demo-script.md` and `docs/submission.md` were written for an earlier prototype; update
 them to this product. Video of 30 seconds or less.
+
+## Mission design: suitability search
+
+**Owner:** to be set (the role was not chosen when PR 1 was prepared). Spec: `docs/mission-design-spec.md`.
+**Status:** in progress (PR 1: bound). `logic/bounds.py` (ephemeris visibility bound, no endpoint yet) is written, tested
+and validated against the LOLA terrain masks; method and validation output in `docs/data-and-computation.md`
+("Ephemeris visibility bound"). The suitability API and the web mission design follow in later pull requests and are
+added next to the area search, which stays as it is (`/api/v1/areas/search`).
+**Files, PR 1:** `api/app/logic/bounds.py`, `api/tests/test_bounds.py`, `api/tests/validation_bounds.py`.
+**Files, PR 2 (crater shape, independent):** `pipeline/lunarnav/crater_shape.py`, `pipeline/tests/test_crater_shape.py`,
+`api/app/db/craters.py` (additive), `data/README.md`, `docs/references.md`.
+**Files, PR 3 (suitability API):** `api/app/schemas/suitability.py`, `api/app/logic/suitability.py`,
+`api/app/suitability_search.py`, `api/app/routers/suitability.py`, `api/app/db/nomenclature.py`, `api/app/db/store.py`
+(additive), `api/app/main.py` (additive), `api/tests/test_suitability_logic.py`, `api/tests/test_suitability.py`,
+`api/tests/bench_suitability.py`.

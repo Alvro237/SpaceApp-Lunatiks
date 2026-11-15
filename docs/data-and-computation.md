@@ -118,6 +118,106 @@ No Space Agency Partner dataset is used in the calculations yet. That is stated 
   boundary-only splitting beat mixing in the proxy splits at the same budget (91.2 % vs 89.7 %). Speed: about 20
   samples per second on 8 threads (300 samples in 13 s for a 150 km region).
 
+### Ephemeris visibility bound (mission design, `api/app/logic/bounds.py`)
+
+A conservative bound that proves, from the ephemeris and the elevation range alone, where a mission-window criterion
+must fail, so that whole tiles of 4-60 km are dropped before any raster is read at full resolution or any horizon is
+traced. It orders the funnel by spatial scale: Sun and Earth visibility change slowly over the surface (1 degree of
+elevation per 30.3 km of ground), slope changes from cell to cell and is checked last. The order changes the speed,
+never the result. Smooth-sphere results are never bounds (repo rule): this bound is not a smooth sphere, it is the
+lowest skyline that any terrain at or above the lowest LOLA height can produce.
+
+**Statement and proof.** Observer O at radius `r_o = R + top`, `top` = ground height + mast (m). Every terrain point has
+radius at least `r_s = R + h_min`. The engine's skyline in an azimuth is the maximum, over the ray samples `d_i`
+(surface distance), of the elevation of the terrain point at `d_i` (`logic.horizon.skyline_from_heights`). The elevation
+of a point at central angle `theta_i = d_i / R` and radius `r` is `atan((r cos theta_i - r_o) / (r sin theta_i))`,
+increasing in `r`. So the skyline is at least `floor = max_i atan((r_s cos theta_i - r_o) / (r_s sin theta_i))`, whatever
+the terrain. A body whose highest point is below `floor` is hidden for sure. If the engine had infinite rays this floor
+tends to `-arccos(r_s / r_o)` (the tangent to the lowest sphere), so the same floor is also a physical bound. For a
+tile, the local vertical of any cell differs from the tile centre's by at most the central angle `theta_tile` of the
+half-diagonal, so the elevation of a body at any cell is at most the centre value plus `theta_tile`.
+
+**Possible visibility at a sample:** `el_centre + ang_radius + theta_tile + MARGIN_DEG > floor(top_tile)`, where
+`top_tile` is the highest ground height in and around the tile plus the mast plus `ELEV_MARGIN_M`, and
+`h_min = min(grid minima) - ELEV_MARGIN_M`. If it is false at a sample, no part of the body is visible from any cell of
+the tile at that sample, for any terrain consistent with the grids. Everything derived (upper bound of a visible share,
+lower bound of a longest hidden run, upper bound of the run from the start, two-sided interval of the Sun elevation at
+the first sample) follows sample by sample on the same time grid as the engine (`engine.time_grid`). The floor uses the
+same ray samples as the engine (240 m and 960 m cells, 150 km, 2 % growth) and is the lowest of the two sets: truncating
+rays lowers the floor, so the engine's sampled horizons can be lower than the physical tangent.
+
+**Constants** (method parameters, not criterion thresholds):
+
+| Constant | Value | Why |
+| --- | --- | --- |
+| `ELEV_MARGIN_M` | 500 m | The 960 m elevation grid is smoothed and hides relief: against the 240 m pixels over 399 424 fully covered cells the 240 m maximum exceeds the 960 m value by up to 329 m (99.9th percentile 284 m) and the 960 m value exceeds the 240 m minimum by up to 337 m. Added to the observer height and subtracted from the lowest height. A test re-measures both and fails above 450 m. |
+| `MARGIN_DEG` | 0.05 deg | Earth parallax over a tile (< 0.005 deg at 30 km), float32 ephemeris, the engine's disc sampling (7 slices), ray sample spacing near the optimum (< 0.001 deg). |
+| `h_min` | -9608 m | Lowest grid height (`lola_elevation_60s` -9108 m, `lola_elevation_80s` -7286.5 m) minus the margin. |
+
+**Validation** (`cd api && uv run python tests/validation_bounds.py`). Part 1 checks the bound against the LOLA terrain
+masks of the 13 catalogue terrain sites x 17 zone points (221 masks, 2 m mast, 720 azimuths) at every hourly sample
+2025-2035 with theta = 0: real visibility is `el + true_radius > mask(az)`, mask read at the nearest azimuth. Part 2
+recomputes the discard table (tiles of 61.44, 30.72, 7.68 and 3.84 km over the cap south of 60 S, tile top from the
+960 m grid maximum over the tile and a ring of one cell, mast 2 m, margin; shares weighted by true area; window from
+2027-01-10T00:00Z, hourly, threshold 70 %). Pass criteria: 0 violations for both bodies, smallest margin (real skyline
+minus floor, over the samples where the body is visible) at least 1.5 deg, discard shares not above the prototype's
+measurement by more than 3 percentage points (lower is allowed: the final bound is more conservative). Output of the run
+of 2026-11-15:
+
+```
+== Part 1: bound vs real LOLA masks (96409 hourly samples 2025-2035, 221 zone points, theta = 0)
+site              Sun visible  Sun bound  viol   Earth visible Earth bound  viol
+im-1                   40.54%     78.91%     0          94.95%     100.00%     0
+im-2                   43.02%    100.00%     0          85.05%     100.00%     0
+chandrayaan-3          48.42%     61.05%     0         100.00%     100.00%     0
+mons-malapert          42.80%    100.00%     0          66.10%     100.00%     0
+shackleton              0.00%    100.00%     0           0.00%      83.69%     0
+haworth                 0.00%    100.00%     0           6.12%     100.00%     0
+faustini                0.00%    100.00%     0           3.66%      90.66%     0
+amundsen               14.69%     88.96%     0          24.47%      93.01%     0
+nobile                 34.81%    100.00%     0          27.54%     100.00%     0
+de-gerlache             0.05%    100.00%     0           0.00%      95.76%     0
+cabeus                  0.01%     93.92%     0           3.37%     100.00%     0
+shoemaker               0.00%    100.00%     0          25.74%      99.39%     0
+sverdrup                0.00%    100.00%     0           5.60%      73.45%     0
+TOTAL sun  : samples with any part visible 3,676,868; bound said impossible 0; smallest margin (real skyline - floor) 3.253 deg -> PASS  [1 s]
+TOTAL earth: samples with any part visible 7,253,974; bound said impossible 0; smallest margin (real skyline - floor) 4.536 deg -> PASS  [1 s]
+
+== Part 2: share of the area south of 60 S proven to fail (%), Sun >= 70 % / Earth >= 70 %
+  tiles of 61.44 km:     722 tiles,   0.0 s
+  tiles of 30.72 km:    2889 tiles,   0.2 s
+  tiles of  7.68 km:   46163 tiles,   2.3 s
+  tiles of  3.84 km:  184701 tiles,   9.5 s
+
+By latitude band, tiles of 7.68 km (final bound | specification 3.2):
+band               Sun 14 d      Sun 29.53 d       Earth 14 d    Earth 29.53 d
+60-70 S        59.4 |  60.0    100.0 | 100.0     37.6 |  38.3     44.9 |  45.4
+70-80 S        52.8 |  54.5     83.1 |  90.9     29.7 |  30.9     42.6 |  43.5
+80-85 S        22.9 |  26.6      1.0 |   4.6      3.3 |   5.0     38.3 |  39.8
+85-88 S         0.0 |   0.0      0.0 |   0.0      0.0 |   0.0     18.7 |  22.4
+88-90 S         0.0 |   0.0      0.0 |   0.0      0.0 |   0.0      0.0 |   0.0
+
+By tile size, whole cap, Sun >= 70 % over 29.53 d (final bound | specification 3.2):
+  61.44 km:  72.3 |  77.3 -> PASS
+  30.72 km:  77.9 |  82.0 -> PASS
+   7.68 km:  83.1 |  86.8 -> PASS
+   3.84 km:  84.1 |  87.6 -> PASS
+
+OVERALL: PASS  [14 s]
+```
+
+The prototype found 3 676 764 Sun and 7 252 663 Earth samples with a visible part and margins of 2.369 and 3.649 deg;
+the final bound, with a lower floor, per-sample disc radii and the extra 0.05 deg, finds 0 violations and larger
+margins. The visible-sample counts differ by about 100 because the real mask is read at the nearest azimuth here.
+`tests/test_bounds.py` repeats part 1 at every 6th hour plus the other checks (reference floors, floor below every
+random terrain skyline, run helpers, tile bound contains every cell of the tile, the engine's own traced horizons stay
+above the floor, the elevation margin still covers the grids).
+
+**Limitation.** Within about 5 degrees of the pole the Sun stays near the horizon and the bound discards nothing for the
+Sun (0 % at 85-90 S): only the terrain decides there, so window samples stay necessary. Earth contact is still
+discarded up to 88 S over a full lunation. Slope cannot be decided by tiles (no tile above a few km is uniformly passing
+or failing), so it is checked last, at full resolution, on what survives; hydrogen can (45 km footprint).
+
 ## Verified results (2026-11-13)
 
 | Check | Result |
