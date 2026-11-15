@@ -195,6 +195,7 @@ export function Timeline() {
       {data && (
         <>
           {!comparing && <PlaceStrip id={id} data={data} link={link.data ?? null} linkReady={!link.problem} showEarth={showEarthRow || !link.data} left={LEFT} x={x} ticks={ticks} durationH={durationH} startMs={startMs} endMs={endMs} tMs={tMs} onSeek={seek} />}
+          {!comparing && link.data?.budget && !link.problem && <MarginChart link={link.data} startMs={startMs} endMs={endMs} tMs={tMs} x={x} left={LEFT} onSeek={seek} />}
           {battery && <BatteryChart r={battery} startMs={startMs} endMs={endMs} tMs={tMs} x={x} left={LEFT} onSeek={seek} />}
           {inside && <InsideChart r={inside} startMs={startMs} endMs={endMs} tMs={tMs} x={x} left={LEFT} onSeek={seek} />}
           <TimelineText data={data} battery={battery} inside={inside} tMs={tMs} link={link.data && !link.problem ? link.data : null} />
@@ -287,6 +288,63 @@ function PlaceStrip({ id, data, link, linkReady, showEarth, left, x, ticks, dura
     </svg>
   )
 }
+/**
+ * Link budget (level 2): the best Eb/N0 margin among the antennas in contact, at each sample, against the margin the
+ * user asks for (dashed). The link is closed only where the line is at or above the dashed one, which is what the
+ * Link row above draws. A break in the line means no antenna is in contact then. The same numbers are in the panel.
+ */
+function MarginChart({ link, startMs, endMs, tMs, x, left, onSeek }: { link: LinkResponse; startMs: number; endMs: number; tMs: number; x: (t: number) => number; left: number; onSeek: (e: MouseEvent<SVGSVGElement>) => void }) {
+  const b = link.budget!
+  const need = b.inputs.min_margin_db
+  const values = b.best_margin_db
+  const finite = values.filter((v): v is number => v !== null)
+  if (finite.length === 0) return null
+  const lo = Math.min(...finite, need) - 1
+  const hi = Math.max(...finite, need) + 1
+  const y = (v: number) => BH - ((v - lo) / (hi - lo)) * (BH - 8) - 4
+  const runs: string[] = []
+  let current: string[] = []
+  link.t.forEach((iso, i) => {
+    const t = Date.parse(iso)
+    const v = values[i]
+    if (v === null || v === undefined || t < startMs || t > endMs) {
+      if (current.length) runs.push(current.join(' L'))
+      current = []
+    } else current.push(`${x(t).toFixed(1)},${y(v).toFixed(1)}`)
+  })
+  if (current.length) runs.push(current.join(' L'))
+  const closed = Math.min(...finite) >= need
+  const label = `Link margin between ${Math.min(...finite).toFixed(1)} and ${Math.max(...finite).toFixed(1)} dB, against the ${need} dB the link needs. ${closed ? 'It stays above the need.' : 'It falls below the need at times.'}`
+
+  return (
+    <svg className="line-chart margin-chart" viewBox={`${-left} -6 ${W + left + 6} ${BH + 14}`} role="img" aria-label={label} onClick={onSeek}>
+      <text x={-8} y={BH / 2 - 2} textAnchor="end" className="row-label">
+        Margin
+      </text>
+      <text x={-8} y={BH / 2 + 11} textAnchor="end" className="axis-label">
+        dB
+      </text>
+      <rect x={0} y={0} width={W} height={BH} className="row-bg" />
+      <text x={W + 4} y={10} className="axis-label">
+        {hi.toFixed(0)}
+      </text>
+      <text x={W + 4} y={BH} className="axis-label">
+        {lo.toFixed(0)}
+      </text>
+      <line x1={0} x2={W} y1={y(need)} y2={y(need)} className="margin-need">
+        <title>Margin the link needs: {need} dB</title>
+      </line>
+      <text x={4} y={y(need) - 3} className="axis-label">
+        needs {need} dB
+      </text>
+      {runs.map((d, i) => (
+        <path key={i} d={`M${d}`} className="margin-line" />
+      ))}
+      {tMs >= startMs && tMs <= endMs && <line className="cursor" x1={x(tMs)} x2={x(tMs)} y1={-4} y2={BH + 2} />}
+    </svg>
+  )
+}
+
 const CROW = 14
 const CGAP = 6
 const NAME_CHARS = 22

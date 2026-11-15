@@ -79,9 +79,11 @@ The link is now in the interface. The section is still opened with the "Earth li
   "Direction and own antennas". The answer updates by itself after each valid change (a short pause while typing); the previous
   answer stays on screen, marked "updating", until the new one arrives. While the budget is incomplete the geometry is
   asked instead, so the panel and the timeline keep showing the contact and the panel says what is missing.
-- `charts/Timeline.tsx`: the single-place strips are now `Sunlit`, optionally `Earth up`, and `Link` (solid bars are
-  link; at Budget level dotted bars are contact without enough margin). The Earth row is hidden while the link answer
-  is available and appears in its place if the API does not answer. The comparison strips are unchanged.
+- `charts/Timeline.tsx`: the single-place strips are now `Sunlit`, optionally `Earth up`, and `Link` (bars only where
+  there is real link). At Budget level a `Margin` chart goes under them: the best Eb/N0 margin at each sample as a line
+  against a dashed line at the margin the user asks for; the link is closed where the line is at or above the dashed one,
+  and a break in the line means no antenna is in contact. The Earth row is hidden while the link answer is available and
+  appears in its place if the API does not answer. The comparison strips are unchanged.
 - `panels/TimelineFilters.tsx` and `app/Layout.tsx`: a "Filters" button in the top bar with the option "Earth above the
   horizon" (off by default) that shows the `Earth up` row.
 - `panels/linkModel.ts` (pure, tested in `linkModel.test.ts`), `state/link.ts` (form state and the shared request),
