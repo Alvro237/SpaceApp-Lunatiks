@@ -9,8 +9,7 @@ import { GroundStack, type SunDir } from './light'
 import type { LightRequest, LightResponse } from './light.worker'
 import { type Ring, loadRing, photoAlbedo, placePhotoMean, planeFrame, ringSpecs } from './rings'
 import { detailSampler, detailTileUrl, loadDetailTile, tileKey, visibleFarTiles } from './detailPhoto'
-import { KPIXEL_M, MAX_LAT, kKey, kaguyaMean, kaguyaSampler, kaguyaTileUrl, loadKaguyaTile, pixelGrid, visibleKaguyaTiles } from './kaguya'
-import { TILE_CELL_M } from './detailPhoto'
+import { MAX_LAT, kKey, kaguyaMean, kaguyaSampler, kaguyaTileUrl, loadKaguyaTile, pixelGrid, visibleKaguyaTiles } from './kaguya'
 import { groundTexture } from '../groundTexture'
 import type { ReliefScene } from './render'
 
@@ -314,7 +313,6 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
         exposure: night === 'earthshine' && lit ? NIGHT_EXPOSURE / lit.earthRatio : 1,
         albedo: live.stack === stack && ringAlbedo ? ringAlbedo : undefined,
         detailAt: live.stack === stack ? detailAt : undefined,
-        detailPixelM: detail.source === 'kaguya' ? KPIXEL_M : TILE_CELL_M,
         grain: groundTexture(),
       },
       night,

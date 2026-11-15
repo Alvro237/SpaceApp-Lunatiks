@@ -1,7 +1,8 @@
 /**
  * Puts the rendered relief (render.ts) on the horizon canvas: an offscreen buffer at device resolution once the
  * view is still ("fine"), or at about INTERACTIVE_COLUMNS columns while it moves, scaled up; then the mask's skyline
- * as a thin line, so the line the metrics use stays visible on the drawn ground.
+ * as a thin line where it stands in the sky above the drawn ground (the line the metrics use; where the drawn ground
+ * rises above it the line is hidden, as a real skyline would be).
  */
 import type { Camera } from '../project'
 import { wrap360 } from '../project'
@@ -47,16 +48,29 @@ export function drawReliefGround(
   ctx.drawImage(buffer.canvas, 0, 0, w * scale, h * scale)
   ctx.restore()
 
-  // the mask's skyline, thin and faint
+  // the mask's skyline, thin and faint, only where it is in the sky (no ground drawn just under it)
   const step = 2
+  const data = buffer.image.data
+  const groundAt = (x: number, y: number) => {
+    const i = Math.min(w - 1, Math.max(0, Math.floor(x / scale)))
+    const j = Math.floor((y + 1.5) / scale)
+    return j >= 0 && j < h && data[4 * (j * w + i) + 3] > 0 && j > 0 && data[4 * ((j - 1) * w + i) + 3] > 0
+  }
   ctx.strokeStyle = 'rgba(241,238,232,0.32)'
   ctx.lineWidth = 1
   ctx.beginPath()
+  let pen = false
   for (let x = 0; x <= W + step; x += step) {
     const az = wrap360(c.yaw + (x - c.cx) * c.degPerPx)
     const y = c.cy - (horizonAt(az) - c.pitch) / c.degPerPx
-    if (x === 0) ctx.moveTo(x, y)
+    // hidden where the drawn ground covers the line and the row above it
+    if (groundAt(x, y - 3)) {
+      pen = false
+      continue
+    }
+    if (!pen) ctx.moveTo(x, y)
     else ctx.lineTo(x, y)
+    pen = true
   }
   ctx.stroke()
   return true
