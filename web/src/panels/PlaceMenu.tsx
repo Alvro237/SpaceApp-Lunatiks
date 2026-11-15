@@ -12,6 +12,7 @@ import { useSites } from '../api/hooks'
 import { useMasks } from '../time/hooks'
 import { pointName } from '../time/place'
 import { IconEdit, IconTrash } from '../ui/icons'
+import { CloseButton } from '../ui/PanelNav'
 
 export function PlaceMenu() {
   const menu = usePlaceStyles((s) => s.menu)
@@ -81,6 +82,7 @@ function MenuBody({ menu }: { menu: PlaceMenuTarget }) {
         <span className="pm-name" title={name}>
           {name}
         </span>
+        <CloseButton label="Close the place menu" size={16} onClick={() => close()} />
       </div>
 
       {editing ? (

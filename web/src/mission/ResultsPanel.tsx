@@ -8,7 +8,9 @@ import { useId } from 'react'
 import './planner.css'
 import type { SuitabilityResponse, TopSite } from '../api/types'
 import { useAreas } from '../state/areas'
+import { usePanels } from '../state/panels'
 import { MAX_COMPARE, useApp } from '../state/store'
+import { CloseButton } from '../ui/PanelNav'
 import { CATEGORY_TITLE, CRITERION_LABEL } from './plannerInputs'
 import { coord, siteTitle } from './sites'
 
@@ -68,12 +70,20 @@ const pct = (v: number) => `${Math.round(v * 100)} %`
 /** Category ids, highest weight first. */
 const byWeight = (cats: string[], w: Record<string, number>) => [...cats].sort((x, y) => (w[y] ?? 0) - (w[x] ?? 0)).join(',')
 
+/** Hides the panel; the planner's "Show candidate sites" button and the next answer bring it back. */
+function CloseResults() {
+  return <CloseButton label="Close candidate sites" esc={false} onClick={() => usePanels.getState().setResultsOpen(false)} />
+}
+
 export function ResultsPanel({ titleId }: { titleId: string }) {
   const a = useAreas()
   if (!a.suit) {
     return (
       <div className="results-empty">
-        <h2 id={titleId}>Candidate sites</h2>
+        <div className="results-head">
+          <h2 id={titleId}>Candidate sites</h2>
+          <CloseResults />
+        </div>
         <p className="muted pad">No search yet: set a region and switch on at least one category in the planner panel.</p>
       </div>
     )
@@ -186,12 +196,15 @@ function Results({ r, titleId }: { r: SuitabilityResponse; titleId: string }) {
   ]
   return (
     <div className="results" aria-live="polite">
-      <h2 id={titleId} className="ios-header">
-        Candidate sites
-        <span className="muted small-note">
-          {r.seconds.toFixed(1)} s{r.window ? ` · ${r.window.samples} horizons` : ''}
-        </span>
-      </h2>
+      <div className="results-head">
+        <h2 id={titleId} className="ios-header">
+          Candidate sites
+          <span className="muted small-note">
+            {r.seconds.toFixed(1)} s{r.window ? ` · ${r.window.samples} horizons` : ''}
+          </span>
+        </h2>
+        <CloseResults />
+      </div>
       <table className="cell-counts">
         <caption className="sr-only">Cells of the search region by outcome</caption>
         <tbody>

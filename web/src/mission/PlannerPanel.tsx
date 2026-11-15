@@ -7,6 +7,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import './planner.css'
 import { useAreas } from '../state/areas'
+import { usePanels } from '../state/panels'
 import { useApp } from '../state/store'
 import { IconChevron } from '../ui/icons'
 import { AdvancedInputs } from './AdvancedInputs'
@@ -67,6 +68,7 @@ export function PlannerPanel() {
   usePlannerBounds(open)
   const search = usePlannerSearch()
   const [example, setExample] = useState(false)
+  const resultsOpen = usePanels((s) => s.resultsOpen)
 
   // Escape cancels "Pick on the Moon" (3.8); a click elsewhere disarms it on its own (GlobeView/TerrainView).
   useEffect(() => {
@@ -153,6 +155,11 @@ export function PlannerPanel() {
           <p className="planner-status" role="status">
             {footer}
           </p>
+          {!resultsOpen && (
+            <button type="button" className="small" onClick={() => usePanels.getState().setResultsOpen(true)}>
+              Show candidate sites
+            </button>
+          )}
           <button type="button" className="primary" disabled={!search.hasWindow || search.pending} onClick={search.simulate}>
             Simulate full detail
           </button>

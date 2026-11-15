@@ -5,6 +5,7 @@
 import { useNavigate } from 'react-router-dom'
 import { QUESTS } from '../learn/quests'
 import { useQuest } from '../learn/useQuest'
+import { BackToNavigator } from '../ui/PanelNav'
 
 export function LearnPage() {
   const navigate = useNavigate()
@@ -20,6 +21,7 @@ export function LearnPage() {
 
   return (
     <article className="page prose learn">
+      <BackToNavigator />
       <h1>Learn</h1>
       <p className="intro">
         Five short challenges inside the real tool. Each one opens the navigator on a real place and date and asks one question; the answer is worked out

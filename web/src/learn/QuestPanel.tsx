@@ -5,6 +5,7 @@
 import { useEffect, useId, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useEphemeris, useMasks } from '../time/hooks'
+import { BackButton, CloseButton } from '../ui/PanelNav'
 import { QUESTS, questById } from './quests'
 import { useQuest } from './useQuest'
 
@@ -27,6 +28,7 @@ function QuestCard({ id }: { id: string }) {
   const solved = useMemo(() => (eph && masks ? quest.solve({ table: eph.table, masks }) : null), [eph, masks, quest])
   const index = QUESTS.findIndex((q) => q.id === id)
   const next = QUESTS[index + 1] ?? null
+  const prev = QUESTS[index - 1] ?? null
   const right = solved && picked === solved.answerId
 
   useEffect(() => {
@@ -34,14 +36,21 @@ function QuestCard({ id }: { id: string }) {
   }, [right, id, markDone])
 
   return (
-    <section className="float quest-card" aria-labelledby={headingId}>
+    <section
+      className="float quest-card"
+      aria-labelledby={headingId}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.stopPropagation()
+          stop()
+        }
+      }}
+    >
       <div className="quest-top">
         <span className="quest-kicker">
           Lunar Quest · {index + 1} of {QUESTS.length} · {quest.kind}
         </span>
-        <button type="button" className="icon small" aria-label="Close the challenge" onClick={stop}>
-          ✕
-        </button>
+        <CloseButton label="Close the challenge" size={16} onClick={stop} />
       </div>
       <h2 id={headingId} className="quest-title">
         {quest.title}
@@ -84,6 +93,11 @@ function QuestCard({ id }: { id: string }) {
           </button>
         )}
         <span className="quest-spacer" />
+        {prev && (
+          <BackButton label={`Back to the previous challenge: ${prev.title}`} onClick={() => start(prev.id)}>
+            Previous
+          </BackButton>
+        )}
         {next ? (
           <button type="button" className="primary" onClick={() => start(next.id)}>
             Next challenge

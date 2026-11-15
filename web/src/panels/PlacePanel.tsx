@@ -17,7 +17,8 @@ import { type SectionId, usePanels } from '../state/panels'
 import { useApp } from '../state/store'
 import { formatUtc } from '../time/clock'
 import { SourceTag } from '../ui/ApiStatus'
-import { IconAntenna, IconBolt, IconClose, IconHorizon, IconMore, IconMulti } from '../ui/icons'
+import { IconAntenna, IconBolt, IconHorizon, IconMore, IconMulti } from '../ui/icons'
+import { BackButton, CloseButton } from '../ui/PanelNav'
 import { openMenuFrom } from './PlaceMenu'
 import { fmtLat, fmtLon } from './format'
 import { LinkPanel } from './LinkPanel'
@@ -95,6 +96,10 @@ export function SectionDrawer({ titleId }: { titleId: string }) {
   const { view, info, outOfRange } = useNow()
   const section = usePanels((s) => s.section)
   const setSection = usePanels((s) => s.setSection)
+  const back = usePanels((s) => s.back)
+  const trail = usePanels((s) => s.trail)
+  // the section shown before this one, for the Back button
+  const prev = SECTIONS.find((s) => s.id === trail[trail.length - 1])
   const heading = useRef<HTMLHeadingElement>(null)
   const active = SECTIONS.find((s) => s.id === section)
 
@@ -104,7 +109,10 @@ export function SectionDrawer({ titleId }: { titleId: string }) {
     if (!section) return
     if (section !== 'horizon') heading.current?.focus()
     return () => {
-      requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(`.place-tools [data-section='${section}']`)?.focus())
+      // only when the drawer closes: going Back or to another section keeps the focus in the drawer
+      requestAnimationFrame(() => {
+        if (!usePanels.getState().section) document.querySelector<HTMLButtonElement>(`.place-tools [data-section='${section}']`)?.focus()
+      })
     }
   }, [section])
 
@@ -121,6 +129,13 @@ export function SectionDrawer({ titleId }: { titleId: string }) {
         }
       }}
     >
+      {prev && (
+        <div className="panel-nav">
+          <BackButton label={`Back to ${prev.title}`} onClick={back}>
+            {prev.title}
+          </BackButton>
+        </div>
+      )}
       <div className="drawer-head">
         <span className={`ios-icon ios-icon-${active.id}`}>{active.icon(18)}</span>
         <div className="drawer-titles">
@@ -148,9 +163,7 @@ export function SectionDrawer({ titleId }: { titleId: string }) {
             <IconMore size={18} />
           </button>
         )}
-        <button type="button" className="icon" onClick={close} aria-label={`Close ${active.title}`} title="Close (Esc)">
-          <IconClose size={18} />
-        </button>
+        <CloseButton label={`Close ${active.title}`} onClick={close} />
       </div>
       {outOfRange && (
         <p className="error" role="alert">
