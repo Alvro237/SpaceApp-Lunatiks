@@ -39,6 +39,7 @@ import {
   trekTileUrl,
   wantedTiles,
 } from './grid'
+import type { PhotoBase } from './photoBase'
 import { DetailSlots } from './slots'
 import { splitQuad } from './trekGeo'
 
@@ -62,6 +63,11 @@ export class GlobeDetail {
   private clockS = 0
   /** Failed tiles: how many times, and when they may be asked for again (seconds on clockS). */
   private readonly failures = new Map<string, { count: number; retryAt: number }>()
+
+  /** `photoBase`: the shipped photo base tiles (photoBase.ts), in place before the first frame; null asks Moon Trek. */
+  constructor(photoBase: PhotoBase | null = null) {
+    for (const { tile, bytes } of photoBase ?? []) this.slots.photo.put(tile, bytes)
+  }
 
   /** The uniforms the shader needs, to spread into the material's uniforms. */
   uniforms(): Record<string, THREE.IUniform> {
