@@ -92,8 +92,13 @@ export const AMBIENT = 0.075
 const NEAR_GROWTH = 0.04
 const STEP_CELLS = 1
 const FIRST_STEP_M = 0.3
-/** Longest ray step over ground with a detail tile, metres: the mosaic's pixel. */
-export const DETAIL_STEP_M = 100
+/**
+ * Ray steps over ground with a finer photo: no longer than DETAIL_STEP_M (about a Kaguya TC pixel) or
+ * DETAIL_STEP_REL of the distance, whichever is longer (a step at 10 km already covers several pixels of the screen
+ * along the ray at grazing incidence).
+ */
+export const DETAIL_STEP_M = 20
+const DETAIL_STEP_REL = 0.004
 /** Grain: metres per level-0 texel, and how strongly it modulates the albedo. */
 const GRAIN_M = 0.04
 const GRAIN_GAIN = 0.55
@@ -308,7 +313,7 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
       let stepM = Math.min(STEP_CELLS * ringCell[k], NEAR_GROWTH * t)
       if (stepM > DETAIL_STEP_M && detailAt) {
         const d = detailAt(t * sa, t * ca)
-        if (d === d) stepM = DETAIL_STEP_M
+        if (d === d) stepM = Math.max(DETAIL_STEP_M, DETAIL_STEP_REL * t)
       }
       t += Math.max(0.02, stepM)
       // nothing farther can show: even the highest ground in the rings would stay below the rows filled so far

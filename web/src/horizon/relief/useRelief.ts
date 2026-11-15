@@ -9,6 +9,7 @@ import { GroundStack, type SunDir } from './light'
 import type { LightRequest, LightResponse } from './light.worker'
 import { type Ring, loadRing, photoAlbedo, placePhotoMean, planeFrame, ringSpecs } from './rings'
 import { detailSampler, detailTileUrl, loadDetailTile, tileKey, visibleFarTiles } from './detailPhoto'
+import { MAX_LAT, kKey, kaguyaMean, kaguyaSampler, kaguyaTileUrl, loadKaguyaTile, visibleKaguyaTiles } from './kaguya'
 import { groundTexture } from '../groundTexture'
 import type { ReliefScene } from './render'
 
@@ -35,8 +36,8 @@ export interface Relief {
   night?: 'earthshine' | 'dark' | null
   /** The data under the observer, in words: "LOLA 5 m DEM", or "LROC NAC 1.6 m DTM + LOLA" where one is merged in. */
   sourceLabel?: string | null
-  /** 100 m photo tiles of the visible far ground: read so far, and asked for. */
-  detailTiles?: { loaded: number; wanted: number }
+  /** Finer photo tiles of the ground in view: which mosaic, read so far, and asked for. */
+  detailTiles?: { source: 'kaguya' | 'wac'; loaded: number; wanted: number }
 }
 
 /** Words for the data a ring was built from (rings.ts). */
@@ -120,37 +121,51 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
     () => (stack && photoMean ? (stack.rings as Ring[]).map((r) => (r.photo ? photoAlbedo(r.photo, photoMean) : null)) : null),
     [stack, photoMean],
   )
-  // the far ground in view, at the mosaic's 100 m: worked out once all the rings are in, tiles shown as they arrive
-  const [detail, setDetail] = useState<{ key: string; tiles: Map<string, Uint8Array>; wanted: number }>({ key: '', tiles: new Map(), wanted: 0 })
+  // the ground in view at a finer photo: Kaguya TC (21 m) up to MAX_LAT, the WAC mosaic's own 100 m beyond (the
+  // ray casting of the horizon picks the tiles); worked out once all the rings are in, shown as the tiles arrive
+  const kaguya = lat !== undefined && Math.abs(lat) <= MAX_LAT
+  const [detail, setDetail] = useState<{ key: string; tiles: Map<string, Uint8Array>; wanted: number; source: 'kaguya' | 'wac' }>({
+    key: '',
+    tiles: new Map(),
+    wanted: 0,
+    source: 'wac',
+  })
   const complete = !!stack && !!specs && stack.rings.length === specs.length
   useEffect(() => {
     if (!complete || !stack || lat === undefined || lon === undefined) return
     let live = true
     const eye = stack.heightAt(0, (512 - 1) / 2, (512 - 1) / 2) + Math.max(mastM, EYE_MIN_M)
-    const wanted = visibleFarTiles(stack, eye)
+    const source = kaguya ? 'kaguya' : 'wac'
+    const jobs: { key: string; url: string; load: (u: string) => Promise<Uint8Array | null> }[] = kaguya
+      ? visibleKaguyaTiles(stack, eye, lat, lon).map((t) => ({ key: kKey(t.col, t.row), url: kaguyaTileUrl(t.col, t.row), load: loadKaguyaTile }))
+      : visibleFarTiles(stack, eye).map((t) => ({ key: tileKey(t.ix, t.iy), url: detailTileUrl(lat, lon, t.ix, t.iy), load: loadDetailTile }))
     const got = new Map<string, Uint8Array>()
-    setDetail({ key, tiles: new Map(), wanted: wanted.length })
+    setDetail({ key, tiles: new Map(), wanted: jobs.length, source })
     let timer: ReturnType<typeof setTimeout> | null = null
     const flush = () => {
       timer = null
-      if (live) setDetail({ key, tiles: new Map(got), wanted: wanted.length })
+      if (live) setDetail({ key, tiles: new Map(got), wanted: jobs.length, source })
     }
-    for (const t of wanted)
-      void loadDetailTile(detailTileUrl(lat, lon, t.ix, t.iy)).then((g) => {
+    for (const j of jobs)
+      void j.load(j.url).then((g) => {
         if (!live || !g) return
-        got.set(tileKey(t.ix, t.iy), g)
+        got.set(j.key, g)
         // a few tiles at a time: each new set costs a render
-        timer ??= setTimeout(flush, 400)
+        timer ??= setTimeout(flush, 500)
       })
     return () => {
       live = false
       if (timer) clearTimeout(timer)
     }
-  }, [complete, stack, key, lat, lon, mastM])
-  const detailAt = useMemo(
-    () => (detail.key === key && detail.tiles.size > 0 && photoMean ? detailSampler(detail.tiles, photoMean) : undefined),
-    [detail, key, photoMean],
-  )
+  }, [complete, stack, key, lat, lon, mastM, kaguya])
+  const detailAt = useMemo(() => {
+    if (detail.key !== key || detail.tiles.size === 0 || lat === undefined || lon === undefined) return undefined
+    if (detail.source === 'kaguya') {
+      const m = kaguyaMean(detail.tiles)
+      return m ? kaguyaSampler(detail.tiles, m, lat, lon) : undefined
+    }
+    return photoMean ? detailSampler(detail.tiles, photoMean) : undefined
+  }, [detail, key, photoMean, lat, lon])
 
   // what is on screen: a stack with its normals and its sunlight, swapped only once a larger stack is fully lit
   const [shown, setShown] = useState<{
@@ -304,7 +319,7 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
       lightMs: live.ms,
       // the finest ring on screen is what the observer stands on
       sourceLabel: ringSourceLabel(live.stack.rings[0] as Ring),
-      detailTiles: detail.key === key ? { loaded: detail.tiles.size, wanted: detail.wanted } : undefined,
+      detailTiles: detail.key === key ? { source: detail.source, loaded: detail.tiles.size, wanted: detail.wanted } : undefined,
     }
   }, [specs, key, shown, loaded, mastM, sun, lights, stack, ringAlbedo, detailAt, detail])
 }

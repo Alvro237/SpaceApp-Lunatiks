@@ -302,3 +302,29 @@ describe('far detail tiles', () => {
     expect(at(0, 0)).toBeNaN()
   })
 })
+
+describe('Kaguya TC tiles', () => {
+  it('turns plane metres into latitude and longitude (inverse local stereographic)', async () => {
+    const { planeToLatLon } = await import('./kaguya')
+    const out = new Float64Array(2)
+    const c = (0.5 * Math.PI) / 180 // half a degree of arc
+    planeToLatLon(26.571, 150.851, 0, 2 * R_M * Math.tan(c / 2), out)
+    expect(out[0]).toBeCloseTo(27.071, 6)
+    expect(out[1]).toBeCloseTo(150.851, 6)
+    planeToLatLon(0, 179.9, 2 * R_M * Math.tan(c / 2), 0, out)
+    expect(out[0]).toBeCloseTo(0, 6)
+    expect(out[1]).toBeCloseTo(-179.6, 6) // across the date line
+  })
+
+  it('samples the tile under a point and gives NaN where none is loaded', async () => {
+    const { kaguyaSampler, kKey, KTILE_DEG, KTILE_PX } = await import('./kaguya')
+    const lat0 = 26.571
+    const lon0 = 150.851
+    const col = Math.floor((lon0 + 180) / KTILE_DEG)
+    const row = Math.floor((90 - lat0) / KTILE_DEG)
+    const g = new Uint8Array(KTILE_PX * KTILE_PX).fill(60)
+    const at = kaguyaSampler(new Map([[kKey(col, row), g]]), 40, lat0, lon0)
+    expect(at(0, 0)).toBeCloseTo(1.5, 5)
+    expect(at(0, 50_000)).toBeNaN()
+  })
+})
