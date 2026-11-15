@@ -6,13 +6,10 @@
  * Catalogue sites are buttons over the globe; the panels hold the same information as text.
  */
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
-<<<<<<< HEAD
 import { Line2 } from 'three/examples/jsm/lines/Line2.js'
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js'
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js'
-=======
 import { SkyMap } from './skyMap'
->>>>>>> origin/main
 import { StarField } from './starField'
 import { ToolPortal } from '../ui/ToolSlot'
 import { usePlaceStyles } from '../state/placeStyle'
@@ -23,12 +20,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type KeyboardEvent, type MouseEvent, type PointerEvent, type WheelEvent, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { useInsets } from '../state/layout'
-<<<<<<< HEAD
 import { useAreas } from '../state/areas'
-import { type MarkerStyle, useApp } from '../state/store'
-=======
 import { type MarkerStyle, type ViewMode, useApp } from '../state/store'
->>>>>>> origin/main
 import { MarkerSet } from '../map/markerSet'
 import { type MapSite, useMapSites } from '../map/useMapSites'
 import { TileLoader } from '../terrain/loader'
@@ -36,11 +29,7 @@ import { prefetchMap } from '../terrain/prefetch'
 import { useEphemeris, useMasks } from '../time/hooks'
 import { DATA_BASE } from '../time/staticData'
 import { GlobeDetail } from './detail/globeDetail'
-<<<<<<< HEAD
-import { MIN_DIST, MOON_R_KM, type Orbit, OrbitRig, RELIEF_MAX, TILT_3D, cameraPose, latLonToScene, missionPickOutcome, nearPlaneKm, raySphere, reliefExaggeration, sceneToLatLon } from './orbit'
-=======
-import { MIN_DIST, MOON_R_KM, type Orbit, OrbitRig, RELIEF_MAX, TILT_3D, cameraPose, isNearView, latLonToScene, nearPlaneKm, raySphere, reliefExaggeration, sceneToLatLon } from './orbit'
->>>>>>> origin/main
+import { MIN_DIST, MOON_R_KM, type Orbit, OrbitRig, RELIEF_MAX, TILT_3D, cameraPose, isNearView, latLonToScene, missionPickOutcome, nearPlaneKm, raySphere, reliefExaggeration, sceneToLatLon } from './orbit'
 import { PATCH_LEVELS, holeOf, patchGeometry, patchWindows } from './patch'
 import { GLOBE_FRAG, GLOBE_VERT, PATCH_VERT } from './shaders'
 import { IconCrosshair } from '../ui/icons'
@@ -120,23 +109,14 @@ export function GlobeView() {
   /** The mesh's relief exaggeration, to half a unit (for the caption and the markers' height). */
   const [exag, setExag] = useState(RELIEF_MAX)
   const anchored = useGlobe((s) => s.anchored)
-<<<<<<< HEAD
   const regionCenter = useAreas((s) => s.center)
   const regionRadiusKm = useAreas((s) => s.radiusKm)
-  /** Whether the view is tilted (the 3D button's state; the camera itself lives in the orbit rig). */
-  const [tilted, setTilted] = useState(false)
   const [regionToast, setRegionToast] = useState<string | null>(null)
   useEffect(() => {
     if (!regionToast) return
     const t = setTimeout(() => setRegionToast(null), 3000)
     return () => clearTimeout(t)
   }, [regionToast])
-  const toggleTilt = () => {
-    const on = orbit.viewGoal.tilt < 1
-    orbit.setTilt(on ? TILT_3D : 0)
-    setTilted(on)
-  }
-=======
   // 2D or 3D: the app's view, shared with the polar map and kept in the address (the camera lives in the orbit rig).
   // 3D tilts the view; 2D sets it straight down with north up again, whatever turn it had.
   const view = useApp((s) => s.view)
@@ -150,7 +130,6 @@ export function GlobeView() {
     else orbit.resetView()
   }, [view, orbit])
   const toggleTilt = () => setApp({ view: useApp.getState().view === '3d' ? '2d' : '3d' })
->>>>>>> origin/main
   /** A click on the surface waits to see whether it is the first half of a double click. */
   const pendingClick = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => () => void (pendingClick.current && clearTimeout(pendingClick.current)), [])

@@ -1,9 +1,5 @@
 import { describe, expect, it } from 'vitest'
-<<<<<<< HEAD
-import { IDLE_BEFORE_SPIN_MS, MAX_TILT, MOON_R_KM, OrbitRig, SURFACE_MAX_R_KM, TILT_3D, cameraPose, missionPickOutcome, nearPlaneKm, RELIEF_MAX, SPIN_DEG_PER_S, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon, zoomOrbitToward } from './orbit'
-=======
-import { IDLE_BEFORE_SPIN_MS, MAX_TILT, MOON_R_KM, NEAR_ENTER_KM, NEAR_LEAVE_KM, isNearView, OrbitRig, SURFACE_MAX_R_KM, TILT_3D, cameraPose, nearPlaneKm, RELIEF_MAX, SPIN_DEG_PER_S, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon, zoomOrbitToward } from './orbit'
->>>>>>> origin/main
+import { IDLE_BEFORE_SPIN_MS, MAX_TILT, MOON_R_KM, NEAR_ENTER_KM, NEAR_LEAVE_KM, isNearView, OrbitRig, SURFACE_MAX_R_KM, TILT_3D, cameraPose, missionPickOutcome, nearPlaneKm, RELIEF_MAX, SPIN_DEG_PER_S, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon, zoomOrbitToward } from './orbit'
 
 describe('globe geometry', () => {
   it('puts the north pole up and longitude 0 toward +x', () => {
