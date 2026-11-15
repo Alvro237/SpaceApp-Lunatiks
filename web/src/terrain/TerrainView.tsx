@@ -360,6 +360,7 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
       last = { layer, lighting }
       let mode: LayerMode = { kind: 'none' }
       if (layer === 'elevation') mode = { kind: 'elevation' }
+      else if (layer === 'photo') mode = { kind: 'photo' }
       else if (layer !== 'none' && tileset.layers[layer]) {
         const m = tileset.layers[layer]
         mode = { kind: 'data', id: layer, colormap: m.colormap, levels: m.levels }

@@ -7,7 +7,7 @@ import { type LayerId, type Scene, type Selection, MASTS_M, MAX_COMPARE, default
 
 const VERSION = 1
 const MAX_URL_BYTES = 8192
-const LAYERS: LayerId[] = ['none', 'elevation', 'slope', 'sun_illumination', 'earth_visibility', 'permanent_shadow']
+const LAYERS: LayerId[] = ['none', 'photo', 'elevation', 'slope', 'sun_illumination', 'earth_visibility', 'permanent_shadow']
 const PANELS: PanelModel[] = ['tracking', 'vertical', 'horizontal']
 /** The tables cover 1969-1972 and 2025-2035; anything far outside is rejected as corrupt. */
 const T_MIN = Date.parse('1969-01-01T00:00:00Z')
