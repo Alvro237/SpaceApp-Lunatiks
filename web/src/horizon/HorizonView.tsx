@@ -22,13 +22,13 @@ import { useApp } from '../state/store'
 import { IconBack, IconMinus, IconPlus } from '../ui/icons'
 import { ToolPortal } from '../ui/ToolSlot'
 import { drawHorizon } from './draw'
-import { loadGroundTexture } from './groundTexture'
 import { starDirections } from './stars'
 import { cameraFor, compass16, wrap180 } from './project'
 import { MOON_R_KM } from '../globe/orbit'
 import { useEffectiveCamera } from './useEffectiveCamera'
 import { type SceneLights, useRelief } from './relief/useRelief'
 import { earthPhaseAngle, earthshineRatio } from './relief/light'
+import { loadGroundTexture } from './groundTexture'
 
 const state = (f: number) => (f >= 0.999 ? 'fully visible' : f > 0 ? `${Math.round(f * 100)} percent visible` : 'hidden by the horizon')
 
@@ -113,16 +113,6 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
   const tMs = view?.tMs
   const stars = useMemo(() => (frame && tMs !== undefined ? starDirections(tMs, frame) : null), [frame, tMs])
 
-  // the real lunar surface texture of the ground (LROC WAC patch); the illustration is drawn until it arrives
-  const [groundReady, setGroundReady] = useState(false)
-  useEffect(() => {
-    let live = true
-    void loadGroundTexture().then((t) => live && setGroundReady(t !== null))
-    return () => {
-      live = false
-    }
-  }, [])
-
   // the real ground around the place: LOLA rings lit by the Sun of the active instant, and at night by the Earth (relief/)
   const sunAz = view?.sun.az
   const sunEl = view?.sun.el
@@ -142,6 +132,15 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
     return { sun, sunVisible: sunUp, earth, earthRatio }
   }, [sunAz, sunEl, sunR, sunUp, earthAz, earthEl, earthR, earthKm])
   const relief = useRelief(info?.model.lat, info?.model.lon, info?.mastUsedM ?? 0, lights)
+  // the regolith grain near the feet (LROC WAC patch, groundTexture.ts); the ground redraws once it has arrived
+  const [grainReady, setGrainReady] = useState(false)
+  useEffect(() => {
+    let live = true
+    void loadGroundTexture().then((t) => live && setGrainReady(t !== null))
+    return () => {
+      live = false
+    }
+  }, [])
   // full resolution once the camera and the instant have been still for a moment, a lighter pass while they move
   const change = useMemo(() => ({ camera, tMs, arrival, scene: relief.scene }), [camera, tMs, arrival, relief.scene])
   const [still, setStill] = useState<typeof change | null>(null)
@@ -184,7 +183,7 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
       // during the descent the eye comes down over the same ground
       relief: relief.scene ? { scene: arrival < 1 ? { ...relief.scene, eyeM: relief.scene.eyeM + from.km * 1000 * (1 - k) } : relief.scene, fine: fine && arrival >= 1 } : null,
     })
-  }, [camera, view, info, size, tracks, free, arrival, stars, groundReady, relief.scene, fine, from.km])
+  }, [camera, view, info, size, tracks, free, arrival, stars, grainReady, relief.scene, fine, from.km])
 
   const turn = (dYaw: number, dPitch: number) => look(cam.yaw + dYaw, cam.pitch + dPitch)
 
@@ -251,10 +250,9 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
         <canvas ref={canvas} aria-hidden="true" style={{ width: '100%', height: '100%' }} />
         <p className="horizon-notice" style={{ left: free.left + 14, bottom: Math.max(free.bottom + 44, noticeBottom), maxWidth: `calc(100% - ${free.left + 28}px)` }}>
           {relief.status === 'ready'
-            ? `Rendered from LOLA heights, not footage · Relief: ${relief.sourceLabel ?? `LOLA ${relief.cellM?.toFixed(0)} m DEM`} to ${(relief.reachKm ?? 0) < 10 ? (relief.reachKm ?? 0).toFixed(1) : (relief.reachKm ?? 0).toFixed(0)} km, ${relief.night === 'earthshine' ? 'night, lit by earthshine (exposure raised)' : relief.night === 'dark' ? 'night, neither the Sun nor the Earth up' : 'lit by the Sun at this instant'} · Skyline: horizon mask`
+            ? `Rendered from LOLA heights and this place's LROC WAC mosaic, not footage · Relief: ${relief.sourceLabel ?? `LOLA ${relief.cellM?.toFixed(0)} m DEM`} to ${(relief.reachKm ?? 0) < 10 ? (relief.reachKm ?? 0).toFixed(1) : (relief.reachKm ?? 0).toFixed(0)} km, ${relief.night === 'earthshine' ? 'night, lit by earthshine (exposure raised)' : relief.night === 'dark' ? 'night, neither the Sun nor the Earth up' : 'lit by the Sun at this instant'}${relief.detailTiles && relief.detailTiles.wanted > 0 ? ` · Ground in view: ${relief.detailTiles.source === 'kaguya' ? 'Kaguya TC (JAXA) 21 m' : 'LROC WAC 100 m'}, ${relief.detailTiles.loaded} of ${relief.detailTiles.wanted} tiles` : ''} · Line: horizon mask used by the figures`
             : 'Not real moon footage · Real moon horizon line'}
           {relief.status === 'loading' && ' · Loading the LOLA relief around this place…'}
-          {relief.status !== 'ready' && groundReady && ' · Ground texture: LROC WAC mosaic, another place on the Moon'}
         </p>
         <p id="horizon-help" className="sr-only">
           Drag or use the arrow keys to look around, plus and minus to zoom, S to follow the Sun, E to follow the Earth, F for free look, Escape to go back to

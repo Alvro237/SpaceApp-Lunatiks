@@ -140,7 +140,7 @@ describe('rendering', () => {
       return a
     })
     const sunDir: [number, number, number] = [0, -Math.cos(20 * D), Math.sin(20 * D)]
-    renderRelief(img, 1, c, () => 10, { stack, normals, sunlight, eyeM: 1.7, sun: sunDir, grain: null })
+    renderRelief(img, 1, c, () => 10, { stack, normals, sunlight, eyeM: 1.7, sun: sunDir })
     const bright = 200 * tone(0.5)
     let top = H
     for (let j = 0; j < H; j++) {
@@ -159,17 +159,33 @@ describe('rendering', () => {
     expect(img.data[4 * (W / 2) + 1]).toBeLessThan(bright)
   })
 
-  it('never draws above the mask', () => {
+  it('draws a wall that rises above the mask up to its own silhouette', () => {
     const { stack, normals } = synthetic(-89.5, 0, 5, (_e, n) => (n > 300 ? 400 : 0))
     const W = 32
     const H = 300
     const c = { yaw: 0, pitch: 0, cx: W / 2, cy: H / 2, degPerPx: 0.1 }
     const img = { width: W, height: H, data: new Uint8ClampedArray(W * H * 4), colorSpace: 'srgb' } as ImageData
-    // the cliff would rise to atan(398.3 / 300) = 53°; the mask says 2°
-    renderRelief(img, 1, c, () => 2, { stack, normals, sunlight: null, eyeM: 1.7, sun: [0, 1, 0], grain: null })
-    const maskRow = Math.ceil(H / 2 - 2 / 0.1 - 0.5)
-    for (let j = 0; j < maskRow; j++) expect(img.data[4 * (j * W + W / 2) + 3]).toBe(0)
-    expect(img.data[4 * (maskRow * W + W / 2) + 3]).toBe(255)
+    // the cliff rises to atan(398.3 / 300) = 53°, beyond the top of this 30° field; the mask says 2°
+    renderRelief(img, 1, c, () => 2, { stack, normals, sunlight: null, eyeM: 1.7, sun: [0, 1, 0] })
+    for (let j = 0; j < H; j++) expect(img.data[4 * (j * W + W / 2) + 3]).toBe(255)
+  })
+
+  it('stops at the ground silhouette below the top of the view', () => {
+    // a 100 m rise 2 km north: atan((98.3 - 1.15) / 2000) = 2.78° above the eye; the mask says 0°
+    const { stack, normals } = synthetic(-89.5, 0, 20, (_e, n) => (n > 2000 ? 100 : 0))
+    const W = 32
+    const H = 300
+    const c = { yaw: 0, pitch: 0, cx: W / 2, cy: H / 2, degPerPx: 0.1 }
+    const img = { width: W, height: H, data: new Uint8ClampedArray(W * H * 4), colorSpace: 'srgb' } as ImageData
+    renderRelief(img, 1, c, () => 0, { stack, normals, sunlight: null, eyeM: 1.7, sun: [0, 1, 0] })
+    let top = H
+    for (let j = 0; j < H; j++)
+      if (img.data[4 * (j * W + W / 2) + 3] > 0) {
+        top = j
+        break
+      }
+    const el = Math.atan2(100 - 1.7 - (2000 * 2000) / (2 * R_M), 2000) / D
+    expect(Math.abs(top - (H / 2 - el / 0.1 - 0.5))).toBeLessThan(2)
   })
 })
 
@@ -206,7 +222,6 @@ describe('earthshine', () => {
         earth: [0, -Math.cos(30 * D), Math.sin(30 * D)],
         earthRatio: ratio,
         exposure: 0.6 / ratio,
-        grain: null,
       })
       return img.data[4 * ((H - 1) * W + W / 2) + 1]
     }
@@ -245,5 +260,71 @@ describe('high-resolution DTMs', () => {
     // at the patch's edge the weight is 1 / FINE_FEATHER, outside it LOLA is untouched
     expect(lola[200 * n + 250]).toBeCloseTo((1 / FINE_FEATHER) * (-2 / 10_000), 7)
     expect(lola[199 * n + 250]).toBe(0)
+  })
+})
+
+describe('photo albedo', () => {
+  it('divides each byte by the place mean, leaving photographed shadows out of the mean', async () => {
+    const { photoAlbedo, photoMean, ALBEDO_MIN } = await import('./rings')
+    const grey = new Uint8Array(100).map((_, i) => (i < 20 ? 0 : i % 2 ? 120 : 80))
+    const m = photoMean(grey)!
+    expect(m).toBeCloseTo(100, 5)
+    const a = photoAlbedo(grey, m)
+    expect(a[0]).toBeCloseTo(ALBEDO_MIN, 5)
+    expect(a[20]).toBeCloseTo(0.8, 5)
+    expect(a[21]).toBeCloseTo(1.2, 5)
+    expect(photoMean(new Uint8Array(100))).toBeNull()
+  })
+
+  it('takes the place mean from the finest ring with a usable photo', async () => {
+    const { placePhotoMean } = await import('./rings')
+    const rings = [
+      { cellM: 60, photo: new Uint8Array(10) },
+      { cellM: 960, photo: new Uint8Array(10).fill(90) },
+      { cellM: 240, photo: new Uint8Array(10).fill(50) },
+      { cellM: 120 },
+    ]
+    expect(placePhotoMean(rings)).toBe(50)
+  })
+})
+
+describe('far detail tiles', () => {
+  it('finds the tile of a wall 60 km north and samples its photo there', async () => {
+    const { visibleFarTiles, detailSampler, tileKey, TILE_PX, TILE_M } = await import('./detailPhoto')
+    // flat ground, then a 2 km wall from 60 km north on: the wall is in view, the ground behind it is not
+    const { stack } = synthetic(-89.5, 0, 5, (_e, n) => (n > 60_000 ? 2000 : 0))
+    const tiles = visibleFarTiles(stack, 1.7)
+    expect(tiles.length).toBeGreaterThan(0)
+    expect(tiles[0]).toMatchObject({ ix: 0, iy: Math.floor(60_000 / TILE_M + 0.5) })
+    const g = new Uint8Array(TILE_PX * TILE_PX).fill(150)
+    const at = detailSampler(new Map([[tileKey(tiles[0].ix, tiles[0].iy), g]]), 100)
+    expect(at(0, 60_500)).toBeCloseTo(1.5, 5)
+    expect(at(0, 0)).toBeNaN()
+  })
+})
+
+describe('Kaguya TC tiles', () => {
+  it('turns plane metres into latitude and longitude (inverse local stereographic)', async () => {
+    const { planeToLatLon } = await import('./kaguya')
+    const out = new Float64Array(2)
+    const c = (0.5 * Math.PI) / 180 // half a degree of arc
+    planeToLatLon(26.571, 150.851, 0, 2 * R_M * Math.tan(c / 2), out)
+    expect(out[0]).toBeCloseTo(27.071, 6)
+    expect(out[1]).toBeCloseTo(150.851, 6)
+    planeToLatLon(0, 179.9, 2 * R_M * Math.tan(c / 2), 0, out)
+    expect(out[0]).toBeCloseTo(0, 6)
+    expect(out[1]).toBeCloseTo(-179.6, 6) // across the date line
+  })
+
+  it('samples the tile under a point and gives NaN where none is loaded', async () => {
+    const { kaguyaSampler, kKey, KTILE_DEG, KTILE_PX } = await import('./kaguya')
+    const lat0 = 26.571
+    const lon0 = 150.851
+    const col = Math.floor((lon0 + 180) / KTILE_DEG)
+    const row = Math.floor((90 - lat0) / KTILE_DEG)
+    const g = new Uint8Array(KTILE_PX * KTILE_PX).fill(60)
+    const at = kaguyaSampler(new Map([[kKey(col, row), g]]), 40, lat0, lon0)
+    expect(at(0, 0)).toBeCloseTo(1.5, 5)
+    expect(at(0, 50_000)).toBeNaN()
   })
 })

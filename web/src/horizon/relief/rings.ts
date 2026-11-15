@@ -105,6 +105,8 @@ export interface RingSpec {
   cellM: number
   source: ReliefSource
   url: string
+  /** The LROC WAC mosaic over the same cells (photoUrl): this place's own ground brightness. */
+  photoUrl?: string
   /** A high-resolution DTM read for this ring too, merged over the LOLA heights where it has data. */
   fine?: { dem: FineDem; url: string }
 }
@@ -117,6 +119,11 @@ export interface Ring extends RingSpec {
   /** Share of the ring's samples taken from the fine DTM, and its mean offset from LOLA removed there, metres. */
   fineShare?: number
   fineOffsetM?: number
+  /**
+   * RING_N x RING_N grey bytes of this place's LROC WAC mosaic over the ring's cells (photoUrl), row 0 north; absent
+   * where the photo could not be read (the ground is then plain regolith). Turned into albedo by photoAlbedo.
+   */
+  photo?: Uint8Array
 }
 
 /** Observer frame in the plane: position, scale factor and the east and north unit vectors there. */
@@ -176,7 +183,7 @@ export function ringSpecs(lat: number, lon: number): RingSpec[] | null {
     const cellM = firstCell * RING_RATIO ** j
     if (j > 0 && ringHalf(cellM / RING_RATIO) >= MAX_REACH_M) break
     const source = RELIEF_SOURCES.find((s) => covers(s, lat, lon, ringHalf(cellM)))!
-    const spec: RingSpec = { cellM, source, url: ringUrl(source.file, lat, lon, cellM) }
+    const spec: RingSpec = { cellM, source, url: ringUrl(source.file, lat, lon, cellM), photoUrl: photoUrl(lat, lon, cellM) }
     if (fine && cellM <= FINE_RING_FACTOR * fine.cellM) spec.fine = { dem: fine, url: ringUrl(fine.file, lat, lon, cellM) }
     specs.push(spec)
   }
@@ -207,6 +214,103 @@ export function ringUrl(service: string, lat: number, lon: number, cellM: number
     `&size=${RING_N},${RING_N + TREK_EXTRA_ROWS}` +
     '&format=tiff&pixelType=F32&compression=LZ77&interpolation=RSP_BilinearInterpolation&f=image'
   )
+}
+
+/**
+ * The LROC WAC mosaics on Moon Trek (Speyerer et al. 2011; 100 m, 8-bit reflectance as photographed): the polar
+ * ones (south and north polar stereographic, a square of ±1 095.6 km to about 60°) and the global one (303 px/deg).
+ * The polar mosaics are used where the ring's square lies inside them: the global one is equirectangular, so near
+ * the poles its pixels are stretched along the parallels.
+ */
+const WAC_POLAR_HALF_M = 1_095_600
+const WAC_GLOBAL = 'LRO_WAC_Mosaic_Global_303ppd_v02'
+
+export function photoService(lat: number, lon: number, cellM: number): string {
+  const pole: 'S' | 'N' = lat < 0 ? 'S' : 'N'
+  const polarSrc: ReliefSource = { file: '', pixelM: 100, demM: 100, pole, halfExtentM: WAC_POLAR_HALF_M }
+  return Math.abs(lat) >= 60 && covers(polarSrc, lat, lon, ringHalf(cellM)) ? `LRO_WAC_Mosaic_${pole}Pole60_100m_v02` : WAC_GLOBAL
+}
+
+/**
+ * exportImage URL of a ring's photo: the same cells as its heights (no extra row: the JPEG answers have no zero
+ * row), grey JPEG reprojected by the server into the place's own stereographic plane. Measured 2026-11-15 at
+ * IM-1 (80.13 S): 0.96 s for 100 m cells, 1.27 s for 400 m cells.
+ */
+export function photoUrl(lat: number, lon: number, cellM: number): string {
+  const h = ringHalf(cellM)
+  return photoBoxUrl(photoService(lat, lon, cellM), lat, lon, [-h, -h, h, h], RING_N)
+}
+
+/** exportImage URL of a square box (xMin, yMin, xMax, yMax metres in the place's stereographic plane), size² grey JPEG. */
+export function photoBoxUrl(service: string, lat: number, lon: number, box: [number, number, number, number], size: number): string {
+  const sr = encodeURIComponent(JSON.stringify({ wkt: localStereoWkt(lat, lon) }))
+  return (
+    `${TREK_IMAGE_SERVER}${service}/ImageServer/exportImage?bbox=${box.join(',')}&bboxSR=${sr}&imageSR=${sr}` +
+    `&size=${size},${size}&format=jpg&compressionQuality=90&interpolation=RSP_BilinearInterpolation&f=image`
+  )
+}
+
+/**
+ * The photo as albedo: each byte over the place's mean brightness (photoMean), so the mosaic's own contrast is kept
+ * as photographed and every ring and detail tile of a place shares one scale (they are cut from the same mosaic).
+ * Bytes under SHADOW_BYTE are the mosaic's photographed shadows: left out of the mean.
+ */
+export const SHADOW_BYTE = 12
+/**
+ * Albedo range kept. The mosaic holds the shadows it was photographed with (near the poles most of the ground:
+ * median 0.016 of the byte range within 60 km of the pole); the floor leaves that ground shaped by the light of the
+ * chosen instant instead of black, and the cap keeps sunlit crater walls from blowing out.
+ */
+export const ALBEDO_MIN = 0.3
+export const ALBEDO_MAX = 2.2
+
+/** Mean of the bytes that are not photographed shadow, or null when (almost) all are. */
+export function photoMean(grey: ArrayLike<number>): number | null {
+  let sum = 0
+  let n = 0
+  for (let i = 0; i < grey.length; i++)
+    if (grey[i] >= SHADOW_BYTE) {
+      sum += grey[i]
+      n++
+    }
+  return n < grey.length * 0.05 ? null : sum / n
+}
+
+/** Grey bytes to albedo: byte / mean, clamped to [ALBEDO_MIN, ALBEDO_MAX]. */
+export function photoAlbedo(grey: ArrayLike<number>, mean: number): Float32Array {
+  const out = new Float32Array(grey.length)
+  for (let i = 0; i < grey.length; i++) out[i] = Math.min(ALBEDO_MAX, Math.max(ALBEDO_MIN, grey[i] / mean))
+  return out
+}
+
+/**
+ * The place's reference brightness: the mean of the finest ring photo that is not mostly shadow (the ground the
+ * observer stands on reads as plain regolith, brighter or darker ground around it as photographed), or null.
+ */
+export function placePhotoMean(rings: { cellM: number; photo?: Uint8Array }[]): number | null {
+  const wide = rings.filter((r) => r.photo).sort((x, y) => x.cellM - y.cellM)
+  for (const r of wide) {
+    const m = photoMean(r.photo!)
+    if (m !== null) return m
+  }
+  return null
+}
+
+/** Decode a square grey JPEG of `size` pixels to one byte per pixel; null where the browser cannot (tests) or the size is wrong. */
+export async function decodePhoto(blob: Blob, size = RING_N): Promise<Uint8Array | null> {
+  if (typeof createImageBitmap === 'undefined' || typeof document === 'undefined') return null
+  const img = await createImageBitmap(blob)
+  if (img.width !== size || img.height !== size) return null
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const g = canvas.getContext('2d', { willReadFrequently: true })
+  if (!g) return null
+  g.drawImage(img, 0, 0)
+  const rgba = g.getImageData(0, 0, size, size).data
+  const grey = new Uint8Array(size * size)
+  for (let i = 0; i < grey.length; i++) grey[i] = rgba[4 * i]
+  return grey
 }
 
 /**
@@ -332,11 +436,20 @@ export function loadRing(spec: RingSpec, fetchFn: typeof fetch = (u, i) => fetch
   }
   // the fine DTM is asked for alongside; if it fails or has no data here, the ring is LOLA alone
   const fine = spec.fine ? fetchBuf(spec.fine.url).then(decodeFine, () => null) : Promise.resolve(null)
+  // and the place's photo: without it the ground is plain regolith
+  const photo: Promise<Uint8Array | null> = spec.photoUrl
+    ? fetchFn(spec.photoUrl)
+        .then((r) => (r.ok ? r.blob() : null))
+        .then((b) => (b ? decodePhoto(b) : null))
+        .catch(() => null)
+    : Promise.resolve(null)
   const p = (async () => {
     let last: unknown = null
     for (let a = 0; a < 3; a++) {
       try {
-        const ring = await decodeRing(await fetchBuf(spec.url), spec)
+        const lola = await decodeRing(await fetchBuf(spec.url), spec)
+        const grey = await photo
+        const ring: Ring = grey ? { ...lola, photo: grey } : lola
         const f = await fine.catch(() => null)
         if (!f) return ring
         const { share, offsetM } = mergeFine(ring.heights, f)

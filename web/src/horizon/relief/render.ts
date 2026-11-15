@@ -9,8 +9,11 @@
  * however long a step is. The view's projection is the linear one of project.ts (one CSS pixel is the same
  * number of degrees across and up).
  *
- * The skyline stays the site's horizon mask (the one the metrics use): nothing is drawn above it, and where the
- * rings end below it (beyond 164 km with the 5 m DEM) the band up to it takes the last ground's shade.
+ * The ground is drawn up to its own silhouette, so a ridge or a crater wall rising above the site's horizon mask
+ * shows as the wall it is, with its photo and its light (the mask comes from a coarser grid away from the poles:
+ * 3.8 km cells against the rings' 60-118 m, and misses near slopes). The mask, the skyline the metrics use, is drawn
+ * over it as a thin line (drawRelief.ts). Where the mask stands above the rings' ground instead, the band up to it
+ * takes the shade of the last ground the ray met.
  *
  * Shading: radiance of a lunar-Lambert surface (McEwen 1991), R = (1 - L) mu0 + 2 L mu0 / (mu0 + mu), with mu0 the
  * cosine of the incidence times the visible share of the solar disc (light.ts) and mu the cosine of the emission
@@ -18,8 +21,14 @@
  * stand-in for the tabulated values). A fixed exposure maps R to the screen. Shadowed ground keeps a floor of
  * AMBIENT so that its shape still reads: the real shadows are darker than drawn. At night the ground facing the
  * Earth is lit by earthshine (the Earth as a second light with its own disc and shadows, light.ts
- * earthshineRatio), with the exposure raised as a camera would (the view says so). Below the DEM's cell, a fine
- * regolith grain from the LROC WAC patch (groundTexture.ts) modulates the albedo near the feet only.
+ * earthshineRatio), with the exposure raised as a camera would (the view says so).
+ *
+ * Albedo: this place's own photo multiplies the displayed brightness (after the tone curve, writePixel), as the photo views of the globe and of the polar
+ * map drape the mosaic over the LOLA relief. Where a detail tile has been read (detailPhoto.ts: the far ground the
+ * ray casting finds visible, at the mosaic's own 100 m) it is used, and the ray steps no longer than DETAIL_STEP_M
+ * there so the photo's detail is not stepped over; elsewhere the photo read over each ring's cells (rings.ts). The
+ * mosaic keeps the shadows it was photographed with; their floor (ALBEDO_MIN) leaves that ground to the light of
+ * the chosen instant. Without a photo the ground is plain regolith (albedo 1).
  */
 import { R_M } from '../../terrain/tileset'
 import type { GroundTexture } from '../groundTexture'
@@ -51,7 +60,12 @@ export interface ReliefScene {
   earthRatio?: number
   /** Multiplies the radiance before the tone curve: 1 by day, raised at night so the earthlit ground reads. */
   exposure?: number
-  grain: GroundTexture | null
+  /** Albedo per ring (rings.ts ringAlbedo), aligned with stack.rings; null or missing: plain regolith. */
+  albedo?: (Float32Array | null | undefined)[]
+  /** Albedo from the finer photo tiles at a point (east, north metres from the observer), or NaN where none is loaded. */
+  detailAt?: (e: number, n: number) => number
+  /** Regolith grain under the DEM's cell, near the feet only (groundTexture.ts), as before; null: none. */
+  grain?: GroundTexture | null
 }
 
 export interface ColumnCamera {
@@ -78,14 +92,28 @@ export const AMBIENT = 0.075
 const NEAR_GROWTH = 0.04
 const STEP_CELLS = 1
 const FIRST_STEP_M = 0.3
+/**
+ * Ray steps over ground with a finer photo: no longer than DETAIL_STEP_M (about a Kaguya TC pixel) or
+ * DETAIL_STEP_REL of the distance, whichever is longer (a step at 10 km already covers several pixels of the screen
+ * along the ray at grazing incidence).
+ */
+export const DETAIL_STEP_M = 20
+const DETAIL_STEP_REL = 0.004
 /** Grain: metres per level-0 texel, and how strongly it modulates the albedo. */
 const GRAIN_M = 0.04
 const GRAIN_GAIN = 0.55
-/** Grain fades out linearly to nothing at this distance, metres; eye height used for its footprint, metres. */
-const GRAIN_REACH_M = 60
+/**
+ * The grain (the regolith texture of a WAC patch of another place, groundTexture.ts) is laid near the feet only and
+ * fades out linearly to nothing at GRAIN_REACH_M: farther, only the real photo of the place shows (a patch repeated
+ * at larger scales would draw the same craters again and again). Eye height used for its footprint, metres.
+ */
+const GRAIN_REACH_M = 200
 const GRAIN_EYE_M = 1.7
 const LOG_GRAIN = Math.log2(GRAIN_M)
 
+/** Limb-darkening weight L = max(0, 1 - g / 150°) tabulated over cos g in [-1, 1] (LAMBERT_STEPS + 1 entries). */
+const LAMBERT_STEPS = 4096
+const LAMBERT_LUT = Float32Array.from({ length: LAMBERT_STEPS + 1 }, (_, i) => Math.max(0, 1 - Math.acos(-1 + (2 * i) / LAMBERT_STEPS) / (150 * D)))
 
 /** Display level (0..1) of a radiance. */
 export const tone = (r: number) => AMBIENT + (1 - AMBIENT) * (1 - Math.exp(-EXPOSURE * Math.max(0, r)))
@@ -135,7 +163,6 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
   const px = out.data
   px.fill(0)
   const { stack } = s
-  const dTheta = scale * c.degPerPx * D
   const rows = (el: number) => (c.cy - (el - c.pitch) / c.degPerPx) / scale - 0.5
   const f = stack.frame
   const nR = stack.rings.length
@@ -151,10 +178,15 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
   const E = s.earth ?? [0, 0, 1]
   const earthRatio = s.earthRatio ?? 0
   const exposure = s.exposure ?? 1
+  const detailAt = s.detailAt
+  const grain = s.grain ?? null
+  const dTheta = scale * c.degPerPx * D
+  // set by albedoAt(): whether the last point read had a finer photo
+  let lastFine = false
   /** Lunar-Lambert radiance for one light: direct factor mu0, light direction L, unit vector towards the eye. */
   const lunarLambert = (mu0: number, mu: number, Lx: number, Ly: number, Lz: number, vx: number, vy: number, vz: number): number => {
     const cosG = Lx * vx + Ly * vy + Lz * vz
-    const L = Math.max(0, 1 - Math.acos(Math.max(-1, Math.min(1, cosG))) / (150 * D))
+    const L = LAMBERT_LUT[Math.round((Math.max(-1, Math.min(1, cosG)) + 1) * (LAMBERT_STEPS / 2))]
     return (1 - L) * mu0 + (2 * L * mu0) / (mu0 + mu + 1e-6)
   }
   /**
@@ -214,6 +246,30 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
     }
     return R * exposure
   }
+  /**
+   * Albedo of the ground at a point (east, north metres) in ring k: the finer photo where a tile covers it, else the
+   * ring's photo, else 1. Read for every pixel at the point its line of sight meets, so the photo lies on the slope
+   * as the heights put it (not stretched between two ray steps).
+   */
+  const albedoAt = (k: number, e: number, n: number): number => {
+    if (detailAt) {
+      const d = detailAt(e, n)
+      if (d === d) {
+        lastFine = true
+        return d
+      }
+    }
+    lastFine = false
+    const A = s.albedo?.[k]
+    if (!A) return 1
+    const q = idx[k]
+    const u = Math.min(NM1, Math.max(0, q.au * e + q.bu * n + CEN))
+    const v = Math.min(NM1, Math.max(0, q.av * e + q.bv * n + CEN))
+    return bilinear(A, u, v)
+  }
+  // tangent of each screen row's elevation angle (the inverse of rows())
+  const tanRow = new Float64Array(h)
+  for (let r = 0; r < h; r++) tanRow[r] = Math.tan((c.pitch + (c.cy - (r + 0.5) * scale) * c.degPerPx) * D)
   for (let i = 0; i < w; i++) {
     const az = c.yaw + ((i + 0.5) * scale - c.cx) * c.degPerPx
     const sa = Math.sin(az * D)
@@ -231,7 +287,7 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
     let pT = 0
     let pUp = 0
     let pR = NaN
-    while (top > maskTop) {
+    while (top > 0) {
       // finest ring under the ray (rings only get coarser outwards)
       const e = t * sa
       const n = t * ca
@@ -257,24 +313,43 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
       const y = rows(Math.atan2(up, t) / D)
       steps++
       let R = NaN
+      let seen = false
       if (y < top || pY !== pY) {
+        seen = true
         R = radiance(k, u, v, t, up, sa, ca)
         if (pY !== pY) {
           // the first step also stands for the ground between it and the feet
           pY = h
           pR = R
           pT = t
+          pUp = up
         } else if (pR !== pR) pR = radiance(pK, pU, pV, pT, pUp, sa, ca)
-        const r0 = Math.max(maskTop, Math.ceil(y))
+        const r0 = Math.max(0, Math.ceil(y))
         const span = pY - y
+        const dT = t - pT
+        const dU = up - pUp
         for (let r = Math.min(top, h) - 1; r >= r0; r--) {
-          const a = span > 1e-9 ? Math.min(1, Math.max(0, (r - y) / span)) : 0 // 0 at this step, 1 at the previous
+          // where this row's line of sight meets the ground between the previous step and this one (the ground taken
+          // as straight between them): a = 0 at this step, 1 at the previous; by rows if the segment is degenerate
+          let a = span > 1e-9 ? Math.min(1, Math.max(0, (r - y) / span)) : 0
+          const tn = tanRow[r]
+          const den = dU - tn * dT
+          if (den > 1e-12 || den < -1e-12) {
+            const f = (tn * pT - pUp) / den
+            if (f >= 0 && f <= 1) a = 1 - f
+          }
           const ta = t + (pT - t) * a
-          writePixel(px, 4 * (r * w + i), R + (pR - R) * a, ta, ta * sa, ta * ca, dTheta, s.grain, 255)
+          const ea = ta * sa
+          const na = ta * ca
+          const alb = albedoAt(k, ea, na)
+          writePixel(px, 4 * (r * w + i), R + (pR - R) * a, alb, ta, ea, na, dTheta, grain, 255)
         }
         // antialiased top edge: the row the ground only partly covers
         const edge = r0 - 1
-        if (edge >= maskTop && edge < top && y < r0) writePixel(px, 4 * (edge * w + i), R, t, e, n, dTheta, s.grain, Math.round(255 * Math.min(1, r0 - y)))
+        if (edge >= 0 && edge < top && y < r0) {
+          const alb = albedoAt(k, e, n)
+          writePixel(px, 4 * (edge * w + i), R, alb, t, e, n, dTheta, grain, Math.round(255 * Math.min(1, r0 - y)))
+        }
         if (r0 < top) top = r0
       }
       pY = y
@@ -284,7 +359,10 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
       pT = t
       pUp = up
       pR = R
-      t += Math.max(0.02, Math.min(STEP_CELLS * ringCell[k], NEAR_GROWTH * t))
+      let stepM = Math.min(STEP_CELLS * ringCell[k], NEAR_GROWTH * t)
+      // finer steps only while the ray sees ground with a finer photo (ground hidden behind a ridge needs none)
+      if (seen && lastFine && stepM > DETAIL_STEP_M) stepM = Math.max(DETAIL_STEP_M, DETAIL_STEP_REL * t)
+      t += Math.max(0.02, stepM)
       // nothing farther can show: even the highest ground in the rings would stay below the rows filled so far
       if ((steps & 7) === 0 && rows(Math.atan2(headroom - (t * t) / twoR, t) / D) >= top) {
         k = nR
@@ -294,7 +372,8 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
     // beyond the rings (or beyond what can show), up to the mask: the shade of the ground where the ray stopped
     if (top > maskTop && pY === pY) {
       const R = pR !== pR ? radiance(pK, pU, pV, pT, pUp, sa, ca) : pR
-      for (let r = Math.min(top, h) - 1; r >= maskTop; r--) writePixel(px, 4 * (r * w + i), R, pT, 0, 0, dTheta, null, 255)
+      const alb = albedoAt(pK, pT * sa, pT * ca)
+      for (let r = Math.min(top, h) - 1; r >= maskTop; r--) writePixel(px, 4 * (r * w + i), R, alb, pT, 0, 0, dTheta, null, 255)
     }
   }
   return steps
@@ -305,10 +384,16 @@ const TONE_MAX = 4
 const TONE_STEPS = 512
 const TONE_LUT = Float32Array.from({ length: TONE_MAX * TONE_STEPS + 2 }, (_, i) => tone(i / TONE_STEPS))
 
+/**
+ * One pixel: the light (radiance without the albedo) through the tone curve, then times the photo's albedo, as the
+ * globe and the polar map multiply the photo by their light. Taken after the curve, the photo's contrast stays
+ * visible on brightly lit slopes, where the curve is flat and an albedo inside the radiance would vanish.
+ */
 function writePixel(
   px: Uint8ClampedArray,
   o: number,
   R: number,
+  albedo: number,
   t: number,
   e: number,
   n: number,
@@ -318,7 +403,7 @@ function writePixel(
 ): void {
   // partial edge pixels keep the higher alpha already written
   if (alpha < 255 && px[o + 3] >= alpha) return
-  let b = TONE_LUT[R > 0 ? (R < TONE_MAX ? (R * TONE_STEPS) | 0 : TONE_MAX * TONE_STEPS) : 0]
+  let b = TONE_LUT[R > 0 ? (R < TONE_MAX ? (R * TONE_STEPS) | 0 : TONE_MAX * TONE_STEPS) : 0] * albedo
   if (grain !== null && t < GRAIN_REACH_M) {
     // footprint of the pixel on the ground: t dTheta across the ray, about t^2 dTheta / h along it at grazing
     // incidence (h: eye height); their geometric mean picks the mip level, so far grain blurs out instead of aliasing
