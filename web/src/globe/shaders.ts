@@ -150,6 +150,8 @@ uniform float uPolarExtent; // half-width of the polar quadtree's square, metres
 uniform vec4 uPolarHole;    // drawn by a finer polar mesh instead (patch.ts): centre x, y and half-width (metres); w > 0 = on
 uniform sampler2D uPolarOverview; // heights of the whole polar square, 2049 x 2049 vertices, metres (detail/polar.ts)
 uniform float uPolarShadow; // 1 once the overview is loaded: the terrain casts shadows south of 60 S
+uniform float uMorph;       // 0..1: share of the morphologic look over the polar cap in photo mode (close in)
+uniform vec3 uMorphLight;   // its light's direction across the screen (toward the top left), Moon Mean-Earth axes
 uniform sampler2DArray uDetail;        // DEM detail tiles, 256 x 256 cells each, heights in metres
 uniform sampler2D uIndex;              // R8: layer + 1 of each loaded DEM tile of every level, 0 = none (slots.ts)
 uniform sampler2DArray uPhoto;         // photo detail tiles, 256 x 256 cells each, reflectance 0..1
@@ -171,6 +173,15 @@ const vec3 REGOLITH = vec3(0.72, 0.71, 0.68);
 // brightness of the regolith grey that stands in for the polar mosaic's photographed shadows, against REGOLITH: about
 // the mosaic's own lit ground after PHOTO_GAIN (0.15-0.3 raw, x2)
 const float PHOTO_SHADOW_FILL = 0.6;
+// The morphologic look over the south-polar cap, close in, in photo mode: the WAC mosaics that show the Moon's shape
+// best are taken with the Sun well up, but at the pole it never rises more than about 1.6 degrees, so the polar
+// mosaic is mostly photographed shadow. Close in, the cap is drawn instead as plain regolith (MORPH_ALBEDO of
+// REGOLITH, about the global mosaic's mean after PHOTO_GAIN) with the LOLA relief shaded as a shaded-relief map is:
+// light from the top left of the screen (so craters never read as domes, as they do lit from below), MORPH_ELEV_DEG
+// up, slopes exaggerated MORPH_EXAG times. The real light and shadows stay in relief mode and in the whole-Moon view.
+const float MORPH_ELEV_DEG = 35.0;
+const float MORPH_EXAG = 2.0;
+const float MORPH_ALBEDO = 0.86;
 // Brightness of the photo: the mosaic's value x PHOTO_GAIN, rolled off smoothly above TONE_KNEE instead of clipped at
 // white, so sunlit slopes keep their texture (same value and slope up to the knee).
 const float TONE_KNEE = 0.6;
@@ -344,6 +355,22 @@ void main() {
       // the night side keeps a faint fixed-light relief so its shape stays readable
       float night = 0.07 + 0.12 * max(0.0, dot(n, fixedLight));
       light = night + (1.0 - night) * sun * day;
+    }
+    float morph = uPhotoMode > 0.5 ? uMorph * pw : 0.0;
+    if (morph > 0.0) {
+      // the light: toward the top left of the screen along the ground, raised to MORPH_ELEV_DEG
+      vec3 hz = uMorphLight - up * dot(up, uMorphLight);
+      float hl = length(hz);
+      vec3 toward = hl > 1e-6 ? hz / hl : north;
+      vec3 L = normalize(up * sin(radians(MORPH_ELEV_DEG)) + toward * cos(radians(MORPH_ELEV_DEG)));
+      vec3 nm = normalize(up - MORPH_EXAG * (he * east + hn * north));
+      // 1 on flat ground, brighter facing the light, darker away from it
+      float relM = clamp(dot(nm, L) / dot(up, L), 0.0, 2.0);
+      // the side of the Moon in night stays dark: lit while the Sun is less than about 14 degrees below the horizon,
+      // which holds everywhere within a few degrees of the pole
+      float dayM = smoothstep(-0.25, 0.0, dot(up, uSun));
+      light = mix(light, (0.06 + 0.94 * dayM) * relM, morph);
+      albedo = mix(albedo, REGOLITH * MORPH_ALBEDO, morph);
     }
     colour = albedo * light;
   }
