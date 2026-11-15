@@ -9,22 +9,31 @@
  * numbers are also in the Power and Earth link sections. Sunlit and Earth ranges come as time ranges and as a
  * fraction of the window (the two forms every time answer takes, CLAUDE.md). Source: GET /sites/{id}/series when
  * deployed and paused, otherwise the browser engine.
+ *
+ * With Multiselect comparing two or more places, the two strips give way to one strip per place on the same time
+ * axis (numbered as on the map, with its share of the window), and a Sunlit / Earth switch next to the playback
+ * icons chooses what those strips show. Adding a place adds a row.
  */
-import { type MouseEvent, useId, useMemo } from 'react'
+import { type MouseEvent, useId, useMemo, useState } from 'react'
 import { useApiSeries } from '../api/hooks'
 import type { PowerResponse } from '../api/types'
+import { type ComparedPlace, useComparePlaces, useComparing } from '../compare/useComparePlaces'
 import { useCurrentPowerResult } from '../state/power'
-import { useApp } from '../state/store'
+import { sameSelection, useApp } from '../state/store'
 import { SPEEDS, type SpeedId, formatUtc, isoMinute } from '../time/clock'
 import { MS_PER_DAY, MS_PER_HOUR } from '../time/engine'
 import { useParams, useThrottledTime } from '../time/hooks'
 import { useNow } from '../panels/useNow'
-import { IconPause, IconPlay, IconSpeed } from '../ui/icons'
+import { IconAntenna, IconPause, IconPlay, IconSpeed, IconSun } from '../ui/icons'
 
 const W = 1000
 const ROW = 14
 const H = ROW * 2 + 24
-const LEFT = 70
+/** Width of the label column: the row names for one place, number + name + share when comparing. */
+const LEFT_SINGLE = 70
+const LEFT_COMPARE = 230
+
+type Strip = 'sun' | 'earth'
 
 interface TimelineData {
   source: 'api' | 'browser'
@@ -66,6 +75,10 @@ export function Timeline() {
   )
   const api = useApiSeries(selection, apiParams, !playing)
   const endMs = startMs + durationH * MS_PER_HOUR
+  const comparing = useComparing()
+  const compared = useComparePlaces()
+  const [strip, setStrip] = useState<Strip>('sun')
+  const LEFT = comparing ? LEFT_COMPARE : LEFT_SINGLE
 
   const data: TimelineData | null = useMemo(() => {
     if (api.data && !playing) {
@@ -139,6 +152,29 @@ export function Timeline() {
           aria-valuetext={formatUtc(slider)}
           onChange={(e) => setTime(Number(e.target.value))}
         />
+        {comparing && (
+          <div className="tl-seg" role="radiogroup" aria-label="The strips show">
+            {(
+              [
+                ['sun', 'Sunlit', <IconSun key="s" size={16} />],
+                ['earth', 'Earth', <IconAntenna key="e" size={16} />],
+              ] as const
+            ).map(([v, label, icon]) => (
+              <button
+                key={v}
+                type="button"
+                role="radio"
+                aria-checked={strip === v}
+                className={`tl-seg-item${strip === v ? ' is-on' : ''}`}
+                onClick={() => setStrip(v)}
+                title={v === 'sun' ? 'When each place is sunlit' : 'When each place sees the Earth'}
+              >
+                {icon}
+                <span>{label}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <div className="tl-icons" role="group" aria-label="Playback">
           <button type="button" className="tl-btn" aria-pressed={playing} aria-label={playing ? 'Pause' : 'Play'} title={playing ? 'Pause (Space)' : 'Play (Space)'} onClick={() => setPlaying(!playing)}>
             {playing ? <IconPause size={20} /> : <IconPlay size={20} />}
@@ -150,8 +186,12 @@ export function Timeline() {
         </div>
       </div>
 
+      {comparing && (
+        <CompareStrips places={compared.filter((p) => p.win)} strip={strip} startMs={startMs} endMs={endMs} durationH={durationH} tMs={tMs} ticks={ticks} x={x} onSeek={seek} />
+      )}
       {data && (
         <>
+          {!comparing && (
           <svg
             className="strip"
             viewBox={`${-LEFT} 0 ${W + LEFT + 6} ${H}`}
@@ -189,12 +229,122 @@ export function Timeline() {
             ))}
             {tMs >= startMs && tMs <= endMs && <line className="cursor" x1={x(tMs)} x2={x(tMs)} y1={-2} y2={ROW * 2 + 6} />}
           </svg>
-          {battery && <BatteryChart r={battery} startMs={startMs} endMs={endMs} tMs={tMs} x={x} onSeek={seek} />}
-          {inside && <InsideChart r={inside} startMs={startMs} endMs={endMs} tMs={tMs} x={x} onSeek={seek} />}
+          )}
+          {battery && <BatteryChart r={battery} startMs={startMs} endMs={endMs} tMs={tMs} x={x} left={LEFT} onSeek={seek} />}
+          {inside && <InsideChart r={inside} startMs={startMs} endMs={endMs} tMs={tMs} x={x} left={LEFT} onSeek={seek} />}
           <TimelineText data={data} battery={battery} inside={inside} tMs={tMs} />
         </>
       )}
     </section>
+  )
+}
+
+const CROW = 14
+const CGAP = 6
+const NAME_CHARS = 22
+
+/**
+ * Multiselect: one strip per compared place on the window's time axis, sunlit or Earth in view as the switch says.
+ * The label column carries the place's number (as on the map), its name and its share of the window, with a star
+ * for the best; the current place is highlighted and a click on a label makes that place current.
+ */
+function CompareStrips({
+  places,
+  strip,
+  startMs,
+  endMs,
+  durationH,
+  tMs,
+  ticks,
+  x,
+  onSeek,
+}: {
+  places: ComparedPlace[]
+  strip: Strip
+  startMs: number
+  endMs: number
+  durationH: number
+  tMs: number
+  ticks: number[]
+  x: (t: number) => number
+  onSeek: (e: MouseEvent<SVGSVGElement>) => void
+}) {
+  const id = useId()
+  const selection = useApp((s) => s.selection)
+  const select = useApp((s) => s.select)
+  if (places.length === 0) return null
+  const share = (p: ComparedPlace) => (strip === 'sun' ? p.win!.metrics.sunlightPct : p.win!.metrics.commsPct)
+  const best = Math.max(...places.map(share))
+  const rowsH = places.length * (CROW + CGAP) - CGAP
+  const h = rowsH + 24
+  const what = strip === 'sun' ? 'sunlit' : 'in view of the Earth'
+  const cut = (s: string) => (s.length > NAME_CHARS ? `${s.slice(0, NAME_CHARS - 1)}…` : s)
+
+  return (
+    <svg
+      className={`strip compare-strips is-${strip}`}
+      viewBox={`${-LEFT_COMPARE} 0 ${W + LEFT_COMPARE + 6} ${h}`}
+      role="img"
+      aria-label={`When each place is ${what}: ${places.map((p) => `${p.num} ${p.info.name} ${share(p).toFixed(0)} %`).join(', ')} of the window.`}
+      onClick={onSeek}
+    >
+      <defs>
+        <pattern id={`${id}-hatch`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width="6" height="6" className="hatch-bg" />
+          <line x1="0" y1="0" x2="0" y2="6" className="hatch-line" />
+        </pattern>
+      </defs>
+      {places.map((p, i) => {
+        const y = i * (CROW + CGAP)
+        const ranges = strip === 'sun' ? p.win!.sunlit : p.win!.comms
+        const current = sameSelection(p.sel, selection)
+        const isBest = places.length > 1 && share(p) === best
+        return (
+          <g key={p.num} className={current ? 'is-current' : undefined}>
+            <g
+              className="cs-label"
+              onClick={(e) => {
+                e.stopPropagation()
+                select(p.sel)
+              }}
+            >
+              <title>{`${p.info.name}: ${share(p).toFixed(1)} % ${what}`}</title>
+              <circle cx={-LEFT_COMPARE + 9} cy={y + (CROW - 2) / 2} r={8} className={`cs-num cs-c-${p.num}`} />
+              <text x={-LEFT_COMPARE + 9} y={y + (CROW - 2) / 2 + 4} textAnchor="middle" className="cs-num-text">
+                {p.num}
+              </text>
+              <text x={-LEFT_COMPARE + 23} y={y + CROW * 0.78} className="row-label">
+                {cut(p.info.name)}
+              </text>
+              <text x={-8} y={y + CROW * 0.78} textAnchor="end" className="row-label cs-share">
+                {`${isBest ? '★ ' : ''}${share(p).toFixed(0)}%`}
+              </text>
+            </g>
+            <rect x={0} y={y} width={W} height={CROW - 2} className="row-bg" />
+            {ranges.map(([a, b], k) => (
+              <rect
+                key={k}
+                x={x(a)}
+                y={y}
+                width={Math.max(1, x(b) - x(a))}
+                height={CROW - 2}
+                className={strip === 'sun' ? 'range-sun' : 'range-earth'}
+                fill={strip === 'earth' ? `url(#${id}-hatch)` : undefined}
+              />
+            ))}
+          </g>
+        )
+      })}
+      {ticks.map((t) => (
+        <g key={t} className="tick">
+          <line x1={x(t)} x2={x(t)} y1={rowsH + 4} y2={rowsH + 9} />
+          <text x={x(t)} y={rowsH + 21} textAnchor="middle">
+            {new Date(t).toISOString().slice(5, durationH <= 72 ? 13 : 10).replace('T', ' ')}
+          </text>
+        </g>
+      ))}
+      {tMs >= startMs && tMs <= endMs && <line className="cursor" x1={x(tMs)} x2={x(tMs)} y1={-2} y2={rowsH + 6} />}
+    </svg>
   )
 }
 
@@ -207,6 +357,8 @@ interface RowProps {
   endMs: number
   tMs: number
   x: (t: number) => number
+  /** Width of the label column, so every row shares the strips' time axis. */
+  left: number
   onSeek: (e: MouseEvent<SVGSVGElement>) => void
 }
 
@@ -228,7 +380,7 @@ function useLine(r: PowerResponse, series: number[] | null, startMs: number, end
  * from the API (and, at level 4, the saving-mode ranges) are marked with a hatch and a word, never colour alone;
  * the same series is in the text below.
  */
-function BatteryChart({ r, startMs, endMs, tMs, x, onSeek }: RowProps) {
+function BatteryChart({ r, startMs, endMs, tMs, x, left: LEFT, onSeek }: RowProps) {
   const id = useId()
   const y = useMemo(() => (v: number) => BH - v * BH, [])
   const pts = useLine(r, r.battery_soc, startMs, endMs, x, y)
@@ -295,7 +447,7 @@ function BatteryChart({ r, startMs, endMs, tMs, x, onSeek }: RowProps) {
 }
 
 /** Habitat inside temperature in °C (colony analysis), with the minimum safe temperature breaches hatched. */
-function InsideChart({ r, startMs, endMs, tMs, x, onSeek }: RowProps) {
+function InsideChart({ r, startMs, endMs, tMs, x, left: LEFT, onSeek }: RowProps) {
   const id = useId()
   const k = r.interior_k
   const lo = k && k.length ? Math.min(...k) - 273.15 : 0
