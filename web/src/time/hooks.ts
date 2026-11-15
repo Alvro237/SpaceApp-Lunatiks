@@ -31,12 +31,13 @@ export const useMasks = () => useQuery({ queryKey: ['static', 'masks'], queryFn:
 
 export type { ModelInfo } from './place'
 
-/** Site model for the selection (see place.ts). */
-export function useSiteModel(sel: Selection, mastM: number): ModelInfo | null {
+/** Site model for the selection (see place.ts); null while no place is chosen. */
+export function useSiteModel(sel: Selection | null, mastM: number): ModelInfo | null {
   const masks = useMasks().data
   const names = useSiteNames()
   // Trace over the LOLA grids via the API for a manual point, and for a catalogue site without a stored mask.
   const coords = useMemo(() => {
+    if (!sel) return null
     if (sel.kind === 'point') return { lat: sel.lat, lon: sel.lon }
     const site = masks?.site(sel.id)
     return site && !site.terrain.available ? { lat: site.lat, lon: site.lon } : null
@@ -46,7 +47,7 @@ export function useSiteModel(sel: Selection, mastM: number): ModelInfo | null {
     () => (ph ? { kind: ph.horizon_kind, values: ph.elevation_deg, groundM: ph.ground_m, cellM: ph.near_cell_m } : null),
     [ph],
   )
-  return useMemo(() => (masks ? placeModel(masks, sel, mastM, names, traced) : null), [masks, sel, mastM, names, traced])
+  return useMemo(() => (masks && sel ? placeModel(masks, sel, mastM, names, traced) : null), [masks, sel, mastM, names, traced])
 }
 
 /** Display names from the API catalogue (the static copy has the same ones). */

@@ -136,8 +136,8 @@ export function GlobeView() {
       phase = t.phase
       if (phase === 'diving') {
         const sel = useApp.getState().selection
-        const site = sel.kind === 'site' ? masks?.site(sel.id) : null
-        const ll = sel.kind === 'point' ? [sel.lat, sel.lon] : site ? [site.lat, site.lon] : null
+        const site = sel?.kind === 'site' ? masks?.site(sel.id) : null
+        const ll = sel?.kind === 'point' ? [sel.lat, sel.lon] : site ? [site.lat, site.lon] : null
         if (!ll) return
         before = { ...orbit.goal }
         orbit.turnTo(ll[0], ll[1])
@@ -159,8 +159,8 @@ export function GlobeView() {
       if (s.focusSeq === seq) return
       seq = s.focusSeq
       const sel = s.selection
-      const site = sel.kind === 'site' ? masks?.site(sel.id) : null
-      const ll = sel.kind === 'point' ? [sel.lat, sel.lon] : site ? [site.lat, site.lon] : null
+      const site = sel?.kind === 'site' ? masks?.site(sel.id) : null
+      const ll = sel?.kind === 'point' ? [sel.lat, sel.lon] : site ? [site.lat, site.lon] : null
       if (ll) orbit.turnTo(ll[0], ll[1])
     })
   }, [masks, orbit])
