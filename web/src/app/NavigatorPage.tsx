@@ -162,7 +162,7 @@ export function NavigatorPage() {
               ) : mission ? (
                 resultsOpen && <SidePanel>{(titleId) => <ResultsPanel titleId={titleId} />}</SidePanel>
               ) : (
-                section && hasPlace && <SidePanel wide={section === 'power'}>{(titleId) => <SectionDrawer titleId={titleId} />}</SidePanel>
+                section && hasPlace && <SidePanel>{(titleId) => <SectionDrawer titleId={titleId} />}</SidePanel>
               )}
               <RemovedToast />
               <PlaceMenu />
