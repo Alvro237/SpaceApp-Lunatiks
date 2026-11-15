@@ -18,6 +18,7 @@ import { LIVE_LEVELS, type LiveSource, cachedLiveLevels, trekTileUrl } from '../
 import { PHOTO_CELLS, photoTileUrl } from '../../terrain/live/photo'
 import { TileLoader } from '../../terrain/loader'
 import { type TileKey, type Tileset, children, keyOf, parent, polarLatLon, polarXY, scaleFactor, tileBounds, tileUrl } from '../../terrain/tileset'
+import { lutBytes } from '../../terrain/colormaps'
 import { MOON_R_KM, latLonToScene, sceneToLatLon } from '../orbit'
 
 /** Finest height level: 30 m cells, Moon Trek's 30 m DEM (to 75° S; elsewhere the 100 m DEM's 120 m at z6). */
@@ -31,6 +32,8 @@ export const POLAR_SAMPLES = 257
  * float32 are 46 MB).
  */
 export const POLAR_CAPACITY = 176
+/** Colour layer tiles kept: the shipped levels z0-z3 are 1 + 4 + 16 + 64 tiles. */
+export const LAYER_CAPACITY = 96
 /** Index texture: the finest level's columns, every level's rows stacked (1 + 2 + … + 256 = 511). */
 export const POLAR_INDEX_W = 2 ** POLAR_MAX_Z
 export const POLAR_INDEX_H = 2 ** (POLAR_MAX_Z + 1) - 1
@@ -147,18 +150,25 @@ class PolarSlots {
   readonly texture: THREE.DataArrayTexture
   readonly index: THREE.DataTexture
   private readonly cells: number
-  private readonly keys: (string | null)[] = new Array(POLAR_CAPACITY).fill(null)
-  private readonly tiles: (TileKey | null)[] = new Array(POLAR_CAPACITY).fill(null)
-  private readonly lastWanted = new Float64Array(POLAR_CAPACITY)
+  private readonly channels: number
+  private readonly capacity: number
+  private readonly keys: (string | null)[]
+  private readonly tiles: (TileKey | null)[]
+  private readonly lastWanted: Float64Array
   private readonly byKey = new Map<string, number>()
   private wanted = new Set<string>()
   private clock = 0
 
-  constructor(cells: number, float: boolean) {
+  constructor(cells: number, float: boolean, channels = 1, capacity = POLAR_CAPACITY) {
     this.cells = cells
-    const n = cells * cells * POLAR_CAPACITY
-    this.texture = new THREE.DataArrayTexture(float ? new Float32Array(n) : new Uint8Array(n), cells, cells, POLAR_CAPACITY)
-    this.texture.format = THREE.RedFormat
+    this.channels = channels
+    this.capacity = capacity
+    this.keys = new Array(capacity).fill(null)
+    this.tiles = new Array(capacity).fill(null)
+    this.lastWanted = new Float64Array(capacity)
+    const n = cells * cells * channels * capacity
+    this.texture = new THREE.DataArrayTexture(float ? new Float32Array(n) : new Uint8Array(n), cells, cells, capacity)
+    this.texture.format = channels === 2 ? THREE.RGFormat : THREE.RedFormat
     this.texture.type = float ? THREE.FloatType : THREE.UnsignedByteType
     this.texture.minFilter = this.texture.magFilter = THREE.NearestFilter
     this.texture.unpackAlignment = 1
@@ -188,11 +198,11 @@ class PolarSlots {
   put(t: TileKey, data: Float32Array | Uint8Array): boolean {
     const key = keyOf(t)
     if (this.byKey.has(key)) return true
-    if (data.length !== this.cells * this.cells) return false
+    if (data.length !== this.cells * this.cells * this.channels) return false
     let slot = this.keys.indexOf(null)
     if (slot < 0) {
       let oldest = Infinity
-      for (let i = 0; i < POLAR_CAPACITY; i++) {
+      for (let i = 0; i < this.capacity; i++) {
         if (this.wanted.has(this.keys[i]!)) continue
         if (this.lastWanted[i] < oldest) {
           oldest = this.lastWanted[i]
@@ -203,7 +213,7 @@ class PolarSlots {
       this.byKey.delete(this.keys[slot]!)
       this.setIndex(this.tiles[slot]!, 0)
     }
-    ;(this.texture.image.data as Float32Array | Uint8Array).set(data, slot * this.cells * this.cells)
+    ;(this.texture.image.data as Float32Array | Uint8Array).set(data, slot * this.cells * this.cells * this.channels)
     this.texture.addLayerUpdate(slot)
     this.texture.needsUpdate = true
     this.setIndex(t, slot + 1)
@@ -212,6 +222,16 @@ class PolarSlots {
     this.byKey.set(key, slot)
     this.lastWanted[slot] = this.clock
     return true
+  }
+
+  /** Forget every tile (another layer is shown): the index goes back to "none". */
+  clear(): void {
+    this.keys.fill(null)
+    this.tiles.fill(null)
+    this.byKey.clear()
+    this.wanted = new Set()
+    ;(this.index.image.data as Uint8Array).fill(0)
+    this.index.needsUpdate = true
   }
 
   private setIndex(t: TileKey, v: number): void {
@@ -228,13 +248,20 @@ class PolarSlots {
 interface Job {
   key: string
   tile: TileKey
-  kind: 'h' | 'p'
+  kind: 'h' | 'p' | 'd'
   req: Omit<DecodeRequest, 'id'>
 }
 
 export class PolarDetail {
   private readonly heights = new PolarSlots(POLAR_SAMPLES, true)
   private readonly photos = new PolarSlots(PHOTO_CELLS, false)
+  /** The colour layer's tiles (value, coverage) of the polar map: 256 x 256 cells, shipped levels only. */
+  private readonly layerTiles = new PolarSlots(256, false, 2, LAYER_CAPACITY)
+  private readonly lut = new THREE.DataTexture(new Uint8Array(256 * 4), 256, 1, THREE.RGBAFormat, THREE.UnsignedByteType)
+  private layerId: string | null = null
+  /** What the layers menu asked for (a tile layer, 'elevation' or null), to notice a change. */
+  private shown: string | null = null
+  private layerMaxZ = -1
   private readonly loader = new TileLoader(2)
   /** The overview heights for the shadows; a 1 × 1 placeholder until they load. */
   private overview: THREE.DataTexture = new THREE.DataTexture(new Float32Array(1), 1, 1, THREE.RedFormat, THREE.FloatType)
@@ -257,6 +284,15 @@ export class PolarDetail {
       uPolarHIndex: { value: this.heights.index },
       uPolarP: { value: this.photos.texture },
       uPolarPIndex: { value: this.photos.index },
+      uPolarD: { value: this.layerTiles.texture },
+      uPolarDIndex: { value: this.layerTiles.index },
+      uLut: { value: this.lut },
+      // 1 while a colour layer (slope, illumination, ...) is drawn over the polar cap
+      uDataMode: { value: 0 },
+      // the layers drawn over the whole Moon from the heights themselves: 0 none, 1 slope, 2 elevation
+      uGlobalKind: { value: 0 },
+      // value range of that colour scale: degrees of slope, metres of height
+      uGlobalRange: { value: new THREE.Vector2(0, 1) },
       // -1 until the tileset is known
       uPolarMaxZ: { value: -1 },
       uPolarExtent: { value: 983_040 },
@@ -308,6 +344,32 @@ export class PolarDetail {
     this.since = Infinity
   }
 
+  /**
+   * Show a colour layer of the polar map (tileset.layers) over the polar cap, or none (null). The tiles are the
+   * map's own (value in 8 bits, coverage), at the levels the tileset ships; the colour scale is a 256 x 1 lookup.
+   */
+  setLayer(id: string | null, material: THREE.ShaderMaterial, elevation: readonly [number, number]): void {
+    const ts = this.ts
+    const meta = id && ts ? ts.layers[id] : undefined
+    const next = meta ? id : id === 'elevation' && ts ? id : null
+    if (next === this.shown) return
+    this.shown = next
+    this.layerId = meta ? id : null
+    this.layerTiles.clear()
+    const u = material.uniforms
+    u.uDataMode.value = meta ? 1 : 0
+    // slope and elevation are also drawn outside the polar tiles, from the heights loaded (the shader derives them)
+    u.uGlobalKind.value = next === 'slope' ? 1 : next === 'elevation' ? 2 : 0
+    const scale = meta ? { cmap: meta.colormap, min: meta.min, max: meta.max } : next ? { cmap: 'cividis' as const, min: elevation[0], max: elevation[1] } : null
+    if (scale) {
+      this.layerMaxZ = meta ? Math.min(meta.levels - 1, POLAR_MAX_Z) : -1
+      ;(this.lut.image.data as Uint8Array).set(lutBytes(scale.cmap))
+      this.lut.needsUpdate = true
+      ;(u.uGlobalRange.value as THREE.Vector2).set(scale.min, scale.max)
+    }
+    this.since = Infinity
+  }
+
   private exists = (t: TileKey): boolean => !!this.ts && keyOf(t) in this.ts.height.tiles
 
   /** Called every frame; works out the wanted tiles every INTERVAL_S and asks for the missing ones. */
@@ -341,6 +403,21 @@ export class PolarDetail {
       // coarse first across both kinds, so colour and relief sharpen together
       jobs.sort((a, b) => a.tile.z - b.tile.z)
     }
+    if (this.layerId) {
+      const seen = new Set<string>()
+      const layerWanted: TileKey[] = []
+      for (let t of wanted) {
+        while (t.z > this.layerMaxZ) t = parent(t)!
+        const k = keyOf(t)
+        if (!seen.has(k)) {
+          seen.add(k)
+          layerWanted.push(t)
+        }
+      }
+      this.layerTiles.setWanted(layerWanted)
+      for (const t of layerWanted) if (!this.layerTiles.has(t)) jobs.push(this.layerJob(t))
+      jobs.sort((a, b) => a.tile.z - b.tile.z)
+    }
     const rank = new Map(jobs.map((j, i) => [j.key, i]))
     // the overview is not a wanted tile: keep it (first) rather than cancel it as unwanted
     this.loader.prioritise((k) => (k === 'overview' ? -1 : (rank.get(k) ?? null)))
@@ -356,7 +433,8 @@ export class PolarDetail {
         .then((r) => {
           this.failures.delete(job.key)
           if (job.kind === 'h') this.heights.put(job.tile, r.heights!)
-          else this.photos.put(job.tile, r.bytes!)
+          else if (job.kind === 'p') this.photos.put(job.tile, r.bytes!)
+          else if (job.key.startsWith(`d|${this.layerId}|`)) this.layerTiles.put(job.tile, r.bytes!)
         })
         .catch((e: Error) => {
           if (e.message === 'cancelled') return
@@ -396,6 +474,11 @@ export class PolarDetail {
     }
   }
 
+  private layerJob(t: TileKey): Job {
+    const id = this.layerId!
+    return { key: `d|${id}|${keyOf(t)}`, tile: t, kind: 'd', req: { url: `${this.base}layers/${id}/${t.z}/${t.x}/${t.y}.png`, kind: 'layer' } }
+  }
+
   private photoJob(ts: Tileset, t: TileKey): Job {
     // a 256 × 256 grey JPEG decoded by the globe's photo path (the box is not used for photos)
     return {
@@ -410,6 +493,8 @@ export class PolarDetail {
     this.loader.dispose()
     this.heights.dispose()
     this.photos.dispose()
+    this.layerTiles.dispose()
+    this.lut.dispose()
     this.overview.dispose()
   }
 }

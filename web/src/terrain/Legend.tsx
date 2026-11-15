@@ -141,7 +141,8 @@ export function LayersControl({ tileset, exaggeration, onExaggeration, craterErr
   )
 }
 
-export function LegendChip({ tileset }: { tileset: Tileset }) {
+/** `globe`: on the globe, elevation and slope cover the whole Moon, so the source says which heights they come from (and the range is the global grid's, when given). */
+export function LegendChip({ tileset, globe = false }: { tileset: Tileset; globe?: boolean | readonly [number, number] }) {
   const layer = useApp((s) => s.layer)
   // low graphics shows the relief instead of the photo (TerrainView): no photo legend then
   const low = useGraphics((s) => s.low)
@@ -171,6 +172,13 @@ export function LegendChip({ tileset }: { tileset: Tileset }) {
             }`,
           }
         : null
+  if (globe && scale && (layer === 'slope' || layer === 'elevation')) {
+    if (layer === 'elevation' && typeof globe !== 'boolean') [scale.min, scale.max] = globe
+    scale.source =
+      layer === 'slope'
+        ? 'LOLA heights as loaded (7.6 km whole Moon, finer zoomed in); PGDA 90 mean slope (960 m) south of 60 S'
+        : 'LOLA heights as loaded (7.6 km whole Moon, finer zoomed in)'
+  }
   if (!scale) return null
   return (
     <figure className="legend-chip">
