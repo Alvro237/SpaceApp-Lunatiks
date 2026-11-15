@@ -83,11 +83,17 @@ const RIM = '#f1eef9'
 
 export interface GroundScene {
   horizonAt: (az: number) => number
+  /** Visible fraction of the solar disc, 0..1 (draw.ts Body.fraction). The ground dims a little when it is 0. */
+  daylight?: number
 }
+
+/** How much darker the ground gets with the Sun fully below the skyline: perceptible, still readable. */
+const NIGHT_DIM = 0.3
 
 /**
  * The illustrated ground: layered bands that echo the real skyline (each lower band a smoother, lower copy of it),
- * a bright rim on the skyline, craters and pebbles anchored to azimuth. Same at every hour.
+ * a bright rim on the skyline, craters and pebbles anchored to azimuth. The drawing is the same at every hour; only
+ * a light veil dims it while the Sun is below the skyline, and the skyline rim stays bright.
  */
 export function drawGround(ctx: CanvasRenderingContext2D, W: number, H: number, c: Camera, s: GroundScene): void {
   const step = 2
@@ -181,21 +187,7 @@ export function drawGround(ctx: CanvasRenderingContext2D, W: number, H: number, 
       const x = c.cx + (a - c.yaw) / c.degPerPx
       const y = yOf(el)
       if (x < -rx - 4 || x > W + rx + 4 || y > H + ry || rx < 1.5) continue
-      // bowl: darker inside, a shadowed far wall on top and a bright near rim below
-      ctx.fillStyle = 'rgba(20,18,34,0.34)'
-      ctx.beginPath()
-      ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.strokeStyle = 'rgba(12,10,24,0.5)'
-      ctx.lineWidth = Math.max(1, ry * 0.22)
-      ctx.beginPath()
-      ctx.ellipse(x, y, rx, ry, 0, Math.PI * 1.05, Math.PI * 1.95)
-      ctx.stroke()
-      ctx.strokeStyle = 'rgba(244,241,252,0.5)'
-      ctx.lineWidth = Math.max(1, ry * 0.16)
-      ctx.beginPath()
-      ctx.ellipse(x, y + ry * 0.12, rx, ry, 0, Math.PI * 0.08, Math.PI * 0.92)
-      ctx.stroke()
+      drawCrater(ctx, x, y, rx, ry, cell * 7 + r)
     }
   }
 
@@ -215,6 +207,119 @@ export function drawGround(ctx: CanvasRenderingContext2D, W: number, H: number, 
       ctx.fillStyle = hash(cell, 400 + j) < 0.5 ? 'rgba(246,243,255,0.4)' : 'rgba(14,12,26,0.42)'
       ctx.beginPath()
       ctx.ellipse(x, y, size, size * 0.55, 0, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+
+  // night: a light veil over everything below the skyline (the rim above the clip stays bright)
+  const dim = NIGHT_DIM * (1 - Math.min(1, Math.max(0, s.daylight ?? 1)))
+  if (dim > 0.001) {
+    ctx.fillStyle = `rgba(6,5,16,${dim.toFixed(3)})`
+    ctx.fillRect(0, 0, W, H)
+  }
+  ctx.restore()
+}
+
+// ------------------------------------------------------------------------------------------------- craters
+
+/** Points of an irregular ellipse: the radius wobbles with two low harmonics so no crater is a perfect ring. */
+function wobblyOutline(x: number, y: number, rx: number, ry: number, seed: number, amp: number, scale = 1): number[] {
+  const N = 28
+  const p1 = hash(seed, 1) * Math.PI * 2
+  const p2 = hash(seed, 2) * Math.PI * 2
+  const pts: number[] = []
+  for (let i = 0; i < N; i++) {
+    const t = (i / N) * Math.PI * 2
+    const w = 1 + amp * (0.6 * Math.sin(2 * t + p1) + 0.4 * Math.sin(5 * t + p2)) + amp * 0.5 * (hash(seed, 10 + i) - 0.5)
+    pts.push(x + Math.cos(t) * rx * scale * w, y + Math.sin(t) * ry * scale * w)
+  }
+  return pts
+}
+
+/** Smooth path through the outline points (quadratic curves between midpoints), closed or over [from, to]. */
+function tracePath(ctx: CanvasRenderingContext2D, pts: number[], from = 0, to = pts.length / 2, close = true): void {
+  const N = pts.length / 2
+  const px = (k: number) => pts[2 * (((k % N) + N) % N)]
+  const py = (k: number) => pts[2 * (((k % N) + N) % N) + 1]
+  const end = close ? from + N : to
+  ctx.beginPath()
+  ctx.moveTo((px(from) + px(from + 1)) / 2, (py(from) + py(from + 1)) / 2)
+  for (let k = from + 1; k <= end; k++) ctx.quadraticCurveTo(px(k), py(k), (px(k) + px(k + 1)) / 2, (py(k) + py(k + 1)) / 2)
+  if (close) ctx.closePath()
+}
+
+/**
+ * One crater seen at a grazing angle: a faint ejecta apron, a raised irregular rim, a bowl that is dark under the
+ * far rim and lighter towards the near wall, a bright crest on the near rim, and a few blocks on the floor of the
+ * larger ones. About a third are old, degraded craters drawn softer and without an apron.
+ */
+function drawCrater(ctx: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number, seed: number): void {
+  const fresh = hash(seed, 50) > 0.35
+  ctx.save()
+  ctx.globalAlpha = fresh ? 1 : 0.55
+  const N = 28
+
+  // ejecta apron: a lighter, ragged blanket around fresh craters
+  if (fresh && rx > 5) {
+    const apron = wobblyOutline(x, y + ry * 0.1, rx, ry, seed + 3, 0.18, 1.55)
+    ctx.fillStyle = 'rgba(236,233,248,0.07)'
+    tracePath(ctx, apron)
+    ctx.fill()
+  }
+
+  // raised rim: a lighter ring just outside the bowl
+  const rim = wobblyOutline(x, y, rx, ry, seed, 0.09, 1.12)
+  ctx.fillStyle = 'rgba(226,223,240,0.16)'
+  tracePath(ctx, rim)
+  ctx.fill()
+
+  // bowl: shadow under the far (upper) rim fading to a lit near wall
+  const bowl = wobblyOutline(x, y, rx, ry, seed, 0.09)
+  const g = ctx.createLinearGradient(0, y - ry, 0, y + ry)
+  g.addColorStop(0, 'rgba(10,9,22,0.62)')
+  g.addColorStop(0.45, 'rgba(22,20,38,0.38)')
+  g.addColorStop(1, 'rgba(120,116,140,0.12)')
+  ctx.fillStyle = g
+  tracePath(ctx, bowl)
+  ctx.fill()
+
+  // far inner wall: a darker crescent along the top of the bowl
+  ctx.strokeStyle = 'rgba(8,7,18,0.55)'
+  ctx.lineWidth = Math.max(1, ry * 0.2)
+  tracePath(ctx, bowl, Math.round(N * 0.55), Math.round(N * 0.95), false)
+  ctx.stroke()
+
+  // near rim crest: bright, sometimes broken once by a slump in the wall
+  ctx.strokeStyle = 'rgba(246,243,255,0.55)'
+  ctx.lineWidth = Math.max(1, ry * 0.14)
+  ctx.lineCap = 'round'
+  const start = Math.round(N * 0.04)
+  const end = Math.round(N * 0.46)
+  if (hash(seed, 80) < 0.4) {
+    const gap = start + 2 + Math.floor(hash(seed, 81) * (end - start - 5))
+    tracePath(ctx, rim, start, gap, false)
+    ctx.stroke()
+    tracePath(ctx, rim, gap + 2, end, false)
+    ctx.stroke()
+  } else {
+    tracePath(ctx, rim, start, end, false)
+    ctx.stroke()
+  }
+
+  // floor blocks on the larger craters
+  if (rx > 14) {
+    const count = 2 + Math.floor(hash(seed, 60) * 4)
+    for (let j = 0; j < count; j++) {
+      const bx = x + (hash(seed, 61 + j) - 0.5) * rx * 0.9
+      const by = y + (hash(seed, 71 + j) - 0.2) * ry * 0.6
+      const bs = Math.max(0.8, rx * 0.025 * (0.6 + hash(seed, 91 + j)))
+      ctx.fillStyle = 'rgba(240,237,252,0.35)'
+      ctx.beginPath()
+      ctx.ellipse(bx, by, bs, bs * 0.6, 0, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = 'rgba(8,7,18,0.4)'
+      ctx.beginPath()
+      ctx.ellipse(bx + bs * 0.5, by + bs * 0.45, bs * 0.9, bs * 0.3, 0, 0, Math.PI * 2)
       ctx.fill()
     }
   }

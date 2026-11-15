@@ -51,7 +51,7 @@ export function drawHorizon(ctx: CanvasRenderingContext2D, W: number, H: number,
   drawTrack(ctx, W, c, s.earthTrack, EARTH)
   drawSun(ctx, c, s.sun)
   drawEarth(ctx, c, s.earth, s.sun)
-  drawGround(ctx, W, H, c, s)
+  drawGround(ctx, W, H, c, { horizonAt: s.horizonAt, daylight: s.sun.fraction })
   if (s.showLabels !== false) drawLabels(ctx, W, c, s)
   drawCompass(ctx, W, H, c, s)
 }
