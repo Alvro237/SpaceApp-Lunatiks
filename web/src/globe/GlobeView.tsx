@@ -14,6 +14,7 @@ import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js'
 import { SkyMap } from './skyMap'
 import { StarField } from './starField'
 import { ToolPortal } from '../ui/ToolSlot'
+import { useGraphics } from '../state/graphics'
 import { usePlaceStyles } from '../state/placeStyle'
 import { IconCube, IconMinus, IconPin, IconPlus, IconPole } from '../ui/icons'
 import { useCinematic } from '../state/cinematic'
@@ -98,6 +99,22 @@ const NO_HOLE = [0, 0, 0, 0]
 const IDLE_REDRAW_S = 0.5
 const WINDOW_S = 2
 const SLOW_FPS = 45
+/**
+ * Low graphics (state/graphics.ts) while the Moon turns by itself: drawn at most this many times a second (the turn is
+ * slow, so 30 steady frames look smoother than 60 the GPU cannot hold), with no new detail tiles asked for meanwhile
+ * (each one is decoded and uploaded to the GPU, which is what makes a slow machine stutter).
+ */
+const LOW_SPIN_FPS = 30
+/**
+ * While the camera moves on a slow GPU the globe is drawn with fewer pixels: the pixel ratio is multiplied by a
+ * factor that drops by MOVING_STEP (to MOVING_MIN) each MOVING_WINDOW_S of moving frames slower than SLOW_FPS. The
+ * full ratio comes back MOVING_SETTLE_S after the camera stops. A fast GPU never lowers it, nor does the Moon turning
+ * by itself.
+ */
+const MOVING_STEP = 0.75
+const MOVING_MIN = 0.5
+const MOVING_WINDOW_S = 0.5
+const MOVING_SETTLE_S = 0.15
 const GRACE_S = 3
 
 /** A first view of the whole Moon, turned so the south pole faces the viewer. */
@@ -122,7 +139,10 @@ export function GlobeView() {
   const openMenu = usePlaceStyles((s) => s.openMenu)
   const enterMap = useApp((s) => s.enterMap)
   const [orbit] = useState(() => new OrbitRig(START))
-  const [surface, setSurface] = useState<GlobeSurface>('photo')
+  const [chosenSurface, setSurface] = useState<GlobeSurface>('photo')
+  // low graphics (state/graphics.ts): the lit relief only, no photo tiles
+  const lowGraphics = useGraphics((s) => s.low)
+  const surface: GlobeSurface = lowGraphics ? 'relief' : chosenSurface
   /** The mesh's relief exaggeration, to half a unit (for the caption and the markers' height). */
   const [exag, setExag] = useState(RELIEF_MAX)
   const anchored = useGlobe((s) => s.anchored)
@@ -423,8 +443,9 @@ export function GlobeView() {
         <button
           type="button"
           aria-pressed={surface === 'photo'}
-          onClick={() => setSurface(surface === 'photo' ? 'relief' : 'photo')}
-          title="Drape the LROC WAC photo mosaic over the 3D relief lit by the Sun"
+          aria-disabled={lowGraphics || undefined}
+          onClick={() => !lowGraphics && setSurface(surface === 'photo' ? 'relief' : 'photo')}
+          title={lowGraphics ? 'The photo is off in Low graphics (top bar)' : 'Drape the LROC WAC photo mosaic over the 3D relief lit by the Sun'}
         >
           Photo
         </button>
@@ -572,6 +593,8 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
   const sceneVersion = useRef(0)
   /** Frame rate over continuous drawing, to lower the pixel ratio on a slow GPU (the pixel ratio the canvas started with first). */
   const perf = useRef({ frames: 0, time: 0, age: 0, dpr: viewport.dpr })
+  /** The camera's motion: seconds since it last moved, the moving frames' timing and the factor on the pixel ratio. */
+  const motion = useRef({ last: new Float64Array(16), still: Infinity, frames: 0, time: 0, factor: 1 })
   const eph = useEphemeris().data
   const [reduced] = useState(() => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
   const [detail] = useState(() => new GlobeDetail(data.photoBase))
@@ -766,8 +789,17 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
 
     // the Sun at the active instant
     const { tMs } = useApp.getState()
-    stars.update(tMs, gl.getPixelRatio())
-    sky.update(tMs)
+    // low graphics: no stars, no Milky Way, no shadows cast by the terrain; and while the Moon turns by itself no new
+    // detail tiles and fewer frames (LOW_SPIN_FPS)
+    const low = useGraphics.getState().low
+    const lean = low && orbit.isSpinning()
+    stars.points.visible = !low
+    sky.mesh.visible = !low
+    if (!low) {
+      stars.update(tMs, gl.getPixelRatio())
+      sky.update(tMs)
+    }
+    material.uniforms.uPolarShadow.value = !low && polar.shadowReady ? 1 : 0
     if (eph?.table.covers(tMs)) {
       const s = eph.table.positions(tMs)
       const len = Math.hypot(s[0], s[1], s[2])
@@ -822,11 +854,11 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
     const view = { fovDeg: FOV, widthPx: size.width * dpr, heightPx: size.height * dpr }
     // over the pole the latitude/longitude tiles are not needed (the polar ones are drawn there) and would squeeze
     // into hundreds of slivers; elsewhere they load as before
-    if (!polarView) detail.update(dt, { ...view, lat: n.lat, lon: n.lon, distKm: n.dist }, { ...view, lat: g.lat, lon: g.lon, distKm: g.dist }, material, isNear)
+    if (!polarView && !lean) detail.update(dt, { ...view, lat: n.lat, lon: n.lon, distKm: n.dist }, { ...view, lat: g.lat, lon: g.lon, distKm: g.dist }, material, isNear)
     // the polar tiles for what the camera sees (culled to the view, finer nearer the camera)
     cam.updateMatrixWorld()
     frustum.setFromProjectionMatrix(projView.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse))
-    polar.update(dt, {
+    if (!lean) polar.update(dt, {
       position: [cam.position.x, cam.position.y, cam.position.z],
       pixelRad: ((FOV * Math.PI) / 180) / Math.max(1, size.height),
       visible: (c, r) => frustum.intersectsSphere(sphere.set(sphere.center.set(c[0], c[1], c[2]), r)),
@@ -848,6 +880,37 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
       toPoint.copy(camDir).sub(p)
       return p.dot(toPoint) > 0
     })
+
+    // Fewer pixels while the camera moves on a slow GPU (MOVING_*): the shader's cost goes with the pixel count
+    const m = motion.current
+    cam.updateMatrixWorld()
+    let moved = false
+    cam.matrixWorld.elements.forEach((v, k) => {
+      if (m.last[k] !== v) {
+        m.last[k] = v
+        moved = true
+      }
+    })
+    // the Moon turning by itself (idle, cinematic) keeps its full pixels: that is a view to look at, not a drag
+    const driven = moved && !orbit.isSpinning()
+    m.still = driven ? 0 : m.still + dt
+    const moving = m.still < MOVING_SETTLE_S
+    if (moving && driven && dt < 0.25) {
+      m.frames++
+      m.time += dt
+      if (m.time >= MOVING_WINDOW_S) {
+        if (m.frames / m.time < SLOW_FPS) m.factor = Math.max(MOVING_MIN, m.factor * MOVING_STEP)
+        m.frames = 0
+        m.time = 0
+      }
+    } else if (!moving) {
+      m.frames = 0
+      m.time = 0
+    }
+    // low graphics: a pixel ratio of at most 1
+    const base = useGraphics.getState().low ? Math.min(1, perf.current.dpr) : perf.current.dpr
+    const wantDpr = moving ? base * m.factor : base
+    if (Math.abs(wantDpr - gl.getPixelRatio()) > 1e-3) setDpr(wantDpr)
 
     // Draw only when the picture changed (this callback has a priority, so React Three Fiber leaves the drawing to
     // it): the camera, the canvas, the Sun, the relief, the detail tiles or the places. A pinned or just-touched
@@ -880,8 +943,12 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
       put(t.id); put(t.version)
     }
     put(sceneVersion.current)
+    put(low ? 1 : 0)
     d.at += dt
-    const draw = changed || d.at >= IDLE_REDRAW_S
+    // a frame skipped for LOW_SPIN_FPS is still owed: the signature is spoilt so the next frame draws
+    const held = changed && lean && d.at < 1 / LOW_SPIN_FPS - 0.002
+    if (held) sig[0] = NaN
+    const draw = (changed && !held) || d.at >= IDLE_REDRAW_S
     if (draw) {
       gl.render(scene, cam)
       d.at = 0

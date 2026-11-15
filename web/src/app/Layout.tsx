@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useApp } from '../state/store'
 import { BlockToggle } from '../blocks/BlockToggle'
+import { GraphicsToggle } from '../ui/GraphicsToggle'
 import { BrandMark } from '../ui/BrandMark'
 import { TourButton } from '../ui/Walkthrough'
 import { useCinematic } from '../state/cinematic'
@@ -54,6 +55,7 @@ export function Layout() {
               </div>
             )}
             <BlockToggle />
+            {!blocks && <GraphicsToggle />}
             {!blocks && <CinematicButton />}
           </div>
         )}
