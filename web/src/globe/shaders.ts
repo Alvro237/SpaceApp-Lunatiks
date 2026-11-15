@@ -292,8 +292,12 @@ vec2 slopes(int slot, vec2 cell, float tileDeg, float lat, float lon) {
   return vec2((hAt(uv + vec2(1.0 / size.x, 0.0)) - hAt(uv - vec2(1.0 / size.x, 0.0))) / (2.0 * R * coslat * (2.0 * PI / size.x)),
               (hAt(uv - vec2(0.0, 1.0 / size.y)) - hAt(uv + vec2(0.0, 1.0 / size.y))) / (2.0 * R * (PI / size.y)));
 }
-// relief shading exaggeration of the shipped grid's slopes, for legibility at 7.6 km pixels
+// relief shading exaggeration of the shipped grid's slopes, for legibility at 7.6 km pixels (relief mode). In photo
+// mode the photograph carries the texture, and the grid is shaded like the detail heights (uDetailShade): in the
+// whole-Moon view only the MAX_VIEW_TILES detail tiles nearest the centre are loaded, and a stronger shading on the
+// rest of the disc drew the limbs in a second, harsher look next to the centre's.
 const float GRID_SHADE = 3.0;
+float gridShade() { return uPhotoMode > 0.5 ? uDetailShade : GRID_SHADE; }
 
 void main() {
   vec3 up = normalize(vMe);
@@ -382,7 +386,7 @@ void main() {
         float cDeg;
         int coarse = findTile(uIndex, degrees(lon), degrees(lat), levelOf(tileDeg) - 1, cCell, cDeg);
         g = mix(slopes(coarse, cCell, cDeg, lat, lon), g, w);
-        exag = mix(coarse >= 0 ? uDetailShade : GRID_SHADE, uDetailShade, w);
+        exag = mix(coarse >= 0 ? uDetailShade : gridShade(), uDetailShade, w);
       }
       he = g.x;
       hn = g.y;
@@ -390,7 +394,7 @@ void main() {
       vec2 g = slopes(-1, cell, tileDeg, lat, lon);
       he = g.x;
       hn = g.y;
-      exag = GRID_SHADE;
+      exag = gridShade();
     }
     // south of 60 S the slopes of the polar height tiles, eased in from the disc's edge: one and a half vertices
     // either side in map metres (wider than one: the bilinear heights' slope then changes smoothly across a cell
