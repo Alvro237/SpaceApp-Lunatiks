@@ -1,31 +1,26 @@
 # Demo video script (30 seconds or less)
 
-> Written for the first static prototype (a React site whose engine lived in `web/src/core`). The method and
-> the numbers still hold; the engine now lives in `api/app/logic`, the data in `data/` and the tests in
-> `api/tests`. Paths under `web/` no longer exist in this repository.
-
 Rules from the Project Submission Guide: **30 s maximum** (longer disqualifies), public link with no login,
 English audio or **English subtitles**, no people under 18 on screen, no NASA logos in generated content,
 AI-generated images or video need a visible watermark (none are used here). Host it on YouTube or similar
 and test the link in a private window.
 
-Structure the guide suggests, with our content. Time-code is the *start* of each beat.
+Structure the guide suggests, with this product. Time-code is the *start* of each beat.
 
 | Time | Say (English) | Show on screen |
 | --- | --- | --- |
-| 0:00 | "I'm **[name]**, team **[team name]**." | Title card: project name, team name, member names. |
-| 0:02 | "The challenge: choose where and when to land on the Moon." | The Moon's south pole, the `Explore` page loaded on Mons Malapert. |
-| 0:05 | "**Lunar Landing Site Navigator**: compare sites and dates by sunlight and a line to Earth." | Logo/title over the app. |
-| 0:10 | "Built on NASA's LOLA terrain and JPL ephemerides, it shows the Sun and Earth over the *real* horizon, validated to thousandths of a degree." | Close-up view: the Sun's disc half hidden behind the terrain. Cut to the timeline strips. |
-| 0:17 | "Launch slipped? Every site, every landing day, in one view." | Date planner heat map; press an arrow key and the selected cell moves; open it. |
-| 0:23 | "Free, accessible, and it runs in your browser." | Compare view with three scenarios ranked; end on the live URL. |
-| 0:27 | "Plan the next landing. Teach why the Moon is hard." | Final card: URL and QR code. |
+| 0:00 | "We're team **Lunatiks**." | Title card: project name, team name, member names. |
+| 0:02 | "The challenge: choose where and when to land on the Moon." | The globe lit by the Sun at the chosen instant; it turns and dives into the south-polar map. |
+| 0:06 | "**Lunar Landing Site Navigator** shows the Sun and Earth over the *real* terrain horizon, from NASA's LOLA maps and JPL ephemerides." | Study mode on IM-2: open Horizon, the first-person view with the Sun and Earth tracks over the skyline; the timeline plays. |
+| 0:13 | "Power, radiation and Earth contact, for any place on the Moon." | Power panel (levels and battery line), then a click on a crater rim: the traced horizon badge. |
+| 0:18 | "Mission mode paints where a lander can go: every requirement, one search." | Mission filters, *Load example mission*, *Find areas*: green outlined areas on the relief; open one with *Study*. |
+| 0:25 | "Validated against JPL Horizons to millionths of a degree. Plan the next landing." | Data & methods page (validation numbers), then the final card with the URL. |
 
 Recording notes
 
 - Record at 1080p, browser zoom 110-125 % so text stays readable at video size. Dark theme.
-- Use a saved URL for each shot so it is repeatable: `…/#/explore?s=mons-malapert,20270115T0000,7,2`, then the
-  planner view, then `#/compare?...` with the scenarios you want (copy them from *Copy link to this scenario*).
+- The example mission makes the mission shot repeatable (it fills the region, the window and four filters). Run the
+  search once before recording: the API keeps the answer, so the take shows the result at once.
 - Do not show any personal data (browser bookmarks, tabs, notifications).
 - Add **burned-in English subtitles** even if you speak English (accessibility).
 - Music: only if you own the rights or it is royalty-free and listed in the References field.
