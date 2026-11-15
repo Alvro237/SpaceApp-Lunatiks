@@ -56,6 +56,28 @@ for (const size of SIZES) {
   })
 }
 
+for (const size of [SIZES[0], SIZES[1], SIZES[3], SIZES[5]]) {
+  test(`Educational mode fits a ${size.name} (${size.width}x${size.height})`, async ({ page }) => {
+    await page.setViewportSize(size)
+    await page.goto('./')
+    await page.getByRole('switch', { name: /Educational/ }).click()
+    const card = page.locator('.blk-story')
+    await expect(card).toBeVisible({ timeout: 20_000 })
+    const parts = '.topbar, .where-when > *, .toolstrip button, .blk-sky, .blk-bottom, .blk-story, .blk-mission'
+    expect(await noSidewaysScroll(page)).toBe(true)
+    expect(await outside(page, parts)).toEqual([])
+
+    // a mission's story: the picture strip and the big button stay inside the card, which never scrolls sideways
+    await page.locator('.blk-mission').first().click()
+    await expect(page.locator('.blk-strip')).toBeVisible()
+    expect(await noSidewaysScroll(page)).toBe(true)
+    expect(await outside(page, `${parts}, .blk-strip li, .blk-big`)).toEqual([])
+    expect(await card.evaluate((e) => getComputedStyle(e).overflowX)).toBe('hidden')
+    const strip = await page.locator('.blk-strip li').evaluateAll((items) => items.map((e) => e.scrollWidth <= e.clientWidth + 1))
+    expect(strip).not.toContain(false)
+  })
+}
+
 test('the text pages fit a small phone', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 640 })
   for (const path of ['./#/data', './#/learn']) {
