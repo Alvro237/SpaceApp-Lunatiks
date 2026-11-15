@@ -101,6 +101,8 @@ export function GlobeView() {
   const enterMap = useApp((s) => s.enterMap)
   const [orbit] = useState(() => new OrbitRig(START))
   const [surface, setSurface] = useState<GlobeSurface>('relief')
+  /** The light, shared with the polar map's layers menu: the Sun at the chosen time, or neutral relief. */
+  const lighting = useApp((s) => s.lighting)
   /** The mesh's relief exaggeration, to half a unit (for the caption and the markers' height). */
   const [exag, setExag] = useState(RELIEF_MAX)
   const anchored = useGlobe((s) => s.anchored)
@@ -343,12 +345,21 @@ export function GlobeView() {
         >
           Photo
         </button>
+        <button
+          type="button"
+          aria-pressed={lighting === 'relief'}
+          onClick={() => useApp.getState().set({ lighting: lighting === 'relief' ? 'sun' : 'relief' })}
+          title="Neutral light: the relief lit evenly from the north-west, with no night side, as on the polar map. Off: the Sun at the chosen time"
+        >
+          Neutral light
+        </button>
       </div>
       </ToolPortal>
       <p className="globe-caption">
         {surface === 'photo'
-          ? `LROC WAC photo mosaic, 100 m, from NASA Moon Trek, over global LOLA topography (relief ×${exag}; 118 m detail as you zoom) · lit by the Sun at the chosen time`
-          : `Global LOLA topography (relief ×${exag}; 118 m detail from NASA Moon Trek as you zoom) · lit by the Sun at the chosen time`}
+          ? `LROC WAC photo mosaic, 100 m, from NASA Moon Trek, over global LOLA topography (relief ×${exag}; 118 m detail as you zoom)`
+          : `Global LOLA topography (relief ×${exag}; 118 m detail from NASA Moon Trek as you zoom)`}
+        {lighting === 'relief' ? ' · neutral light, not the Sun' : ' · lit by the Sun at the chosen time'}
       </p>
     </>
   )
@@ -387,6 +398,11 @@ function setExaggeration(m: THREE.ShaderMaterial, e: number) {
   m.uniforms.uExag.value = e
 }
 
+/** The Sun at the chosen instant (true) or neutral relief (false). */
+function setLighting(m: THREE.ShaderMaterial, sun: boolean) {
+  m.uniforms.uLighting.value = sun ? 1 : 0
+}
+
 /** Unit vector to the Sun, Moon Mean-Earth axes. */
 function setSun(m: THREE.ShaderMaterial, x: number, y: number, z: number) {
   ;(m.uniforms.uSun.value as THREE.Vector3).set(x, y, z)
@@ -417,7 +433,7 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
   const { camera, size, scene, gl, setDpr, viewport } = useThree()
   const [markersSet] = useState(() => new MarkerSet())
   /** What the last drawn frame showed (camera, canvas, Sun, relief, detail tiles): a frame is drawn when it differs. */
-  const drawn = useRef({ sig: new Float64Array(40), at: Infinity, was: false })
+  const drawn = useRef({ sig: new Float64Array(41), at: Infinity, was: false })
   const sceneVersion = useRef(0)
   /** Frame rate over continuous drawing, to lower the pixel ratio on a slow GPU (the pixel ratio the canvas started with first). */
   const perf = useRef({ frames: 0, time: 0, age: 0, dpr: viewport.dpr })
@@ -439,6 +455,7 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
         uDiscLat: { value: MAP_DISC_LAT },
         ...detail.uniforms(),
         uDetailShade: { value: DETAIL_SHADE_EXAGGERATION },
+        uLighting: { value: 1 },
         uHole: { value: new THREE.Vector4() },
       },
     })
@@ -562,7 +579,8 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
     placeCamera(cam, n, orbit.view.tilt, orbit.view.heading, size.width, size.height)
 
     // the Sun at the active instant
-    const { tMs } = useApp.getState()
+    const { tMs, lighting } = useApp.getState()
+    setLighting(material, lighting !== 'relief')
     stars.update(tMs, gl.getPixelRatio())
     sky.update(tMs)
     if (eph?.table.covers(tMs)) {
@@ -640,7 +658,7 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
     const u = material.uniforms
     const sun = u.uSun.value as THREE.Vector3
     put(sun.x); put(sun.y); put(sun.z)
-    put(u.uExag.value as number); put(u.uMaxLevel.value as number); put(u.uPhotoMode.value as number)
+    put(u.uExag.value as number); put(u.uMaxLevel.value as number); put(u.uPhotoMode.value as number); put(u.uLighting.value as number)
     // a detail tile that arrives is written into these textures, which raises their version
     for (const name of ['uDetail', 'uIndex', 'uPhoto', 'uPhotoIndex']) {
       const t = u[name].value as THREE.Texture

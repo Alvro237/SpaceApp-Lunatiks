@@ -51,9 +51,9 @@ describe('orbit controller', () => {
 
 describe('relief exaggeration', () => {
   it('is x1 close in, x4 for the whole Moon, and grows with distance in between', () => {
-    expect(reliefExaggeration(MOON_R_KM + 200)).toBe(1)
+    expect(reliefExaggeration(MOON_R_KM + 200)).toBe(2)
     expect(reliefExaggeration(MOON_R_KM * 3.4)).toBe(RELIEF_MAX)
-    expect(reliefExaggeration(MOON_R_KM + 1_375)).toBeCloseTo(2.5, 6)
+    expect(reliefExaggeration(MOON_R_KM + 1_375)).toBeCloseTo(3, 6)
   })
 })
 

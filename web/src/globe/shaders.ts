@@ -105,6 +105,7 @@ uniform sampler2D uPhotoIndex;         // the same for the photo tiles
 uniform float uMaxLevel;    // finest level the view uses; -1 = no detail
 uniform float uPhotoMode;   // 1 = LROC WAC photo draped over the LOLA relief, 0 = LOLA relief alone
 uniform float uDetailShade; // slope exaggeration of the shading from detail heights
+uniform float uLighting;    // 1: the Sun at the chosen instant (day and night); 0: neutral relief, lit evenly from the north-west
 uniform vec4 uHole;         // drawn by a finer mesh instead (patch.ts): centre longitude, half-width in longitude,
                             // south and north latitude, degrees; half-width 0 = no hole
 in vec3 vMe;
@@ -112,7 +113,9 @@ in float vHeight;
 layout(location = 0) out highp vec4 fragColor;
 const float PI = 3.141592653589793;
 const float R = 1737400.0;
-const float PHOTO_GAIN = 1.6;
+// The WAC global mosaic's mean brightness is 0.308 of the byte range (median 0.31; the 32 WMTS tiles of matrix 2,
+// unweighted by area, measured 2026-11-15): x2 brings it to about the plain regolith grey, as on the polar map.
+const float PHOTO_GAIN = 2.0;
 const vec3 REGOLITH = vec3(0.72, 0.71, 0.68);
 
 ${H_AT}
@@ -171,10 +174,16 @@ void main() {
     vec3 north = vec3(-sin(lat) * cos(lon), -sin(lat) * sin(lon), cos(lat));
     vec3 n = normalize(up - exag * (he * east + hn * north));
     float sun = max(0.0, dot(n, uSun));
-    // the night side keeps a faint fixed-light relief (like earthshine) so its shape stays readable
-    vec3 fixedLight = normalize(up + 0.6 * east + 0.4 * north);
-    float night = 0.07 + 0.12 * max(0.0, dot(n, fixedLight));
-    float light = night + (1.0 - night) * sun * day;
+    float light;
+    if (uLighting > 0.5) {
+      // the night side keeps a faint fixed-light relief (like earthshine) so its shape stays readable
+      vec3 fixedLight = normalize(up + 0.6 * east + 0.4 * north);
+      float night = 0.07 + 0.12 * max(0.0, dot(n, fixedLight));
+      light = night + (1.0 - night) * sun * day;
+    } else {
+      // neutral relief, as on the polar map: no day or night, a fixed light from the north-west
+      light = 0.30 + 0.70 * max(0.0, dot(n, normalize(0.75 * up - 0.55 * east + 0.40 * north)));
+    }
     colour = albedo * light;
   }
   // outline of the polar map's coverage

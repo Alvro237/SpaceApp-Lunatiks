@@ -66,7 +66,7 @@ export function DataPage() {
                 <a href="https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/cylindrical/img/">LOLA LDEM_16</a>, NASA PDS
                 (4 px/deg area means for the globe, 8 px/deg for the horizon grid)
               </td>
-              <td>Globe lit by the Sun at the chosen time (relief exaggerated ×4); the 3.8 km grid that traces horizons outside the south pole</td>
+              <td>Globe lit by the Sun at the chosen time, or by a neutral light (relief exaggerated ×4 for the whole Moon, ×2 close in); the 3.8 km grid that traces horizons outside the south pole</td>
             </tr>
             <tr>
               <th scope="row">The whole Moon, read while you zoom</th>
