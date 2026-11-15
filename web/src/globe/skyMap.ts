@@ -74,6 +74,8 @@ export class SkyMap {
   private rank = -1
   private upgrade: ReturnType<typeof setTimeout> | undefined
   private disposed = false
+  /** Stops the downloads of a sky that is gone before they finish. */
+  private readonly abort = new AbortController()
   private lastMs = NaN
 
   constructor(gl: THREE.WebGLRenderer) {
@@ -95,12 +97,19 @@ export class SkyMap {
     if (wantsLargeMap(gl)) this.upgrade = setTimeout(() => this.load(gl, 'starmap_8k.jpg', 1), UPGRADE_DELAY_MS)
   }
 
-  /** Loads a map and shows it unless a sharper one (higher rank) is already shown. */
+  /**
+   * Loads a map and shows it unless a sharper one (higher rank) is already shown. The JPEG is decoded off the main
+   * thread (createImageBitmap): handed to the GPU as an <img>, the 8k map was decoded inside the frame that first
+   * drew it, which froze the picture for about 0.7 s ten seconds after the globe opened (measured 2026-11-15). The
+   * bitmap is flipped while decoding (WebGL does not flip a bitmap on upload) and freed once it is on the GPU. A
+   * browser that cannot do this takes the old path.
+   */
   private load(gl: THREE.WebGLRenderer, file: string, rank: number): void {
-    new THREE.TextureLoader().load(`${DATA_BASE}sky/${file}`, (tex) => {
+    const url = `${DATA_BASE}sky/${file}`
+    const show = (tex: THREE.Texture) => {
       if (this.disposed || rank < this.rank) {
         tex.dispose()
-        return
+        return false
       }
       tex.colorSpace = THREE.NoColorSpace // the file holds the colours to show (the canvas is not colour-managed)
       tex.wrapS = THREE.RepeatWrapping
@@ -112,7 +121,25 @@ export class SkyMap {
       this.rank = rank
       this.material.uniforms.uMap.value = tex
       this.mesh.visible = true
-    })
+      return true
+    }
+    const viaImage = () => void new THREE.TextureLoader().load(url, show)
+    if (typeof createImageBitmap !== 'function') return viaImage()
+    fetch(url, { signal: this.abort.signal })
+      .then((res) => (res.ok ? res.blob() : Promise.reject(new Error(`HTTP ${res.status}`))))
+      .then((blob) => createImageBitmap(blob, { imageOrientation: 'flipY', colorSpaceConversion: 'none', premultiplyAlpha: 'none' }))
+      .then((bitmap) => {
+        const tex = new THREE.Texture(bitmap)
+        tex.flipY = false
+        tex.onUpdate = () => {
+          tex.onUpdate = null
+          bitmap.close()
+        }
+        if (!show(tex)) bitmap.close()
+      })
+      .catch(() => {
+        if (!this.disposed) viaImage()
+      })
   }
 
   /** Turn the sky to the Moon's orientation at this instant (skipped while the time has not moved a second). */
@@ -125,6 +152,7 @@ export class SkyMap {
 
   dispose(): void {
     this.disposed = true
+    this.abort.abort()
     clearTimeout(this.upgrade)
     this.texture?.dispose()
     this.mesh.geometry.dispose()
