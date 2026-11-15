@@ -27,6 +27,29 @@ npm run gen:api      # regenerate src/api/schema.gen.ts from the API's OpenAPI d
 Start the API first (`cd api && uv run uvicorn app.main:app --reload`). `API_PROXY=http://127.0.0.1:8010` points
 the dev proxy elsewhere; in production set `VITE_API_URL` to the API's public URL.
 
+## Landing page and Vercel
+
+`landing.html` (`src/landing`) is the public front door: the 30-second demo, four sections on what the tool gives,
+and buttons into the navigator. Its background is the Moon rendered live from the LROC WAC mosaic and the SVS star
+map already in `public/data`; the camera descends to the south pole as the page scrolls. In development it opens at
+http://localhost:5173/SpaceApp-Lunatiks/landing.html. The demo's YouTube id, the API docs and the repository link
+are set in `src/landing/links.ts`. An AI-made background video can replace the render (`BACKGROUND_VIDEO`); the page
+then shows the visible "AI-generated" watermark the Space Apps rules require.
+
+On Vercel (`vercel.json`, project root `web`) the landing page is served at `/` and the navigator at `/app`;
+`vite.config.ts` switches the base to `/` when `VERCEL` is set. The terrain tiles are built locally (`npm run tiles`
+needs uv and the pipeline), so deploy a local build:
+
+```
+cd web
+npm run tiles
+npx vercel build --prod          # with VITE_API_URL set to the public API
+npx vercel deploy --prebuilt --prod
+```
+
+The production URL is public; preview URLs sit behind Vercel's deployment protection, so give the judges the
+production one and open it in a private window before submitting.
+
 ## Where the numbers come from
 
 - **The API** computes everything it exposes. Views use `/sites`, `/meta/*` today and call `/state`, `/series`,
