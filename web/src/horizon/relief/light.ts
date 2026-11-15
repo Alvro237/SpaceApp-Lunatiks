@@ -44,6 +44,20 @@ export const PATCH_PAD = 2
 export const PATCH_N = PATCH_TILE * RING_RATIO + 2 * PATCH_PAD
 
 /**
+ * Blocks: every grid is cut into squares of BLOCK cells whose highest sample is kept (GroundStack.blockMax), so the
+ * renderer's ray can pass a whole block at once where even that height would be hidden from the eye (render.ts).
+ * (The shadow rays of ringLightHorizon do not use them: their steps are already several cells long, and the test
+ * cost more than the steps it saved, measured.) The blocks are laid so that none straddles ground another
+ * grid answers for: a ring's start half a cell before sample 0 (as its tiles do: BLOCK divides PATCH_TILE), a
+ * patch's at its tile's edge, PATCH_PAD - 1/2 samples in.
+ */
+export const BLOCK = 16
+const RING_BLOCKS = RING_N / BLOCK
+const PATCH_BLOCKS = (PATCH_TILE * RING_RATIO) / BLOCK
+const RING_BLOCK_O = -0.5
+const PATCH_BLOCK_O = PATCH_PAD - 0.5
+
+/**
  * Linear map from (e, n) to a grid's fractional sample indices: u = au e + bu n + cu, v = av e + bv n + cv.
  * (cu, cv) is where the observer falls in the grid: its centre for a ring, outside it for a patch.
  */
@@ -121,6 +135,14 @@ export class GroundStack {
   readonly size: number[]
   readonly cell: number[]
   readonly tiles: (Int16Array | null)[]
+  /**
+   * Per grid: the highest sample of each block (see BLOCK), row by row, `blocks[g]` blocks a side starting at index
+   * `blockO[g]`. Infinity on a ring's blocks over the next finer ring, which answers there with heights of its own.
+   * Worked out on first use: the lighting workers never read it.
+   */
+  private maxima: Float32Array[] | null = null
+  readonly blocks: number[]
+  readonly blockO: number[]
   readonly frame: PlaneFrame
 
   constructor(rings: RingGrid[], frame: PlaneFrame, patches: PatchGrid[] = []) {
@@ -139,9 +161,44 @@ export class GroundStack {
       const t = (this.tiles[k] ??= new Int16Array(PATCH_TILES * PATCH_TILES).fill(-1))
       t[p.tr * PATCH_TILES + p.tc] = rings.length + i
     })
+    this.blocks = this.grids.map((_, g) => (g < rings.length ? RING_BLOCKS : PATCH_BLOCKS))
+    this.blockO = this.grids.map((_, g) => (g < rings.length ? RING_BLOCK_O : PATCH_BLOCK_O))
     let m = -Infinity
     for (const r of this.grids) for (let i = 0; i < r.heights.length; i++) if (r.heights[i] > m) m = r.heights[i]
     this.maxU = m
+  }
+
+  get blockMax(): Float32Array[] {
+    if (this.maxima) return this.maxima
+    const rings = this.rings
+    this.maxima = this.grids.map((grid, g) => {
+      const n = this.size[g]
+      const nb = this.blocks[g]
+      const o = this.blockO[g]
+      const H = grid.heights
+      const out = new Float32Array(nb * nb)
+      // the middle blocks of a ring lie over the next finer ring (its four middle tiles)
+      const mid0 = g > 0 && g < rings.length ? (PATCH_TILES / 2 - 1) * (PATCH_TILE / BLOCK) : nb
+      const mid1 = nb - mid0
+      for (let bj = 0; bj < nb; bj++) {
+        // every sample a bilinear read inside the block can touch
+        const j0 = Math.max(0, Math.floor(o + BLOCK * bj))
+        const j1 = Math.min(n - 1, Math.ceil(o + BLOCK * (bj + 1)))
+        for (let bi = 0; bi < nb; bi++) {
+          if (bi >= mid0 && bi < mid1 && bj >= mid0 && bj < mid1) {
+            out[bj * nb + bi] = Infinity
+            continue
+          }
+          const i0 = Math.max(0, Math.floor(o + BLOCK * bi))
+          const i1 = Math.min(n - 1, Math.ceil(o + BLOCK * (bi + 1)))
+          let m = -Infinity
+          for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) if (H[j * n + i] > m) m = H[j * n + i]
+          out[bj * nb + bi] = m
+        }
+      }
+      return out
+    })
+    return this.maxima
   }
 
   /** Grid index of the patch over ring k's indices (u, v), or -1. */
@@ -242,6 +299,21 @@ export function ringNormals(ring: RingGrid, f: PlaneFrame, n = RING_N, cu = C, c
   return out
 }
 
+/**
+ * A ring's per-sample values (ringLightHorizon) over one of its tiles, on the patch's samples: bilinear between the
+ * ring's. What a patch shows until its own light has been worked out (useRelief.ts).
+ */
+export function patchFromRing(ring: Float32Array, tc: number, tr: number): Float32Array {
+  const out = new Float32Array(PATCH_N * PATCH_N)
+  // patch index p is ring index (p + 1/2 - PATCH_PAD) / RING_RATIO + PATCH_TILE t - 1/2 (patchOrigin, inverted)
+  const at = (p: number, t: number) => Math.min(RING_N - 1, Math.max(0, (p + 0.5 - PATCH_PAD) / RING_RATIO + PATCH_TILE * t - 0.5))
+  for (let j = 0; j < PATCH_N; j++) {
+    const v = at(j, tr)
+    for (let i = 0; i < PATCH_N; i++) out[j * PATCH_N + i] = bilinear(ring, at(i, tc), v)
+  }
+  return out
+}
+
 /** Unit normals of every grid of a stack (rings, then patches), as ringNormals. */
 export function stackNormals(stack: GroundStack): Float32Array[] {
   return stack.grids.map((g, i) => ringNormals(g, stack.frame, stack.size[i], stack.idx[i].cu, stack.idx[i].cv))
@@ -316,7 +388,11 @@ export function ringLightHorizon(
     const o = j * n + i
     const cosI = N[3 * o] * S[0] + N[3 * o + 1] * S[1] + N[3 * o + 2] * S[2]
     if (cosI <= -0.02 || below) return HORIZON_CLAMP_DEG
-    const [e, no] = sampleEnu(f, grid.cellM, i, j, idx[g].cu, idx[g].cv)
+    // the sample's east and north (sampleEnu, without its array: this runs for every sample)
+    const px = (i - idx[g].cu) * grid.cellM
+    const py = -(j - idx[g].cv) * grid.cellM
+    const e = (px * f.E[0] + py * f.E[1]) / f.k0
+    const no = (px * f.N[0] + py * f.N[1]) / f.k0
     // the Sun's elevation over this sample's own level (its vertical leans by e / R, n / R)
     const iu = 1 / Math.sqrt(1 + (e * e + no * no) / (R_M * R_M))
     const elP = Math.asin(Math.min(1, Math.max(-1, (S[0] * e / R_M + S[1] * no / R_M + S[2]) * iu))) / D

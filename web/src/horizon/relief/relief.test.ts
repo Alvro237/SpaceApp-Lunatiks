@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { R_M } from '../../terrain/tileset'
 import {
+  BLOCK,
   GroundStack,
   HORIZON_CLAMP_DEG,
   PATCH_N,
@@ -12,6 +13,7 @@ import {
   earthPhaseAngle,
   earthshineRatio,
   lightFromHorizon,
+  patchFromRing,
   patchOrigin,
   ringLightHorizon,
   ringNormals,
@@ -507,6 +509,56 @@ describe('far relief patches', () => {
     expect(at(7000, 16_000)).toBe(1)
     // the ring samples well inside the patch's tile are left to the patch (not computed)
     expect(light[1][Math.round(C - 36_000 / 240) * RING_N + Math.round(C + 7000 / 240)]).toBe(0)
+  })
+
+  it('lays the values of a ring over the samples of a patch until the patch has its own (bilinear, exact for a plane)', () => {
+    // a ring of 240 m cells whose value is the sample's east minus twice its north, in metres
+    const f = planeFrame(10, 20)
+    const ring = new Float32Array(RING_N * RING_N)
+    for (let j = 0; j < RING_N; j++)
+      for (let i = 0; i < RING_N; i++) {
+        const [e, n] = sampleEnu(f, 240, i, j)
+        ring[j * RING_N + i] = e - 2 * n
+      }
+    const over = patchFromRing(ring, 6, 2)
+    expect(over).toHaveLength(PATCH_N * PATCH_N)
+    for (const [i, j] of [
+      [PATCH_PAD, PATCH_PAD],
+      [130, 77],
+      [PATCH_N - 1, 0],
+    ]) {
+      const [e, n] = sampleEnu(f, 60, i, j, patchOrigin(6), patchOrigin(2))
+      expect(over[j * PATCH_N + i]).toBeCloseTo(e - 2 * n, 1)
+    }
+  })
+
+  it('keeps the highest sample of every block of 16 cells: no height read inside a block is above it', () => {
+    // rough ground, so that neighbouring samples differ: the renderer passes a block whose maximum is hidden
+    const rough = (e: number, n: number) => 300 * Math.sin(e / 700) * Math.cos(n / 900) + 40 * Math.sin(e / 130 + n / 170)
+    const { f, rings } = synthetic(10, 20, 60, rough)
+    const stack = new GroundStack(rings, f, [patch(10, 20, 240, 6, 2, rough)])
+    const tmp = new Float64Array(3)
+    let checked = 0
+    for (let a = 0; a < 2000; a++) {
+      // points all over the first three rings and the patch (a fixed pseudo-random spread)
+      const e = (((a * 7919) % 2000) / 1000 - 1) * 200_000
+      const n = (((a * 104_729) % 2000) / 1000 - 1) * 200_000
+      const g = stack.locateFine(e, n, tmp)
+      if (g < 0) continue
+      const nb = stack.blocks[g]
+      const bi = Math.floor((tmp[0] - stack.blockO[g]) / BLOCK)
+      const bj = Math.floor((tmp[1] - stack.blockO[g]) / BLOCK)
+      if (bi < 0 || bj < 0 || bi >= nb || bj >= nb) continue
+      expect(stack.heightAt(g, tmp[0], tmp[1])).toBeLessThanOrEqual(stack.blockMax[g][bj * nb + bi] + 1e-3)
+      checked++
+    }
+    expect(checked).toBeGreaterThan(1000)
+    // a ring's blocks over the next finer ring are never passed: that ring answers there
+    expect(stack.blockMax[1][16 * 32 + 16]).toBe(Infinity)
+    expect(stack.blockMax[0][16 * 32 + 16]).toBeLessThan(Infinity)
+    // a patch has 16 x 16 blocks over its tile, starting at its edge (1.5 samples in)
+    expect(stack.blocks[rings.length]).toBe(16)
+    expect(stack.blockO[rings.length]).toBe(PATCH_PAD - 0.5)
   })
 
   it('picks the tiles of a far hill in view and asks for them four times finer, where LOLA has finer data', () => {

@@ -493,5 +493,14 @@ export function loadRing(spec: RingSpec, fetchFn: typeof fetch = (u, i) => fetch
   return p
 }
 
+/**
+ * Start reading a place's rings before the view asks for them (the map's flight down to the place takes over a
+ * second): loadRing keeps them, so the view finds them on their way or already there. A failure here is left to the
+ * view, which asks again.
+ */
+export function prefetchRings(lat: number, lon: number): void {
+  for (const spec of ringSpecs(lat, lon) ?? []) loadRing(spec).catch(() => undefined)
+}
+
 /** Height of the curved ground below the observer's level plane at horizontal distance d: d^2 / (2 R). */
 export const curvatureDrop = (d: number) => (d * d) / (2 * R_M)

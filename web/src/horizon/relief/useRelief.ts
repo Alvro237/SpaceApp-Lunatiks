@@ -6,7 +6,7 @@
  * finer heights on the hills of its skyline (patches.ts), which join the stack once they have all arrived.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { GroundStack, type PatchGrid, type SunDir } from './light'
+import { GroundStack, PATCH_N, type PatchGrid, type SunDir, patchFromRing, ringNormals } from './light'
 import type { LightRequest, LightResponse } from './light.worker'
 import { type Ring, loadRing, photoAlbedo, placePhotoMean, planeFrame, ringSpecs } from './rings'
 import { detailSampler, detailTileUrl, loadDetailTile, tileKey, visibleFarTiles } from './detailPhoto'
@@ -113,23 +113,31 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
     return () => clearTimeout(id)
   }, [loaded, batch.key, key])
   const frame = useMemo(() => (lat === undefined || lon === undefined ? null : planeFrame(lat, lon)), [lat, lon])
+  // every ring of the place, as soon as the last one arrives (the batch below may still be waiting): what the far
+  // patches and the photo tiles are picked from
+  const allStack = useMemo(() => {
+    if (loaded.key !== key || !frame || !specs) return null
+    const have = loaded.rings.filter((r): r is Ring => !!r).sort((a, b) => a.cellM - b.cellM)
+    return have.length === specs.length ? new GroundStack(have, frame) : null
+  }, [loaded, key, frame, specs])
   const ringStack = useMemo(() => {
     if (batch.key !== key || !frame) return null
     // finest first, whatever has arrived: the outer rings give the far ground and the skyline's foreground at once,
     // the inner ones sharpen it as they come
     const have = batch.rings.filter((r): r is Ring => !!r).sort((a, b) => a.cellM - b.cellM)
+    if (allStack && have.length === allStack.rings.length) return allStack
     return have.length > 0 ? new GroundStack(have, frame) : null
-  }, [batch, key, frame])
-  const complete = !!ringStack && !!specs && ringStack.rings.length === specs.length
+  }, [batch, key, frame, allStack])
+  const complete = !!ringStack && ringStack === allStack
 
   // finer heights on the far ground in view (patches.ts): picked once all the rings are in, read from Moon Trek, and
   // added to the stack together (each new stack is lit again from scratch)
   const [patches, setPatches] = useState<{ key: string; specs: PatchSpec[]; grids: PatchGrid[]; done: boolean }>({ key: '', specs: [], grids: [], done: true })
   useEffect(() => {
-    if (!complete || !ringStack || !specs || lat === undefined || lon === undefined) return
+    if (!allStack || !specs || lat === undefined || lon === undefined) return
     let live = true
-    const eye = ringStack.heightAt(0, (512 - 1) / 2, (512 - 1) / 2) + Math.max(mastM, EYE_MIN_M)
-    const wanted = visibleFarPatches(ringStack, eye, specs, lat, lon)
+    const eye = allStack.heightAt(0, (512 - 1) / 2, (512 - 1) / 2) + Math.max(mastM, EYE_MIN_M)
+    const wanted = visibleFarPatches(allStack, eye, specs, lat, lon)
     setPatches({ key, specs: wanted, grids: [], done: wanted.length === 0 })
     if (wanted.length === 0) return
     const got: PatchGrid[] = []
@@ -148,7 +156,7 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
       live = false
       clearTimeout(timer)
     }
-  }, [complete, ringStack, specs, key, lat, lon, mastM])
+  }, [allStack, specs, key, lat, lon, mastM])
   const stack = useMemo(() => {
     if (!ringStack || !frame) return null
     const grids = patches.key === key && complete ? patches.grids : []
@@ -172,8 +180,8 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
   })
   useEffect(() => {
     // the rings alone decide which photo tiles are in view: the patches arriving later do not ask for them again
-    const stack = ringStack
-    if (!complete || !stack || lat === undefined || lon === undefined) return
+    const stack = allStack
+    if (!stack || lat === undefined || lon === undefined) return
     let live = true
     const eye = stack.heightAt(0, (512 - 1) / 2, (512 - 1) / 2) + Math.max(mastM, EYE_MIN_M)
     const source = kaguya ? 'kaguya' : 'wac'
@@ -198,7 +206,7 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
       live = false
       if (timer) clearTimeout(timer)
     }
-  }, [complete, ringStack, key, lat, lon, mastM, kaguya])
+  }, [allStack, key, lat, lon, mastM, kaguya])
   // the projection from the place's plane to the Kaguya grid, worked out once per place
   const kGrid = useMemo(() => (kaguya && lat !== undefined && lon !== undefined ? pixelGrid(lat, lon) : null), [kaguya, lat, lon])
   const detailAt = useMemo(() => {
@@ -220,6 +228,11 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
     earthlight: Float32Array[] | null
     lights: SceneLights | null
   } | null>(null)
+  // what is on screen, for the effect below (declared first: it runs first)
+  const shownRef = useRef(shown)
+  useEffect(() => {
+    shownRef.current = shown
+  }, [shown])
   const kick = useRef<(() => void) | null>(null)
   const job = useRef<{ busy: boolean; sent: SceneLights | null; want: SceneLights | null; id: number; quick: boolean }>({
     busy: false,
@@ -231,6 +244,25 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
 
   useEffect(() => {
     if (!stack || typeof Worker === 'undefined') return
+    // patches joining the rings already on screen go up at once, with the ring's own light laid over their samples
+    // (shadows as coarse as before, the relief already fine), until the workers below have lit them properly
+    const prev = shownRef.current
+    if (prev && prev.key === key && prev.stack !== stack && prev.stack.rings === stack.rings && stack.patches.length > prev.stack.patches.length) {
+      const nR = stack.rings.length
+      const ringOf = (p: PatchGrid) => stack.rings.findIndex((r) => r.cellM === p.parentCellM)
+      const was = (p: PatchGrid) => prev.stack.patches.indexOf(p)
+      const normals = prev.normals.slice(0, nR)
+      const sunlight = prev.sunlight.slice(0, nR)
+      const earthlight = prev.earthlight ? prev.earthlight.slice(0, nR) : null
+      stack.patches.forEach((p, i) => {
+        const j = was(p)
+        const q = stack.idx[nR + i]
+        normals.push(j >= 0 ? prev.normals[nR + j] : ringNormals(p, stack.frame, PATCH_N, q.cu, q.cv))
+        sunlight.push(j >= 0 ? prev.sunlight[nR + j] : patchFromRing(prev.sunlight[ringOf(p)], p.tc, p.tr))
+        if (earthlight && prev.earthlight) earthlight.push(j >= 0 ? prev.earthlight[nR + j] : patchFromRing(prev.earthlight[ringOf(p)], p.tc, p.tr))
+      })
+      setShown({ key, stack, normals, sunlight, earthlight, ms: prev.ms, lights: prev.lights })
+    }
     // a small pool: each worker lights every n-th row of the rings and its own share of the patches (light.ts
     // ringLightHorizon); the parts are put together here
     const count = Math.max(1, Math.min(MAX_WORKERS, (navigator.hardwareConcurrency || 2) - 1))
