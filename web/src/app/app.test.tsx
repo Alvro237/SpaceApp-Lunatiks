@@ -293,14 +293,15 @@ describe('navigator', () => {
     }
     expect(useApp.getState().compare).toHaveLength(3)
     expect(await screen.findByRole('heading', { level: 2, name: 'Comparing 3 places' })).toBeInTheDocument()
-    // one card per place, each with its own radar (not three shapes piled on one chart)
-    const items = within(screen.getByRole('list', { name: 'Places compared' })).getAllByRole('listitem')
-    expect(items.filter((li) => li.classList.contains('cmp-card'))).toHaveLength(3)
-    expect(await screen.findAllByRole('img', { name: /^Radar of \d / })).toHaveLength(3)
-    // a metric name explains its axis and which way is better, also from the keyboard
-    await user.hover(screen.getAllByRole('button', { name: 'Longest night' })[0])
+    // one radar with every place on it, the places beside it as its legend
+    const radar = await screen.findByRole('group', { name: /Radar of 3 places/ })
+    expect(within(screen.getByRole('list', { name: 'Places compared' })).getAllByRole('listitem')).toHaveLength(3)
+    // an axis name explains what it measures and which way is better, on hover and from the keyboard
+    const axis = within(radar).getByRole('button', { name: /Short nights/ })
+    await user.hover(axis)
     expect(screen.getByRole('tooltip')).toHaveTextContent(/Better:.*Worse:/)
-    await user.unhover(screen.getAllByRole('button', { name: 'Longest night' })[0])
+    await user.unhover(axis)
+    expect(screen.queryByRole('tooltip')).toBeNull()
     // the timeline under the map shows one strip per place, switched between Sunlit and Earth
     const timeline = screen.getByRole('region', { name: 'Mission window and playback' })
     expect(within(timeline).getByRole('img', { name: /When each place is sunlit: 1 IM-2.*2 Mons Malapert.*3 Shackleton crater/ })).toBeInTheDocument()

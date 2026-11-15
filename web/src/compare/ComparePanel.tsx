@@ -1,19 +1,23 @@
 /**
  * Multiselect comparison: the side panel that opens once two or more places are picked with Multiselect on.
  *
- * One card per place (numbered as on the map), side by side instead of piled on one chart: its own small radar of
- * the metrics that decide a landing site, every axis on an absolute 0..1 scale, with the best of the group drawn
- * as a faint outline behind it, and the same metrics as numbers with a bar and a star for the best place. The card
- * header keeps the place's options and remove button (the keyboard route to what a right click on the map does).
+ *   1. One radar plot of the metrics that decide a landing site, every axis on an absolute 0..1 scale: each place
+ *      picked is added on top of the others. Hovering (or focusing) an axis name opens a small pop-up with what
+ *      the axis measures and which way is better and worse.
+ *   2. Beside it, the places as the radar's legend (numbered as on the map, with the line pattern of their shape),
+ *      each with its options and remove buttons (the keyboard route to what a right click on the map does).
+ *      Hovering a place brings its shape to the front and fades the others.
  *
  * When each place is sunlit or sees the Earth is in the timeline under the map: in Multiselect it shows one strip
  * per place on the window's time axis, with a Sunlit / Earth switch.
  *
  * Same instant and window for every place, computed with the browser engine (the same tables and masks as the
- * rest of the navigator). The numbers behind the cards are also in a table.
+ * rest of the navigator). The numbers behind the radar are in a table.
  */
-import { type FocusEvent, type MouseEvent, useId, useState } from 'react'
+import { useId, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { DataTable } from '../charts/DataTable'
+import { RadarChart } from '../charts/RadarChart'
 import { sameSelection, useApp } from '../state/store'
 import { formatUtc } from '../time/clock'
 import { SOLAR_CONSTANT_W_M2 } from '../time/engine'
@@ -27,62 +31,38 @@ interface Axis {
   label: string
   /** 0..1, outward is better, on an absolute scale (not relative to the places shown). */
   value: (w: WindowSeries) => number
-  /** Full sentence for the table and the screen-reader summary. */
+  /** Full sentence for the table, the pop-up and the screen-reader summary. */
   text: (w: WindowSeries) => string
-  /** Name of the figure printed on the card (what the number is, not the direction of the axis). */
-  cardLabel: string
-  /** Compact figure printed on the card. */
-  short: (w: WindowSeries) => string
 }
 
 /** What a planner wants more of, each on a fixed scale that the label states. */
 const AXES: Axis[] = [
-  {
-    key: 'sun',
-    label: 'Sunlight',
-    cardLabel: 'Sunlight',
-    value: (w) => w.metrics.sunlightPct / 100,
-    text: (w) => `${w.metrics.sunlightPct.toFixed(0)} % of the window`,
-    short: (w) => `${w.metrics.sunlightPct.toFixed(0)} %`,
-  },
-  {
-    key: 'earth',
-    label: 'Earth contact',
-    cardLabel: 'Earth contact',
-    value: (w) => w.metrics.commsPct / 100,
-    text: (w) => `${w.metrics.commsPct.toFixed(0)} % of the window`,
-    short: (w) => `${w.metrics.commsPct.toFixed(0)} %`,
-  },
+  { key: 'sun', label: 'Sunlight', value: (w) => w.metrics.sunlightPct / 100, text: (w) => `${w.metrics.sunlightPct.toFixed(0)} % of the window` },
+  { key: 'earth', label: 'Earth contact', value: (w) => w.metrics.commsPct / 100, text: (w) => `${w.metrics.commsPct.toFixed(0)} % of the window` },
   {
     key: 'night',
     label: 'Short nights',
-    cardLabel: 'Longest night',
     value: (w) => 1 - Math.min(1, w.metrics.longestDarkH / Math.max(1, w.metrics.windowHours)),
     text: (w) => `longest night ${w.metrics.longestDarkH.toFixed(0)} h`,
-    short: (w) => `${w.metrics.longestDarkH.toFixed(0)} h`,
   },
   {
     key: 'blackout',
     label: 'Steady contact',
-    cardLabel: 'Longest blackout',
     value: (w) => 1 - Math.min(1, w.metrics.longestBlackoutH / Math.max(1, w.metrics.windowHours)),
     text: (w) => `longest blackout ${w.metrics.longestBlackoutH.toFixed(0)} h`,
-    short: (w) => `${w.metrics.longestBlackoutH.toFixed(0)} h`,
   },
   {
     key: 'power',
     label: 'Power',
-    cardLabel: 'Mean power',
     value: (w) => Math.min(1, w.metrics.meanPowerWm2 / SOLAR_CONSTANT_W_M2),
     text: (w) => `${w.metrics.meanPowerWm2.toFixed(0)} W/m² mean`,
-    short: (w) => `${w.metrics.meanPowerWm2.toFixed(0)} W/m²`,
   },
 ]
 
 /**
- * What each axis means and which way is better, shown in a small pop-up when the pointer is over an axis of the
- * radar or a metric name (or the metric name has keyboard focus). `comms` is the share of the Earth's disc that
- * counts as contact (the analysis setting).
+ * What each axis means and which way is better, shown in a small pop-up when the pointer is over an axis name of
+ * the radar (or it has keyboard focus). `comms` is the share of the Earth's disc that counts as contact (the
+ * analysis setting).
  */
 const HELP: Record<string, { what: (comms: number) => string; better: string; worse: string }> = {
   sun: {
@@ -114,21 +94,45 @@ const HELP: Record<string, { what: (comms: number) => string; better: string; wo
 
 interface Tip {
   key: string
+  /** Pop-up anchor in CSS pixels of the viewport. */
   left: number
   top: number
-  /** Open above the anchor (for anchors in the lower half). */
+  /** Open above the anchor (for axis names in the lower half). */
   above: boolean
 }
+
+const TIP_HALF = 125
+/** Height the pop-up needs below its anchor before it opens above instead (CSS pixels). */
+const TIP_ROOM = 250
 
 export function ComparePanel({ titleId }: { titleId: string }) {
   const startMs = useApp((s) => s.startMs)
   const durationH = useApp((s) => s.durationH)
+  const comms = useApp((s) => s.commsMinFraction)
   const { setCompareMode } = useApp.getState()
   const places = useComparePlaces()
   const ready = places.filter((p) => p.win)
+  const [hl, setHl] = useState<number | null>(null)
+  const [tip, setTip] = useState<Tip | null>(null)
+  const tipId = useId()
 
-  // best value per axis among the places (the outline behind each radar and the stars)
   const best = AXES.map((a) => (ready.length ? Math.max(...ready.map((p) => a.value(p.win!))) : 0))
+  const bestIn = (p: ComparedPlace) => (ready.length > 1 && p.win ? AXES.filter((a, i) => a.value(p.win!) === best[i]).map((a) => a.label) : [])
+
+  // the pop-up floats over the page (portal, fixed position) so the panel's scrolling body never clips it
+  const onAxis = (key: string | null, anchor: Element | null) => {
+    if (!key || !anchor) return setTip(null)
+    const r = anchor.getBoundingClientRect()
+    const below = window.innerHeight - r.bottom
+    const above = below < TIP_ROOM && r.top > below
+    const left = Math.max(TIP_HALF + 8, Math.min(window.innerWidth - TIP_HALF - 8, r.left + r.width / 2))
+    setTip({ key, left, top: above ? r.top - 6 : r.bottom + 6, above })
+  }
+
+  const summary =
+    `Radar of ${places.length} places over ${AXES.map((a) => a.label.toLowerCase()).join(', ')}, outward is better. ` +
+    ready.map((p) => `${p.num} ${p.info.name}: ${AXES.map((a) => a.text(p.win!)).join(', ')}`).join('. ')
+  const tipAxis = tip ? AXES.find((a) => a.key === tip.key)! : null
 
   return (
     <div className="multi">
@@ -140,16 +144,59 @@ export function ComparePanel({ titleId }: { titleId: string }) {
           <IconClose size={18} />
         </button>
       </div>
-      <p className="muted cmp-note">
-        Outward on the radar and a longer bar are better on every axis. The faint outline is the best of the group; ★ marks the best place. When each place is sunlit or sees the
-        Earth is in the timeline below the map.
-      </p>
 
-      <ol className="cmp-cards" aria-label="Places compared">
-        {places.map((p) => (
-          <PlaceCard key={p.num} p={p} best={best} several={ready.length > 1} />
-        ))}
-      </ol>
+      <div className="cmp-layout">
+        <div className="cmp-radar-box">
+          {ready.length >= 2 ? (
+            <RadarChart
+              axes={AXES}
+              series={ready.map((p) => ({ num: p.num, name: p.info.name, values: AXES.map((a) => a.value(p.win!)) }))}
+              summary={summary}
+              highlight={hl}
+              activeAxis={tip?.key ?? null}
+              onAxis={onAxis}
+              describedBy={tipId}
+            />
+          ) : (
+            <p className="muted">Computing…</p>
+          )}
+          {tip &&
+            tipAxis &&
+            createPortal(
+            <div id={tipId} role="tooltip" className={`cmp-tip${tip.above ? ' is-above' : ''}`} style={{ left: tip.left, top: tip.top }}>
+              <strong className="cmp-tip-title">{tipAxis.label}</strong>
+              <p>{HELP[tip.key].what(comms)}</p>
+              <p className="cmp-tip-good">
+                <span aria-hidden="true">▲</span> <b>Better:</b> {HELP[tip.key].better}
+              </p>
+              <p className="cmp-tip-bad">
+                <span aria-hidden="true">▼</span> <b>Worse:</b> {HELP[tip.key].worse}
+              </p>
+              {ready.length > 0 && (
+                <ul className="cmp-tip-values">
+                  {ready.map((p) => (
+                    <li key={p.num}>
+                      <span className="num" aria-hidden="true">
+                        {p.num}
+                      </span>
+                      {/* just the figure: "124 h", "83 %", "719 W/m² mean" (the title says what it is) */}
+                      {tipAxis.text(p.win!).replace(' of the window', '').replace(/^[a-z ]+(?=\d)/, '')}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>,
+            document.body,
+          )}
+          <p className="muted cmp-note">Outward is better on every axis. Hover an axis name to see what it means.</p>
+        </div>
+
+        <ol className="cmp-legend" aria-label="Places compared" onMouseLeave={() => setHl(null)}>
+          {places.map((p) => (
+            <LegendRow key={p.num} p={p} bestIn={bestIn(p)} on={hl === p.num} onHover={setHl} />
+          ))}
+        </ol>
+      </div>
 
       <DataTable
         summary="Table"
@@ -161,192 +208,47 @@ export function ComparePanel({ titleId }: { titleId: string }) {
   )
 }
 
-function PlaceCard({ p, best, several }: { p: ComparedPlace; best: number[]; several: boolean }) {
+/** One place in the legend: its line pattern and number, name, best axes, options and remove. */
+function LegendRow({ p, bestIn, on, onHover }: { p: ComparedPlace; bestIn: string[]; on: boolean; onHover: (n: number | null) => void }) {
   const selection = useApp((s) => s.selection)
   const { select, removePlace } = useApp.getState()
   const current = sameSelection(p.sel, selection)
-  const values = p.win ? AXES.map((a) => a.value(p.win!)) : null
-  const comms = useApp((s) => s.commsMinFraction)
-  const tipId = useId()
-  const [tip, setTip] = useState<Tip | null>(null)
-  // a metric name: open the pop-up under its row, over the metrics column
-  const openFromRow = (key: string) => (e: MouseEvent<HTMLElement> | FocusEvent<HTMLElement>) => {
-    const li = e.currentTarget.closest('li') as HTMLElement
-    setTip({ key, left: li.offsetLeft, top: li.offsetTop + li.offsetHeight + 4, above: false })
-  }
-  const close = () => setTip(null)
-
   return (
-    <li className={`cmp-card cmp-c-${p.num}${current ? ' is-current' : ''}`}>
-      <div className="cmp-card-head">
-        <span className="num" aria-hidden="true">
-          {p.num}
-        </span>
+    <li
+      className={`cmp-row radar-key rs-${p.num}${current ? ' is-current' : ''}${on ? ' is-hl' : ''}`}
+      onMouseEnter={() => onHover(p.num)}
+      onFocus={() => onHover(p.num)}
+    >
+      <svg width="26" height="10" aria-hidden="true">
+        <line x1="1" y1="5" x2="25" y2="5" />
+      </svg>
+      <span className="num" aria-hidden="true">
+        {p.num}
+      </span>
+      <div className="cmp-row-main">
         <button type="button" className="multi-name" onClick={() => select(p.sel)} aria-current={current ? 'true' : undefined} title={p.info.name}>
           {p.info.name}
         </button>
-        <button
-          type="button"
-          className="icon small"
-          aria-haspopup="dialog"
-          aria-label={`Options for ${p.info.name}`}
-          title="Rename, pointer colour, remove"
-          onClick={(e) => openMenuFrom(e.currentTarget, { sel: p.sel, name: p.info.name })}
-        >
-          <IconMore size={14} />
-        </button>
-        <button type="button" className="icon small" onClick={() => removePlace(p.sel, p.info.name)} aria-label={`Remove ${p.info.name}`}>
-          <IconClose size={14} />
-        </button>
+        {(bestIn.length > 0 || p.info.model.horizon.kind === 'smooth_sphere') && (
+          <span className="cmp-row-sub">
+            {bestIn.length > 0 && <span>★ best {bestIn.join(', ').toLowerCase()}</span>}
+            {p.info.model.horizon.kind === 'smooth_sphere' && <span className="tag-pill">smooth sphere</span>}
+          </span>
+        )}
       </div>
-      {p.info.model.horizon.kind === 'smooth_sphere' && <span className="tag-pill cmp-tag">smooth sphere horizon</span>}
-      {values ? (
-        <div className="cmp-body" onMouseLeave={close}>
-          <MiniRadar
-            num={p.num}
-            values={values}
-            best={several ? best : null}
-            active={tip?.key ?? null}
-            onAxis={(key, left, top) => setTip(key ? { key, left, top, above: top > RS * RSCALE * 0.55 } : null)}
-            label={`Radar of ${p.num} ${p.info.name}, outward is better: ${AXES.map((a) => `${a.label.toLowerCase()} ${a.text(p.win!)}`).join(', ')}.`}
-          />
-          <ul className="cmp-metrics">
-            {AXES.map((a, i) => {
-              const isBest = several && values[i] === best[i]
-              const on = tip?.key === a.key
-              return (
-                <li key={a.key} className={`${isBest ? 'is-best' : ''}${on ? ' is-active' : ''}`.trim() || undefined}>
-                  <button
-                    type="button"
-                    className="cmp-m-label"
-                    aria-describedby={on ? tipId : undefined}
-                    onMouseEnter={openFromRow(a.key)}
-                    onFocus={openFromRow(a.key)}
-                    onBlur={close}
-                    onKeyDown={(e) => e.key === 'Escape' && close()}
-                  >
-                    {a.cardLabel}
-                  </button>
-                  <span className="cmp-m-value">
-                    {isBest && (
-                      <>
-                        <span aria-hidden="true">★ </span>
-                        <span className="sr-only">best: </span>
-                      </>
-                    )}
-                    {a.short(p.win!)}
-                  </span>
-                  <span className="cmp-m-bar" aria-hidden="true">
-                    <span style={{ width: `${Math.max(2, values[i] * 100)}%` }} />
-                  </span>
-                </li>
-              )
-            })}
-          </ul>
-          {tip && (
-            <AxisTip
-              id={tipId}
-              tip={tip}
-              comms={comms}
-              label={AXES.find((a) => a.key === tip.key)!.label}
-              value={p.win ? AXES.find((a) => a.key === tip.key)!.text(p.win) : null}
-            />
-          )}
-        </div>
-      ) : (
-        <p className="muted">Computing…</p>
-      )}
+      <button
+        type="button"
+        className="icon small"
+        aria-haspopup="dialog"
+        aria-label={`Options for ${p.info.name}`}
+        title="Rename, pointer colour, remove"
+        onClick={(e) => openMenuFrom(e.currentTarget, { sel: p.sel, name: p.info.name })}
+      >
+        <IconMore size={14} />
+      </button>
+      <button type="button" className="icon small" onClick={() => removePlace(p.sel, p.info.name)} aria-label={`Remove ${p.info.name}`}>
+        <IconClose size={14} />
+      </button>
     </li>
-  )
-}
-
-/** The explanation pop-up: what the axis measures, then which way is better and worse (words, not colour alone). */
-function AxisTip({ id, tip, comms, label, value }: { id: string; tip: Tip; comms: number; label: string; value: string | null }) {
-  const h = HELP[tip.key]
-  return (
-    <div
-      id={id}
-      role="tooltip"
-      className={`cmp-tip${tip.above ? ' is-above' : ''}`}
-      style={{ left: tip.left, top: tip.top }}
-    >
-      <strong className="cmp-tip-title">{label}</strong>
-      {value && <span className="cmp-tip-value">Here: {value}</span>}
-      <p>{h.what(comms)}</p>
-      <p className="cmp-tip-good">
-        <span aria-hidden="true">▲</span> <b>Better:</b> {h.better}
-      </p>
-      <p className="cmp-tip-bad">
-        <span aria-hidden="true">▼</span> <b>Worse:</b> {h.worse}
-      </p>
-    </div>
-  )
-}
-
-const RS = 120
-/** Rendered size of the radar in CSS pixels over its viewBox size (.cmp-radar is 112 px wide). */
-const RSCALE = 112 / RS
-const RC = RS / 2
-const RR = 46
-const RINGS = [0.5, 1]
-/** Rim labels, short enough for the small radar; the full names are next to it in the metric list. */
-const ABBR: Record<string, string> = { sun: 'Sun', earth: 'Earth', night: 'Night', blackout: 'Link', power: 'Power' }
-
-const at = (i: number, n: number, v: number): [number, number] => {
-  const a = -Math.PI / 2 + (i * 2 * Math.PI) / n
-  return [RC + Math.cos(a) * RR * v, RC + Math.sin(a) * RR * v]
-}
-const poly = (vals: number[]) => vals.map((v, i) => at(i, vals.length, Math.max(0, Math.min(1, v))).join(',')).join(' ')
-
-/**
- * A small radar for one place: short axis names at the rim, the group's best as a faint outline behind it. Hovering
- * an axis (its spoke or its name) reports it with the pop-up's anchor in CSS pixels; the same explanations are
- * reachable from the keyboard through the metric names next to the radar.
- */
-function MiniRadar({
-  num,
-  values,
-  best,
-  label,
-  active,
-  onAxis,
-}: {
-  num: number
-  values: number[]
-  best: number[] | null
-  label: string
-  active: string | null
-  onAxis: (key: string | null, left: number, top: number) => void
-}) {
-  const n = values.length
-  return (
-    <svg className="cmp-radar" viewBox={`0 0 ${RS} ${RS}`} role="img" aria-label={label}>
-      {RINGS.map((r) => (
-        <polygon key={r} className="radar-ring" points={poly(values.map(() => r))} />
-      ))}
-      {best && <polygon className="cmp-radar-best" points={poly(best)} />}
-      <g className={`radar-series rs-${num}`}>
-        <polygon points={poly(values)} />
-      </g>
-      {AXES.map((a, i) => {
-        const [x, y] = at(i, n, 1)
-        const [lx, ly] = at(i, n, 1.24)
-        const below = ly > RC
-        return (
-          <g
-            key={a.key}
-            className={`cmp-axis${active === a.key ? ' is-active' : ''}`}
-            onMouseEnter={() => onAxis(a.key, lx * RSCALE, (below ? ly - 8 : ly + 8) * RSCALE)}
-          >
-            <line className="radar-spoke" x1={RC} y1={RC} x2={x} y2={y} />
-            <line className="cmp-axis-hit" x1={RC} y1={RC} x2={lx} y2={ly} />
-            <circle className="cmp-axis-hit" cx={lx} cy={ly} r={11} />
-            <text className="cmp-radar-axis" x={lx} y={ly + 3.5} textAnchor="middle">
-              {ABBR[a.key]}
-            </text>
-          </g>
-        )
-      })}
-    </svg>
   )
 }
