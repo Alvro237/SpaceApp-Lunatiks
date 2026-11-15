@@ -275,11 +275,11 @@ function Budget() {
       <NumField label="Lunar EIRP" unit="dBW" value={f.eirp} onChange={(v) => set({ eirp: v })} hint={uplink ? 'Transmit power times antenna gain of the ground antenna, in dBW.' : 'Transmit power times the gain of your lunar antenna, in dBW.'} />
       <NumField label="Data rate" unit="kbit/s" value={f.rateKbps} onChange={(v) => set({ rateKbps: v })} hint="The information rate you want to send." />
       <NumField label="Eb/N0 needed" unit="dB" value={f.ebn0} onChange={(v) => set({ ebn0: v })} hint="What your modulation and coding need to decode. It comes from your radio’s specification." />
+      <NumField label="Margin wanted" unit="dB" value={f.margin} onChange={(v) => set({ margin: v })} optional placeholder="3" hint="Extra signal above the need for the link to count as closed. Empty uses 3 dB." />
       {uplink && <NumField label="Lunar G/T" unit="dB/K" value={f.gt} onChange={(v) => set({ gt: v })} hint="The sensitivity of your lunar receiver: its antenna gain minus 10·log10 of its noise temperature." />}
       <details className="link-more">
         <summary>More options</summary>
         <NumField label="Exact frequency" unit="GHz" value={f.freq} onChange={(v) => set({ freq: v })} optional placeholder="band centre" hint="Type your mission’s channel instead of the band centre." />
-        <NumField label="Margin wanted" unit="dB" value={f.margin} onChange={(v) => set({ margin: v })} optional placeholder="3" hint="Extra signal above the need for the link to count as closed." />
         <NumField label="Other losses" unit="dB" value={f.losses} onChange={(v) => set({ losses: v })} optional placeholder="0" hint="Pointing, polarisation, atmosphere: losses this model does not include." />
         {!uplink && <NumField label="Ground G/T" unit="dB/K" value={f.gt} onChange={(v) => set({ gt: v })} optional placeholder="each antenna’s own" hint="Replaces the sensitivity of every ground antenna. Leave empty to use each antenna’s own." />}
       </details>    </section>
