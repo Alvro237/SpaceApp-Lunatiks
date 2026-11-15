@@ -157,6 +157,12 @@ work: merged, tested, called on a running server. Not before.
 | Hard filter | `battery_survives` | `logic/constraints/power.py` | MECH | Battery carries the load all mission (same model as `/power` level 3) |
 | Endpoint | `POST /api/v1/verdict` | `routers/verdict.py`, `logic/scoring.py` | MECH | RF-11: hard filters then soft score; unfeasible / unknown / favourable / marginal / poor |
 | Endpoint | `GET /api/v1/validation` | `routers/validation.py`, `app/validation_checks.py` | MECH | Pipeline validation + 8 live model checks with reference, source, tolerance |
+| Endpoint | `GET /api/v1/sites/{site_id}/state`, `/series` | `routers/state.py`, `schemas/state.py` | SW-1 | Sun and Earth at an instant and over a window; output format `docs/sw1-output-format.md` |
+| Endpoint | `GET /api/v1/sites/{site_id}/horizon` | `routers/horizon.py` | SW-1 | Stored LOLA mask, or the traced skyline for sites without one; optional neighbours |
+| Endpoint | `GET /api/v1/points/state`, `/series`, `/horizon` | `routers/points.py`, `services.py`, `logic/horizon.py` | SW-1 | Manual coordinates; `horizon=terrain` ray-traces LOLA anywhere (240-960 m south of 60 S, 3.8 km global grid elsewhere) |
+| Endpoint | `POST /api/v1/areas/search` | `routers/areas.py`, `area_search.py`, `logic/areas.py` | SW-1 | Mission mode: paints the cells of a region that pass the filters (map filters, landing radius, window filters on quadtree samples with traced horizons); connected areas |
+| Endpoint | `POST /api/v1/link`, `GET /api/v1/link/stations` | `routers/link.py`, `logic/link.py`, `logic/stations.py`, `db/stations.py` | AERO-2 | Radio link level 1: the site sees the Earth AND a selected DSN/ESA/JAXA or custom antenna sees the Moon |
+| Hard filter | `comms_hours`, `max_blackout` | `logic/constraints/comms.py` | AERO-2 | Earth-contact time and longest blackout over the window (site side, line of sight) |
 
 Also in place and verified: the engine in `app/logic` (ephemeris, geometry, horizon, disc-visible fraction,
 series, metrics, time ranges, next sunset/Earthset; reproduces JPL Horizons to better than 0.01 degrees) and the
