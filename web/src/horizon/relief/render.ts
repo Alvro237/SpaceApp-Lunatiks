@@ -216,7 +216,6 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
   }
   const radiance = (k: number, u: number, v: number, t: number, up: number, sa: number, ca: number): number => {
     const hasEarth = s.earthlight && earthRatio > 0
-    lastFine = false
     if (!s.sunlight && !hasEarth) return 0
     normalAt(k, u, v)
     // towards the eye
@@ -241,16 +240,34 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
         if (me > 0) R += earthRatio * lunarLambert(me, mu, E[0], E[1], E[2], vx, vy, vz)
       }
     }
-    const fine = detailAt ? detailAt(t * sa, t * ca) : NaN
-    if (fine === fine) {
-      lastFine = true
-      lastPhotoM = detailPx
-      return R * exposure * fine
+    return R * exposure
+  }
+  /**
+   * Albedo of the ground at a point (east, north metres) in ring k: the finer photo where a tile covers it, else the
+   * ring's photo, else 1. Read for every pixel at the point its line of sight meets, so the photo lies on the slope
+   * as the heights put it (not stretched between two ray steps).
+   */
+  const albedoAt = (k: number, e: number, n: number): number => {
+    if (detailAt) {
+      const d = detailAt(e, n)
+      if (d === d) {
+        lastFine = true
+        lastPhotoM = detailPx
+        return d
+      }
     }
+    lastFine = false
     lastPhotoM = Math.max(RING_PHOTO_MIN_M, ringCell[k])
     const A = s.albedo?.[k]
-    return R * exposure * (A ? bilinear(A, u, v) : 1)
+    if (!A) return 1
+    const q = idx[k]
+    const u = Math.min(NM1, Math.max(0, q.au * e + q.bu * n + CEN))
+    const v = Math.min(NM1, Math.max(0, q.av * e + q.bv * n + CEN))
+    return bilinear(A, u, v)
   }
+  // tangent of each screen row's elevation angle (the inverse of rows())
+  const tanRow = new Float64Array(h)
+  for (let r = 0; r < h; r++) tanRow[r] = Math.tan((c.pitch + (c.cy - (r + 0.5) * scale) * c.degPerPx) * D)
   for (let i = 0; i < w; i++) {
     const az = c.yaw + ((i + 0.5) * scale - c.cx) * c.degPerPx
     const sa = Math.sin(az * D)
@@ -298,22 +315,40 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
       if (y < top || pY !== pY) {
         seen = true
         R = radiance(k, u, v, t, up, sa, ca)
+        const mu = lastMu
         if (pY !== pY) {
           // the first step also stands for the ground between it and the feet
           pY = h
           pR = R
           pT = t
+          pUp = up
         } else if (pR !== pR) pR = radiance(pK, pU, pV, pT, pUp, sa, ca)
         const r0 = Math.max(0, Math.ceil(y))
         const span = pY - y
+        const dT = t - pT
+        const dU = up - pUp
         for (let r = Math.min(top, h) - 1; r >= r0; r--) {
-          const a = span > 1e-9 ? Math.min(1, Math.max(0, (r - y) / span)) : 0 // 0 at this step, 1 at the previous
+          // where this row's line of sight meets the ground between the previous step and this one (the ground taken
+          // as straight between them): a = 0 at this step, 1 at the previous; by rows if the segment is degenerate
+          let a = span > 1e-9 ? Math.min(1, Math.max(0, (r - y) / span)) : 0
+          const tn = tanRow[r]
+          const den = dU - tn * dT
+          if (den > 1e-12 || den < -1e-12) {
+            const f = (tn * pT - pUp) / den
+            if (f >= 0 && f <= 1) a = 1 - f
+          }
           const ta = t + (pT - t) * a
-          writePixel(px, 4 * (r * w + i), R + (pR - R) * a, ta, ta * sa, ta * ca, dTheta, lastMu, lastPhotoM, grain, 255)
+          const ea = ta * sa
+          const na = ta * ca
+          const alb = albedoAt(k, ea, na)
+          writePixel(px, 4 * (r * w + i), (R + (pR - R) * a) * alb, ta, ea, na, dTheta, mu, lastPhotoM, grain, 255)
         }
         // antialiased top edge: the row the ground only partly covers
         const edge = r0 - 1
-        if (edge >= 0 && edge < top && y < r0) writePixel(px, 4 * (edge * w + i), R, t, e, n, dTheta, lastMu, lastPhotoM, grain, Math.round(255 * Math.min(1, r0 - y)))
+        if (edge >= 0 && edge < top && y < r0) {
+          const alb = albedoAt(k, e, n)
+          writePixel(px, 4 * (edge * w + i), R * alb, t, e, n, dTheta, mu, lastPhotoM, grain, Math.round(255 * Math.min(1, r0 - y)))
+        }
         if (r0 < top) top = r0
       }
       pY = y
@@ -335,7 +370,7 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
     }
     // beyond the rings (or beyond what can show), up to the mask: the shade of the ground where the ray stopped
     if (top > maskTop && pY === pY) {
-      const R = pR !== pR ? radiance(pK, pU, pV, pT, pUp, sa, ca) : pR
+      const R = (pR !== pR ? radiance(pK, pU, pV, pT, pUp, sa, ca) : pR) * albedoAt(pK, pT * sa, pT * ca)
       for (let r = Math.min(top, h) - 1; r >= maskTop; r--) writePixel(px, 4 * (r * w + i), R, pT, 0, 0, dTheta, 1, RING_PHOTO_MIN_M, null, 255)
     }
   }
