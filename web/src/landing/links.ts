@@ -10,7 +10,8 @@ export const APP_URL: string = import.meta.env.VITE_APP_URL ?? import.meta.env.B
 export const DEMO_YOUTUBE_ID = ''
 
 /** Public API documentation (FastAPI /docs of the deployed API). */
-export const API_DOCS_URL = import.meta.env.VITE_API_URL ? `${String(import.meta.env.VITE_API_URL).replace(/\/$/, '')}/docs` : ''
+export const API_DOCS_URL: string =
+  import.meta.env.VITE_API_DOCS_URL ?? (import.meta.env.VITE_API_URL ? `${String(import.meta.env.VITE_API_URL).replace(/\/$/, '')}/docs` : '')
 
 /** Public source repository. Leave empty while the repository is private. */
 export const REPO_URL = ''

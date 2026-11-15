@@ -27,3 +27,7 @@ web/test-results/
 web/playwright-report/
 # local dev viewer (not part of the project)
 viewer/
+
+# Vercel deployment folder (deploy/vercel/stage.sh)
+.vercel-stage/
+.vercel/

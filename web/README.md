@@ -36,15 +36,16 @@ http://localhost:5173/SpaceApp-Lunatiks/landing.html. The demo's YouTube id, the
 are set in `src/landing/links.ts`. An AI-made background video can replace the render (`BACKGROUND_VIDEO`); the page
 then shows the visible "AI-generated" watermark the Space Apps rules require.
 
-On Vercel (`vercel.json`, project root `web`) the landing page is served at `/` and the navigator at `/app`;
-`vite.config.ts` switches the base to `/` when `VERCEL` is set. The terrain tiles are built locally (`npm run tiles`
-needs uv and the pipeline), so deploy a local build:
+On Vercel one project serves everything from one domain: the landing page at `/`, the navigator at `/app`, and the
+API (a Python function running `api/app`) at `/api`, `/health`, `/docs` and `/openapi.json`, so the web calls it with
+no CORS and no `VITE_API_URL`. `vite.config.ts` switches the base to `/` when `VERCEL` is set. The terrain tiles are
+built locally (`npm run tiles` needs uv and the pipeline), so the deployment is assembled locally
+(`deploy/vercel/stage.sh`) and uploaded:
 
 ```
-cd web
-npm run tiles
-npx vercel build --prod          # with VITE_API_URL set to the public API
-npx vercel deploy --prebuilt --prod
+cd web && npm run tiles && VERCEL=1 npm run build && cd ..
+bash deploy/vercel/stage.sh
+cd .vercel-stage && npx vercel deploy --prod
 ```
 
 The production URL is public; preview URLs sit behind Vercel's deployment protection, so give the judges the
