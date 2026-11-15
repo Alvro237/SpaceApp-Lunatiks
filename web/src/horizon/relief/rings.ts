@@ -120,10 +120,10 @@ export interface Ring extends RingSpec {
   fineShare?: number
   fineOffsetM?: number
   /**
-   * RING_N x RING_N albedo of the ground from this place's LROC WAC mosaic (photoAlbedo), 1 for the ring's mean
-   * brightness; absent where the photo could not be read (the ground is then plain regolith).
+   * RING_N x RING_N grey bytes of this place's LROC WAC mosaic over the ring's cells (photoUrl), row 0 north; absent
+   * where the photo could not be read (the ground is then plain regolith). Turned into albedo by photoAlbedo.
    */
-  albedo?: Float32Array
+  photo?: Uint8Array
 }
 
 /** Observer frame in the plane: position, scale factor and the east and north unit vectors there. */
@@ -238,22 +238,23 @@ export function photoService(lat: number, lon: number, cellM: number): string {
  */
 export function photoUrl(lat: number, lon: number, cellM: number): string {
   const h = ringHalf(cellM)
+  return photoBoxUrl(photoService(lat, lon, cellM), lat, lon, [-h, -h, h, h], RING_N)
+}
+
+/** exportImage URL of a square box (xMin, yMin, xMax, yMax metres in the place's stereographic plane), size² grey JPEG. */
+export function photoBoxUrl(service: string, lat: number, lon: number, box: [number, number, number, number], size: number): string {
   const sr = encodeURIComponent(JSON.stringify({ wkt: localStereoWkt(lat, lon) }))
   return (
-    `${TREK_IMAGE_SERVER}${photoService(lat, lon, cellM)}/ImageServer/exportImage?bbox=${-h},${-h},${h},${h}&bboxSR=${sr}&imageSR=${sr}` +
-    `&size=${RING_N},${RING_N}&format=jpg&compressionQuality=90&interpolation=RSP_BilinearInterpolation&f=image`
+    `${TREK_IMAGE_SERVER}${service}/ImageServer/exportImage?bbox=${box.join(',')}&bboxSR=${sr}&imageSR=${sr}` +
+    `&size=${size},${size}&format=jpg&compressionQuality=90&interpolation=RSP_BilinearInterpolation&f=image`
   )
 }
 
 /**
- * The photo as albedo, normalised ring by ring: each sample's brightness over the ring's mean brightness (the
- * mosaic's photographed shadows, bytes under SHADOW_BYTE, left out of the mean), its departures from 1 stretched by
- * PHOTO_CONTRAST. Normalising per ring keeps neighbouring rings at the same mean level, so no seam shows where
- * one ring hands over to the next or where a ring has no photo (albedo 1); the stretch makes the mosaic's detail
- * read on low-contrast ground (maria and plains photographed under a high Sun: a standard deviation of 0.15 of the
- * mean at 26.6 N 150.9 E). The view says so on screen.
+ * The photo as albedo: each byte over the place's mean brightness (photoMean), so the mosaic's own contrast is kept
+ * as photographed and every ring and detail tile of a place shares one scale (they are cut from the same mosaic).
+ * Bytes under SHADOW_BYTE are the mosaic's photographed shadows: left out of the mean.
  */
-export const PHOTO_CONTRAST = 1.8
 export const SHADOW_BYTE = 12
 /**
  * Albedo range kept. The mosaic holds the shadows it was photographed with (near the poles most of the ground:
@@ -263,8 +264,8 @@ export const SHADOW_BYTE = 12
 export const ALBEDO_MIN = 0.3
 export const ALBEDO_MAX = 2.2
 
-/** Grey bytes (one per sample, row 0 north) to albedo: 1 + PHOTO_CONTRAST (byte / mean - 1), clamped; null if all shadow. */
-export function photoAlbedo(grey: ArrayLike<number>): Float32Array | null {
+/** Mean of the bytes that are not photographed shadow, or null when (almost) all are. */
+export function photoMean(grey: ArrayLike<number>): number | null {
   let sum = 0
   let n = 0
   for (let i = 0; i < grey.length; i++)
@@ -272,28 +273,44 @@ export function photoAlbedo(grey: ArrayLike<number>): Float32Array | null {
       sum += grey[i]
       n++
     }
-  if (n < grey.length * 0.05) return null
-  const mean = sum / n
+  return n < grey.length * 0.05 ? null : sum / n
+}
+
+/** Grey bytes to albedo: byte / mean, clamped to [ALBEDO_MIN, ALBEDO_MAX]. */
+export function photoAlbedo(grey: ArrayLike<number>, mean: number): Float32Array {
   const out = new Float32Array(grey.length)
-  for (let i = 0; i < grey.length; i++) out[i] = Math.min(ALBEDO_MAX, Math.max(ALBEDO_MIN, 1 + PHOTO_CONTRAST * (grey[i] / mean - 1)))
+  for (let i = 0; i < grey.length; i++) out[i] = Math.min(ALBEDO_MAX, Math.max(ALBEDO_MIN, grey[i] / mean))
   return out
 }
 
-/** Decode a ring's photo (JPEG) to albedo; null where the browser cannot decode images (tests) or the size is wrong. */
-export async function decodePhoto(blob: Blob): Promise<Float32Array | null> {
+/**
+ * The place's reference brightness: the mean of the finest ring photo that is not mostly shadow (the ground the
+ * observer stands on reads as plain regolith, brighter or darker ground around it as photographed), or null.
+ */
+export function placePhotoMean(rings: { cellM: number; photo?: Uint8Array }[]): number | null {
+  const wide = rings.filter((r) => r.photo).sort((x, y) => x.cellM - y.cellM)
+  for (const r of wide) {
+    const m = photoMean(r.photo!)
+    if (m !== null) return m
+  }
+  return null
+}
+
+/** Decode a square grey JPEG of `size` pixels to one byte per pixel; null where the browser cannot (tests) or the size is wrong. */
+export async function decodePhoto(blob: Blob, size = RING_N): Promise<Uint8Array | null> {
   if (typeof createImageBitmap === 'undefined' || typeof document === 'undefined') return null
   const img = await createImageBitmap(blob)
-  if (img.width !== RING_N || img.height !== RING_N) return null
+  if (img.width !== size || img.height !== size) return null
   const canvas = document.createElement('canvas')
-  canvas.width = RING_N
-  canvas.height = RING_N
+  canvas.width = size
+  canvas.height = size
   const g = canvas.getContext('2d', { willReadFrequently: true })
   if (!g) return null
   g.drawImage(img, 0, 0)
-  const rgba = g.getImageData(0, 0, RING_N, RING_N).data
-  const grey = new Uint8Array(RING_N * RING_N)
+  const rgba = g.getImageData(0, 0, size, size).data
+  const grey = new Uint8Array(size * size)
   for (let i = 0; i < grey.length; i++) grey[i] = rgba[4 * i]
-  return photoAlbedo(grey)
+  return grey
 }
 
 /**
@@ -420,7 +437,7 @@ export function loadRing(spec: RingSpec, fetchFn: typeof fetch = (u, i) => fetch
   // the fine DTM is asked for alongside; if it fails or has no data here, the ring is LOLA alone
   const fine = spec.fine ? fetchBuf(spec.fine.url).then(decodeFine, () => null) : Promise.resolve(null)
   // and the place's photo: without it the ground is plain regolith
-  const photo: Promise<Float32Array | null> = spec.photoUrl
+  const photo: Promise<Uint8Array | null> = spec.photoUrl
     ? fetchFn(spec.photoUrl)
         .then((r) => (r.ok ? r.blob() : null))
         .then((b) => (b ? decodePhoto(b) : null))
@@ -431,8 +448,8 @@ export function loadRing(spec: RingSpec, fetchFn: typeof fetch = (u, i) => fetch
     for (let a = 0; a < 3; a++) {
       try {
         const lola = await decodeRing(await fetchBuf(spec.url), spec)
-        const albedo = await photo
-        const ring: Ring = albedo ? { ...lola, albedo } : lola
+        const grey = await photo
+        const ring: Ring = grey ? { ...lola, photo: grey } : lola
         const f = await fine.catch(() => null)
         if (!f) return ring
         const { share, offsetM } = mergeFine(ring.heights, f)

@@ -2,11 +2,13 @@
  * The horizon view's real ground for one place: loads the rings (rings.ts), has the worker light them at the
  * active instant (light.worker.ts) and hands the renderer a scene (render.ts). The rings load once per place; the
  * sunlight is recomputed when the Sun has moved enough to move a shadow visibly (SUN_EPS), one job at a time.
+ * Once the rings are in, the far ground the eye can see gets the mosaic's 100 m detail tiles (detailPhoto.ts).
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { GroundStack, type SunDir } from './light'
 import type { LightRequest, LightResponse } from './light.worker'
-import { type Ring, loadRing, planeFrame, ringSpecs } from './rings'
+import { type Ring, loadRing, photoAlbedo, placePhotoMean, planeFrame, ringSpecs } from './rings'
+import { detailSampler, detailTileUrl, loadDetailTile, tileKey, visibleFarTiles } from './detailPhoto'
 import type { ReliefScene } from './render'
 
 /** Eye height over the ground when the mask is for the bare surface (mast 0 m): a standing person's eyes. */
@@ -32,6 +34,8 @@ export interface Relief {
   night?: 'earthshine' | 'dark' | null
   /** The data under the observer, in words: "LOLA 5 m DEM", or "LROC NAC 1.6 m DTM + LOLA" where one is merged in. */
   sourceLabel?: string | null
+  /** 100 m photo tiles of the visible far ground: read so far, and asked for. */
+  detailTiles?: { loaded: number; wanted: number }
 }
 
 /** Words for the data a ring was built from (rings.ts). */
@@ -108,6 +112,44 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
     const have = batch.rings.filter((r): r is Ring => !!r).sort((a, b) => a.cellM - b.cellM)
     return have.length > 0 ? new GroundStack(have, frame) : null
   }, [batch, key, frame])
+
+  // the place's photo: one brightness scale for every ring and detail tile (rings.ts photoAlbedo)
+  const photoMean = useMemo(() => (stack ? placePhotoMean(stack.rings as Ring[]) : null), [stack])
+  const ringAlbedo = useMemo(
+    () => (stack && photoMean ? (stack.rings as Ring[]).map((r) => (r.photo ? photoAlbedo(r.photo, photoMean) : null)) : null),
+    [stack, photoMean],
+  )
+  // the far ground in view, at the mosaic's 100 m: worked out once all the rings are in, tiles shown as they arrive
+  const [detail, setDetail] = useState<{ key: string; tiles: Map<string, Uint8Array>; wanted: number }>({ key: '', tiles: new Map(), wanted: 0 })
+  const complete = !!stack && !!specs && stack.rings.length === specs.length
+  useEffect(() => {
+    if (!complete || !stack || lat === undefined || lon === undefined) return
+    let live = true
+    const eye = stack.heightAt(0, (512 - 1) / 2, (512 - 1) / 2) + Math.max(mastM, EYE_MIN_M)
+    const wanted = visibleFarTiles(stack, eye)
+    const got = new Map<string, Uint8Array>()
+    setDetail({ key, tiles: new Map(), wanted: wanted.length })
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const flush = () => {
+      timer = null
+      if (live) setDetail({ key, tiles: new Map(got), wanted: wanted.length })
+    }
+    for (const t of wanted)
+      void loadDetailTile(detailTileUrl(lat, lon, t.ix, t.iy)).then((g) => {
+        if (!live || !g) return
+        got.set(tileKey(t.ix, t.iy), g)
+        // a few tiles at a time: each new set costs a render
+        timer ??= setTimeout(flush, 400)
+      })
+    return () => {
+      live = false
+      if (timer) clearTimeout(timer)
+    }
+  }, [complete, stack, key, lat, lon, mastM])
+  const detailAt = useMemo(
+    () => (detail.key === key && detail.tiles.size > 0 && photoMean ? detailSampler(detail.tiles, photoMean) : undefined),
+    [detail, key, photoMean],
+  )
 
   // what is on screen: a stack with its normals and its sunlight, swapped only once a larger stack is fully lit
   const [shown, setShown] = useState<{
@@ -251,7 +293,8 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
         earth: lit?.earth ? unit(lit.earth) : undefined,
         earthRatio: lit?.earthRatio ?? 0,
         exposure: night === 'earthshine' && lit ? NIGHT_EXPOSURE / lit.earthRatio : 1,
-        albedo: live.stack.rings.map((r) => (r as Ring).albedo),
+        albedo: live.stack === stack && ringAlbedo ? ringAlbedo : undefined,
+        detailAt: live.stack === stack ? detailAt : undefined,
       },
       night,
       cellM,
@@ -259,8 +302,9 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
       lightMs: live.ms,
       // the finest ring on screen is what the observer stands on
       sourceLabel: ringSourceLabel(live.stack.rings[0] as Ring),
+      detailTiles: detail.key === key ? { loaded: detail.tiles.size, wanted: detail.wanted } : undefined,
     }
-  }, [specs, key, shown, loaded, mastM, sun, lights])
+  }, [specs, key, shown, loaded, mastM, sun, lights, stack, ringAlbedo, detailAt, detail])
 }
 
 const unit = (b: SunDir): [number, number, number] => [

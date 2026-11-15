@@ -23,8 +23,10 @@
  * Earth is lit by earthshine (the Earth as a second light with its own disc and shadows, light.ts
  * earthshineRatio), with the exposure raised as a camera would (the view says so).
  *
- * Albedo: this place's own LROC WAC mosaic, read over the same cells as each ring (rings.ts photoAlbedo), multiplies
- * the radiance, as the photo views of the globe and of the polar map drape the mosaic over the LOLA relief. The
+ * Albedo: this place's own LROC WAC mosaic multiplies the radiance, as the photo views of the globe and of the polar
+ * map drape the mosaic over the LOLA relief. Where a detail tile has been read (detailPhoto.ts: the far ground the
+ * ray casting finds visible, at the mosaic's own 100 m) it is used, and the ray steps no longer than DETAIL_STEP_M
+ * there so the photo's detail is not stepped over; elsewhere the photo read over each ring's cells (rings.ts). The
  * mosaic keeps the shadows it was photographed with; their floor (ALBEDO_MIN) leaves that ground to the light of
  * the chosen instant. Without a photo the ground is plain regolith (albedo 1).
  */
@@ -57,8 +59,10 @@ export interface ReliefScene {
   earthRatio?: number
   /** Multiplies the radiance before the tone curve: 1 by day, raised at night so the earthlit ground reads. */
   exposure?: number
-  /** Albedo per ring (rings.ts Ring.albedo), aligned with stack.rings; null or missing: plain regolith. */
+  /** Albedo per ring (rings.ts ringAlbedo), aligned with stack.rings; null or missing: plain regolith. */
   albedo?: (Float32Array | null | undefined)[]
+  /** Albedo from the 100 m detail tiles at a point (east, north metres from the observer), or NaN where none is loaded. */
+  detailAt?: (e: number, n: number) => number
 }
 
 export interface ColumnCamera {
@@ -74,12 +78,7 @@ const D = Math.PI / 180
 const TINT_R = 206
 const TINT_G = 200
 const TINT_B = 191
-/**
- * Radiance at which the tone curve reaches half of its range. Down-sun, the lunar-Lambert radiance of ground seen at
- * grazing angles approaches 2 (the opposition side looks flat and bright), and the albedo multiplies it again, so
- * the curve keeps contrast up there (R / (R + K)) instead of saturating as an exponential would.
- */
-const TONE_K = 1.2
+const EXPOSURE = 2.4
 /** Display level of ground that gets no direct sunlight. */
 export const AMBIENT = 0.075
 /**
@@ -90,14 +89,10 @@ export const AMBIENT = 0.075
 const NEAR_GROWTH = 0.04
 const STEP_CELLS = 1
 const FIRST_STEP_M = 0.3
-/**
- * Slope exaggeration of the shading only (the horizontal parts of the normal are multiplied by it, as the globe
- * does with its detail heights, globe/shaders.ts): from a lander's height the real Sun at the poles grazes the
- * ground and flattens its shape. The geometry, the skyline and the shadows stay the real ones. Shown on screen.
- */
-export const RELIEF_SHADE = 2
+/** Longest ray step over ground with a detail tile, metres: the mosaic's pixel. */
+export const DETAIL_STEP_M = 100
 /** Display level (0..1) of a radiance. */
-export const tone = (r: number) => AMBIENT + (1 - AMBIENT) * (Math.max(0, r) / (Math.max(0, r) + TONE_K))
+export const tone = (r: number) => AMBIENT + (1 - AMBIENT) * (1 - Math.exp(-EXPOSURE * Math.max(0, r)))
 
 /**
  * Render into `out` (cleared to transparent): pixel (i, j) covers CSS x = (i + 0.5) scale, y = (j + 0.5) scale.
@@ -124,6 +119,7 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
   const E = s.earth ?? [0, 0, 1]
   const earthRatio = s.earthRatio ?? 0
   const exposure = s.exposure ?? 1
+  const detailAt = s.detailAt
   /** Lunar-Lambert radiance for one light: direct factor mu0, light direction L, unit vector towards the eye. */
   const lunarLambert = (mu0: number, mu: number, Lx: number, Ly: number, Lz: number, vx: number, vy: number, vz: number): number => {
     const cosG = Lx * vx + Ly * vy + Lz * vz
@@ -152,8 +148,8 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
     const w1 = fu * (1 - fv)
     const w2 = (1 - fu) * fv
     const w3 = fu * fv
-    const x = RELIEF_SHADE * (N[o] * w0 + N[o1] * w1 + N[o2] * w2 + N[o3] * w3)
-    const y = RELIEF_SHADE * (N[o + 1] * w0 + N[o1 + 1] * w1 + N[o2 + 1] * w2 + N[o3 + 1] * w3)
+    const x = N[o] * w0 + N[o1] * w1 + N[o2] * w2 + N[o3] * w3
+    const y = N[o + 1] * w0 + N[o1 + 1] * w1 + N[o2 + 1] * w2 + N[o3 + 1] * w3
     const z = N[o + 2] * w0 + N[o1 + 2] * w1 + N[o2 + 2] * w2 + N[o3 + 2] * w3
     const il = 1 / Math.sqrt(x * x + y * y + z * z)
     nrm[0] = x * il
@@ -185,6 +181,8 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
         if (me > 0) R += earthRatio * lunarLambert(me, mu, E[0], E[1], E[2], vx, vy, vz)
       }
     }
+    const fine = detailAt ? detailAt(t * sa, t * ca) : NaN
+    if (fine === fine) return R * exposure * fine
     const A = s.albedo?.[k]
     return R * exposure * (A ? bilinear(A, u, v) : 1)
   }
@@ -257,7 +255,12 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
       pT = t
       pUp = up
       pR = R
-      t += Math.max(0.02, Math.min(STEP_CELLS * ringCell[k], NEAR_GROWTH * t))
+      let stepM = Math.min(STEP_CELLS * ringCell[k], NEAR_GROWTH * t)
+      if (stepM > DETAIL_STEP_M && detailAt) {
+        const d = detailAt(t * sa, t * ca)
+        if (d === d) stepM = DETAIL_STEP_M
+      }
+      t += Math.max(0.02, stepM)
       // nothing farther can show: even the highest ground in the rings would stay below the rows filled so far
       if ((steps & 7) === 0 && rows(Math.atan2(headroom - (t * t) / twoR, t) / D) >= top) {
         k = nR
@@ -274,7 +277,7 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
 }
 
 /** tone() tabulated: TONE_STEPS entries per unit of radiance up to TONE_MAX (the curve is flat beyond). */
-const TONE_MAX = 16
+const TONE_MAX = 4
 const TONE_STEPS = 512
 const TONE_LUT = Float32Array.from({ length: TONE_MAX * TONE_STEPS + 2 }, (_, i) => tone(i / TONE_STEPS))
 

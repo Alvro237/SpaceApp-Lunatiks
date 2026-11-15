@@ -28,8 +28,6 @@ import { MOON_R_KM } from '../globe/orbit'
 import { useEffectiveCamera } from './useEffectiveCamera'
 import { type SceneLights, useRelief } from './relief/useRelief'
 import { earthPhaseAngle, earthshineRatio } from './relief/light'
-import { RELIEF_SHADE } from './relief/render'
-import { PHOTO_CONTRAST } from './relief/rings'
 
 const state = (f: number) => (f >= 0.999 ? 'fully visible' : f > 0 ? `${Math.round(f * 100)} percent visible` : 'hidden by the horizon')
 
@@ -242,7 +240,7 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
         <canvas ref={canvas} aria-hidden="true" style={{ width: '100%', height: '100%' }} />
         <p className="horizon-notice" style={{ left: free.left + 14, bottom: Math.max(free.bottom + 44, noticeBottom), maxWidth: `calc(100% - ${free.left + 28}px)` }}>
           {relief.status === 'ready'
-            ? `Rendered from LOLA heights and this place's LROC WAC mosaic, not footage · Relief: ${relief.sourceLabel ?? `LOLA ${relief.cellM?.toFixed(0)} m DEM`} to ${(relief.reachKm ?? 0) < 10 ? (relief.reachKm ?? 0).toFixed(1) : (relief.reachKm ?? 0).toFixed(0)} km, ${relief.night === 'earthshine' ? 'night, lit by earthshine (exposure raised)' : relief.night === 'dark' ? 'night, neither the Sun nor the Earth up' : 'lit by the Sun at this instant'}, slope shading ×${RELIEF_SHADE}, photo contrast ×${PHOTO_CONTRAST} · Line: horizon mask used by the figures`
+            ? `Rendered from LOLA heights and this place's LROC WAC mosaic, not footage · Relief: ${relief.sourceLabel ?? `LOLA ${relief.cellM?.toFixed(0)} m DEM`} to ${(relief.reachKm ?? 0) < 10 ? (relief.reachKm ?? 0).toFixed(1) : (relief.reachKm ?? 0).toFixed(0)} km, ${relief.night === 'earthshine' ? 'night, lit by earthshine (exposure raised)' : relief.night === 'dark' ? 'night, neither the Sun nor the Earth up' : 'lit by the Sun at this instant'}${relief.detailTiles && relief.detailTiles.wanted > 0 ? ` · Far ground in view: WAC 100 m, ${relief.detailTiles.loaded} of ${relief.detailTiles.wanted} tiles` : ''} · Line: horizon mask used by the figures`
             : 'Not real moon footage · Real moon horizon line'}
           {relief.status === 'loading' && ' · Loading the LOLA relief around this place…'}
         </p>

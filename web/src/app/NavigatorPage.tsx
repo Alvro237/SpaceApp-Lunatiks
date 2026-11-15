@@ -46,8 +46,8 @@ import { Popover } from '../ui/Popover'
 import { ToolSlotContext } from '../ui/toolSlotContext'
 
 /**
- * Map → horizon: the map camera flies to the place, comes down and tilts toward the horizon, and fades (DIVE_MS);
- * then the horizon view finishes the descent. Horizon → map: the map camera flies back (RETURN_MS).
+ * Map → horizon: the horizon view opens at once on the place (no flight, no descent). Horizon → map: the map
+ * camera flies back (RETURN_MS).
  * The phase is shared (state/horizon) so the map views can drive their cameras.
  */
 const reducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
@@ -75,7 +75,8 @@ export function NavigatorPage() {
   const [phase, setPhase] = useState<Phase>(section === 'horizon' ? 'horizon' : 'map')
   if (prevSection !== section) {
     setPrevSection(section)
-    if (section === 'horizon') setPhase(reducedMotion() ? 'horizon' : 'diving')
+    // the horizon view opens at once, standing on the place: no flight of the map camera, no descent
+    if (section === 'horizon') setPhase('horizon')
     else if (prevSection === 'horizon') setPhase(reducedMotion() ? 'map' : 'returning')
   }
   useLayoutEffect(() => useHorizonTransition.getState().setPhase(phase), [phase])
@@ -105,7 +106,7 @@ export function NavigatorPage() {
           >
             {scale === 'globe' ? <GlobeView /> : <TerrainView />}
           </div>
-          {horizonOn && phase === 'horizon' && <HorizonView animate={!reducedMotion()} />}
+          {horizonOn && phase === 'horizon' && <HorizonView />}
           {blocks && (
             <Suspense
               fallback={

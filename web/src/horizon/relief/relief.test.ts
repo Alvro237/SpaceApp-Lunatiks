@@ -263,24 +263,42 @@ describe('high-resolution DTMs', () => {
   })
 })
 
-describe('photoAlbedo', () => {
-  it('normalises a ring to its mean brightness and stretches the contrast', async () => {
-    const { photoAlbedo, PHOTO_CONTRAST } = await import('./rings')
-    const grey = new Uint8Array(1000).map((_, i) => (i % 2 ? 120 : 80)) // mean 100
-    const a = photoAlbedo(grey)!
-    expect(a[0]).toBeCloseTo(1 + PHOTO_CONTRAST * (80 / 100 - 1), 5)
-    expect(a[1]).toBeCloseTo(1 + PHOTO_CONTRAST * (120 / 100 - 1), 5)
-    // the same scene twice as bright gives the same albedo: no seam between rings of different exposure
-    const b = photoAlbedo(grey.map((v) => v * 2))!
-    expect(b[0]).toBeCloseTo(a[0], 5)
+describe('photo albedo', () => {
+  it('divides each byte by the place mean, leaving photographed shadows out of the mean', async () => {
+    const { photoAlbedo, photoMean, ALBEDO_MIN } = await import('./rings')
+    const grey = new Uint8Array(100).map((_, i) => (i < 20 ? 0 : i % 2 ? 120 : 80))
+    const m = photoMean(grey)!
+    expect(m).toBeCloseTo(100, 5)
+    const a = photoAlbedo(grey, m)
+    expect(a[0]).toBeCloseTo(ALBEDO_MIN, 5)
+    expect(a[20]).toBeCloseTo(0.8, 5)
+    expect(a[21]).toBeCloseTo(1.2, 5)
+    expect(photoMean(new Uint8Array(100))).toBeNull()
   })
 
-  it('leaves photographed shadows out of the mean, floors them, and gives up on an all-shadow ring', async () => {
-    const { photoAlbedo, ALBEDO_MIN } = await import('./rings')
-    const grey = new Uint8Array(100).map((_, i) => (i < 50 ? 0 : 100))
-    const a = photoAlbedo(grey)!
-    expect(a[0]).toBeCloseTo(ALBEDO_MIN, 5)
-    expect(a[99]).toBeCloseTo(1, 5)
-    expect(photoAlbedo(new Uint8Array(100))).toBeNull()
+  it('takes the place mean from the finest ring with a usable photo', async () => {
+    const { placePhotoMean } = await import('./rings')
+    const rings = [
+      { cellM: 60, photo: new Uint8Array(10) },
+      { cellM: 960, photo: new Uint8Array(10).fill(90) },
+      { cellM: 240, photo: new Uint8Array(10).fill(50) },
+      { cellM: 120 },
+    ]
+    expect(placePhotoMean(rings)).toBe(50)
+  })
+})
+
+describe('far detail tiles', () => {
+  it('finds the tile of a wall 60 km north and samples its photo there', async () => {
+    const { visibleFarTiles, detailSampler, tileKey, TILE_PX, TILE_M } = await import('./detailPhoto')
+    // flat ground, then a 2 km wall from 60 km north on: the wall is in view, the ground behind it is not
+    const { stack } = synthetic(-89.5, 0, 5, (_e, n) => (n > 60_000 ? 2000 : 0))
+    const tiles = visibleFarTiles(stack, 1.7)
+    expect(tiles.length).toBeGreaterThan(0)
+    expect(tiles[0]).toMatchObject({ ix: 0, iy: Math.floor(60_000 / TILE_M + 0.5) })
+    const g = new Uint8Array(TILE_PX * TILE_PX).fill(150)
+    const at = detailSampler(new Map([[tileKey(tiles[0].ix, tiles[0].iy), g]]), 100)
+    expect(at(0, 60_500)).toBeCloseTo(1.5, 5)
+    expect(at(0, 0)).toBeNaN()
   })
 })
