@@ -11,6 +11,7 @@
  * patches (below) lift the ground by the detail heights in both modes.
  */
 import { MAX_LEVEL } from './detail/grid'
+import { POLAR_MAX_Z } from './detail/polar'
 
 // bilinear between the centres of the shipped height grid's cells, longitude wrapping
 const H_AT = /* glsl */ `
@@ -66,6 +67,48 @@ float tileAt(sampler2DArray tiles, int slot, vec2 cell) {
 float dAt(int slot, vec2 cell) { return tileAt(uDetail, slot, cell); }
 `
 
+// The south-polar detail tiles (detail/polar.ts): the polar map's quadtree in south polar stereographic metres,
+// x = r sin(lon), y = r cos(lon), r = 2R tan((90° + lat) / 2), tile rows from the top (largest y). Heights are
+// 257 × 257 vertices per tile, photos 256 × 256 cells. Needs uPolarMaxZ, uPolarExtent and POLAR_MAX_Z.
+const POLAR_LOOKUP = /* glsl */ `
+vec2 polarXY(float latRad, float lonRad) {
+  float r = 2.0 * 1737400.0 * tan(0.5 * (1.5707963267948966 + latRad));
+  return vec2(r * sin(lonRad), r * cos(lonRad));
+}
+// Finest loaded tile holding the point (metres), from the finest level down. cell = position in the tile in units of
+// tile / cells (0 at the tile's west and north edges); sizeM = the tile's side.
+int findPolar(sampler2D index, vec2 xy, float cells, out vec2 cell, out float sizeM) {
+  for (int z = min(int(uPolarMaxZ), POLAR_MAX_Z); z >= 0; z--) {
+    float n = float(1 << z);
+    float s = 2.0 * uPolarExtent / n;
+    vec2 f = vec2((xy.x + uPolarExtent) / s, (uPolarExtent - xy.y) / s);
+    if (f.x < 0.0 || f.y < 0.0 || f.x >= n || f.y >= n) return -1;
+    ivec2 t = ivec2(floor(f));
+    int slot = int(texelFetch(index, ivec2(t.x, (1 << z) - 1 + t.y), 0).r * 255.0 + 0.5) - 1;
+    if (slot >= 0) {
+      cell = (f - vec2(t)) * cells;
+      sizeM = s;
+      return slot;
+    }
+  }
+  cell = vec2(0.0);
+  sizeM = 0.0;
+  return -1;
+}
+// height (metres) between the tile's vertices, bilinear
+float polarH(int slot, vec2 v) {
+  vec2 g = clamp(v, vec2(0.0), vec2(256.0));
+  ivec2 i = min(ivec2(floor(g)), ivec2(255));
+  vec2 t = g - vec2(i);
+  ivec2 j = i + 1;
+  return mix(mix(texelFetch(uPolarH, ivec3(i.x, i.y, slot), 0).r, texelFetch(uPolarH, ivec3(j.x, i.y, slot), 0).r, t.x),
+             mix(texelFetch(uPolarH, ivec3(i.x, j.y, slot), 0).r, texelFetch(uPolarH, ivec3(j.x, j.y, slot), 0).r, t.x), t.y);
+}
+// Share of the polar tiles in the picture: 1 a degree and a half inside the disc's edge, easing to 0 at the edge,
+// where the latitude/longitude tiles and the shipped grid take over without a seam.
+float polarWeight(float latDeg) { return uPolarMaxZ < 0.0 ? 0.0 : smoothstep(uDiscLat, uDiscLat - 1.5, latDeg); }
+`
+
 export const GLOBE_VERT = /* glsl */ `
 uniform sampler2D uHeight;  // 1440 x 720 heights, metres; row 0 = 90 N, column 0 = longitude 0, east positive
 uniform float uExag;        // relief exaggeration of the mesh (x4 for the whole Moon, x1 close in)
@@ -94,9 +137,17 @@ export const GLOBE_FRAG = /* glsl */ `
 precision highp float;
 precision highp sampler2DArray;
 #define DETAIL_MAX_LEVEL ${MAX_LEVEL}
+#define POLAR_MAX_Z ${POLAR_MAX_Z}
 uniform sampler2D uHeight;
 uniform vec3 uSun;          // unit vector to the Sun, Moon Mean-Earth axes
-uniform float uDiscLat;     // the polar map covers south of this latitude (degrees)
+uniform float uDiscLat;     // the polar tiles cover south of this latitude (degrees)
+uniform sampler2DArray uPolarH;      // south-polar height tiles, 257 x 257 vertices, metres (detail/polar.ts)
+uniform sampler2D uPolarHIndex;
+uniform sampler2DArray uPolarP;      // south-polar photo tiles, 256 x 256 cells, reflectance 0..1
+uniform sampler2D uPolarPIndex;
+uniform float uPolarMaxZ;   // finest polar level; -1 = none
+uniform float uPolarExtent; // half-width of the polar quadtree's square, metres
+uniform vec4 uPolarHole;    // drawn by a finer polar mesh instead (patch.ts): centre x, y and half-width (metres); w > 0 = on
 uniform sampler2DArray uDetail;        // DEM detail tiles, 256 x 256 cells each, heights in metres
 uniform sampler2D uIndex;              // R8: layer + 1 of each loaded DEM tile of every level, 0 = none (slots.ts)
 uniform sampler2DArray uPhoto;         // photo detail tiles, 256 x 256 cells each, reflectance 0..1
@@ -115,21 +166,28 @@ const float R = 1737400.0;
 // unweighted by area, measured 2026-11-15): x2 brings it to about the plain regolith grey, as on the polar map.
 const float PHOTO_GAIN = 2.0;
 const vec3 REGOLITH = vec3(0.72, 0.71, 0.68);
+// brightness of the regolith grey that stands in for the polar mosaic's photographed shadows, against REGOLITH: about
+// the mosaic's own lit ground after PHOTO_GAIN (0.15-0.3 raw, x2)
+const float PHOTO_SHADOW_FILL = 0.6;
 // share of the LOLA slope shading laid over the photo (the photo already holds some shading of its own)
 const float PHOTO_RELIEF = 0.7;
 
 ${H_AT}
 
 ${DETAIL_LOOKUP}
+${POLAR_LOOKUP}
 void main() {
   vec3 up = normalize(vMe);
   float lat = asin(clamp(up.z, -1.0, 1.0));
-  float lon = atan(up.y, up.x);
+  float lon = length(up.xy) > 1e-9 ? atan(up.y, up.x) : 0.0;
   if (uHole.y > 0.0) {
     float dLon = mod(degrees(lon) - uHole.x + 540.0, 360.0) - 180.0;
     float la = degrees(lat);
     if (abs(dLon) < uHole.y && la > uHole.z && la < uHole.w) discard;
   }
+  float pw = lat < 0.0 ? polarWeight(degrees(lat)) : 0.0;
+  vec2 pxy = lat < 0.0 ? polarXY(lat, lon) : vec2(0.0);
+  if (uPolarHole.w > 0.0 && lat < 0.0 && abs(pxy.x - uPolarHole.x) < uPolarHole.z && abs(pxy.y - uPolarHole.y) < uPolarHole.z) discard;
   float day = smoothstep(-0.02, 0.05, dot(up, uSun));
   vec2 cell;
   float tileDeg;
@@ -137,12 +195,31 @@ void main() {
   // ground brightness: the WAC photograph where a photo tile is loaded (photo mode), else plain regolith grey
   vec3 albedo = REGOLITH;
   bool photo = false;
+  // share of the ground where the polar mosaic's photographed shadow is replaced by plain regolith (below)
+  float fill = 0.0;
   if (uPhotoMode > 0.5 && uMaxLevel >= 0.0) {
     vec2 pCell;
     float pDeg;
     int pSlot = findTile(uPhotoIndex, degrees(lon), degrees(lat), pCell, pDeg);
     if (pSlot >= 0) {
       albedo = vec3(min(1.0, tileAt(uPhoto, pSlot, pCell) * PHOTO_GAIN));
+      photo = true;
+    }
+  }
+  // south of 60 S the polar mosaic (same gain as the polar map), eased in from the disc's edge
+  if (uPhotoMode > 0.5 && pw > 0.0) {
+    vec2 qCell;
+    float qSize;
+    int qSlot = findPolar(uPolarPIndex, pxy, 256.0, qCell, qSize);
+    if (qSlot >= 0) {
+      // The mosaic keeps the shadows it was photographed with, nearly black near the pole (median 0.016 within 60 km
+      // of it), and a few blocks without data (0). There the ground eases to the plain regolith grey, lit like the
+      // rest by the Sun at the chosen instant, so the LOLA relief reads instead of a black patch.
+      float raw = tileAt(uPolarP, qSlot, qCell);
+      float seen = smoothstep(0.015, 0.11, raw);
+      fill = pw * (1.0 - seen);
+      vec3 polarAlbedo = mix(REGOLITH * PHOTO_SHADOW_FILL, vec3(min(1.0, raw * PHOTO_GAIN)), seen);
+      albedo = photo ? mix(albedo, polarAlbedo, pw) : mix(REGOLITH, polarAlbedo, pw);
       photo = true;
     }
   }
@@ -174,6 +251,28 @@ void main() {
       hn = (hAt(uv - vec2(0.0, 1.0 / size.y)) - hAt(uv + vec2(0.0, 1.0 / size.y))) / (2.0 * R * dLat);
       exag = 3.0;
     }
+    // south of 60 S the slopes of the polar height tiles, eased in from the disc's edge: one vertex either side in
+    // map metres, times the scale factor k = 1 / cos²((90° + lat) / 2) for ground metres, turned to east and north
+    // (map north is away from the pole, (sin lon, cos lon); east is (cos lon, −sin lon))
+    if (pw > 0.0) {
+      vec2 hv;
+      float hSize;
+      int hSlot = findPolar(uPolarHIndex, pxy, 256.0, hv, hSize);
+      if (hSlot >= 0) {
+        float cellM = hSize / 256.0;
+        float xm = max(hv.x - 1.0, 0.0);
+        float xp = min(hv.x + 1.0, 256.0);
+        float ym = max(hv.y - 1.0, 0.0);
+        float yp = min(hv.y + 1.0, 256.0);
+        float k = 1.0 / pow(cos(0.5 * (0.5 * PI + lat)), 2.0);
+        float gx = k * (polarH(hSlot, vec2(xp, hv.y)) - polarH(hSlot, vec2(xm, hv.y))) / (cellM * max(xp - xm, 0.5));
+        // rows run down the map (toward smaller y)
+        float gy = k * (polarH(hSlot, vec2(hv.x, ym)) - polarH(hSlot, vec2(hv.x, yp))) / (cellM * max(yp - ym, 0.5));
+        he = mix(he, gx * cos(lon) - gy * sin(lon), pw);
+        hn = mix(hn, gx * sin(lon) + gy * cos(lon), pw);
+        exag = mix(exag, uDetailShade, pw);
+      }
+    }
     vec3 east = vec3(-sin(lon), cos(lon), 0.0);
     vec3 north = vec3(-sin(lat) * cos(lon), -sin(lat) * sin(lon), cos(lat));
     vec3 n = normalize(up - exag * (he * east + hn * north));
@@ -183,7 +282,8 @@ void main() {
       // photo: the slope's Sun relative to flat ground's (1 on the flat, brighter facing the Sun, darker away from
       // it; the 0.2 keeps it finite at the terminator), over the day and night of the chosen instant
       float rel = clamp((sun + 0.2) / (max(0.0, dot(up, uSun)) + 0.2), 0.0, 1.8);
-      light = (0.10 + 0.90 * day) * mix(1.0, rel, PHOTO_RELIEF);
+      // where the regolith stands in for the photo's shadows, the relief is shaded in full (no photo shading there)
+      light = (0.10 + 0.90 * day) * mix(1.0, rel, mix(PHOTO_RELIEF, 1.0, fill));
     } else {
       // the night side keeps a faint fixed-light relief (like earthshine) so its shape stays readable
       vec3 fixedLight = normalize(up + 0.6 * east + 0.4 * north);
@@ -192,9 +292,6 @@ void main() {
     }
     colour = albedo * light;
   }
-  // outline of the polar map's coverage
-  float latDeg = degrees(lat);
-  if (abs(latDeg - uDiscLat) < 0.18) colour = mix(colour, vec3(0.925, 0.918, 0.894), 0.85);
   fragColor = vec4(colour, 1.0);
 }
 `
@@ -258,6 +355,57 @@ void main() {
   vMe = me;
   vHeight = h;
   // Mean-Earth axes to the scene's (north up): x, z, -y
+  vec3 pos = vec3(me.x, me.z, -me.y) * (1737.4 + h / 1000.0 * uExag - skirt * uSkirtKm);
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+}
+`
+
+/**
+ * A polar patch: the same dense grid as PATCH_VERT, laid out in south polar stereographic metres around the place
+ * the camera looks at (patch.ts, polarPatchWindows), so it stays square over the pole where a latitude/longitude grid
+ * folds up. Lifted by the polar height tiles (detail/polar.ts) eased in from the disc's edge, else the shipped grid.
+ * Drawn with the globe's fragment shader.
+ */
+export const POLAR_PATCH_VERT = /* glsl */ `
+precision highp float;
+precision highp sampler2DArray;
+#define POLAR_MAX_Z ${POLAR_MAX_Z}
+uniform sampler2D uHeight;
+uniform float uExag;
+uniform float uDiscLat;
+uniform sampler2DArray uPolarH;
+uniform sampler2D uPolarHIndex;
+uniform float uPolarMaxZ;
+uniform float uPolarExtent;
+uniform vec4 uPWin;         // centre x and y, cell size (metres); w = 1 on the outermost grid
+uniform float uSkirtKm;
+in float skirt;
+out vec3 vMe;
+out float vHeight;
+const float PI = 3.141592653589793;
+${H_AT}
+${POLAR_LOOKUP}
+void main() {
+  vec2 xy = uPWin.xy + position.xy * uPWin.z;
+  // the outermost grid eases back to the shipped heights over its last EDGE_CELLS cells, so it meets the globe's own
+  // mesh (which has no detail heights) without a step
+  const float EDGE_CELLS = 24.0;
+  float edge = uPWin.w > 0.5 ? clamp((128.0 - max(abs(position.x), abs(position.y))) / EDGE_CELLS, 0.0, 1.0) : 1.0;
+  float r = length(xy);
+  float lat = 2.0 * atan(r / (2.0 * 1737400.0)) - 0.5 * PI;
+  // atan(0, 0) is undefined (NaN on some GPUs): the vertex on the pole takes longitude 0
+  float lon = r > 1e-3 ? atan(xy.x, xy.y) : 0.0;
+  vec3 me = vec3(cos(lat) * cos(lon), cos(lat) * sin(lon), sin(lat));
+  float h = hAt(vec2(fract(lon / (2.0 * PI)), (0.5 * PI - lat) / PI));
+  float pw = polarWeight(degrees(lat)) * edge;
+  if (pw > 0.0) {
+    vec2 v;
+    float sizeM;
+    int slot = findPolar(uPolarHIndex, xy, 256.0, v, sizeM);
+    if (slot >= 0) h = mix(h, polarH(slot, v), pw);
+  }
+  vMe = me;
+  vHeight = h;
   vec3 pos = vec3(me.x, me.z, -me.y) * (1737.4 + h / 1000.0 * uExag - skirt * uSkirtKm);
   gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
 }
