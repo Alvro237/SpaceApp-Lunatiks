@@ -17,6 +17,10 @@ files.push('globe/globe.json', `globe/${JSON.parse(readFileSync(resolve(root, 'd
 for (const f of files) copyFileSync(resolve(root, 'data', f), resolve(out, f))
 console.log(`copied ${files.length} files from data/ to web/public/data/`)
 
+// Past landings on the map (mission planner, section 3.6): the catalogue of measured landing and impact points.
+copyFileSync(resolve(root, 'data/external/sites/landing_sites.csv'), resolve(out, 'landing_sites.csv'))
+console.log('copied landing_sites.csv to web/public/data/')
+
 // Diameters of the catalogue's named features, from the IAU Gazetteer copy in data/external/nomenclature.
 function parseCsv(text) {
   const rows = []

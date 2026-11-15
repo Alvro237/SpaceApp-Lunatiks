@@ -4,7 +4,7 @@
  * The WebGL map is replaced by a stub: jsdom has no GPU; the engine behind it is tested in terrain/*.test.ts.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import axe from 'axe-core'
 import { readFileSync } from 'node:fs'
@@ -52,7 +52,10 @@ const areaAnswer = {
   score_b64: btoa(String.fromCharCode(0, 0, 0, 0, 0, 200, 210, 0, 0, 190, 220, 0, 0, 0, 0, 0)),
   counts: { outside: 4, failed_static: 6, failed_window: 2, viable: 4, unknown: 0 },
   funnel: [{ id: 'max_slope_deg', stage: 'static', cells_in: 12, cells_out: 6, cells_unknown: 0 }],
-  areas: [{ id: 1, cells: 4, area_km2: 3.69, centroid_lat: -84.79, centroid_lon: 29.2, best_lat: -84.79, best_lon: 29.21, best_score: 0.86, mean_score: 0.81, sites: ['IM-2 Athena'] }],
+  areas: [
+    { id: 1, cells: 4, area_km2: 3.69, centroid_lat: -84.79, centroid_lon: 29.2, best_lat: -84.79, best_lon: 29.21, best_score: 0.86, mean_score: 0.81, sites: ['IM-2 Athena'] },
+    { id: 2, cells: 2, area_km2: 1.84, centroid_lat: -84.7, centroid_lon: 29.0, best_lat: -84.7, best_lon: 29.0, best_score: 0.72, mean_score: 0.7, sites: [] },
+  ],
   window: null,
   seconds: 0.4,
   assumptions: ['Static filters read a k x k sub-grid per cell.'],
@@ -104,6 +107,23 @@ beforeEach(() => {
   window.location.hash = ''
   useApp.setState({ ...defaultScene(T), playing: false })
   usePlaceStyles.setState({ styles: {}, menu: null })
+  useAreas.setState({
+    center: null,
+    radiusKm: 20,
+    cellMode: 'auto',
+    advancedOpen: false,
+    categoriesOn: {},
+    sideOn: false,
+    plannerSwitches: {},
+    plannerSelects: { past_landings: 'away' },
+    plannerValues: { comms_fraction: '50' },
+    showLandings: false,
+    pickArmed: false,
+    result: null,
+    raster: null,
+    isPreview: false,
+    show: true,
+  })
 })
 afterEach(() => vi.unstubAllGlobals())
 
@@ -244,35 +264,53 @@ describe('navigator', () => {
     expect(useApp.getState().speed).not.toBe(before)
   })
 
-  it('mission mode: a region, filters with values, then the areas painted and listed', async () => {
+  it('mission mode: the planner panel, a typed centre and an input send a preview and list the areas', async () => {
     const user = userEvent.setup()
     useApp.setState({ mode: 'mission' })
-    useAreas.setState({ center: null, enabled: {}, values: {}, result: null, raster: null })
+    useAreas.setState({ center: null, categoriesOn: {}, plannerValues: {}, plannerSwitches: {}, result: null, raster: null })
     const { container } = renderAt('/')
-    // the filters open from the tool bar at the top left
-    await user.click(await screen.findByRole('button', { name: 'Mission filters' }))
-    await user.click(screen.getByRole('button', { name: 'Find areas' }))
-    expect(screen.getByRole('alert')).toHaveTextContent('Place the search region first')
-    await user.click(await screen.findByRole('button', { name: /^Centre on / }))
-    const slope = screen.getByRole('switch', { name: /Maximum slope/ })
-    await user.click(slope)
-    expect(slope).toHaveAttribute('aria-checked', 'true')
-    await user.click(screen.getByRole('button', { name: /^Find areas/ }))
-    expect(screen.getByRole('alert')).toHaveTextContent('Maximum slope: steepest slope is required')
-    await user.type(screen.getByRole('textbox', { name: /Maximum slope.*Steepest slope/ }), '8')
+    // the panel is visible in mission mode without clicking a button (P2: no popover over the timeline)
+    expect(await screen.findByRole('heading', { level: 2, name: 'Mission planner inputs' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Mission filters' })).toBeNull()
+    // the centre is set by typing latitude and longitude
+    fireEvent.change(screen.getByLabelText('Region centre latitude'), { target: { value: '-89.45' } })
+    fireEvent.change(screen.getByLabelText('Region centre longitude'), { target: { value: '137.3' } })
+    expect(useAreas.getState().center).toEqual({ lat: -89.45, lon: 137.3 })
+    // Advanced inputs: switch on Topography, type Maximum slope
+    await user.click(screen.getByRole('button', { name: 'Advanced inputs' }))
+    await user.click(screen.getByRole('switch', { name: 'Topography and landing safety' }))
     // filters the data cannot answer are listed with the reason, not hidden
     expect(screen.getByText(/No open boulder map covers the pole/)).toBeInTheDocument()
-    await user.click(screen.getByRole('button', { name: /^Find areas/ }))
-    expect(await screen.findByText(/#1 · 3.69 km²/)).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Cells removed by each filter' })).toHaveTextContent('Maximum slope')
+    fireEvent.change(screen.getByLabelText('Maximum slope'), { target: { value: '8' } })
+    // a preview request follows (debounced 500 ms) and the results panel lists the areas
+    expect(await screen.findByText(/#1 · 3.69 km²/, undefined, { timeout: 3000 })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Cells removed by each input' })).toHaveTextContent('Maximum slope')
     expect(useAreas.getState().raster?.codes[5]).toBe(3)
     const body = JSON.parse(String((fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.find((c) => String(c[0]).endsWith('/areas/search'))![1].body))
     expect(body.filters).toEqual({ max_slope_deg: 8 })
-    expect(body.region.radius_km).toBe(30)
-    // Study opens the best spot of the area in study mode
-    await user.click(screen.getByRole('button', { name: 'Study the best spot of area 1' }))
-    expect(useApp.getState().mode).toBe('study')
-    expect(useApp.getState().selection).toEqual({ kind: 'point', lat: -84.79, lon: 29.21 })
+    expect(body.region.radius_km).toBe(20)
+    // Study no longer opens the Study tab: it ticks the area's own button, so several can be picked
+    const compareBtn = () => screen.getByRole('button', { name: /^Compare selected/ })
+    expect(compareBtn()).toBeDisabled()
+    await user.click(screen.getByRole('button', { name: 'Select area 1 for comparison' }))
+    expect(useApp.getState().mode).toBe('mission')
+    expect(screen.getByRole('button', { name: 'Deselect area 1 for comparison' })).toHaveAttribute('aria-pressed', 'true')
+    expect(compareBtn()).toBeDisabled() // still only one ticked
+    await user.click(screen.getByRole('button', { name: 'Select area 2 for comparison' }))
+    expect(compareBtn()).toBeEnabled()
+    // "Compare selected" reuses Study + Multiselect's own comparison panel, unchanged
+    await user.click(compareBtn())
+    expect(useApp.getState().compareMode).toBe(true)
+    expect(useApp.getState().compare).toEqual([
+      { kind: 'point', lat: -84.79, lon: 29.21 },
+      { kind: 'point', lat: -84.7, lon: 29 },
+    ])
+    expect(await screen.findByRole('heading', { name: 'Comparing 2 places' })).toBeInTheDocument()
+    // leaving the comparison returns to the mission results, the ticks still there
+    await user.click(screen.getByRole('button', { name: 'Close comparison and leave multiselect' }))
+    expect(useApp.getState().compareMode).toBe(false)
+    expect(await screen.findByRole('heading', { level: 2, name: /^Candidate areas/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Deselect area 1 for comparison' })).toHaveAttribute('aria-pressed', 'true')
     await noAxeViolations(container)
   })
 
@@ -326,18 +364,18 @@ describe('navigator', () => {
     expect(screen.queryByRole('heading', { name: /Comparing/ })).toBeNull()
   })
 
-  it('mission mode: an example mission fills the region, the window and four filters in one click', async () => {
+  it('mission mode: an example mission fills the region, the window and three categories in one click', async () => {
     const user = userEvent.setup()
     useApp.setState({ mode: 'mission' })
-    useAreas.setState({ center: null, enabled: {}, values: {}, result: null, raster: null })
+    useAreas.setState({ center: null, categoriesOn: {}, plannerValues: {}, plannerSwitches: {}, result: null, raster: null })
     const { container } = renderAt('/')
-    await user.click(await screen.findByRole('button', { name: 'Mission filters' }))
-    await user.click(screen.getByRole('button', { name: /Load example mission/ }))
-    expect(screen.getByText(/Example mission loaded/)).toHaveTextContent(/not requirements/)
+    await user.click(await screen.findByRole('button', { name: 'Load example mission' }))
+    expect(screen.getByText(/Example values to try the planner, not mission requirements/)).toBeInTheDocument()
     expect(useAreas.getState().center).toEqual({ lat: -89.45, lon: 137.3 })
     expect(useApp.getState().durationH).toBe(168)
-    expect(screen.getByRole('switch', { name: /Maximum slope/ })).toHaveAttribute('aria-checked', 'true')
-    expect(screen.getByRole('textbox', { name: /Maximum slope.*Steepest slope/ })).toHaveValue('10')
+    await user.click(screen.getByRole('button', { name: 'Advanced inputs' }))
+    expect(screen.getByRole('switch', { name: 'Topography and landing safety' })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByLabelText('Maximum slope')).toHaveValue('10')
     await noAxeViolations(container)
   })
 

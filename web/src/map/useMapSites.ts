@@ -72,6 +72,8 @@ export function useMapSites(): MapSite[] {
   const screen = useApp((s) => s.screen)
   const selection = useApp((s) => s.selection)
   const compare = useApp((s) => s.compare)
+  // Mission mode places a search region, not a site: the selected place's pin (Study) is not drawn there.
+  const mission = useApp((s) => s.mode === 'mission')
   const styles = usePlaceStyles((s) => s.styles)
 
   // Window metrics per catalogue site, only when a filter needs them.
@@ -96,7 +98,7 @@ export function useMapSites(): MapSite[] {
     }
     for (const s of masks.doc.sites) {
       const sel: Selection = { kind: 'site', id: s.id }
-      const current = sameSelection(sel, selection)
+      const current = !mission && sameSelection(sel, selection)
       const compared = num(sel)
       const slope = s.terrain.available ? (s.terrain.slopeDeg ?? null) : null
       const m = metrics.get(s.id) ?? null
@@ -106,11 +108,11 @@ export function useMapSites(): MapSite[] {
       if (!wanted && !current && compared === null) continue
       out.push({ key: s.id, sel, name, lat: s.lat, lon: s.lon, diameterKm: features?.features[s.id]?.diameterKm ?? null, slopeDeg: slope, metrics: m, pass, current, compared, colour: styles[s.id]?.colour ?? null })
     }
-    for (const p of [selection, ...compare]) {
+    for (const p of mission ? compare : [selection, ...compare]) {
       if (p.kind !== 'point' || out.some((o) => sameSelection(o.sel, p))) continue
       const key = placeKey(p)
-      out.push({ key, sel: p, name: names.get(key) ?? pointName(p.lat, p.lon), lat: p.lat, lon: p.lon, diameterKm: null, slopeDeg: null, metrics: null, pass: null, current: sameSelection(p, selection), compared: num(p), colour: styles[key]?.colour ?? null })
+      out.push({ key, sel: p, name: names.get(key) ?? pointName(p.lat, p.lon), lat: p.lat, lon: p.lon, diameterKm: null, slopeDeg: null, metrics: null, pass: null, current: !mission && sameSelection(p, selection), compared: num(p), colour: styles[key]?.colour ?? null })
     }
     return out
-  }, [masks, features, names, query, screen, metrics, selection, compare, styles])
+  }, [masks, features, names, query, screen, metrics, selection, compare, styles, mission])
 }

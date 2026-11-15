@@ -134,6 +134,18 @@ export function nearPlaneKm(camera: Vec3, axis: Vec3, cosMaxOffAxis: number, rMa
   return Math.max(1, byAngle, byTangent)
 }
 
+/** South of here a region centre is accepted (mission mode, section 3.8); the search covers the south polar grids. */
+export const REGION_MIN_LAT = -60
+
+/**
+ * In mission mode, a click at this latitude either sets the region centre (south of `regionMinLat`) or is
+ * refused with a toast ("The search covers south of 60° S") that leaves the centre unchanged. Pure decision
+ * shared by the globe's and the map's click handlers, so it can be tested without a WebGL canvas.
+ */
+export function missionPickOutcome(lat: number, regionMinLat = REGION_MIN_LAT): 'centre' | 'refused' {
+  return lat <= regionMinLat ? 'centre' : 'refused'
+}
+
 /** Idle time after which the Moon starts turning by itself, ms. */
 export const IDLE_BEFORE_SPIN_MS = 20_000
 /** Slow turn: about two minutes a revolution. */

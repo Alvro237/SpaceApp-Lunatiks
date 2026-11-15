@@ -113,6 +113,72 @@ export function dotArt(colour: string): Art {
   return { texture: texture(c), w: 10, h: 10, cx: 0.5, cy: 0.5 }
 }
 
+/** A small filled square for a past landing or impact (mission planner, section 3.6): never colour alone, the
+ * two kinds also differ in shape (a plain square for a landing, one rotated 45° — a diamond — for an impact) and
+ * always carry a text label ("landing site" / "impact site"). */
+export function squareArt(kind: 'landing' | 'impact'): Art {
+  const s = 14
+  const [c, ctx] = canvas(s, s)
+  ctx.translate(s / 2, s / 2)
+  if (kind === 'impact') ctx.rotate(Math.PI / 4)
+  const half = kind === 'impact' ? 4.6 : 5
+  ctx.beginPath()
+  ctx.rect(-half, -half, half * 2, half * 2)
+  ctx.fillStyle = kind === 'impact' ? '#ff8a65' : '#c9c6be'
+  ctx.fill()
+  ctx.lineWidth = 1.5
+  ctx.strokeStyle = 'rgba(0,0,0,0.75)'
+  ctx.stroke()
+  return { texture: texture(c), w: s, h: s, cx: 0.5, cy: 0.5 }
+}
+
+/**
+ * A red pennant on a silver pole (mission planner: the best places found). The foot of the pole is the place.
+ * The rank is written on the cloth, so the flags match the numbered list and are never told apart by colour alone.
+ */
+export const FLAG = { w: 34, h: 40 }
+export function flagArt(rank: number): Art {
+  const { w, h } = FLAG
+  const [c, ctx] = canvas(w, h)
+  const poleX = 6
+  // pole: a thin silver rod with a light edge, from the cloth down to the ground
+  const rod = ctx.createLinearGradient(poleX - 1.5, 0, poleX + 1.5, 0)
+  rod.addColorStop(0, '#8c9096')
+  rod.addColorStop(0.45, '#f1f2f4')
+  rod.addColorStop(1, '#7a7e84')
+  ctx.fillStyle = rod
+  ctx.fillRect(poleX - 1.5, 3, 3, h - 4)
+  // cloth: a waving triangle from the top of the pole, red with a lighter fold and a darker tail
+  const top = 3
+  const bottom = 21
+  ctx.beginPath()
+  ctx.moveTo(poleX, top)
+  ctx.bezierCurveTo(poleX + 10, top - 2, poleX + 18, top + 8, w - 2, top + 9)
+  ctx.bezierCurveTo(poleX + 18, top + 12, poleX + 10, bottom - 3, poleX, bottom)
+  ctx.closePath()
+  const cloth = ctx.createLinearGradient(poleX, 0, w - 2, 0)
+  cloth.addColorStop(0, '#e8261c')
+  cloth.addColorStop(0.35, '#ff6a5c')
+  cloth.addColorStop(1, '#a8150f')
+  ctx.fillStyle = cloth
+  ctx.fill()
+  ctx.lineWidth = 1
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)'
+  ctx.stroke()
+  // the rank, white on the cloth
+  ctx.fillStyle = '#ffffff'
+  ctx.font = `700 ${rank >= 10 ? 8 : 9}px system-ui, -apple-system, sans-serif`
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.fillText(String(rank), poleX + 8, top + 9)
+  // a small shadow dot at the foot, so the place reads on bright and dark ground alike
+  ctx.beginPath()
+  ctx.ellipse(poleX, h - 1.5, 3.5, 1.4, 0, 0, Math.PI * 2)
+  ctx.fillStyle = 'rgba(0,0,0,0.55)'
+  ctx.fill()
+  return { texture: texture(c), w, h, cx: poleX / w, cy: 1.5 / h }
+}
+
 /** White text on a dark rounded box, anchored `dx` px to the right and `dy` px above the place. */
 export function labelArt(text: string, dx: number, dy: number): Art {
   const font = '600 12px system-ui, -apple-system, sans-serif'
