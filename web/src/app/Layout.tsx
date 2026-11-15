@@ -43,10 +43,10 @@ export function Layout() {
               <>
                 <div className="mode-switch" role="radiogroup" aria-label="Mode">
                   <button type="button" role="radio" aria-checked={mode === 'study'} onClick={() => set({ mode: 'study' })}>
-                    Study
+                    Site explorer
                   </button>
                   <button type="button" role="radio" aria-checked={mode === 'mission'} onClick={() => set({ mode: 'mission' })}>
-                    Mission
+                    Mission planner
                   </button>
                 </div>
               </>
@@ -63,9 +63,6 @@ export function Layout() {
             </li>
             <li>
               <NavLink to="/data">Data & methods</NavLink>
-            </li>
-            <li>
-              <NavLink to="/learn">Learn</NavLink>
             </li>
           </ul>
         </nav>

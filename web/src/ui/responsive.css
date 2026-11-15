@@ -5,7 +5,7 @@
  *   - medium (761 to 1023 px): the same floating layout; the header drops the product name to stay on one row and
  *     the side panel lays its content out from its own width, not the window's;
  *   - narrow (760 px and down) or short (480 px tall and down, a phone on its side): stacked. The map, the
- *     timeline and the panels in one column that scrolls; on a narrow window the header takes two rows.
+ *     timeline and the panels in one column that scrolls; on a narrow window the header wraps into rows.
  * The stacked layout's media query, `(max-width: 760px), (max-height: 480px)`, is the same in every stylesheet.
  * Floating menus (popovers, layers, search results) are kept inside the window by ui/useFitViewport.ts.
  */
@@ -28,8 +28,12 @@ img, video { max-width: 100%; height: auto; }
   /* one row: the mark stays, the name is still read by screen readers (the page's h1 carries it too) */
   .app.on-map .brand-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
+@media (max-width: 860px) {
+  /* the two mode names, the Educational switch and the navigation share the row down to 761 px */
+  .app.on-map .topbar { padding: 6px 10px; gap: 8px 10px; }
+}
 @media (max-width: 760px) {
-  /* two rows, nothing scrolls sideways: mark and navigation, then the mode controls */
+  /* rows instead of a sideways scroll: mark and navigation, then the mode controls (they wrap again on a phone) */
   .app.on-map .topbar { flex-wrap: wrap; overflow-x: visible; justify-content: flex-start; padding: 6px 8px; gap: 4px 8px; }
   .app.on-map .topbar > * { flex: 0 1 auto; min-width: 0; }
   .app.on-map .topbar nav { margin-left: auto; }
@@ -40,7 +44,7 @@ img, video { max-width: 100%; height: auto; }
   .page { padding: 16px 12px 32px; }
 }
 @media (max-width: 360px) {
-  /* the smallest phones: tighter labels so the header still takes two rows, not four */
+  /* the smallest phones: tighter labels, so each header row holds its controls */
   .app.on-map .topbar { font-size: 0.86rem; gap: 4px 6px; }
   .app.on-map .topbar nav a { padding: 6px 5px; }
   .app.on-map .mode-switch button { padding: 6px 9px; }

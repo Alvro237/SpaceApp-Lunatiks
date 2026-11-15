@@ -45,7 +45,7 @@ for (const size of SIZES) {
     expect(await outside(page, `${parts}, .side-panel, .side-panel .stat`)).toEqual([])
 
     // the widest menu of the tool bar stays inside the window, in both directions
-    await page.getByRole('radio', { name: 'Mission' }).click()
+    await page.getByRole('radio', { name: 'Mission planner' }).click()
     await page.getByRole('button', { name: 'Mission filters' }).click()
     const panel = page.locator('.mission-pop .pop-panel')
     await expect(panel).toBeVisible()
