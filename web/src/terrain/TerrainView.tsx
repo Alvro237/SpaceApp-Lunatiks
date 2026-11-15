@@ -27,6 +27,7 @@ import { IconCrosshair, IconCube, IconFit, IconGlobe, IconMinus, IconPlus } from
 import { WebGLGuard } from '../ui/WebGLGuard'
 import { terrainRegistry } from './registry'
 import { type Tileset, inExtent, polarLatLon, polarXY, scaleFactor } from './tileset'
+import { useOnScreen } from '../ui/useOnScreen'
 
 export const TILES_BASE = `${import.meta.env.BASE_URL}tiles/`
 
@@ -125,7 +126,10 @@ function MapView({ tileset }: { tileset: Tileset }) {
   // paused (no frames drawn) while the horizon view or Educational mode covers the map; it keeps its camera and tiles
   const underHorizon = useHorizonTransition((s) => s.phase === 'horizon')
   const underBlocks = useApp((s) => s.blocks)
-  const covered = underHorizon || underBlocks
+  // and while it is scrolled out of the window (a phone's column, with a panel being read under it)
+  const [root, setRoot] = useState<HTMLDivElement | null>(null)
+  const offScreen = !useOnScreen(root)
+  const covered = underHorizon || underBlocks || offScreen
 
   useEffect(() => rig.setTilt(view === '3d' ? TILT_3D : 0), [rig, view])
 
@@ -238,6 +242,7 @@ function MapView({ tileset }: { tileset: Tileset }) {
   return (
     <>
       <div
+        ref={setRoot}
         className="map-view"
         tabIndex={0}
         role="application"

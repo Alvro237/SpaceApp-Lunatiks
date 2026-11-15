@@ -41,6 +41,7 @@ import { TILES_BASE, loadTileset } from '../terrain/TerrainView'
 import { polarXY } from '../terrain/tileset'
 import { IconCrosshair } from '../ui/icons'
 import { WebGLGuard } from '../ui/WebGLGuard'
+import { useOnScreen } from '../ui/useOnScreen'
 
 const FOV = 35
 /** The polar map covers the disc south of this latitude (the LOLA polar grids). */
@@ -152,7 +153,10 @@ export function GlobeView() {
   // paused (no frames drawn) while the horizon view or Educational mode covers the map; it keeps its camera and tiles
   const underHorizon = useHorizonTransition((s) => s.phase === 'horizon')
   const underBlocks = useApp((s) => s.blocks)
-  const covered = underHorizon || underBlocks
+  // and while it is scrolled out of the window (a phone's column, with a panel being read under it)
+  const [root, setRoot] = useState<HTMLDivElement | null>(null)
+  const offScreen = !useOnScreen(root)
+  const covered = underHorizon || underBlocks || offScreen
   useEffect(() => orbit.touch(), [covered, orbit])
 
   // Opening the horizon view: turn to the place and come down over it; back to the previous view when it closes.
@@ -332,6 +336,7 @@ export function GlobeView() {
   return (
     <>
       <div
+        ref={setRoot}
         className="map-view globe-view"
         tabIndex={0}
         role="application"
