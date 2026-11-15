@@ -31,6 +31,7 @@ import { CoordsButton, SiteSearch } from '../panels/SiteSearch'
 import { NowProvider } from '../panels/useNow'
 import { useInsets } from '../state/layout'
 import { useAreas } from '../state/areas'
+import { useCinematic } from '../state/cinematic'
 import { usePanels } from '../state/panels'
 import { useApp } from '../state/store'
 import { useUrlSync } from '../state/useUrlSync'
@@ -44,6 +45,7 @@ import { TerrainView } from '../terrain/TerrainView'
 import { useClock } from '../time/useClock'
 import { QuestPanel } from '../learn/QuestPanel'
 import { ToolSlotContext } from '../ui/toolSlotContext'
+import { CinematicExit } from './Cinematic'
 
 /**
  * Map → horizon: the map camera flies to the place, comes down and tilts toward the horizon, and fades (DIVE_MS);
@@ -69,6 +71,8 @@ export function NavigatorPage() {
   }, [areasResult])
   const comparing = useApp((s) => s.compareMode && s.compare.length >= 2)
   const blocks = useApp((s) => s.blocks)
+  // cinematic mode: only the turning Moon and a button to leave (app/Cinematic.tsx); not with Educational mode
+  const cinematic = useCinematic((s) => s.on) && !blocks
   // With no place chosen there is nothing for the bottom bar (the place's sunlight and Earth over the window) or
   // the place's sections to show: they wait until a place is picked on the map or in the search.
   const hasPlace = useApp((s) => s.selection !== null)
@@ -99,10 +103,11 @@ export function NavigatorPage() {
       <DiveTarget />
       <ToolSlotContext.Provider value={slot}>
         <div
-          className={`navigator${horizonOn ? ' is-horizon' : ''}${blocks ? ' is-blocks' : ''}${mission ? ' is-mission' : ''}${!blocks && phase === 'diving' ? ' is-diving' : ''}${!blocks && phase === 'returning' ? ' is-returning' : ''}`}
+          className={`navigator${horizonOn ? ' is-horizon' : ''}${blocks ? ' is-blocks' : ''}${mission ? ' is-mission' : ''}${cinematic ? ' is-cinematic' : ''}${!blocks && phase === 'diving' ? ' is-diving' : ''}${!blocks && phase === 'returning' ? ' is-returning' : ''}`}
           ref={root}
         >
           <h1 className="sr-only">Lunar Landing Site Navigator</h1>
+          {cinematic && <CinematicExit />}
           {/* The map stays mounted (and keeps its camera and tiles) under the horizon view and under Educational mode:
               paused, hidden and out of the tab order. */}
           <div
