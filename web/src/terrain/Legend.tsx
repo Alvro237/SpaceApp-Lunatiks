@@ -5,6 +5,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { IconLayers } from '../ui/icons'
 import { type LayerId, useApp } from '../state/store'
+import { useGraphics } from '../state/graphics'
 import { ApiStatus } from '../ui/ApiStatus'
 import { CloseButton } from '../ui/PanelNav'
 import { useFitViewport } from '../ui/useFitViewport'
@@ -48,9 +49,10 @@ export function LayersControl({ tileset, exaggeration, onExaggeration, craterErr
   const craters = useApp((s) => s.craters)
   const markerStyle = useApp((s) => s.markerStyle)
   const set = useApp((s) => s.set)
+  const low = useGraphics((s) => s.low)
   const options: { id: LayerId; name: string }[] = [
     { id: 'none', name: 'Relief only' },
-    { id: 'photo', name: 'Photo (LROC WAC) on the relief' },
+    { id: 'photo', name: low ? 'Photo (LROC WAC) on the relief: off in Low graphics' : 'Photo (LROC WAC) on the relief' },
     { id: 'elevation', name: 'Elevation' },
     ...Object.entries(tileset.layers).map(([k, m]) => ({ id: k as LayerId, name: m.name })),
   ]
@@ -141,6 +143,9 @@ export function LayersControl({ tileset, exaggeration, onExaggeration, craterErr
 
 export function LegendChip({ tileset }: { tileset: Tileset }) {
   const layer = useApp((s) => s.layer)
+  // low graphics shows the relief instead of the photo (TerrainView): no photo legend then
+  const low = useGraphics((s) => s.low)
+  if (layer === 'photo' && low) return null
   if (layer === 'photo') {
     return (
       <figure className="legend-chip">

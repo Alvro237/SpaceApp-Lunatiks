@@ -23,6 +23,7 @@ import { IconGlobe, IconInfo, IconMinus, IconMountain, IconPlus } from '../ui/ic
 import { Popover } from '../ui/Popover'
 import { ToolPortal } from '../ui/ToolSlot'
 import { useHud } from './useStory'
+import { AdaptiveDpr } from '../ui/AdaptiveDpr'
 import { WebGLGuard } from '../ui/WebGLGuard'
 import { voxelBodyMaterial } from './voxelMaterial'
 import {
@@ -728,6 +729,7 @@ export function BlockWorld() {
         ) : (
           <WebGLGuard what="world of cubes">
           <Canvas key={showGround ? `g${groundKey}` : 'moon'} shadows camera={{ fov: FOV, position: [0, 40, 120] }} dpr={[1, 2]} flat gl={{ antialias: true }} aria-hidden="true">
+            <AdaptiveDpr />
             {showGround && ground.blocks ? (
               <GroundScene blocks={ground.blocks} sun={now?.sun ?? null} earth={now?.earth ?? null} eclipse={now?.eclipse ?? 0} cam={groundCam} />
             ) : moon ? (
