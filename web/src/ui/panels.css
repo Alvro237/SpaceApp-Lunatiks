@@ -464,7 +464,8 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
   border-radius: 8px;
   padding: 6px 10px;
 }
-.timeline.mini .tl-row { display: flex; align-items: center; gap: 10px; }
+/* room between the clock, slider and playback buttons and the Sunlit / Link strips under them */
+.timeline.mini .tl-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .timeline.mini .tl-clock { font-family: var(--mono); font-size: 0.78rem; font-weight: 600; white-space: nowrap; min-width: 8.6em; }
 .timeline.mini .time-slider { flex: 1; margin: 0; min-width: 0; accent-color: #eceae4; }
 .timeline.mini .tl-icons { display: flex; gap: 6px; flex: none; }
