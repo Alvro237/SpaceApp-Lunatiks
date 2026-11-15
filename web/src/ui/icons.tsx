@@ -55,6 +55,12 @@ export const IconCube = (p: P) => (
     <path d="m4 7.5 8 4.5 8-4.5M12 12v9" />
   </Svg>
 )
+/** Enlarge: four arrows pointing out to the corners. */
+export const IconExpand = (p: P) => (
+  <Svg {...p}>
+    <path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" />
+  </Svg>
+)
 export const IconFit = (p: P) => (
   <Svg {...p}>
     <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />

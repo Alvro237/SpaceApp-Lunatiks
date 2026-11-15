@@ -2,8 +2,9 @@
  * Multiselect comparison: the side panel that opens once two or more places are picked with Multiselect on.
  *
  *   1. One radar plot of the metrics that decide a landing site, every axis on an absolute 0..1 scale: each place
- *      picked is added on top of the others. Hovering (or focusing) an axis name opens a small pop-up with what
- *      the axis measures and which way is better and worse.
+ *      picked is added on top of the others. Hovering (or focusing) an axis, its name or its spoke, opens a small
+ *      pop-up with what the axis measures and which way is better and worse. A button opens the radar large in a
+ *      window centred on the screen.
  *   2. Beside it, the places as the radar's legend (numbered as on the map, with the line pattern of their shape),
  *      each with its options and remove buttons (the keyboard route to what a right click on the map does).
  *      Hovering a place brings its shape to the front and fades the others.
@@ -14,7 +15,7 @@
  * Same instant and window for every place, computed with the browser engine (the same tables and masks as the
  * rest of the navigator). The numbers behind the radar are in a table.
  */
-import { useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { DataTable } from '../charts/DataTable'
 import { RadarChart } from '../charts/RadarChart'
@@ -22,7 +23,7 @@ import { sameSelection, useApp } from '../state/store'
 import { formatUtc } from '../time/clock'
 import { SOLAR_CONSTANT_W_M2 } from '../time/engine'
 import type { WindowSeries } from '../time/hooks'
-import { IconClose, IconMore } from '../ui/icons'
+import { IconClose, IconExpand, IconMore } from '../ui/icons'
 import { openMenuFrom } from '../panels/PlaceMenu'
 import { type ComparedPlace, useComparePlaces } from './useComparePlaces'
 
@@ -92,13 +93,16 @@ const HELP: Record<string, { what: (comms: number) => string; better: string; wo
   },
 }
 
+
 interface Tip {
   key: string
   /** Pop-up anchor in CSS pixels of the viewport. */
   left: number
   top: number
-  /** Open above the anchor (for axis names in the lower half). */
+  /** Open above the anchor (when there is not enough room below). */
   above: boolean
+  /** Where the pop-up is rendered: the large window (top layer) when the axis is in it, else <body>. */
+  host: HTMLElement
 }
 
 const TIP_HALF = 125
@@ -108,25 +112,103 @@ const TIP_ROOM = 250
 export function ComparePanel({ titleId }: { titleId: string }) {
   const startMs = useApp((s) => s.startMs)
   const durationH = useApp((s) => s.durationH)
-  const comms = useApp((s) => s.commsMinFraction)
   const { setCompareMode } = useApp.getState()
   const places = useComparePlaces()
+  const ready = places.filter((p) => p.win)
+  const [big, setBig] = useState(false)
+
+  return (
+    <div className="multi">
+      <div className="multi-head">
+        <h2 id={titleId} className="multi-title" tabIndex={-1}>
+          Comparing {places.length} places
+        </h2>
+        <button type="button" className="icon" onClick={() => setBig(true)} aria-label="Open the radar in a large window" title="Enlarge">
+          <IconExpand size={18} />
+        </button>
+        <button type="button" className="icon" onClick={() => setCompareMode(false)} aria-label="Close comparison and leave multiselect" title="Leave multiselect">
+          <IconClose size={18} />
+        </button>
+      </div>
+
+      <RadarView places={places} actions />
+
+      <DataTable
+        summary="Table"
+        caption={`Places compared over the window from ${formatUtc(startMs)} (${Math.round(durationH / 24)} days)`}
+        head={['Place', ...AXES.map((a) => a.label)]}
+        rows={ready.map((p) => [`${p.num} ${p.info.name}`, ...AXES.map((a) => a.text(p.win!))])}
+      />
+
+      {big && <BigRadar places={places} onClose={() => setBig(false)} />}
+    </div>
+  )
+}
+
+/**
+ * The radar in a large window centred on the screen (a modal <dialog>: focus stays inside, Escape or the close
+ * button or a click on the backdrop closes it, and the focus returns to the button that opened it).
+ */
+function BigRadar({ places, onClose }: { places: ComparedPlace[]; onClose: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null)
+  const titleId = useId()
+  useEffect(() => {
+    const d = ref.current
+    if (!d) return
+    const opener = document.activeElement as HTMLElement | null
+    if (typeof d.showModal === 'function') d.showModal()
+    else d.setAttribute('open', '')
+    return () => opener?.focus()
+  }, [])
+  return createPortal(
+    <dialog
+      ref={ref}
+      className="cmp-dialog"
+      aria-labelledby={titleId}
+      onCancel={(e) => {
+        e.preventDefault()
+        onClose()
+      }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div className="cmp-dialog-body">
+        <div className="multi-head">
+          <h2 id={titleId} className="multi-title">
+            Comparing {places.length} places
+          </h2>
+          <button type="button" className="icon" onClick={onClose} aria-label="Close the large radar">
+            <IconClose size={18} />
+          </button>
+        </div>
+        <RadarView places={places} big />
+      </div>
+    </dialog>,
+    document.body,
+  )
+}
+
+/**
+ * One radar with every place on it and the places beside it as its legend. Hovering (or focusing) an axis opens
+ * a small pop-up with what it measures, which way is better and worse, and each place's figure; hovering a place
+ * brings its shape to the front. `actions` adds each place's options and remove buttons to the legend.
+ */
+function RadarView({ places, actions = false, big = false }: { places: ComparedPlace[]; actions?: boolean; big?: boolean }) {
+  const comms = useApp((s) => s.commsMinFraction)
   const ready = places.filter((p) => p.win)
   const [hl, setHl] = useState<number | null>(null)
   const [tip, setTip] = useState<Tip | null>(null)
   const tipId = useId()
 
-  const best = AXES.map((a) => (ready.length ? Math.max(...ready.map((p) => a.value(p.win!))) : 0))
-  const bestIn = (p: ComparedPlace) => (ready.length > 1 && p.win ? AXES.filter((a, i) => a.value(p.win!) === best[i]).map((a) => a.label) : [])
-
-  // the pop-up floats over the page (portal, fixed position) so the panel's scrolling body never clips it
+  // the pop-up floats over the page (fixed position) so no scrolling panel clips it; inside the large window it is
+  // rendered in the <dialog> (the top layer), elsewhere in <body>
   const onAxis = (key: string | null, anchor: Element | null) => {
     if (!key || !anchor) return setTip(null)
     const r = anchor.getBoundingClientRect()
     const below = window.innerHeight - r.bottom
     const above = below < TIP_ROOM && r.top > below
     const left = Math.max(TIP_HALF + 8, Math.min(window.innerWidth - TIP_HALF - 8, r.left + r.width / 2))
-    setTip({ key, left, top: above ? r.top - 6 : r.bottom + 6, above })
+    const host = (anchor.closest('dialog') as HTMLElement | null) ?? document.body
+    setTip({ key, left, top: above ? r.top - 6 : r.bottom + 6, above, host })
   }
 
   const summary =
@@ -135,87 +217,68 @@ export function ComparePanel({ titleId }: { titleId: string }) {
   const tipAxis = tip ? AXES.find((a) => a.key === tip.key)! : null
 
   return (
-    <div className="multi">
-      <div className="multi-head">
-        <h2 id={titleId} className="multi-title" tabIndex={-1}>
-          Comparing {places.length} places
-        </h2>
-        <button type="button" className="icon" onClick={() => setCompareMode(false)} aria-label="Close comparison and leave multiselect" title="Leave multiselect">
-          <IconClose size={18} />
-        </button>
+    <div className={`cmp-layout${big ? ' is-big' : ''}`}>
+      <div className="cmp-radar-box">
+        {ready.length >= 2 ? (
+          <RadarChart
+            axes={AXES}
+            series={ready.map((p) => ({ num: p.num, name: p.info.name, values: AXES.map((a) => a.value(p.win!)) }))}
+            summary={summary}
+            highlight={hl}
+            activeAxis={tip?.key ?? null}
+            onAxis={onAxis}
+            describedBy={tipId}
+          />
+        ) : (
+          <p className="muted">Computing…</p>
+        )}
       </div>
+      {tip &&
+        tipAxis &&
+        createPortal(
+          <div id={tipId} role="tooltip" className={`cmp-tip${tip.above ? ' is-above' : ''}`} style={{ left: tip.left, top: tip.top }}>
+            <strong className="cmp-tip-title">{tipAxis.label}</strong>
+            <p>{HELP[tip.key].what(comms)}</p>
+            <p className="cmp-tip-good">
+              <span aria-hidden="true">▲</span> <b>Better:</b> {HELP[tip.key].better}
+            </p>
+            <p className="cmp-tip-bad">
+              <span aria-hidden="true">▼</span> <b>Worse:</b> {HELP[tip.key].worse}
+            </p>
+            {ready.length > 0 && (
+              <ul className="cmp-tip-values">
+                {ready.map((p) => (
+                  <li key={p.num}>
+                    <span className="num" aria-hidden="true">
+                      {p.num}
+                    </span>
+                    {/* just the figure: "124 h", "83 %", "719 W/m² mean" (the title says what it is) */}
+                    {tipAxis.text(p.win!).replace(' of the window', '').replace(/^[a-z ]+(?=\d)/, '')}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>,
+          tip.host,
+        )}
 
-      <div className="cmp-layout">
-        <div className="cmp-radar-box">
-          {ready.length >= 2 ? (
-            <RadarChart
-              axes={AXES}
-              series={ready.map((p) => ({ num: p.num, name: p.info.name, values: AXES.map((a) => a.value(p.win!)) }))}
-              summary={summary}
-              highlight={hl}
-              activeAxis={tip?.key ?? null}
-              onAxis={onAxis}
-              describedBy={tipId}
-            />
-          ) : (
-            <p className="muted">Computing…</p>
-          )}
-          {tip &&
-            tipAxis &&
-            createPortal(
-            <div id={tipId} role="tooltip" className={`cmp-tip${tip.above ? ' is-above' : ''}`} style={{ left: tip.left, top: tip.top }}>
-              <strong className="cmp-tip-title">{tipAxis.label}</strong>
-              <p>{HELP[tip.key].what(comms)}</p>
-              <p className="cmp-tip-good">
-                <span aria-hidden="true">▲</span> <b>Better:</b> {HELP[tip.key].better}
-              </p>
-              <p className="cmp-tip-bad">
-                <span aria-hidden="true">▼</span> <b>Worse:</b> {HELP[tip.key].worse}
-              </p>
-              {ready.length > 0 && (
-                <ul className="cmp-tip-values">
-                  {ready.map((p) => (
-                    <li key={p.num}>
-                      <span className="num" aria-hidden="true">
-                        {p.num}
-                      </span>
-                      {/* just the figure: "124 h", "83 %", "719 W/m² mean" (the title says what it is) */}
-                      {tipAxis.text(p.win!).replace(' of the window', '').replace(/^[a-z ]+(?=\d)/, '')}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>,
-            document.body,
-          )}
-          <p className="muted cmp-note">Outward is better on every axis. Hover an axis name to see what it means.</p>
-        </div>
-
-        <ol className="cmp-legend" aria-label="Places compared" onMouseLeave={() => setHl(null)}>
-          {places.map((p) => (
-            <LegendRow key={p.num} p={p} bestIn={bestIn(p)} on={hl === p.num} onHover={setHl} />
-          ))}
-        </ol>
-      </div>
-
-      <DataTable
-        summary="Table"
-        caption={`Places compared over the window from ${formatUtc(startMs)} (${Math.round(durationH / 24)} days)`}
-        head={['Place', ...AXES.map((a) => a.label)]}
-        rows={ready.map((p) => [`${p.num} ${p.info.name}`, ...AXES.map((a) => a.text(p.win!))])}
-      />
+      <ol className="cmp-legend" aria-label={actions ? 'Places compared' : 'Legend'} onMouseLeave={() => setHl(null)}>
+        {places.map((p) => (
+          <LegendRow key={p.num} p={p} actions={actions} on={hl === p.num} onHover={setHl} />
+        ))}
+      </ol>
     </div>
   )
 }
 
-/** One place in the legend: its line pattern and number, name, best axes, options and remove. */
-function LegendRow({ p, bestIn, on, onHover }: { p: ComparedPlace; bestIn: string[]; on: boolean; onHover: (n: number | null) => void }) {
+/** One place in the legend: its line pattern and number, name and, in the panel, its options and remove buttons. */
+function LegendRow({ p, actions, on, onHover }: { p: ComparedPlace; actions: boolean; on: boolean; onHover: (n: number | null) => void }) {
   const selection = useApp((s) => s.selection)
   const { select, removePlace } = useApp.getState()
   const current = sameSelection(p.sel, selection)
   return (
     <li
-      className={`cmp-row radar-key rs-${p.num}${current ? ' is-current' : ''}${on ? ' is-hl' : ''}`}
+      className={`cmp-row radar-key rs-${p.num}${current ? ' is-current' : ''}${on ? ' is-hl' : ''}${actions ? '' : ' is-plain'}`}
       onMouseEnter={() => onHover(p.num)}
       onFocus={() => onHover(p.num)}
     >
@@ -226,29 +289,32 @@ function LegendRow({ p, bestIn, on, onHover }: { p: ComparedPlace; bestIn: strin
         {p.num}
       </span>
       <div className="cmp-row-main">
-        <button type="button" className="multi-name" onClick={() => select(p.sel)} aria-current={current ? 'true' : undefined} title={p.info.name}>
-          {p.info.name}
-        </button>
-        {(bestIn.length > 0 || p.info.model.horizon.kind === 'smooth_sphere') && (
-          <span className="cmp-row-sub">
-            {bestIn.length > 0 && <span>★ best {bestIn.join(', ').toLowerCase()}</span>}
-            {p.info.model.horizon.kind === 'smooth_sphere' && <span className="tag-pill">smooth sphere</span>}
-          </span>
+        {actions ? (
+          <button type="button" className="multi-name" onClick={() => select(p.sel)} aria-current={current ? 'true' : undefined} title={p.info.name}>
+            {p.info.name}
+          </button>
+        ) : (
+          <span className="cmp-row-name">{p.info.name}</span>
         )}
+        {p.info.model.horizon.kind === 'smooth_sphere' && <span className="tag-pill">smooth sphere</span>}
       </div>
-      <button
-        type="button"
-        className="icon small"
-        aria-haspopup="dialog"
-        aria-label={`Options for ${p.info.name}`}
-        title="Rename, pointer colour, remove"
-        onClick={(e) => openMenuFrom(e.currentTarget, { sel: p.sel, name: p.info.name })}
-      >
-        <IconMore size={14} />
-      </button>
-      <button type="button" className="icon small" onClick={() => removePlace(p.sel, p.info.name)} aria-label={`Remove ${p.info.name}`}>
-        <IconClose size={14} />
-      </button>
+      {actions && (
+        <>
+          <button
+            type="button"
+            className="icon small"
+            aria-haspopup="dialog"
+            aria-label={`Options for ${p.info.name}`}
+            title="Rename, pointer colour, remove"
+            onClick={(e) => openMenuFrom(e.currentTarget, { sel: p.sel, name: p.info.name })}
+          >
+            <IconMore size={14} />
+          </button>
+          <button type="button" className="icon small" onClick={() => removePlace(p.sel, p.info.name)} aria-label={`Remove ${p.info.name}`}>
+            <IconClose size={14} />
+          </button>
+        </>
+      )}
     </li>
   )
 }

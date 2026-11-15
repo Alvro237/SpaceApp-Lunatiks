@@ -5,9 +5,9 @@
  * place does not change when another place is added.
  *
  * Places are told apart by their number at each vertex, a line pattern and a colour (never colour alone). One place
- * can be highlighted (the others fade). Each axis name is a button: hovering or focusing it calls `onAxis` with the
- * axis and its label element, so the caller can explain the axis next to it. The numbers are in the table next to
- * the chart.
+ * can be highlighted (the others fade). Each axis (its name and its spoke) is a button: hovering or focusing it
+ * calls `onAxis` with the axis and its label element, so the caller can explain the axis next to it. The numbers
+ * are in the table next to the chart.
  */
 import type { FocusEvent, MouseEvent } from 'react'
 
@@ -92,8 +92,10 @@ export function RadarChart({
           })}
         </g>
         {axes.map((a, i) => {
+          const [x, y] = at(i, n, 1)
           const [lx, ly] = at(i, n, 1.2)
           const anchor = Math.abs(lx - C) < 8 ? 'middle' : lx > C ? 'start' : 'end'
+          const label = (e: MouseEvent<SVGGElement>) => e.currentTarget.querySelector('text') ?? e.currentTarget
           return (
             <g
               key={a.key}
@@ -102,12 +104,14 @@ export function RadarChart({
               tabIndex={onAxis ? 0 : undefined}
               aria-label={`${a.label}: what it means`}
               aria-describedby={activeAxis === a.key ? describedBy : undefined}
-              onMouseEnter={open(a.key)}
+              onMouseEnter={(e) => onAxis?.(a.key, label(e))}
               onMouseLeave={close}
               onFocus={open(a.key)}
               onBlur={close}
               onKeyDown={(e) => e.key === 'Escape' && close()}
             >
+              {/* the whole spoke (branch) is a hover target too, wider than the drawn line */}
+              <line className="radar-spoke-hit" x1={C + (x - C) * 0.12} y1={C + (y - C) * 0.12} x2={x} y2={y} />
               <text className="radar-axis" x={lx} y={ly + 4} textAnchor={anchor}>
                 {a.label}
               </text>

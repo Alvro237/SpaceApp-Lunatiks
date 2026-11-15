@@ -302,6 +302,12 @@ describe('navigator', () => {
     expect(screen.getByRole('tooltip')).toHaveTextContent(/Better:.*Worse:/)
     await user.unhover(axis)
     expect(screen.queryByRole('tooltip')).toBeNull()
+    // the radar opens large in a centred window, and closes again
+    await user.click(screen.getByRole('button', { name: 'Open the radar in a large window' }))
+    const big = await screen.findByRole('dialog', { name: 'Comparing 3 places' })
+    expect(within(big).getByRole('group', { name: /Radar of 3 places/ })).toBeInTheDocument()
+    await user.click(within(big).getByRole('button', { name: 'Close the large radar' }))
+    expect(screen.queryByRole('dialog', { name: 'Comparing 3 places' })).toBeNull()
     // the timeline under the map shows one strip per place, switched between Sunlit and Earth
     const timeline = screen.getByRole('region', { name: 'Mission window and playback' })
     expect(within(timeline).getByRole('img', { name: /When each place is sunlit: 1 IM-2.*2 Mons Malapert.*3 Shackleton crater/ })).toBeInTheDocument()
