@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useApp } from '../state/store'
 import { BlockToggle } from '../blocks/BlockToggle'
 import { BrandMark } from '../ui/BrandMark'
+import { TourButton } from '../ui/Walkthrough'
 
 const TITLES: Record<string, string> = { '/': 'Navigator', '/data': 'Data & methods', '/learn': 'Learn' }
 
@@ -43,10 +44,10 @@ export function Layout() {
               <>
                 <div className="mode-switch" role="radiogroup" aria-label="Mode">
                   <button type="button" role="radio" aria-checked={mode === 'study'} onClick={() => set({ mode: 'study' })}>
-                    Study
+                    Site explorer
                   </button>
                   <button type="button" role="radio" aria-checked={mode === 'mission'} onClick={() => set({ mode: 'mission' })}>
-                    Mission
+                    Mission planner
                   </button>
                 </div>
               </>
@@ -54,21 +55,21 @@ export function Layout() {
             <BlockToggle />
           </div>
         )}
-        <nav aria-label="Main">
-          <ul>
-            <li>
-              <NavLink to="/" end>
-                Navigator
-              </NavLink>
-            </li>
-            <li>
-              <NavLink to="/data">Data & methods</NavLink>
-            </li>
-            <li>
-              <NavLink to="/learn">Learn</NavLink>
-            </li>
-          </ul>
-        </nav>
+        <div className="bar-end">
+          <nav aria-label="Main">
+            <ul>
+              <li>
+                <NavLink to="/" end>
+                  Navigator
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/data">Data & methods</NavLink>
+              </li>
+            </ul>
+          </nav>
+          <TourButton />
+        </div>
       </header>
       <main id="main" ref={main} tabIndex={-1}>
         <Outlet />

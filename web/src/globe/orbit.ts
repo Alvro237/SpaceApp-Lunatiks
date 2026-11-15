@@ -47,13 +47,18 @@ export const MAX_DIST = MOON_R_KM * 8
 /** Relief exaggeration of the globe's mesh: x4 when the camera is high enough to see the whole Moon. */
 export const RELIEF_MAX = 4
 /**
- * Exaggeration at a camera distance (km from the centre): x1 (true relief) up to 250 km above the surface, x4 from
- * 2 500 km, linear in between. Close in, the shading comes from 118 m heights while the mesh holds 21 km steps of
- * the 7.6 km grid; exaggerated steps would make the fine shading slide over them as the camera moves.
+ * Exaggeration close in: x2, the polar map's default (terrain/TerrainView.tsx), so the ground reads as 3D in a tilted
+ * view anywhere on the Moon, as it does on the map. Close in, the patches around the view (patch.ts) carry the 118 m
+ * detail heights, so the fine shading follows the lifted ground; true relief (x1) looked flat in tilted views.
+ */
+export const RELIEF_MIN = 2
+/**
+ * Exaggeration at a camera distance (km from the centre): RELIEF_MIN up to 250 km above the surface, RELIEF_MAX from
+ * 2 500 km, linear in between.
  */
 export function reliefExaggeration(distKm: number): number {
   const t = (distKm - MOON_R_KM - 250) / (2_500 - 250)
-  return 1 + (RELIEF_MAX - 1) * Math.max(0, Math.min(1, t))
+  return RELIEF_MIN + (RELIEF_MAX - RELIEF_MIN) * Math.max(0, Math.min(1, t))
 }
 
 /** Drag: the surface follows the pointer (degrees per pixel shrink as the camera gets closer). */
@@ -85,6 +90,21 @@ export function zoomOrbitToward(o: Orbit, factor: number, lat: number, lon: numb
 export const MAX_TILT = 75
 /** Tilt of the "3D" view, degrees (the polar map's own is 58). */
 export const TILT_3D = 58
+
+/**
+ * Close-up view of the globe: closer than NEAR_ENTER_KM above the surface the view tilts into 3D by itself and the
+ * finest detail tiles are loaded around the place in view, as the polar map does when zooming in over the south pole
+ * opens it. 450 km is the height the polar map flies down to when it opens (terrain/TerrainView.tsx, mapEntry). It
+ * goes back to the straight 2D view above NEAR_LEAVE_KM: the gap keeps a zoom that hovers near one value from
+ * flicking between the two.
+ */
+export const NEAR_ENTER_KM = 450
+export const NEAR_LEAVE_KM = 700
+
+/** Whether the camera, `altitudeKm` above the surface, is in the close-up view, given whether it was (null: unknown). */
+export function isNearView(wasNear: boolean | null, altitudeKm: number): boolean {
+  return altitudeKm < (wasNear ? NEAR_LEAVE_KM : NEAR_ENTER_KM)
+}
 
 /**
  * Where the camera is and what it looks at, in scene kilometres. The camera looks at the point of the sphere under

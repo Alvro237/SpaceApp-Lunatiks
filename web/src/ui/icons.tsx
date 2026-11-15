@@ -55,6 +55,12 @@ export const IconCube = (p: P) => (
     <path d="m4 7.5 8 4.5 8-4.5M12 12v9" />
   </Svg>
 )
+/** Enlarge: four arrows pointing out to the corners. */
+export const IconExpand = (p: P) => (
+  <Svg {...p}>
+    <path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" />
+  </Svg>
+)
 export const IconFit = (p: P) => (
   <Svg {...p}>
     <path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" />
@@ -157,6 +163,13 @@ export const IconInfo = (p: P) => (
     <circle cx="12" cy="12" r="9" />
     <path d="M12 11v5" />
     <circle cx="12" cy="7.8" r="0.6" fill="currentColor" />
+  </Svg>
+)
+export const IconHelp = (p: P) => (
+  <Svg {...p}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M9.6 9.4a2.5 2.5 0 0 1 4.8 1c0 1.7-2.4 2.2-2.4 3.6" />
+    <circle cx="12" cy="17" r="0.6" fill="currentColor" />
   </Svg>
 )
 export const IconCompare = (p: P) => (

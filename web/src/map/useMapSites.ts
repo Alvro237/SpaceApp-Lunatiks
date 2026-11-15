@@ -108,7 +108,7 @@ export function useMapSites(): MapSite[] {
       if (!wanted && !current && compared === null) continue
       out.push({ key: s.id, sel, name, lat: s.lat, lon: s.lon, diameterKm: features?.features[s.id]?.diameterKm ?? null, slopeDeg: slope, metrics: m, pass, current, compared, colour: styles[s.id]?.colour ?? null })
     }
-    for (const p of mission ? compare : [selection, ...compare]) {
+    for (const p of mission ? compare : selection ? [selection, ...compare] : compare) {
       if (p.kind !== 'point' || out.some((o) => sameSelection(o.sel, p))) continue
       const key = placeKey(p)
       out.push({ key, sel: p, name: names.get(key) ?? pointName(p.lat, p.lon), lat: p.lat, lon: p.lon, diameterKm: null, slopeDeg: null, metrics: null, pass: null, current: !mission && sameSelection(p, selection), compared: num(p), colour: styles[key]?.colour ?? null })

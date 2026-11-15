@@ -1,0 +1,402 @@
+{
+ "source": "NASA Moon Trek ImageServer service descriptions (?f=json), https://trek.nasa.gov/moon/trekarcgis/rest/services/",
+ "built": "2026-11-15",
+ "dems": [
+  {
+   "file": "Apollo15_PanCam_DEM_19S129E_5mp",
+   "lat0": -21.05297,
+   "lat1": -18.28739,
+   "lon0": 127.39189,
+   "lon1": 129.75761,
+   "cellM": 5.142,
+   "noData": null
+  },
+  {
+   "file": "Apollo15_PanCam_DEM_25N311E_5mp",
+   "lat0": 23.42623,
+   "lat1": 26.09425,
+   "lon0": -49.77115,
+   "lon1": -48.03565,
+   "cellM": 5.252,
+   "noData": null
+  },
+  {
+   "file": "Apollo15_PanCam_DEM_28N307E_3mp",
+   "lat0": 26.76358,
+   "lat1": 29.03347,
+   "lon0": -53.10151,
+   "lon1": -51.59242,
+   "cellM": 3.193,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_00N234E_150cmp",
+   "lat0": -0.56073,
+   "lat1": 0.76904,
+   "lon0": -125.97453,
+   "lon1": -125.10718,
+   "cellM": 1.5,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_02N085E_150cmp",
+   "lat0": 1.37782,
+   "lat1": 2.81479,
+   "lon0": 84.86369,
+   "lon1": 85.75429,
+   "cellM": 1.5,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_02S167E_150cmp",
+   "lat0": -2.91917,
+   "lat1": -1.75021,
+   "lon0": 166.57944,
+   "lon1": 166.97099,
+   "cellM": 1.5,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_02S317E_150cmp",
+   "lat0": -2.95007,
+   "lat1": -1.825,
+   "lon0": -43.33463,
+   "lon1": -42.90854,
+   "cellM": 1.5,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_03S286E_150cmp",
+   "lat0": -3.69929,
+   "lat1": -2.56082,
+   "lon0": -74.53521,
+   "lon1": -73.71013,
+   "cellM": 1.501,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_05N000E_150cmp",
+   "lat0": 4.10549,
+   "lat1": 5.37039,
+   "lon0": -0.59391,
+   "lon1": -0.16515,
+   "cellM": 1.503,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_06N120E_200cmp",
+   "lat0": 5.98415,
+   "lat1": 7.10901,
+   "lon0": 119.55787,
+   "lon1": 120.10126,
+   "cellM": 2.006,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_07N022E_150cmp",
+   "lat0": 6.27192,
+   "lat1": 7.2299,
+   "lon0": 21.62283,
+   "lon1": 22.21954,
+   "cellM": 1.5,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_07N301E_2mp",
+   "lat0": 6.8589,
+   "lat1": 7.82328,
+   "lon0": -58.86571,
+   "lon1": -58.41037,
+   "cellM": 2.007,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_08N332E_2mp",
+   "lat0": 7.06152,
+   "lat1": 8.74633,
+   "lon0": -28.07371,
+   "lon1": -27.10656,
+   "cellM": 2.01,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_09S015E_150cmp",
+   "lat0": -9.64696,
+   "lat1": -8.61957,
+   "lon0": 15.14035,
+   "lon1": 15.69618,
+   "cellM": 1.509,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_10N058E_150cmp",
+   "lat0": 10.66025,
+   "lat1": 11.13574,
+   "lon0": 58.63981,
+   "lon1": 58.94039,
+   "cellM": 1.512,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_13N356E_150cmp",
+   "lat0": 12.51629,
+   "lat1": 13.46994,
+   "lon0": -3.93013,
+   "lon1": -3.64534,
+   "cellM": 1.52,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_13S358E_200cmp",
+   "lat0": -13.1203,
+   "lat1": -12.08656,
+   "lon0": -2.60842,
+   "lon1": -2.00405,
+   "cellM": 2.026,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_14N304E_2mp",
+   "lat0": 13.21304,
+   "lat1": 14.19645,
+   "lon0": -56.13638,
+   "lon1": -55.64169,
+   "cellM": 2.03,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_16S041E_150cmp",
+   "lat0": -16.5958,
+   "lat1": -15.27781,
+   "lon0": 40.47058,
+   "lon1": 41.21947,
+   "cellM": 1.543,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_17S173E_150cmp",
+   "lat0": -17.43601,
+   "lat1": -15.97534,
+   "lon0": 173.15712,
+   "lon1": 173.71861,
+   "cellM": 1.534,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_19N005E_2mp",
+   "lat0": 18.12948,
+   "lat1": 19.08628,
+   "lon0": 5.22908,
+   "lon1": 5.50453,
+   "cellM": 2.057,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_19S070E_150cmp",
+   "lat0": -19.33382,
+   "lat1": -17.62884,
+   "lon0": 69.50212,
+   "lon1": 70.23478,
+   "cellM": 1.543,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_19S129E_150cmp",
+   "lat0": -20.18309,
+   "lat1": -18.72337,
+   "lon0": 128.29479,
+   "lon1": 128.83123,
+   "cellM": 1.543,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_20N010E_2mp",
+   "lat0": 19.5487,
+   "lat1": 20.51792,
+   "lon0": 10.19972,
+   "lon1": 10.57074,
+   "cellM": 2.063,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_20S337E_400cmp",
+   "lat0": -21.06587,
+   "lat1": -20.48414,
+   "lon0": -22.79269,
+   "lon1": -22.20728,
+   "cellM": 4.126,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_25N311E_2mp",
+   "lat0": 24.08925,
+   "lat1": 25.28969,
+   "lon0": -49.04118,
+   "lon1": -48.43525,
+   "cellM": 2.101,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_26N004E_150cmp",
+   "lat0": 25.4546,
+   "lat1": 26.7641,
+   "lon0": 3.02717,
+   "lon1": 3.84964,
+   "cellM": 1.582,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_26N150E_200cmp",
+   "lat0": 25.62324,
+   "lat1": 26.81692,
+   "lon0": 150.14618,
+   "lon1": 150.68465,
+   "cellM": 2.11,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_26N178E_150cmp",
+   "lat0": 25.67176,
+   "lat1": 26.43026,
+   "lon0": 177.53991,
+   "lon1": 178.00408,
+   "cellM": 1.582,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_26S265E_200cmp",
+   "lat0": -26.71747,
+   "lat1": -25.49102,
+   "lon0": -95.78773,
+   "lon1": -95.06205,
+   "cellM": 2.11,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_27N318E_150cmp",
+   "lat0": 26.75868,
+   "lat1": 27.71377,
+   "lon0": -42.01247,
+   "lon1": -41.56226,
+   "cellM": 1.589,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_28N307E_150cmp",
+   "lat0": 27.21681,
+   "lat1": 28.48021,
+   "lon0": -52.74399,
+   "lon1": -52.16559,
+   "cellM": 1.596,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_32N292E_2mp",
+   "lat0": 31.00436,
+   "lat1": 32.36008,
+   "lon0": -68.28084,
+   "lon1": -66.85428,
+   "cellM": 2.172,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_36N320E_2mp",
+   "lat0": 35.66766,
+   "lat1": 36.74317,
+   "lon0": -40.33437,
+   "lon1": -39.64303,
+   "cellM": 2.224,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_36S164E_2mp",
+   "lat0": -36.13591,
+   "lat1": -34.85749,
+   "lon0": 164.02306,
+   "lon1": 164.8637,
+   "cellM": 2.224,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_37S206E_150cmp",
+   "lat0": -37.24877,
+   "lat1": -36.83523,
+   "lon0": -153.95395,
+   "lon1": -153.44603,
+   "cellM": 1.678,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_43S349E_150cmp",
+   "lat0": -43.6577,
+   "lat1": -42.34813,
+   "lon0": -11.64536,
+   "lon1": -10.9236,
+   "cellM": 1.754,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_51S171E_2mp",
+   "lat0": -51.66833,
+   "lat1": -50.37141,
+   "lon0": 170.50259,
+   "lon1": 171.40127,
+   "cellM": 2.521,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_53N354E_150cmp",
+   "lat0": 53.07789,
+   "lat1": 53.51768,
+   "lon0": -5.48333,
+   "lon1": -4.81284,
+   "cellM": 1.934,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_55N077E_200cmp",
+   "lat0": 53.77777,
+   "lat1": 54.93526,
+   "lon0": 76.90275,
+   "lon1": 77.39706,
+   "cellM": 2.641,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_60S200E_150cmp",
+   "lat0": -60.64307,
+   "lat1": -59.31788,
+   "lon0": -160.68167,
+   "lon1": -159.48905,
+   "cellM": 2.121,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_61N099E_150cmp",
+   "lat0": 60.45801,
+   "lat1": 61.72963,
+   "lon0": 98.73258,
+   "lon1": 100.19808,
+   "cellM": 2.154,
+   "noData": null
+  },
+  {
+   "file": "LRO_NAC_DEM_73N350E_150cmp",
+   "lat0": 73.31879,
+   "lat1": 73.71317,
+   "lon0": -9.43688,
+   "lon1": -8.29113,
+   "cellM": 2.774,
+   "noData": null
+  },
+  {
+   "file": "NAC_DTM_APOLLO17",
+   "lat0": 19.3905,
+   "lat1": 21.30355,
+   "lon0": 29.90592,
+   "lon1": 31.65818,
+   "cellM": 5,
+   "noData": null
+  }
+ ]
+}

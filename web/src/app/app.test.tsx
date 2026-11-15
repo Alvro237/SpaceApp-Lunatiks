@@ -4,7 +4,11 @@
  * The WebGL map is replaced by a stub: jsdom has no GPU; the engine behind it is tested in terrain/*.test.ts.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+<<<<<<< HEAD
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+=======
+import { act, render, screen, waitFor, within } from '@testing-library/react'
+>>>>>>> origin/main
 import userEvent from '@testing-library/user-event'
 import axe from 'axe-core'
 import { readFileSync } from 'node:fs'
@@ -105,7 +109,8 @@ async function noAxeViolations(container: HTMLElement) {
 beforeEach(() => {
   vi.stubGlobal('fetch', fakeFetch())
   window.location.hash = ''
-  useApp.setState({ ...defaultScene(T), playing: false })
+  // most cases study IM-2; the app itself opens with no place (see the case for it)
+  useApp.setState({ ...defaultScene(T), selection: { kind: 'site', id: 'im-2' }, playing: false })
   usePlaceStyles.setState({ styles: {}, menu: null })
   useAreas.setState({
     center: null,
@@ -128,6 +133,21 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals())
 
 describe('navigator', () => {
+  it('opens with no place: no bottom bar and no place sections until one is picked', async () => {
+    useApp.setState({ selection: null })
+    renderAt('/')
+    const search = await screen.findByRole('combobox', { name: 'Search sites and missions' }, { timeout: 5000 })
+    expect(search).toHaveAttribute('placeholder', 'Search a site or click the Moon')
+    expect(screen.queryByRole('button', { name: /^Play/ })).not.toBeInTheDocument()
+    expect(document.querySelector('.float-bottom')).toBeNull()
+    const tools = screen.getByRole('group', { name: 'Place tools' })
+    expect(within(tools).queryByRole('button', { name: 'Horizon' })).not.toBeInTheDocument()
+    // picking a place brings them in
+    act(() => useApp.getState().select({ kind: 'site', id: 'im-2' }))
+    expect(await screen.findByRole('img', { name: /Sunlit .*% and Earth in view/ }, { timeout: 5000 })).toBeInTheDocument()
+    expect(within(tools).getByRole('button', { name: 'Horizon' })).toBeInTheDocument()
+  })
+
   it('shows the catalogue, the Sun and Earth for IM-2, and says which engine computed them', async () => {
     const { container } = renderAt('/')
     expect(await screen.findByRole('heading', { level: 1, name: 'Lunar Landing Site Navigator' }, { timeout: 5000 })).toBeInTheDocument()
@@ -314,7 +334,7 @@ describe('navigator', () => {
     await noAxeViolations(container)
   })
 
-  it('multiselect: two places open the comparison with a radar, strips over time and removal with undo', async () => {
+  it('multiselect: two places open the comparison with a card per place, strips per place in the timeline and removal with undo', async () => {
     const user = userEvent.setup()
     const { container } = renderAt('/')
     await screen.findByRole('img', { name: /Sunlit .*% and Earth in view/ }, { timeout: 5000 })
@@ -331,9 +351,25 @@ describe('navigator', () => {
     }
     expect(useApp.getState().compare).toHaveLength(3)
     expect(await screen.findByRole('heading', { level: 2, name: 'Comparing 3 places' })).toBeInTheDocument()
-    expect(await screen.findByRole('img', { name: /Radar of 3 places/ })).toBeInTheDocument()
-    expect(screen.getByRole('img', { name: /When each place is sunlit: 1 IM-2.*2 Mons Malapert.*3 Shackleton crater/ })).toBeInTheDocument()
-    await user.click(screen.getByRole('radio', { name: /Earth/ }))
+    // one radar with every place on it, the places beside it as its legend
+    const radar = await screen.findByRole('group', { name: /Radar of 3 places/ })
+    expect(within(screen.getByRole('list', { name: 'Places compared' })).getAllByRole('listitem')).toHaveLength(3)
+    // an axis name explains what it measures and which way is better, on hover and from the keyboard
+    const axis = within(radar).getByRole('button', { name: /Short nights/ })
+    await user.hover(axis)
+    expect(screen.getByRole('tooltip')).toHaveTextContent(/Better:.*Worse:/)
+    await user.unhover(axis)
+    expect(screen.queryByRole('tooltip')).toBeNull()
+    // the radar opens large in a centred window, and closes again
+    await user.click(screen.getByRole('button', { name: 'Open the radar in a large window' }))
+    const big = await screen.findByRole('dialog', { name: 'Comparing 3 places' })
+    expect(within(big).getByRole('group', { name: /Radar of 3 places/ })).toBeInTheDocument()
+    await user.click(within(big).getByRole('button', { name: 'Close the large radar' }))
+    expect(screen.queryByRole('dialog', { name: 'Comparing 3 places' })).toBeNull()
+    // the timeline under the map shows one strip per place, switched between Sunlit and Earth
+    const timeline = screen.getByRole('region', { name: 'Mission window and playback' })
+    expect(within(timeline).getByRole('img', { name: /When each place is sunlit: 1 IM-2.*2 Mons Malapert.*3 Shackleton crater/ })).toBeInTheDocument()
+    await user.click(within(timeline).getByRole('radio', { name: /Earth/ }))
     expect(screen.getByRole('img', { name: /When each place is in view of the Earth/ })).toBeInTheDocument()
     const table = screen.getByRole('table', { name: /Places compared over the window/ })
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent).join('|')).toMatch(/Place\|Sunlight\|Earth contact\|Short nights\|Steady contact\|Power/)

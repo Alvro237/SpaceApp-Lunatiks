@@ -14,6 +14,10 @@ const files = ['ephemeris.json', ...index.segments.map((s) => s.file), 'sites.js
 // the global LOLA topography for the globe (data/globe, built by pipeline/lunarnav/globe.py)
 mkdirSync(resolve(out, 'globe'), { recursive: true })
 files.push('globe/globe.json', `globe/${JSON.parse(readFileSync(resolve(root, 'data/globe/globe.json'), 'utf8')).file}`)
+// the NASA SVS star map behind the globe (data/sky, built by pipeline/lunarnav/sky.py)
+mkdirSync(resolve(out, 'sky'), { recursive: true })
+const sky = JSON.parse(readFileSync(resolve(root, 'data/sky/sky.json'), 'utf8'))
+files.push('sky/sky.json', ...Object.values(sky.files).map((f) => `sky/${f.file}`))
 for (const f of files) copyFileSync(resolve(root, 'data', f), resolve(out, f))
 console.log(`copied ${files.length} files from data/ to web/public/data/`)
 

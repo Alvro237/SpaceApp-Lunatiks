@@ -9,6 +9,7 @@ import { type LiveConfig, type LiveSource, cachedLiveLevels, descendantRanges, l
 import { LIVE_LAYERS, layerCellGeometry, liveLayerMaxZ, liveLayerSource } from './live/layers'
 import { lutBytes, type ColormapId } from './colormaps'
 import { TileLoader } from './loader'
+import { PHOTO_EAGER_Z, photoMaxZ, photoTileUrl } from './live/photo'
 import { type LodOptions, byDistanceTo, renderable, selectTiles } from './lod'
 import { GRID_VERTICES, TERRAIN_FRAG, TERRAIN_VERT } from './shaders'
 import { SHADOW_FRAG, SHADOW_VERT } from './shadow'
@@ -42,7 +43,12 @@ export type Quality = keyof typeof QUALITY
 /** A tile that failed to load is asked for again after these pauses (s), then left alone for the session. */
 export const RETRY_AFTER_S = [10, 30, 90]
 
-export type LayerMode = { kind: 'none' } | { kind: 'elevation' } | { kind: 'data'; id: string; colormap: ColormapId; levels: number }
+export type LayerMode =
+  | { kind: 'none' }
+  | { kind: 'elevation' }
+  | { kind: 'data'; id: string; colormap: ColormapId; levels: number }
+  /** The LROC WAC south polar mosaic as the ground's brightness, under the same relief and light (live/photo.ts). */
+  | { kind: 'photo' }
 
 /** One 65 × 65 grid with a skirt ring, shared by every tile. `skirt` = 1 on the ring (lowered in the shader). */
 export function gridGeometry(n = GRID_VERTICES): THREE.BufferGeometry {
@@ -312,6 +318,10 @@ export class TerrainEngine {
       this.shared.uLayerMode.value = 0
       return
     }
+    if (layer.kind === 'photo') {
+      this.shared.uLayerMode.value = 3
+      return
+    }
     if (layer.kind === 'data') for (const s of LIVE_LAYERS[layer.id] ?? []) this.warm(s.file)
     const cmap: ColormapId = layer.kind === 'elevation' ? 'cividis' : layer.colormap
     if (!this.luts.has(cmap)) this.luts.set(cmap, lutTexture(cmap))
@@ -495,7 +505,7 @@ export class TerrainEngine {
     // those of another layer (the user switched) and live layer tiles no tile wanted last frame are dropped
     this.wantedLayerKeys = this.nextWantedLayerKeys
     this.nextWantedLayerKeys = new Set()
-    const layerPrefix = this.layer.kind === 'data' ? `L:${this.layer.id}|` : null
+    const layerPrefix = this.layer.kind === 'data' ? `L:${this.layer.id}|` : this.layer.kind === 'photo' ? 'L:photo|' : null
     this.loader.prioritise((k) => {
       if (k === 'overview' || k.startsWith('warm:')) return -1
       if (!k.startsWith('L:')) return rank.get(k) ?? null
@@ -683,6 +693,10 @@ export class TerrainEngine {
    */
   private bindLayer(t: TileKey, tile: GpuTile): void {
     const u = tile.mesh.material.uniforms
+    if (this.layer.kind === 'photo') {
+      this.bindPhoto(t, u)
+      return
+    }
     if (this.layer.kind !== 'data') {
       u.uHasLayer.value = 0
       return
@@ -712,6 +726,60 @@ export class TerrainEngine {
     u.uLayer.value = tex
     u.uLayerXf.value.set((t.x - src.x * 2 ** (t.z - src.z)) * scale, (t.y - src.y * 2 ** (t.z - src.z)) * scale, scale, scale)
     u.uHasLayer.value = 1
+  }
+
+  /**
+   * Photo layer: the tile's own photo tile down to photoMaxZ (about the mosaic's 100 m), else the deepest ancestor
+   * loaded. Coarse tiles (PHOTO_EAGER_Z and up) are asked for as they are seen; finer ones once the camera has
+   * stopped, like the live data layers, and dropped when no tile wants them any more.
+   */
+  private bindPhoto(t: TileKey, u: Record<string, THREE.IUniform>): void {
+    const maxZ = photoMaxZ(this.tileset)
+    let finest: TileKey = t
+    while (finest.z > maxZ) finest = parent(finest)!
+    let src: TileKey | null = finest
+    let tex: THREE.DataTexture | undefined
+    let lk = ''
+    while (src) {
+      lk = `L:photo|${keyOf(src)}`
+      tex = this.layerTextures.get(lk)
+      if (tex) break
+      if (src.z <= PHOTO_EAGER_Z || (src === finest && !this.moving)) this.requestPhoto(src, lk)
+      if (src.z > PHOTO_EAGER_Z) this.nextWantedLayerKeys.add(lk)
+      src = parent(src)
+    }
+    if (!tex || !src) {
+      u.uHasLayer.value = 0
+      return
+    }
+    this.layerTextures.touch(lk)
+    const scale = 1 / 2 ** (t.z - src.z)
+    u.uLayer.value = tex
+    ;(u.uLayerXf.value as THREE.Vector4).set((t.x - src.x * 2 ** (t.z - src.z)) * scale, (t.y - src.y * 2 ** (t.z - src.z)) * scale, scale, scale)
+    u.uHasLayer.value = 1
+  }
+
+  private requestPhoto(t: TileKey, lk: string): void {
+    if (this.loader.known(lk)) return
+    if (t.z > PHOTO_EAGER_Z) this.liveLayerKeys.add(lk)
+    // decoded by the globe's photo path (a 256 x 256 grey JPEG, cached in the browser): the box is not used for photos
+    const req = { url: photoTileUrl(this.tileset, t), kind: 'globe' as const, globe: { kind: 'photo' as const, box: { lon0: 0, lat0: 0, size: 0 }, extraRows: 0 } }
+    this.loader
+      .request(lk, req)
+      .then((res) => {
+        const tex = new THREE.DataTexture(res.bytes!, res.width, res.height, THREE.RedFormat, THREE.UnsignedByteType)
+        tex.minFilter = tex.magFilter = THREE.LinearFilter
+        tex.unpackAlignment = 1
+        tex.colorSpace = THREE.NoColorSpace
+        tex.needsUpdate = true
+        this.layerTextures.set(lk, tex)
+        this.retries.delete(lk)
+        this.version++
+      })
+      .catch((e: Error) => {
+        if (e.message !== 'cancelled') this.retryLater(lk)
+      })
+      .finally(() => this.liveLayerKeys.delete(lk))
   }
 
   private requestLayer(id: string, t: TileKey, lk: string): void {

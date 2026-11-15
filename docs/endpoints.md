@@ -33,7 +33,7 @@ Numbers given as defaults below are placeholders for the owner to set with a cit
 
 ## SW-1 · Site state at a date and time
 
-**Status:** done in branch `seryitron-branchito`, validated (output format: `docs/sw1-output-format.md`). **Files:** `routers/state.py`, `schemas/state.py`, `tests/test_state.py`.
+**Status:** done (on `main`), validated (output format: `docs/sw1-output-format.md`). **Files:** `routers/state.py`, `schemas/state.py`, `tests/test_state.py`.
 
 - `GET /api/v1/sites/{site_id}/state?t=&mast_m=&comms_min_fraction=` (`mast_m` absent or null = 0 m)
 - Response: Sun and Earth `az`, `el`, `horizon_el`, `visible_fraction`, `visible`, `angular_radius_deg`,
@@ -45,7 +45,7 @@ Numbers given as defaults below are placeholders for the owner to set with a cit
 
 ## SW-1 · Series over a window
 
-**Status:** done in branch `seryitron-branchito`, validated (output format: `docs/sw1-output-format.md`, plan:
+**Status:** done (on `main`), validated (output format: `docs/sw1-output-format.md`, plan:
 `docs/sw1-roadmap.md`). **Files:** `routers/state.py` (same router), `schemas/state.py`, `tests/test_series.py`.
 
 - `GET /api/v1/sites/{site_id}/series?start=&duration_h=&step_min=&mast_m=...`
@@ -56,14 +56,14 @@ Numbers given as defaults below are placeholders for the owner to set with a cit
 
 ## SW-1 · Horizon profile
 
-**Status:** done in branch `seryitron-branchito`, validated (output format: `docs/sw1-output-format.md`).
+**Status:** done (on `main`), validated (output format: `docs/sw1-output-format.md`).
 **Files:** `routers/horizon.py`, `schemas/horizon.py`, `tests/test_horizon.py`.
 `GET /api/v1/sites/{site_id}/horizon?mast_m=&include_zone=` returns the 720 azimuth values, `kind`, the mast
 actually used, and optionally the zone neighbours (`db/horizons.py: zone`).
 
 ## SW-1 · Mission mode: area search
 
-**Status:** done in branch `feat/sw1-mission-areas`. **Files:** `routers/areas.py`, `schemas/areas.py`,
+**Status:** done (on `main`, #21). **Files:** `routers/areas.py`, `schemas/areas.py`,
 `area_search.py` (glue), `logic/areas.py` (raster helpers, quadtree), `db/landings.py`, `tests/test_areas.py`.
 
 - `POST /api/v1/areas/search`: which cells of a bounded disc (centre south of 60 S, radius up to 400 km, at most
@@ -84,7 +84,7 @@ actually used, and optionally the zone neighbours (`db/horizons.py: zone`).
 
 ## SW-1 · Manual coordinates
 
-**Status:** `points/state` and `points/series` done in branch `seryitron-branchito`, validated (output format:
+**Status:** `points/state`, `points/series` and `points/horizon` done (on `main`), validated (output format:
 `docs/sw1-output-format.md`); `points/info` not assigned in the team table.
 **Files:** `routers/points.py`, `schemas/points.py` (the site models plus `terrain_reference`),
 `tests/test_points.py`.
@@ -172,7 +172,8 @@ one) as tests with the source of each date in `docs/references.md`.
 
 ## AERO-2 · Hard filters: communication hours and maximum blackout
 
-**Status:** in review (branch `feat/aero2-comms-filters`; level 1, line of sight only). **File:** `logic/constraints/comms.py`.
+**Status:** done (on `main`, #15). Line of sight to the Earth by default; they use the radio-link contact series when
+the context carries it (see the link section). **File:** `logic/constraints/comms.py`.
 
 - `comms_hours`: threshold `{ "min_hours": float }` or `{ "min_fraction": float }` over the mission window, from
   `ctx.series.comms(ctx.params)`. Fill `fraction` and `ranges`.
@@ -180,11 +181,15 @@ one) as tests with the source of each date in `docs/references.md`.
 
 ## AERO-2 · Radio link levels
 
-**Status:** level 1 done (built on the station
-dataset, the Moon in the Earth-fixed frame, `logic/stations.py`, `db/stations.py`). `POST /api/v1/link` answers level 1
-with the networks you select (`networks`), your own antennas (`custom_stations`) and a `direction` (downlink, uplink
-low or high power); `GET /api/v1/link/stations` lists the catalogue. To do: level 2 (link budget), and moving the
-hard filters `comms_hours` / `max_blackout` to the combined contact series.
+**Status:** level 1 done; level 2 in review on `feat/aero2-link-level1` (built on the station dataset, the Moon in
+the Earth-fixed frame, `logic/stations.py`, `db/stations.py`). `POST /api/v1/link` answers with the networks you
+select (`networks`), your own antennas (`custom_stations`) and a `direction` (downlink, uplink low or high power).
+Level 2 adds a `budget` that needs only the lunar terminal's EIRP and the data rate: the band (S, X, Ka) or a typed
+frequency sets the carrier, each antenna uses its own downlink G/T (DSN 810-005, JAXA Misasa specification, or an
+estimate from the dish diameter), and the required Eb/N0 (9.6 dB) and margin (3 dB) have stated defaults. It returns
+the Eb/N0 margin per antenna and the time the link is closed. `GET /api/v1/link/stations` lists the catalogue. The hard filters `comms_hours` / `max_blackout` use the combined contact series when the context
+is built with `services.constraint_context(..., link_networks=[...])` (SW-2: pass the networks the user selected);
+without it they keep using the Earth's line of sight alone.
 **Files:** `logic/link.py`, `routers/link.py`, `schemas/link.py`, `tests/test_link.py`.
 
 - `POST /api/v1/link` with `level` (team decision 2026-11-14: contact needs BOTH ends, so station visibility is
@@ -199,15 +204,15 @@ hard filters `comms_hours` / `max_blackout` to the combined contact series.
      Eb/N0, margin, achievable data rate. Contact then means margin >= a minimum margin given by the user.
      Every parameter has a unit and a source.
 - Satellite relays in lunar orbit are out of scope for now (team decision 2026-11-14).
-- The hard filters `comms_hours` and `max_blackout` currently use the Earth line of sight only (the old level 1);
-  they move to the combined contact series of level 1 once the station dataset exists.
+- The hard filters `comms_hours` and `max_blackout` use the combined contact series of level 1 when the
+  `ConstraintContext` carries it (`ctx.contact`, filled by `services.constraint_context(link_networks=...)`).
 - `logic/link.py` is pure: inputs are arrays and parameter dataclasses, outputs are arrays.
 
 MECH integration guide (requests, fields to show, conventions, errors): `docs/api-guide-mech.md`.
 
 ## MECH · Radiation (moved from AERO-2, team decision 2026-11-14)
 
-**Status:** done on `feat/mech-power`. **Files:** `logic/radiation.py`, `logic/constraints/radiation.py`,
+**Status:** done (on `main`). **Files:** `logic/radiation.py`, `logic/constraints/radiation.py`,
 `db/radiation.py`, `routers/radiation.py`, `schemas/radiation.py`, `tests/test_radiation.py`,
 `pipeline/lunarnav/crater_dose.py`, `data/radiation/crater_dosimeter_daily.json`.
 
@@ -229,7 +234,7 @@ MECH integration guide (requests, fields to show, conventions, errors): `docs/ap
 
 ## MECH · Power levels
 
-**Status:** done on `feat/mech-power`. `site_id` or `lat`/`lon`. Every panel and battery parameter is a
+**Status:** done (on `main`). `site_id` or `lat`/`lon`. Every panel and battery parameter is a
 required input (no cited default yet); `night_load_w` defaults to `load_w`. No educational/advanced switch in the
 API: the frontend chooses what to show. Max 20 000 samples. Eclipses: array power x (1 - obscuration), where
 obscuration is the fraction of the solar disc covered by the Earth (`logic/eclipse.py`); the engine's
@@ -282,7 +287,7 @@ Level 4, colony analysis (team decision 2026-11-14; an extension beyond the API 
 
 ## MECH · Sun over a mission window
 
-**Status:** done on `feat/mech-power`. `POST /api/v1/sun` with the shared window request. Returns the state at
+**Status:** done (on `main`). `POST /api/v1/sun` with the shared window request. Returns the state at
 start (elevation, azimuth, visible fraction, skyline height in the Sun's direction), elevation / azimuth /
 visible-fraction series, elevation stats, sunlit fraction, hours and ranges, longest sunlit and dark stretches,
 next sunset or sunrise (to about one second) and hours to sunset, eclipses (Earth over the Sun: partial or total,
@@ -292,7 +297,7 @@ start, end, duration) with fraction and ranges. Check: the 2025-03-14 eclipse at
 
 ## MECH · Earth over a mission window
 
-**Status:** done on `feat/mech-power`. `POST /api/v1/earth` with the shared window request plus
+**Status:** done (on `main`). `POST /api/v1/earth` with the shared window request plus
 `comms_min_fraction` (default 0.5, team convention). Returns the state at start (elevation, azimuth, visible
 fraction, skyline height, distance, angular radius), series, visibility windows (fraction, hours, ranges), longest
 window and longest blackout, next Earthset or Earthrise and hours to Earthset, and the libration wander (azimuth and
@@ -302,7 +307,7 @@ sees the Earth, 180° E never; Malapert 100 %, Shackleton floor 0 % in March 202
 
 ## MECH · Replanning sweep
 
-**Status:** done on `feat/mech-power`. `POST /api/v1/sweep`: up to 25 places (`site_id` or `lat`/`lon`) x up to
+**Status:** done (on `main`). `POST /api/v1/sweep`: up to 25 places (`site_id` or `lat`/`lon`) x up to
 2000 landing times (`first_landing`, `landings`, `landing_step_h`) for one `stay_h`. One series per place;
 prefix sums for fractions, windows processed as a matrix for longest runs and the battery. Per landing:
 sunlight, comms and both fractions, longest dark and blackout, eclipse hours, mean power per m2 (eclipses
@@ -314,7 +319,7 @@ GCR dose per stay (CRaTER climatology). Every window equals the single-window en
 
 ## MECH · Thermal model and maximum temperature
 
-**Status:** done on `feat/mech-power`. **Files:** `logic/thermal.py`, `logic/constraints/temperature.py`,
+**Status:** done (on `main`). **Files:** `logic/thermal.py`, `logic/constraints/temperature.py`,
 `routers/thermal.py`, `schemas/thermal.py`, `tests/test_thermal.py`.
 
 - `POST /api/v1/thermal`: regolith surface temperature from 1-D conduction (constant properties, geometric grid
@@ -346,7 +351,7 @@ threshold = the flat level-3 fields of `/power`), same model as `/power` level 3
 
 ## MECH · Validation report
 
-**Status:** done on `feat/mech-power`. `GET /api/v1/validation`: the pipeline's validation (`data/validation.json`:
+**Status:** done (on `main`). `GET /api/v1/validation`: the pipeline's validation (`data/validation.json`:
 ephemeris vs JPL Horizons and the Apollo tables, terrain vs LROC) plus 8 MECH model checks run live on the real
 datasets, each with reference, source, computed value, tolerance and pass/fail: Blue Ghost eclipse 2025-03-14
 (NASA GSFC), disc-overlap analytic case, near/far-side Earth visibility, thermal radiative equilibrium, dark
@@ -356,20 +361,28 @@ shielding and CRaTER record. First call about 0.6 s, then cached.
 
 ## MECH · Demo video and form texts
 
-**Status:** to do. `docs/demo-script.md` and `docs/submission.md` were written for an earlier prototype; update
-them to this product. Video of 30 seconds or less.
+**Status:** texts updated to this product on 2026-11-15 (`docs/demo-script.md`, `docs/submission.md`); the video
+(30 seconds or less) and the form's links and SI paragraph are the team's to finish.
 
 ## Mission design: suitability search
 
-**Owner:** to be set (the role was not chosen when PR 1 was prepared). Spec: `docs/mission-design-spec.md`.
-**Status:** in progress (PR 1: bound). `logic/bounds.py` (ephemeris visibility bound, no endpoint yet) is written, tested
+**Owner:** to be set (the role was not chosen when PR 1 was prepared). Spec: `docs/mission-design-spec.md` (API) and
+`docs/mission-planner-ui-spec.md` (web).
+**Status:** in progress. PR 1 (`logic/bounds.py`, the ephemeris visibility bound, no endpoint yet) is written, tested
 and validated against the LOLA terrain masks; method and validation output in `docs/data-and-computation.md`
-("Ephemeris visibility bound"). The suitability API and the web mission design follow in later pull requests and are
-added next to the area search, which stays as it is (`/api/v1/areas/search`).
-**Files, PR 1:** `api/app/logic/bounds.py`, `api/tests/test_bounds.py`, `api/tests/validation_bounds.py`.
-**Files, PR 2 (crater shape, independent):** `pipeline/lunarnav/crater_shape.py`, `pipeline/tests/test_crater_shape.py`,
+("Ephemeris visibility bound"). Stage A of the web mission design (the "Mission planner inputs" panel, live preview,
+compare selected areas) is built against the existing `/api/v1/areas/search` and merged. The suitability API
+(Stage B / PR 3 below) is not built: every Stage B input in the web panel is shown disabled with "Comes with the
+suitability search".
+**Files, PR 1 (done):** `api/app/logic/bounds.py`, `api/tests/test_bounds.py`, `api/tests/validation_bounds.py`.
+**Files, PR 2 (crater shape, independent, to do):** `pipeline/lunarnav/crater_shape.py`, `pipeline/tests/test_crater_shape.py`,
 `api/app/db/craters.py` (additive), `data/README.md`, `docs/references.md`.
-**Files, PR 3 (suitability API):** `api/app/schemas/suitability.py`, `api/app/logic/suitability.py`,
+**Files, PR 3 (suitability API, to do):** `api/app/schemas/suitability.py`, `api/app/logic/suitability.py`,
 `api/app/suitability_search.py`, `api/app/routers/suitability.py`, `api/app/db/nomenclature.py`, `api/app/db/store.py`
 (additive), `api/app/main.py` (additive), `api/tests/test_suitability_logic.py`, `api/tests/test_suitability.py`,
 `api/tests/bench_suitability.py`.
+**Files, web Stage A (done):** `web/src/mission/*`, plus additive edits to `app/NavigatorPage.tsx`, `globe/GlobeView.tsx`,
+`globe/orbit.ts`, `terrain/TerrainView.tsx`, `terrain/cameraRig.ts`, `terrain/shaders.ts`, `terrain/engine.ts`,
+`ui/Tip.tsx`, `ui/panels.css`, `map/markerArt.ts`, `map/markerSet.ts`, `map/useMapSites.ts`, `state/areas.ts`,
+`scripts/copy_static_data.mjs`. `panels/MissionPanel.tsx` and `panels/missionFilters.ts` are left in place, unmounted.
+**Files, web Stage B (to do, after PR 3):** the mission design spec's section 6 and the UI spec's section 9.

@@ -1,0 +1,313 @@
+{
+ "format": 1,
+ "files": {
+  "8k": {
+   "file": "starmap_8k.jpg",
+   "width": 8192,
+   "height": 4096,
+   "bytes": 3975247
+  },
+  "4k": {
+   "file": "starmap_4k.jpg",
+   "width": 4096,
+   "height": 2048,
+   "bytes": 1345153
+  }
+ },
+ "layout": "equirectangular, J2000 right ascension and declination; centre column at 0 h, right ascension grows to the left; row 0 is declination +90",
+ "encoding": "JPEG (quality 75 at 8k, 85 at 4k), sRGB transfer curve applied to the linear EXR values (no other tone mapping)",
+ "frame": "J2000 equator and equinox (ICRS to well under a pixel)",
+ "transformation": "8k: sRGB encode only; 4k: 2 x 2 area mean of the linear values, then sRGB encode",
+ "source": {
+  "product": "Deep Star Maps 2020, starmap_2020_8k.exr (celestial coordinates)",
+  "url": "https://svs.gsfc.nasa.gov/vis/a000000/a004800/a004851/starmap_2020_8k.exr",
+  "page": "https://svs.gsfc.nasa.gov/4851/",
+  "agency": "NASA Goddard Space Flight Center Scientific Visualization Studio",
+  "catalogues": "Hipparcos-2, Tycho-2, Gaia Data Release 2",
+  "released": "2020-09-09",
+  "updated": "2022-08-12"
+ },
+ "citation": "NASA/Goddard Space Flight Center Scientific Visualization Studio. Deep Star Maps 2020 (visualization 4851). Gaia DR2: ESA/Gaia/DPAC. Ernie Wright (USRA/STC).",
+ "validation": {
+  "rule": "the 25 brightest Bright Star Catalogue stars fall on a pixel >= 10.0 x the sky median and within 2 px of the brightness-weighted centroid",
+  "skyMedianLinear": 0.0015513101825490594,
+  "stars": [
+   {
+    "raDeg": 101.287,
+    "decDeg": -16.716,
+    "vmag": -1.46,
+    "pixel": [
+     1791,
+     2428
+    ],
+    "contrastOverMedian": 644.6,
+    "offsetToCentroidPx": 0.05
+   },
+   {
+    "raDeg": 95.988,
+    "decDeg": -52.696,
+    "vmag": -0.72,
+    "pixel": [
+     1911,
+     3247
+    ],
+    "contrastOverMedian": 644.6,
+    "offsetToCentroidPx": 0.19
+   },
+   {
+    "raDeg": 213.915,
+    "decDeg": 19.183,
+    "vmag": -0.04,
+    "pixel": [
+     7420,
+     1611
+    ],
+    "contrastOverMedian": 644.6,
+    "offsetToCentroidPx": 0.08
+   },
+   {
+    "raDeg": 219.9,
+    "decDeg": -60.835,
+    "vmag": -0.01,
+    "pixel": [
+     7284,
+     3432
+    ],
+    "contrastOverMedian": 644.6,
+    "offsetToCentroidPx": 0.33
+   },
+   {
+    "raDeg": 279.235,
+    "decDeg": 38.784,
+    "vmag": 0.03,
+    "pixel": [
+     5933,
+     1165
+    ],
+    "contrastOverMedian": 644.6,
+    "offsetToCentroidPx": 0.09
+   },
+   {
+    "raDeg": 79.172,
+    "decDeg": 45.998,
+    "vmag": 0.08,
+    "pixel": [
+     2294,
+     1001
+    ],
+    "contrastOverMedian": 644.6,
+    "offsetToCentroidPx": 0.04
+   },
+   {
+    "raDeg": 78.635,
+    "decDeg": -8.202,
+    "vmag": 0.12,
+    "pixel": [
+     2306,
+     2234
+    ],
+    "contrastOverMedian": 644.6,
+    "offsetToCentroidPx": 0.03
+   },
+   {
+    "raDeg": 114.825,
+    "decDeg": 5.225,
+    "vmag": 0.38,
+    "pixel": [
+     1483,
+     1929
+    ],
+    "contrastOverMedian": 644.6,
+    "offsetToCentroidPx": 0.02
+   },
+   {
+    "raDeg": 24.429,
+    "decDeg": -57.237,
+    "vmag": 0.46,
+    "pixel": [
+     3540,
+     3350
+    ],
+    "contrastOverMedian": 644.6,
+    "offsetToCentroidPx": 0.24
+   },
+   {
+    "raDeg": 88.793,
+    "decDeg": 7.407,
+    "vmag": 0.5,
+    "pixel": [
+     2075,
+     1879
+    ],
+    "contrastOverMedian": 644.6,
+    "offsetToCentroidPx": 0.01
+   },
+   {
+    "raDeg": 210.956,
+    "decDeg": -60.373,
+    "vmag": 0.61,
+    "pixel": [
+     7487,
+     3421
+    ],
+    "contrastOverMedian": 644.6,
+    "offsetToCentroidPx": 0.06
+   },
+   {
+    "raDeg": 297.696,
+    "decDeg": 8.868,
+    "vmag": 0.77,
+    "pixel": [
+     5513,
+     1846
+    ],
+    "contrastOverMedian": 644.6,
+    "offsetToCentroidPx": 0.05
+   },
+   {
+    "raDeg": 68.98,
+    "decDeg": 16.509,
+    "vmag": 0.85,
+    "pixel": [
+     2526,
+     1672
+    ],
+    "contrastOverMedian": 639.9,
+    "offsetToCentroidPx": 0.02
+   },
+   {
+    "raDeg": 247.352,
+    "decDeg": -26.432,
+    "vmag": 0.96,
+    "pixel": [
+     6659,
+     2649
+    ],
+    "contrastOverMedian": 571.3,
+    "offsetToCentroidPx": 0.02
+   },
+   {
+    "raDeg": 201.298,
+    "decDeg": -11.161,
+    "vmag": 0.98,
+    "pixel": [
+     7707,
+     2301
+    ],
+    "contrastOverMedian": 636.3,
+    "offsetToCentroidPx": 0.03
+   },
+   {
+    "raDeg": 116.329,
+    "decDeg": 28.026,
+    "vmag": 1.14,
+    "pixel": [
+     1448,
+     1410
+    ],
+    "contrastOverMedian": 644.6,
+    "offsetToCentroidPx": 0.07
+   },
+   {
+    "raDeg": 344.413,
+    "decDeg": -29.622,
+    "vmag": 1.16,
+    "pixel": [
+     4450,
+     2722
+    ],
+    "contrastOverMedian": 644.6,
+    "offsetToCentroidPx": 0.02
+   },
+   {
+    "raDeg": 191.93,
+    "decDeg": -59.689,
+    "vmag": 1.25,
+    "pixel": [
+     7920,
+     3406
+    ],
+    "contrastOverMedian": 644.6,
+    "offsetToCentroidPx": 0.01
+   },
+   {
+    "raDeg": 310.358,
+    "decDeg": 45.28,
+    "vmag": 1.25,
+    "pixel": [
+     5225,
+     1017
+    ],
+    "contrastOverMedian": 644.6,
+    "offsetToCentroidPx": 0.03
+   },
+   {
+    "raDeg": 186.65,
+    "decDeg": -63.099,
+    "vmag": 1.33,
+    "pixel": [
+     8040,
+     3483
+    ],
+    "contrastOverMedian": 644.6,
+    "offsetToCentroidPx": 0.11
+   },
+   {
+    "raDeg": 219.9,
+    "decDeg": -60.836,
+    "vmag": 1.33,
+    "pixel": [
+     7284,
+     3432
+    ],
+    "contrastOverMedian": 644.6,
+    "offsetToCentroidPx": 0.33
+   },
+   {
+    "raDeg": 152.093,
+    "decDeg": 11.967,
+    "vmag": 1.35,
+    "pixel": [
+     635,
+     1775
+    ],
+    "contrastOverMedian": 644.6,
+    "offsetToCentroidPx": 0.01
+   },
+   {
+    "raDeg": 104.656,
+    "decDeg": -28.972,
+    "vmag": 1.5,
+    "pixel": [
+     1714,
+     2707
+    ],
+    "contrastOverMedian": 644.6,
+    "offsetToCentroidPx": 0.02
+   },
+   {
+    "raDeg": 187.791,
+    "decDeg": -57.113,
+    "vmag": 1.63,
+    "pixel": [
+     8014,
+     3347
+    ],
+    "contrastOverMedian": 627.2,
+    "offsetToCentroidPx": 0.08
+   },
+   {
+    "raDeg": 263.402,
+    "decDeg": -37.104,
+    "vmag": 1.63,
+    "pixel": [
+     6294,
+     2892
+    ],
+    "contrastOverMedian": 642.6,
+    "offsetToCentroidPx": 0.03
+   }
+  ]
+ },
+ "built": "2026-11-15T10:24:04Z"
+}

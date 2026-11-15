@@ -13,6 +13,8 @@
 import { type GroundTexture, groundTexture, renderGround } from './groundTexture'
 import { type Camera, wrap180, wrap360 } from './project'
 import { STARS, starColour } from './stars'
+import { drawReliefGround } from './relief/drawRelief'
+import type { ReliefScene } from './relief/render'
 
 // ------------------------------------------------------------------------------------------------- stars
 
@@ -86,6 +88,8 @@ export interface GroundScene {
   horizonAt: (az: number) => number
   /** Visible fraction of the solar disc, 0..1 (draw.ts Body.fraction). The ground dims a little when it is 0. */
   daylight?: number
+  /** Real LOLA relief around the place (relief/): drawn instead of the texture or the illustration when present. */
+  relief?: { scene: ReliefScene; fine: boolean } | null
 }
 
 /** How much darker the ground gets with the Sun fully below the skyline: perceptible, still readable. */
@@ -97,6 +101,7 @@ const NIGHT_DIM = 0.3
  * a light veil dims it while the Sun is below the skyline, and the skyline rim stays bright.
  */
 export function drawGround(ctx: CanvasRenderingContext2D, W: number, H: number, c: Camera, s: GroundScene): void {
+  if (s.relief && drawReliefGround(ctx, W, H, c, s.horizonAt, s.relief.scene, s.relief.fine)) return
   const step = 2
   const n = Math.floor(W / step) + 2
   const az = new Float64Array(n)

@@ -64,9 +64,9 @@ export function DataPage() {
               <th scope="row">The whole Moon (globe)</th>
               <td>
                 <a href="https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/cylindrical/img/">LOLA LDEM_16</a>, NASA PDS
-                (4 px/deg area means)
+                (4 px/deg area means for the globe, 8 px/deg for the horizon grid)
               </td>
-              <td>Globe lit by the Sun at the chosen time; relief exaggerated ×4</td>
+              <td>Globe lit by the Sun at the chosen time (relief exaggerated ×4 for the whole Moon, ×2 close in); the 3.8 km grid that traces horizons outside the south pole</td>
             </tr>
             <tr>
               <th scope="row">The whole Moon, read while you zoom</th>
@@ -74,7 +74,7 @@ export function DataPage() {
                 <a href="https://trek.nasa.gov/moon/">NASA Moon Trek</a> LOLA DEMs (global 256 px/deg between 45° S and 45° N, 100 m polar DEMs beyond;
                 down to 83 m cells) and LROC WAC global mosaic (303 px/deg, 100 m), read on demand and kept in this browser's storage
               </td>
-              <td>Sharper relief shading on the globe; the optional photo view (the WAC mosaic keeps the lighting it was photographed with)</td>
+              <td>Sharper relief shading on the globe; the photo view (shown by default), the WAC mosaic draped over the 3D LOLA relief, whose slopes the Sun at the chosen time shades (it keeps the shadows it was photographed with)</td>
             </tr>
             <tr>
               <th scope="row">Relief tiles and elevation</th>
@@ -93,6 +93,13 @@ export function DataPage() {
                 {import.meta.env.DEV || import.meta.env.VITE_PGDA_PROXY ? '' : ' (the PGDA ones are not enabled in this build)'}
               </td>
               <td>2D and 3D terrain when you zoom in</td>
+            </tr>
+            <tr>
+              <th scope="row">Photo layer of the map</th>
+              <td>
+                <a href="https://trek.nasa.gov/moon/">NASA Moon Trek</a> LROC WAC south polar mosaic (100 m, covering the whole map), cut tile by tile in the map's own projection, down to 60 m cells
+              </td>
+              <td>The photo layer (shown by default): the WAC mosaic as the ground's brightness on the 3D LOLA relief, lit by the chosen light (it keeps the shadows it was photographed with)</td>
             </tr>
             <tr>
               <th scope="row">Slope</th>
@@ -139,9 +146,28 @@ export function DataPage() {
               <td>Hydrogen filter in the mission search</td>
             </tr>
             <tr>
+              <th scope="row">Earth ground antennas</th>
+              <td>
+                18 deep-space antennas: NASA DSN (NAIF station kernels, <a href="https://deepspace.jpl.nasa.gov/dsndocs/810-005/">DSN 810-005</a>{' '}
+                horizon masks), JAXA (station positions and horizon masks) and ESA ESTRACK (IGS site logs; no published mask, a 6° estimate is
+                flagged)
+              </td>
+              <td>Radio link level 1 in the API (<code>POST /api/v1/link</code>): when an antenna can see the Moon</td>
+            </tr>
+            <tr>
               <th scope="row">Site coordinates</th>
               <td>NASA NSSDCA, LROC, USGS/IAU Gazetteer</td>
               <td>Catalogue of 21 sites, each with its citation</td>
+            </tr>
+            <tr>
+              <th scope="row">The sky behind the Moon</th>
+              <td>
+                <a href="https://svs.gsfc.nasa.gov/4851/">NASA SVS Deep Star Maps 2020</a> (about 1.7 billion stars from Hipparcos-2, Tycho-2 and
+                Gaia DR2; J2000, 4k or 8k) and the{' '}
+                <a href="https://heasarc.gsfc.nasa.gov/W3Browse/star-catalog/bsc5p.html">Bright Star Catalogue</a> (NASA HEASARC, 2 887 stars to
+                magnitude 5.5); the 25 brightest catalogue stars fall within 0.33 pixels of their place on the map
+              </td>
+              <td>The Milky Way and the stars behind the globe and in the horizon view, turned with the Moon (IAU orientation) at the chosen time</td>
             </tr>
           </tbody>
         </table>
@@ -209,10 +235,11 @@ export function DataPage() {
           <strong>Parallax.</strong> The site position is always subtracted before computing angles: from the lunar surface the Earth shifts by up to 0.26°.
         </li>
         <li>
-          <strong>Horizon.</strong> Catalogue sites with terrain use LOLA horizon masks ray-marched to 175 km with exact lunar curvature. Custom coordinates
-          south of about 60° S get a skyline traced over the LOLA elevation grids when the API is reachable. Anywhere else the horizon is a smooth sphere at
-          the observer's height: an estimate, not a bound in either direction, because real terrain shortens light and contact in craters and on slopes and
-          lengthens them on peaks and ridges. The panels say which horizon was used.
+          <strong>Horizon.</strong> Catalogue sites with terrain use LOLA horizon masks ray-marched to 175 km with exact lunar curvature. Any other place
+          (custom coordinates, and catalogue sites without a mask) gets a skyline the API traces over the LOLA elevation grids: 720 azimuths to 250 km,
+          240–960 m cells south of 60° S and a 3.8 km global grid elsewhere, so it is coarse away from the pole. Measured against the 13 masks, the traced
+          skyline has a median RMS difference of 0.21°. Until the API answers, the horizon is a smooth sphere at the observer's height: an estimate, not a
+          bound in either direction. The panels say which horizon was used.
         </li>
         <li>
           <strong>Shadows on the map.</strong> For each terrain cell the GPU marches toward the Sun's azimuth over the LOLA heights, including the curvature
@@ -220,6 +247,17 @@ export function DataPage() {
           13 terrain sites (72 azimuths each), the map's horizon from the 960 m preview heights is 1.2° lower on average (from 0.2° at Shoemaker
           to 5.6° at Mons Malapert), because nearby ridges are smoothed away: the map shows slightly more light than there is. It is for
           seeing patterns; the numbers in the panels come from the masks.
+        </li>
+        <li>
+          <strong>Mission area search.</strong> The planner places a disc and switches filters on; no threshold has a default. Map filters run on every cell
+          (each cell reads every grid pixel inside it; slope and shadow take the worst value), then a landing radius removes cells with a failure within
+          reach, then the mission-window filters run on samples placed by a quadtree that refines where neighbouring results disagree, each with its own
+          horizon traced every 0.5° to 150 km. With 300 samples, 91 % of the cells agree with a 1718-sample reference over a 40 km region. Cells are painted
+          as viable (outlined), failing a window filter (hatched), failing a map filter (dimmed) or without data (dotted), and the areas are listed.
+        </li>
+        <li>
+          <strong>Radio link.</strong> Level 1 is geometry: there is contact when the site sees the Earth and at least one chosen antenna sees the Moon above
+          its elevation limit. Antenna geometry matches SPICE within 0.0024°. There is no link budget yet (level 2).
         </li>
         <li>
           <strong>Level of detail.</strong> A tile is refined when its cells would look larger than 2 screen pixels and merged
@@ -237,10 +275,11 @@ export function DataPage() {
           there is no forecast of solar particle events.
         </li>
         <li>
-          Precomputed terrain horizons exist for 13 catalogue sites. Custom coordinates south of about 60° S are traced over coarser LOLA grids; everywhere
-          else the horizon is a smooth sphere, which is an estimate and not a bound.
+          Precomputed terrain horizons exist for 13 catalogue sites. Other places are traced over coarser LOLA grids (240–960 m near the south pole,
+          3.8 km elsewhere): relief narrower than a few cells is smoothed away, so away from the pole the skyline screens a region, not a landing ellipse.
         </li>
-        <li>Screening layers are 960 m means: they screen areas, they do not certify a landing ellipse.</li>
+        <li>Screening layers are 960 m means: they screen areas, they do not certify a landing ellipse. The hydrogen map is regional (about 45 km).</li>
+        <li>No roughness or rock data, no link budget and no solar storm forecast: the mission search lists those filters with the reason.</li>
         <li>Sun and Earth tables cover 2025–2035 and 1969–1972.</li>
       </ul>
 

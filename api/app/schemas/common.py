@@ -27,9 +27,9 @@ class WindowRequest(BaseModel):
     duration_h: float = Field(gt=0.0, description="Mission window length, hours")
     step_min: float = Field(60.0, ge=1.0, le=1440.0, description="Sampling step, minutes")
     horizon: Literal["smooth_sphere", "terrain"] = Field("smooth_sphere", description=(
-        "Manual coordinates only: 'terrain' ray-traces the skyline over the LOLA elevation grids where they cover the "
-        "point (south of about 60 S; GET /api/v1/points/horizon shows it); 'smooth_sphere' (default) uses the "
-        "geometric dip. Catalogue sites always use their stored masks"))
+        "Manual coordinates only: 'terrain' ray-traces the skyline over the LOLA elevation grids (240-960 m south of "
+        "60 S, a 3.8 km global grid elsewhere; GET /api/v1/points/horizon shows it); 'smooth_sphere' (default) uses "
+        "the geometric dip. Catalogue sites use their stored masks, or the traced skyline where they have none"))
 
     @model_validator(mode="after")
     def _check_window(self):
