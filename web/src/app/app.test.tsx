@@ -45,20 +45,48 @@ const constraints = {
   soft_score_default_weights: { sunlight: 0.5, comms: 0.3, continuity: 0.2 },
 }
 
-/** A 4 x 4 answer of POST /api/v1/areas/search: one viable area of four cells. */
-const areaAnswer = {
+const site = (rank: number, lat: number, lon: number, score: number, near: { name: string; distance_km: number; bearing_deg: number } | null) => ({
+  rank,
+  lat,
+  lon,
+  near,
+  score,
+  area_score: score,
+  coverage: 1,
+  clearance_km: 1.2,
+  window_exact: null,
+  horizon_kind: null,
+  categories: [{ category: 'topography', label: 'Topography and landing safety', utility: score, weight: 1, contribution: score }],
+  criteria: [{ id: 'max_slope_deg', label: 'Maximum slope', unit: 'deg', value: 3, passes: true, margin: 5 }],
+  pros: score >= 0.5 ? ['topography'] : [],
+  cons: score < 0.5 ? ['topography'] : [],
+  unknown: [],
+})
+
+/** A 4 x 4 answer of POST /api/v1/suitability/search: four viable cells, one cell ruled out by the bound, two sites. */
+const suitAnswer = {
   grid: { projection: 'south polar stereographic', x_left_m: 0, y_top_m: 4000, cell_m: 960, nx: 4, ny: 4 },
-  codes_b64: btoa(String.fromCharCode(0, 1, 1, 0, 1, 3, 3, 1, 1, 3, 3, 2, 0, 1, 2, 0)),
+  codes_b64: btoa(String.fromCharCode(0, 1, 1, 0, 1, 3, 3, 1, 1, 3, 3, 2, 0, 1, 5, 0)),
   score_b64: btoa(String.fromCharCode(0, 0, 0, 0, 0, 200, 210, 0, 0, 190, 220, 0, 0, 0, 0, 0)),
-  counts: { outside: 4, failed_static: 6, failed_window: 2, viable: 4, unknown: 0 },
-  funnel: [{ id: 'max_slope_deg', stage: 'static', cells_in: 12, cells_out: 6, cells_unknown: 0 }],
-  areas: [
-    { id: 1, cells: 4, area_km2: 3.69, centroid_lat: -84.79, centroid_lon: 29.2, best_lat: -84.79, best_lon: 29.21, best_score: 0.86, mean_score: 0.81, sites: ['IM-2 Athena'] },
-    { id: 2, cells: 2, area_km2: 1.84, centroid_lat: -84.7, centroid_lon: 29.0, best_lat: -84.7, best_lon: 29.0, best_score: 0.72, mean_score: 0.7, sites: [] },
+  limiting_b64: btoa(String.fromCharCode(255, 255, 255, 255, 255, 0, 0, 255, 255, 0, 0, 255, 255, 255, 255, 255)),
+  layers: [
+    {
+      category: 'topography',
+      label: 'Topography and landing safety',
+      measure: '1 - slope / maximum slope',
+      weight: 1,
+      utility_b64: btoa(String.fromCharCode(255, 255, 255, 255, 255, 196, 206, 255, 255, 186, 216, 255, 255, 255, 255, 255)),
+    },
   ],
+  weights: { topography: 1 },
+  counts: { outside: 4, failed_static: 6, failed_window: 1, viable: 4, unknown: 0, failed_bound: 1 },
+  funnel: [{ id: 'max_slope_deg', stage: 'fine', cells_in: 12, cells_out: 6, cells_unknown: 0, seconds: 0.01 }],
+  bound: null,
   window: null,
+  sites: [site(1, -84.79, 29.21, 0.86, { name: 'Shackleton', distance_km: 12.3, bearing_deg: 47 }), site(2, -84.7, 29.0, 0.42, null)],
+  sites_dropped: 0,
   seconds: 0.4,
-  assumptions: ['Static filters read a k x k sub-grid per cell.'],
+  assumptions: ['Static criteria read a k x k sub-grid per cell.'],
 }
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -78,7 +106,8 @@ function fakeFetch(apiUp = true) {
     if (url.endsWith('/api/v1/sites')) return json(apiSites)
     if (url.endsWith('/api/v1/meta/constraints')) return json(constraints)
     if (url.endsWith('/api/v1/meta/datasets')) return json({ frame: 'MOON_ME', correction: 'LT+S' })
-    if (url.endsWith('/api/v1/areas/search')) return json(areaAnswer)
+    if (url.endsWith('/api/v1/suitability/search')) return json(suitAnswer)
+    if (url.includes('/api/v1/suitability/features?')) return json({ features: [{ name: 'Shackleton', lat: -89.67, lon: 129.78, diameter_km: 21, type: 'crater' }] })
     return json({ detail: 'Not Found' }, 404)
   })
 }
@@ -121,6 +150,11 @@ beforeEach(() => {
     showLandings: false,
     pickArmed: false,
     result: null,
+    suit: null,
+    suitRequest: null,
+    suitLayers: [],
+    priority: [],
+    weights: {},
     raster: null,
     isPreview: false,
     show: true,
@@ -280,10 +314,10 @@ describe('navigator', () => {
     expect(useApp.getState().speed).not.toBe(before)
   })
 
-  it('mission mode: the planner panel, a typed centre and an input send a preview and list the areas', async () => {
+  it('mission mode: the planner panel, a typed centre and an input send a preview and list the candidate sites', async () => {
     const user = userEvent.setup()
     useApp.setState({ mode: 'mission' })
-    useAreas.setState({ center: null, categoriesOn: {}, plannerValues: {}, plannerSwitches: {}, result: null, raster: null })
+    useAreas.setState({ center: null, categoriesOn: {}, plannerValues: {}, plannerSwitches: {}, result: null, suit: null, raster: null })
     const { container } = renderAt('/')
     // the panel is visible in mission mode without clicking a button (P2: no popover over the timeline)
     expect(await screen.findByRole('heading', { level: 2, name: 'Mission planner inputs' })).toBeInTheDocument()
@@ -295,26 +329,41 @@ describe('navigator', () => {
     // Advanced inputs: switch on Topography, type Maximum slope
     await user.click(screen.getByRole('button', { name: 'Advanced inputs' }))
     await user.click(screen.getByRole('switch', { name: 'Topography and landing safety' }))
-    // filters the data cannot answer are listed with the reason, not hidden
+    // inputs the data cannot answer are listed with the reason, not hidden; Stage B inputs are enabled
     expect(screen.getByText(/No open boulder map covers the pole/)).toBeInTheDocument()
+    expect(screen.getByLabelText('Crater cover in the landing area')).toBeEnabled()
+    expect(screen.getByLabelText('Margin from crater rims')).toBeEnabled()
     fireEvent.change(screen.getByLabelText('Maximum slope'), { target: { value: '8' } })
-    // a preview request follows (debounced 500 ms) and the results panel lists the areas
-    expect(await screen.findByText(/#1 · 3.69 km²/, undefined, { timeout: 3000 })).toBeInTheDocument()
+    // a preview request follows (debounced 500 ms) and the results panel lists the sites
+    expect(await screen.findByText(/#1 · 12 km NE of Shackleton/, undefined, { timeout: 3000 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 2, name: /^Candidate sites/ })).toBeInTheDocument()
+    expect(screen.getByRole('row', { name: /Ruled out by the ephemeris bound/ })).toHaveTextContent('1 cells')
     expect(screen.getByRole('region', { name: 'Cells removed by each input' })).toHaveTextContent('Maximum slope')
+    expect(screen.getByText(/Strong: Topography and landing safety/)).toBeInTheDocument()
+    expect(screen.getByText(/Weak: Topography and landing safety/)).toBeInTheDocument()
     expect(useAreas.getState().raster?.codes[5]).toBe(3)
-    const body = JSON.parse(String((fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.find((c) => String(c[0]).endsWith('/areas/search'))![1].body))
-    expect(body.filters).toEqual({ max_slope_deg: 8 })
+    expect(useAreas.getState().raster?.codes[14]).toBe(5)
+    const calls = (fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls
+    expect(calls.some((c) => String(c[0]).endsWith('/areas/search'))).toBe(false)
+    const body = JSON.parse(String(calls.find((c) => String(c[0]).endsWith('/suitability/search'))![1].body))
+    expect(body.categories).toEqual(['topography'])
+    expect(body.criteria).toEqual([{ id: 'max_slope_deg', limit: 8 }])
+    expect(body.priority).toEqual(['topography'])
     expect(body.region.radius_km).toBe(20)
-    // Study no longer opens the Study tab: it ticks the area's own button, so several can be picked
+    // the priorities list closes the advanced inputs
+    expect(screen.getByRole('heading', { name: 'Priorities' })).toBeInTheDocument()
+    // Show flies the map to the site
+    await user.click(screen.getByRole('button', { name: 'Show site 1 on the map' }))
+    expect(useAreas.getState().goTo).toMatchObject({ lat: -84.79, lon: 29.21, km: 12 })
+    // Study ticks the site's own button, so several can be picked, then "Compare selected" opens the comparison
     const compareBtn = () => screen.getByRole('button', { name: /^Compare selected/ })
     expect(compareBtn()).toBeDisabled()
-    await user.click(screen.getByRole('button', { name: 'Select area 1 for comparison' }))
+    await user.click(screen.getByRole('button', { name: 'Select site 1 for comparison' }))
     expect(useApp.getState().mode).toBe('mission')
-    expect(screen.getByRole('button', { name: 'Deselect area 1 for comparison' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Deselect site 1 for comparison' })).toHaveAttribute('aria-pressed', 'true')
     expect(compareBtn()).toBeDisabled() // still only one ticked
-    await user.click(screen.getByRole('button', { name: 'Select area 2 for comparison' }))
+    await user.click(screen.getByRole('button', { name: 'Select site 2 for comparison' }))
     expect(compareBtn()).toBeEnabled()
-    // "Compare selected" reuses Study + Multiselect's own comparison panel, unchanged
     await user.click(compareBtn())
     expect(useApp.getState().compareMode).toBe(true)
     expect(useApp.getState().compare).toEqual([
@@ -325,8 +374,60 @@ describe('navigator', () => {
     // leaving the comparison returns to the mission results, the ticks still there
     await user.click(screen.getByRole('button', { name: 'Close comparison and leave multiselect' }))
     expect(useApp.getState().compareMode).toBe(false)
-    expect(await screen.findByRole('heading', { level: 2, name: /^Candidate areas/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Deselect area 1 for comparison' })).toHaveAttribute('aria-pressed', 'true')
+    expect(await screen.findByRole('heading', { level: 2, name: /^Candidate sites/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Deselect site 1 for comparison' })).toHaveAttribute('aria-pressed', 'true')
+    await noAxeViolations(container)
+  })
+
+  it('mission mode: the Stage B inputs (battery model, named feature, go near) reach the request', async () => {
+    const user = userEvent.setup()
+    useApp.setState({ mode: 'mission' })
+    useAreas.setState({ center: { lat: -89.45, lon: 137.3 }, categoriesOn: {}, plannerValues: {}, plannerSwitches: {}, result: null, suit: null, raster: null })
+    const { container } = renderAt('/')
+    await user.click(await screen.findByRole('button', { name: 'Advanced inputs' }))
+    await user.click(screen.getByRole('switch', { name: 'Power and sunlight' }))
+    expect(screen.getByLabelText('Battery autonomy')).toBeInTheDocument()
+    await user.click(screen.getByRole('switch', { name: 'Detailed battery model' }))
+    // the battery model replaces battery autonomy and recharge time
+    expect(screen.queryByLabelText('Battery autonomy')).toBeNull()
+    expect(screen.queryByLabelText('Recharge time')).toBeNull()
+    const typeIn = (label: string, v: string) => fireEvent.change(screen.getByLabelText(label), { target: { value: v } })
+    typeIn('Panel area', '2')
+    typeIn('Cell efficiency', '0.3')
+    typeIn('Derating', '0.85')
+    typeIn('Battery capacity', '2000')
+    typeIn('State of charge at landing', '100')
+    typeIn('Lowest allowed state of charge', '20')
+    typeIn('Day load', '50')
+    typeIn('Charge efficiency', '0.95')
+    typeIn('Discharge efficiency', '0.95')
+    await user.click(screen.getByRole('switch', { name: 'Science and resources' }))
+    typeIn('Near a named feature: feature name', 'Shackleton')
+    typeIn('Near a named feature: distance', '30')
+    await user.click(screen.getByRole('radio', { name: 'Go near' }))
+    typeIn('Past landings distance', '50')
+    expect(await screen.findByText(/#1 · 12 km NE of Shackleton/, undefined, { timeout: 3000 })).toBeInTheDocument()
+    const calls = (fetch as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls.filter((c) => String(c[0]).endsWith('/suitability/search'))
+    const body = JSON.parse(String(calls[calls.length - 1][1].body))
+    expect(body.categories).toEqual(['power', 'science'])
+    expect(body.criteria).toEqual([
+      {
+        id: 'battery_model',
+        params: {
+          panel_area_m2: 2,
+          cell_efficiency: 0.3,
+          derating: 0.85,
+          battery_capacity_wh: 2000,
+          battery_initial_soc: 1,
+          battery_min_soc: 0.2,
+          load_w: 50,
+          charge_efficiency: 0.95,
+          discharge_efficiency: 0.95,
+        },
+      },
+      { id: 'target_distance_km', limit: 30, params: { feature: 'Shackleton' } },
+      { id: 'past_landings', choice: 'near', limit: 50 },
+    ])
     await noAxeViolations(container)
   })
 
@@ -399,7 +500,7 @@ describe('navigator', () => {
   it('mission mode: an example mission fills the region, the window and three categories in one click', async () => {
     const user = userEvent.setup()
     useApp.setState({ mode: 'mission' })
-    useAreas.setState({ center: null, categoriesOn: {}, plannerValues: {}, plannerSwitches: {}, result: null, raster: null })
+    useAreas.setState({ center: null, categoriesOn: {}, plannerValues: {}, plannerSwitches: {}, result: null, suit: null, raster: null })
     const { container } = renderAt('/')
     await user.click(await screen.findByRole('button', { name: 'Load example mission' }))
     expect(screen.getByText(/Example values to try the planner, not mission requirements/)).toBeInTheDocument()
