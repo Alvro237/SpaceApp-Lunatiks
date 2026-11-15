@@ -372,15 +372,17 @@ export function buildPlannerFilters(
       if (f.kind === 'range') {
         const lo = (values[`${f.id}:lo`] ?? '').trim()
         const hi = (values[`${f.id}:hi`] ?? '').trim()
+        let loV: number | null = null
         if (lo) {
           const v = parseNumber(`${f.label} (${f.loLabel.toLowerCase()})`, lo, f.min, f.max, f.unit)
           if (typeof v === 'string') return v
-          filters[f.loKey] = v
+          filters[f.loKey] = loV = v
           window = true
         }
         if (hi) {
           const v = parseNumber(`${f.label} (${f.hiLabel.toLowerCase()})`, hi, f.min, f.max, f.unit)
           if (typeof v === 'string') return v
+          if (loV !== null && v < loV) return `${f.label}: the ${f.hiLabel.toLowerCase()} value must not be below the ${f.loLabel.toLowerCase()} one.`
           filters[f.hiKey] = v
           window = true
         }

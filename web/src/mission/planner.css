@@ -29,7 +29,11 @@
 
 .region-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: stretch; }
 .region-row > * { min-width: 0; }
-.range-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.range-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+/* the two ends of a range (Sun height at landing): each one shrinks with the panel, labelled above */
+.range-end { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.range-end .unit-input { min-width: 0; }
+.range-end-label { font-size: 0.75rem; color: var(--muted); }
 
 .disclosure {
   display: flex;

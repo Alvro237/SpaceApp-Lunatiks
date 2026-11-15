@@ -47,6 +47,14 @@ describe('planner inputs: build the /areas/search filters', () => {
   it('Sun height at landing fills one or both ends, both mark the window', () => {
     const r = buildPlannerFilters({ landing: true }, false, {}, {}, { 'sun_el_at_landing:lo': '5' })
     expect(r).toEqual({ filters: { min_sun_el_at_landing_deg: 5 }, window: true })
+    const both = buildPlannerFilters({ landing: true }, false, {}, {}, { 'sun_el_at_landing:lo': '-2', 'sun_el_at_landing:hi': '12' })
+    expect(both).toEqual({ filters: { min_sun_el_at_landing_deg: -2, max_sun_el_at_landing_deg: 12 }, window: true })
+  })
+
+  it('Sun height at landing refuses a highest value below the lowest one', () => {
+    const r = buildPlannerFilters({ landing: true }, false, {}, {}, { 'sun_el_at_landing:lo': '10', 'sun_el_at_landing:hi': '5' })
+    expect(typeof r).toBe('string')
+    expect(r).toMatch(/highest value must not be below the lowest/)
   })
 
   it('Earth in view at landing sends the flag only when on', () => {
