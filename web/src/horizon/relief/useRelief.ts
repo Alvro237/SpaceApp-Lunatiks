@@ -9,6 +9,7 @@ import { GroundStack, type SunDir } from './light'
 import type { LightRequest, LightResponse } from './light.worker'
 import { type Ring, loadRing, photoAlbedo, placePhotoMean, planeFrame, ringSpecs } from './rings'
 import { detailSampler, detailTileUrl, loadDetailTile, tileKey, visibleFarTiles } from './detailPhoto'
+import { groundTexture } from '../groundTexture'
 import type { ReliefScene } from './render'
 
 /** Eye height over the ground when the mask is for the bare surface (mast 0 m): a standing person's eyes. */
@@ -295,6 +296,7 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
         exposure: night === 'earthshine' && lit ? NIGHT_EXPOSURE / lit.earthRatio : 1,
         albedo: live.stack === stack && ringAlbedo ? ringAlbedo : undefined,
         detailAt: live.stack === stack ? detailAt : undefined,
+        grain: groundTexture(),
       },
       night,
       cellM,

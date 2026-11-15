@@ -31,6 +31,7 @@
  * the chosen instant. Without a photo the ground is plain regolith (albedo 1).
  */
 import { R_M } from '../../terrain/tileset'
+import type { GroundTexture } from '../groundTexture'
 import { type GroundStack, bilinear, lightFromHorizon } from './light'
 import { RING_N } from './rings'
 
@@ -63,6 +64,8 @@ export interface ReliefScene {
   albedo?: (Float32Array | null | undefined)[]
   /** Albedo from the 100 m detail tiles at a point (east, north metres from the observer), or NaN where none is loaded. */
   detailAt?: (e: number, n: number) => number
+  /** Regolith grain under the DEM's cell, near the feet only (groundTexture.ts), as before; null: none. */
+  grain?: GroundTexture | null
 }
 
 export interface ColumnCamera {
@@ -91,8 +94,52 @@ const STEP_CELLS = 1
 const FIRST_STEP_M = 0.3
 /** Longest ray step over ground with a detail tile, metres: the mosaic's pixel. */
 export const DETAIL_STEP_M = 100
+/** Grain: metres per level-0 texel, and how strongly it modulates the albedo. */
+const GRAIN_M = 0.04
+const GRAIN_GAIN = 0.55
+/** Grain fades out linearly to nothing at this distance, metres; eye height used for its footprint, metres. */
+const GRAIN_REACH_M = 60
+const GRAIN_EYE_M = 1.7
+const LOG_GRAIN = Math.log2(GRAIN_M)
+
+
 /** Display level (0..1) of a radiance. */
 export const tone = (r: number) => AMBIENT + (1 - AMBIENT) * (1 - Math.exp(-EXPOSURE * Math.max(0, r)))
+
+function mirror(t: number, n: number): number {
+  const p = t & (2 * n - 1)
+  return p < n ? p : 2 * n - 1 - p
+}
+
+/** Bilinear sample of one mip level at level-0 texel coordinates (mirrored repeat, so no seams). */
+function grainLevel(tex: GroundTexture, lv: number, u: number, v: number): number {
+  const s = tex.sizes[lv]
+  const k = 1 << lv
+  const x = u / k - 0.5
+  const y = v / k - 0.5
+  const x0 = Math.floor(x)
+  const y0 = Math.floor(y)
+  const fx = x - x0
+  const fy = y - y0
+  const L = tex.levels[lv]
+  const xa = mirror(x0, s)
+  const xb = mirror(x0 + 1, s)
+  const ya = mirror(y0, s) * s
+  const yb = mirror(y0 + 1, s) * s
+  return (L[ya + xa] * (1 - fx) + L[ya + xb] * fx) * (1 - fy) + (L[yb + xa] * (1 - fx) + L[yb + xb] * fx) * fy
+}
+
+/** Trilinear: the two mip levels around the pixel's footprint, each bilinear, blended; 1 (no grain) past the last. */
+function grainAt(tex: GroundTexture, logFoot: number, u: number, v: number): number {
+  const top = tex.levels.length - 1
+  const l = Math.max(0, logFoot)
+  if (l >= top) return 1
+  const l0 = Math.floor(l)
+  const f = l - l0
+  const a = grainLevel(tex, l0, u, v)
+  const b = l0 + 1 >= top ? 1 : grainLevel(tex, l0 + 1, u, v)
+  return a + (b - a) * f
+}
 
 /**
  * Render into `out` (cleared to transparent): pixel (i, j) covers CSS x = (i + 0.5) scale, y = (j + 0.5) scale.
@@ -120,6 +167,8 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
   const earthRatio = s.earthRatio ?? 0
   const exposure = s.exposure ?? 1
   const detailAt = s.detailAt
+  const grain = s.grain ?? null
+  const dTheta = scale * c.degPerPx * D
   /** Lunar-Lambert radiance for one light: direct factor mu0, light direction L, unit vector towards the eye. */
   const lunarLambert = (mu0: number, mu: number, Lx: number, Ly: number, Lz: number, vx: number, vy: number, vz: number): number => {
     const cosG = Lx * vx + Ly * vy + Lz * vz
@@ -241,11 +290,12 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
         const span = pY - y
         for (let r = Math.min(top, h) - 1; r >= r0; r--) {
           const a = span > 1e-9 ? Math.min(1, Math.max(0, (r - y) / span)) : 0 // 0 at this step, 1 at the previous
-          writePixel(px, 4 * (r * w + i), R + (pR - R) * a, 255)
+          const ta = t + (pT - t) * a
+          writePixel(px, 4 * (r * w + i), R + (pR - R) * a, ta, ta * sa, ta * ca, dTheta, grain, 255)
         }
         // antialiased top edge: the row the ground only partly covers
         const edge = r0 - 1
-        if (edge >= 0 && edge < top && y < r0) writePixel(px, 4 * (edge * w + i), R, Math.round(255 * Math.min(1, r0 - y)))
+        if (edge >= 0 && edge < top && y < r0) writePixel(px, 4 * (edge * w + i), R, t, e, n, dTheta, grain, Math.round(255 * Math.min(1, r0 - y)))
         if (r0 < top) top = r0
       }
       pY = y
@@ -270,7 +320,7 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
     // beyond the rings (or beyond what can show), up to the mask: the shade of the ground where the ray stopped
     if (top > maskTop && pY === pY) {
       const R = pR !== pR ? radiance(pK, pU, pV, pT, pUp, sa, ca) : pR
-      for (let r = Math.min(top, h) - 1; r >= maskTop; r--) writePixel(px, 4 * (r * w + i), R, 255)
+      for (let r = Math.min(top, h) - 1; r >= maskTop; r--) writePixel(px, 4 * (r * w + i), R, pT, 0, 0, dTheta, null, 255)
     }
   }
   return steps
@@ -281,10 +331,27 @@ const TONE_MAX = 4
 const TONE_STEPS = 512
 const TONE_LUT = Float32Array.from({ length: TONE_MAX * TONE_STEPS + 2 }, (_, i) => tone(i / TONE_STEPS))
 
-function writePixel(px: Uint8ClampedArray, o: number, R: number, alpha: number): void {
+function writePixel(
+  px: Uint8ClampedArray,
+  o: number,
+  R: number,
+  t: number,
+  e: number,
+  n: number,
+  dTheta: number,
+  grain: GroundTexture | null,
+  alpha: number,
+): void {
   // partial edge pixels keep the higher alpha already written
   if (alpha < 255 && px[o + 3] >= alpha) return
-  const b = TONE_LUT[R > 0 ? (R < TONE_MAX ? (R * TONE_STEPS) | 0 : TONE_MAX * TONE_STEPS) : 0]
+  let b = TONE_LUT[R > 0 ? (R < TONE_MAX ? (R * TONE_STEPS) | 0 : TONE_MAX * TONE_STEPS) : 0]
+  if (grain !== null && t < GRAIN_REACH_M) {
+    // footprint of the pixel on the ground: t dTheta across the ray, about t^2 dTheta / h along it at grazing
+    // incidence (h: eye height); their geometric mean picks the mip level, so far grain blurs out instead of aliasing
+    const foot = t * dTheta * Math.sqrt(Math.max(1, t / GRAIN_EYE_M))
+    const g = grainAt(grain, Math.log2(Math.max(1e-6, foot)) - LOG_GRAIN, e / GRAIN_M + 311, n / GRAIN_M + 517)
+    b *= 1 + (g - 1) * GRAIN_GAIN * (1 - t / GRAIN_REACH_M)
+  }
   // Uint8ClampedArray rounds and clamps
   px[o] = TINT_R * b
   px[o + 1] = TINT_G * b

@@ -28,6 +28,7 @@ import { MOON_R_KM } from '../globe/orbit'
 import { useEffectiveCamera } from './useEffectiveCamera'
 import { type SceneLights, useRelief } from './relief/useRelief'
 import { earthPhaseAngle, earthshineRatio } from './relief/light'
+import { loadGroundTexture } from './groundTexture'
 
 const state = (f: number) => (f >= 0.999 ? 'fully visible' : f > 0 ? `${Math.round(f * 100)} percent visible` : 'hidden by the horizon')
 
@@ -131,6 +132,15 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
     return { sun, sunVisible: sunUp, earth, earthRatio }
   }, [sunAz, sunEl, sunR, sunUp, earthAz, earthEl, earthR, earthKm])
   const relief = useRelief(info?.model.lat, info?.model.lon, info?.mastUsedM ?? 0, lights)
+  // the regolith grain near the feet (LROC WAC patch, groundTexture.ts); the ground redraws once it has arrived
+  const [grainReady, setGrainReady] = useState(false)
+  useEffect(() => {
+    let live = true
+    void loadGroundTexture().then((t) => live && setGrainReady(t !== null))
+    return () => {
+      live = false
+    }
+  }, [])
   // full resolution once the camera and the instant have been still for a moment, a lighter pass while they move
   const change = useMemo(() => ({ camera, tMs, arrival, scene: relief.scene }), [camera, tMs, arrival, relief.scene])
   const [still, setStill] = useState<typeof change | null>(null)
@@ -173,7 +183,7 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
       // during the descent the eye comes down over the same ground
       relief: relief.scene ? { scene: arrival < 1 ? { ...relief.scene, eyeM: relief.scene.eyeM + from.km * 1000 * (1 - k) } : relief.scene, fine: fine && arrival >= 1 } : null,
     })
-  }, [camera, view, info, size, tracks, free, arrival, stars, relief.scene, fine, from.km])
+  }, [camera, view, info, size, tracks, free, arrival, stars, grainReady, relief.scene, fine, from.km])
 
   const turn = (dYaw: number, dPitch: number) => look(cam.yaw + dYaw, cam.pitch + dPitch)
 
