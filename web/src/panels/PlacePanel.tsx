@@ -40,6 +40,8 @@ export function PlaceTools() {
   const setCompareMode = useApp((s) => s.setCompareMode)
   const section = usePanels((s) => s.section)
   const setSection = usePanels((s) => s.setSection)
+  // the sections are about one place: they wait until one is chosen
+  const hasPlace = useApp((s) => s.selection !== null)
 
   return (
     <div className="place-tools" role="group" aria-label="Place tools">
@@ -65,6 +67,7 @@ export function PlaceTools() {
           </span>
         )
       ) : (
+        hasPlace && (
         <>
           <span className="tool-sep" aria-hidden="true" />
           {SECTIONS.map((s) => (
@@ -81,6 +84,7 @@ export function PlaceTools() {
             </button>
           ))}
         </>
+        )
       )}
     </div>
   )
@@ -137,7 +141,10 @@ export function SectionDrawer({ titleId }: { titleId: string }) {
             aria-haspopup="dialog"
             aria-label={`Options for ${info.name}`}
             title="Rename, pointer colour, remove"
-            onClick={(e) => openMenuFrom(e.currentTarget, { sel: useApp.getState().selection, name: info.name })}
+            onClick={(e) => {
+              const sel = useApp.getState().selection
+              if (sel) openMenuFrom(e.currentTarget, { sel, name: info.name })
+            }}
           >
             <IconMore size={18} />
           </button>

@@ -92,6 +92,21 @@ export const MAX_TILT = 75
 export const TILT_3D = 58
 
 /**
+ * Close-up view of the globe: closer than NEAR_ENTER_KM above the surface the view tilts into 3D by itself and the
+ * finest detail tiles are loaded around the place in view, as the polar map does when zooming in over the south pole
+ * opens it. 450 km is the height the polar map flies down to when it opens (terrain/TerrainView.tsx, mapEntry). It
+ * goes back to the straight 2D view above NEAR_LEAVE_KM: the gap keeps a zoom that hovers near one value from
+ * flicking between the two.
+ */
+export const NEAR_ENTER_KM = 450
+export const NEAR_LEAVE_KM = 700
+
+/** Whether the camera, `altitudeKm` above the surface, is in the close-up view, given whether it was (null: unknown). */
+export function isNearView(wasNear: boolean | null, altitudeKm: number): boolean {
+  return altitudeKm < (wasNear ? NEAR_LEAVE_KM : NEAR_ENTER_KM)
+}
+
+/**
  * Where the camera is and what it looks at, in scene kilometres. The camera looks at the point of the sphere under
  * the orbit's centre from `dist − R` away. With no tilt it is straight above it, north up: the view of the whole
  * Moon. Tilted, it swings down around that point, away from the heading (degrees clockwise from north), so the

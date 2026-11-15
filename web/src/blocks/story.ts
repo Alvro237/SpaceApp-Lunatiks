@@ -80,7 +80,7 @@ export const EMPTY_MEMORY: StoryMemory = {
 
 export interface StoryCtx {
   view: BlockView
-  selection: Selection
+  selection: Selection | null
   placeName: string | null
   horizonKind: 'terrain' | 'smooth_sphere' | null
   sunUp: boolean | null
@@ -682,7 +682,10 @@ export const CHAPTERS: Chapter[] = [
     scene: { view: 'moon' },
     lesson: 'Planners check Sun, Earth and ground.',
     steps: (c) => {
-      const moved = c.memory.startSel !== null && !same(c.memory.startSel, c.selection)
+      // a place picked since the scene was set; when the scene was set with no place chosen (startTMs marks that
+      // it was set), any place counts
+      const started = c.memory.startSel !== null || c.memory.startTMs !== null
+      const moved = started && c.selection !== null && !same(c.memory.startSel, c.selection)
       return [
         { icon: '📍', text: 'Pick a new place', tip: 'Click the Moon, or search at the top', done: moved },
         {

@@ -251,6 +251,22 @@ export function wantedTiles(v: View, minLevel: number): { level: number; coarse:
   return { level: -1, coarse: [], tiles: [] }
 }
 
+/** Tiles of the finest level asked for around the place in view in the close-up view (a 4 × 4 block, 2.8° wide). */
+export const SHARP_TILES = 16
+
+/**
+ * The close-up view's finest tiles: the SHARP_TILES tiles of MAX_LEVEL nearest to the centre of the view, so the
+ * place in view shows the sources' own resolution (83 m cells) even while the rest of the view, wider than
+ * MAX_VIEW_TILES of them, keeps the level matched to the screen pixels. Empty when the view's level is already
+ * MAX_LEVEL (wantedTiles asks for them then).
+ */
+export function sharpTiles(v: View, viewLevel: number): DetailTile[] {
+  if (viewLevel >= MAX_LEVEL) return []
+  const half = (Math.sqrt(SHARP_TILES) / 2) * tileSize(MAX_LEVEL)
+  const cosLat = Math.cos((Math.min(89, Math.abs(v.lat)) * Math.PI) / 180)
+  return tilesAround(MAX_LEVEL, v.lat, v.lon, half, Math.min(180, half / cosLat)).slice(0, SHARP_TILES)
+}
+
 /** Every tile of a level (the photo base). */
 export function allTiles(z: number): DetailTile[] {
   const out: DetailTile[] = []

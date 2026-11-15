@@ -4,7 +4,7 @@
  * The WebGL map is replaced by a stub: jsdom has no GPU; the engine behind it is tested in terrain/*.test.ts.
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import axe from 'axe-core'
 import { readFileSync } from 'node:fs'
@@ -102,12 +102,28 @@ async function noAxeViolations(container: HTMLElement) {
 beforeEach(() => {
   vi.stubGlobal('fetch', fakeFetch())
   window.location.hash = ''
-  useApp.setState({ ...defaultScene(T), playing: false })
+  // most cases study IM-2; the app itself opens with no place (see the case for it)
+  useApp.setState({ ...defaultScene(T), selection: { kind: 'site', id: 'im-2' }, playing: false })
   usePlaceStyles.setState({ styles: {}, menu: null })
 })
 afterEach(() => vi.unstubAllGlobals())
 
 describe('navigator', () => {
+  it('opens with no place: no bottom bar and no place sections until one is picked', async () => {
+    useApp.setState({ selection: null })
+    renderAt('/')
+    const search = await screen.findByRole('combobox', { name: 'Search sites and missions' }, { timeout: 5000 })
+    expect(search).toHaveAttribute('placeholder', 'Search a site or click the Moon')
+    expect(screen.queryByRole('button', { name: /^Play/ })).not.toBeInTheDocument()
+    expect(document.querySelector('.float-bottom')).toBeNull()
+    const tools = screen.getByRole('group', { name: 'Place tools' })
+    expect(within(tools).queryByRole('button', { name: 'Horizon' })).not.toBeInTheDocument()
+    // picking a place brings them in
+    act(() => useApp.getState().select({ kind: 'site', id: 'im-2' }))
+    expect(await screen.findByRole('img', { name: /Sunlit .*% and Earth in view/ }, { timeout: 5000 })).toBeInTheDocument()
+    expect(within(tools).getByRole('button', { name: 'Horizon' })).toBeInTheDocument()
+  })
+
   it('shows the catalogue, the Sun and Earth for IM-2, and says which engine computed them', async () => {
     const { container } = renderAt('/')
     expect(await screen.findByRole('heading', { level: 1, name: 'Lunar Landing Site Navigator' }, { timeout: 5000 })).toBeInTheDocument()

@@ -383,6 +383,7 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
       // while comparing, the view stays put so the numbered places accumulate on screen
       if (s.compareMode) return
       const sel = s.selection
+      if (!sel) return
       let ll: [number, number] | null = null
       if (sel.kind === 'point') ll = [sel.lat, sel.lon]
       else {
@@ -404,8 +405,8 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
       phase = t.phase
       if (phase === 'diving') {
         const sel = useApp.getState().selection
-        const site = sel.kind === 'site' ? masks?.site(sel.id) : null
-        const ll = sel.kind === 'point' ? [sel.lat, sel.lon] : site ? [site.lat, site.lon] : null
+        const site = sel?.kind === 'site' ? masks?.site(sel.id) : null
+        const ll = sel?.kind === 'point' ? [sel.lat, sel.lon] : site ? [site.lat, site.lon] : null
         if (ll && inExtent(tileset, ll[0], ll[1])) before = rig.approach(ll[0], ll[1], t.yaw)
       } else if ((phase === 'returning' || phase === 'map') && before) {
         rig.restore(before)

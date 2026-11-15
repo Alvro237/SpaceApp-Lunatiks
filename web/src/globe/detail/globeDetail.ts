@@ -18,6 +18,7 @@ import { TileLoader } from '../../terrain/loader'
 import {
   type DetailKind,
   type DetailTile,
+  MAX_LEVEL,
   MIN_HEIGHT_LEVEL,
   PHOTO_BASE_LEVEL,
   QUAD_MIN_LEVEL,
@@ -33,6 +34,7 @@ import {
   quadOf,
   quadTiles,
   quadUrl,
+  sharpTiles,
   tileBox,
   trekTileUrl,
   wantedTiles,
@@ -88,7 +90,7 @@ export class GlobeDetail {
    * finer of the two views' levels, so zooming in uses each finer tile as soon as it arrives and zooming out keeps
    * the fine tiles until the camera has left.
    */
-  update(dt: number, now: View, goal: View, material: THREE.ShaderMaterial): void {
+  update(dt: number, now: View, goal: View, material: THREE.ShaderMaterial, sharp = false): void {
     this.clockS += dt
     this.since += dt
     if (this.since < INTERVAL_S) return
@@ -96,9 +98,11 @@ export class GlobeDetail {
     const photo = this.kind === 'photo'
     const drawn = wantedTiles(now, MIN_HEIGHT_LEVEL)
     const w = wantedTiles(goal, MIN_HEIGHT_LEVEL)
-    const level = Math.max(drawn.level, w.level)
+    // the close-up view also asks for the finest tiles around the place in view (after the view's own tiles)
+    const fine = sharp ? sharpTiles(goal, w.level) : []
+    const level = fine.length ? MAX_LEVEL : Math.max(drawn.level, w.level)
     material.uniforms.uMaxLevel.value = photo ? Math.max(level, PHOTO_BASE_LEVEL) : level
-    const demTiles = [...w.coarse, ...w.tiles]
+    const demTiles = [...w.coarse, ...w.tiles, ...fine]
     this.slots.dem.setWanted(demTiles)
     let jobs = this.jobsFor('dem', demTiles)
     if (photo) {

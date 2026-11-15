@@ -46,7 +46,7 @@ export function encodeScene(s: Scene): string {
       m: s.mode,
       sc: s.scale,
       w: s.view,
-      p: packSel(s.selection),
+      p: s.selection ? packSel(s.selection) : null,
       t: s.tMs,
       st: s.startMs,
       d: s.durationH,
@@ -72,8 +72,9 @@ export function decodeScene(param: string | null, fallback: Scene = defaultScene
     return { scene: fallback, ok: false }
   }
   if (typeof raw !== 'object' || raw === null || raw.v !== VERSION) return { scene: fallback, ok: false }
-  const sel = selection(raw.p)
-  if (!sel || !isTime(raw.t) || !isTime(raw.st)) return { scene: fallback, ok: false }
+  // no place chosen is written as null; anything else that is not a place is corrupt
+  const sel = raw.p === null || raw.p === undefined ? null : selection(raw.p)
+  if ((sel === null && raw.p != null) || !isTime(raw.t) || !isTime(raw.st)) return { scene: fallback, ok: false }
   const compare = Array.isArray(raw.cmp)
     ? raw.cmp
         .map((c) => selection(c))
