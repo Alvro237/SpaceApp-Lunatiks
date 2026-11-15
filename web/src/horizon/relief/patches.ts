@@ -43,6 +43,8 @@ export interface PatchSpec {
   source: ReliefSource
   url: string
   weight: number
+  /** Nearest ground of the tile in view, metres from the observer (the order the patches are read in). */
+  distM: number
 }
 
 export const patchKey = (p: { parentCellM: number; tc: number; tr: number }) => `${p.parentCellM}:${p.tc},${p.tr}`
@@ -81,6 +83,7 @@ export function visibleFarPatches(
   maxPatches = MAX_PATCHES,
 ): PatchSpec[] {
   const weights = new Map<number, number>()
+  const near = new Map<number, number>()
   const tmp = new Float64Array(2)
   for (let a = 0; a < VIS_AZ; a++) {
     const az = (a * 2 * Math.PI) / VIS_AZ
@@ -101,6 +104,7 @@ export function visibleFarPatches(
           const gain = best === -Infinity ? 0 : ((Math.atan(slope) - Math.atan(best)) * 180) / Math.PI
           const key = k * PATCH_TILES * PATCH_TILES + tile
           weights.set(key, (weights.get(key) ?? 0) + gain + LEVEL_WEIGHT)
+          near.set(key, Math.min(near.get(key) ?? t, t))
         }
         best = slope
       }
@@ -120,7 +124,7 @@ export function visibleFarPatches(
     const source = patchSource(lat, lon, ring, tc, tr)
     if (!source) continue
     const cellM = ring.cellM / RING_RATIO
-    out.push({ parentCellM: ring.cellM, tc, tr, cellM, source, url: heightsUrl(source.file, lat, lon, patchBox(ring.cellM, tc, tr), cellM, PATCH_N), weight })
+    out.push({ parentCellM: ring.cellM, tc, tr, cellM, source, url: heightsUrl(source.file, lat, lon, patchBox(ring.cellM, tc, tr), cellM, PATCH_N), weight, distM: near.get(key) ?? 0 })
   }
   return out
 }

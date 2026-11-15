@@ -30,6 +30,8 @@ export interface DetailTile {
   ix: number
   iy: number
   weight: number
+  /** Nearest ground of the tile in view, metres from the observer (the order the tiles are read in). */
+  distM: number
 }
 
 export const tileKey = (ix: number, iy: number) => `${ix},${iy}`
@@ -67,9 +69,10 @@ export function visibleFarTiles(stack: GroundStack, eyeM: number, maxTiles = MAX
           const ix = tileIndex(e)
           const iy = tileIndex(n)
           const key = tileKey(ix, iy)
-          const w = weights.get(key) ?? { ix, iy, weight: 0 }
+          const w = weights.get(key) ?? { ix, iy, weight: 0, distM: t }
           // rows raised count most; level ground still in view counts a little
           w.weight += (gain * 180) / Math.PI + 0.002
+          w.distM = Math.min(w.distM, t)
           weights.set(key, w)
         }
         best = slope
