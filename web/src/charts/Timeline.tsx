@@ -14,7 +14,7 @@
  * axis (numbered as on the map, with its share of the window), and a Sunlit / Earth switch next to the playback
  * icons chooses what those strips show. Adding a place adds a row.
  */
-import { type MouseEvent, useId, useMemo, useState } from 'react'
+import { type MouseEvent, createContext, useContext, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useApiSeries } from '../api/hooks'
 import type { LinkResponse, PowerResponse } from '../api/types'
 import { type ComparedPlace, useComparePlaces, useComparing } from '../compare/useComparePlaces'
@@ -28,7 +28,18 @@ import { useNow } from '../panels/useNow'
 import { useComparedLinks, useLinkResult } from '../state/link'
 import { IconAntenna, IconPause, IconPlay, IconSpeed, IconSun } from '../ui/icons'
 
-const W = 1000
+/**
+ * Width of the time axis in SVG units. A wide bar keeps 1000 units and is scaled to fit; a narrower one (a phone, a
+ * small window) draws one unit per pixel, so its labels keep their real size instead of shrinking with the bar.
+ */
+const MAX_W = 1000
+/** Below this the strips would be too short to read: the bar scales down instead. */
+const MIN_W = 180
+const PlotWidth = createContext(MAX_W)
+/** Room a tick label needs on the axis, px: a date, or a date and an hour for windows of three days or less. */
+const tickLabelPx = (durationH: number) => (durationH <= 72 ? 76 : 44)
+/** Every how many ticks a label is written, so labels never overlap on a short axis. */
+const labelEvery = (count: number, w: number, durationH: number) => Math.max(1, Math.ceil((count * tickLabelPx(durationH)) / w))
 const ROW = 14
 /** Width of the label column: the row names for one place, number + name + share when comparing. */
 const LEFT_SINGLE = 70
@@ -82,6 +93,9 @@ export function Timeline() {
   const [strip, setStrip] = useState<Strip>('sun')
   const link = useLinkResult()
   const LEFT = comparing ? LEFT_COMPARE : LEFT_SINGLE
+  const box = useRef<HTMLElement>(null)
+  const boxW = useBoxWidth(box)
+  const W = boxW > 0 ? Math.min(MAX_W, Math.max(MIN_W, Math.round(boxW - LEFT - 6))) : MAX_W
 
   const data: TimelineData | null = useMemo(() => {
     if (api.data && !playing) {
@@ -132,7 +146,8 @@ export function Timeline() {
   const nextSpeed = () => setSpeed(SPEEDS[(SPEEDS.findIndex((s) => s.id === speed) + 1) % SPEEDS.length].id as SpeedId)
 
   return (
-    <section className="timeline mini" aria-labelledby={`${id}-h`}>
+    <PlotWidth.Provider value={W}>
+    <section ref={box} className="timeline mini" aria-labelledby={`${id}-h`}>
       <h2 id={`${id}-h`} className="sr-only">
         Mission window and playback
       </h2>
@@ -202,7 +217,21 @@ export function Timeline() {
         </>
       )}
     </section>
+    </PlotWidth.Provider>
   )
+}
+
+/** Content width of an element, px, kept up to date as the window or the layout changes; 0 until it is measured. */
+function useBoxWidth(ref: { current: HTMLElement | null }): number {
+  const [w, setW] = useState(0)
+  useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(([e]) => setW(Math.round(e.contentRect.width)))
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [ref])
+  return w
 }
 
 
@@ -230,6 +259,7 @@ interface PlaceStripProps {
 }
 
 function PlaceStrip({ id, data, link, linkReady, showEarth, left, x, ticks, durationH, startMs, endMs, tMs, onSeek }: PlaceStripProps) {
+  const W = useContext(PlotWidth)
   const level2 = !!link?.budget
   // the Link row shows real link only: where the budget closes (or, at the geometry level, where there is contact)
   const linkRanges = link && linkReady ? toRanges(level2 ? link.budget!.link_ranges : link.contact_ranges) : []
@@ -276,12 +306,14 @@ function PlaceStrip({ id, data, link, linkReady, showEarth, left, x, ticks, dura
           </g>
         )
       })}
-      {ticks.map((t) => (
+      {ticks.map((t, i) => (
         <g key={t} className="tick">
           <line x1={x(t)} x2={x(t)} y1={tickY} y2={tickY + 5} />
-          <text x={x(t)} y={tickY + 17} textAnchor="middle">
-            {new Date(t).toISOString().slice(5, durationH <= 72 ? 13 : 10).replace('T', ' ')}
-          </text>
+          {i % labelEvery(ticks.length, W, durationH) === 0 && (
+            <text x={x(t)} y={tickY + 17} textAnchor="middle">
+              {new Date(t).toISOString().slice(5, durationH <= 72 ? 13 : 10).replace('T', ' ')}
+            </text>
+          )}
         </g>
       ))}
       {tMs >= startMs && tMs <= endMs && <line className="cursor" x1={x(tMs)} x2={x(tMs)} y1={-2} y2={tickY + 2} />}
@@ -294,6 +326,7 @@ function PlaceStrip({ id, data, link, linkReady, showEarth, left, x, ticks, dura
  * Link row above draws. A break in the line means no antenna is in contact then. The same numbers are in the panel.
  */
 function MarginChart({ link, startMs, endMs, tMs, x, left, onSeek }: { link: LinkResponse; startMs: number; endMs: number; tMs: number; x: (t: number) => number; left: number; onSeek: (e: MouseEvent<SVGSVGElement>) => void }) {
+  const W = useContext(PlotWidth)
   const [tip, setTip] = useState<{ x: number; y: number; w: number } | null>(null)
   const b = link.budget!
   const need = b.inputs.min_margin_db
@@ -390,6 +423,7 @@ function CompareStrips({
   x: (t: number) => number
   onSeek: (e: MouseEvent<SVGSVGElement>) => void
 }) {
+  const W = useContext(PlotWidth)
   const selection = useApp((s) => s.selection)
   const select = useApp((s) => s.select)
   if (places.length === 0) return null
@@ -450,12 +484,14 @@ function CompareStrips({
           </g>
         )
       })}
-      {ticks.map((t) => (
+      {ticks.map((t, i) => (
         <g key={t} className="tick">
           <line x1={x(t)} x2={x(t)} y1={rowsH + 4} y2={rowsH + 9} />
-          <text x={x(t)} y={rowsH + 21} textAnchor="middle">
-            {new Date(t).toISOString().slice(5, durationH <= 72 ? 13 : 10).replace('T', ' ')}
-          </text>
+          {i % labelEvery(ticks.length, W, durationH) === 0 && (
+            <text x={x(t)} y={rowsH + 21} textAnchor="middle">
+              {new Date(t).toISOString().slice(5, durationH <= 72 ? 13 : 10).replace('T', ' ')}
+            </text>
+          )}
         </g>
       ))}
       {tMs >= startMs && tMs <= endMs && <line className="cursor" x1={x(tMs)} x2={x(tMs)} y1={-2} y2={rowsH + 6} />}
@@ -496,6 +532,7 @@ function useLine(r: PowerResponse, series: number[] | null, startMs: number, end
  * the same series is in the text below.
  */
 function BatteryChart({ r, startMs, endMs, tMs, x, left: LEFT, onSeek }: RowProps) {
+  const W = useContext(PlotWidth)
   const id = useId()
   const y = useMemo(() => (v: number) => BH - v * BH, [])
   const pts = useLine(r, r.battery_soc, startMs, endMs, x, y)
@@ -563,6 +600,7 @@ function BatteryChart({ r, startMs, endMs, tMs, x, left: LEFT, onSeek }: RowProp
 
 /** Habitat inside temperature in °C (colony analysis), with the minimum safe temperature breaches hatched. */
 function InsideChart({ r, startMs, endMs, tMs, x, left: LEFT, onSeek }: RowProps) {
+  const W = useContext(PlotWidth)
   const id = useId()
   const k = r.interior_k
   const lo = k && k.length ? Math.min(...k) - 273.15 : 0

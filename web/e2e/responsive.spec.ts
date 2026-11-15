@@ -27,6 +27,15 @@ async function outside(page: Page, selector: string) {
   }, selector)
 }
 
+/** Visible elements matching `selector` whose content is wider than their box (clipped text or a sideways scroll). */
+async function clipped(page: Page, selector: string) {
+  return page.evaluate((sel) =>
+    Array.from(document.querySelectorAll<HTMLElement>(sel))
+      .filter((e) => e.getBoundingClientRect().width > 0 && e.scrollWidth > e.clientWidth + 1)
+      .map((e) => `${e.className || e.textContent} [${e.scrollWidth} > ${e.clientWidth}]`),
+  selector)
+}
+
 const noSidewaysScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)
 
 for (const size of SIZES) {
@@ -37,6 +46,8 @@ for (const size of SIZES) {
     const parts = '.topbar, .topbar nav a, .bar-tools > *, .where-when > *, .toolstrip button, .float-bottom, .globe-caption'
     expect(await noSidewaysScroll(page)).toBe(true)
     expect(await outside(page, parts)).toEqual([])
+    // the header holds every control without a sideways scroll of its own, and no mode name is clipped
+    expect(await clipped(page, '.app.on-map .topbar, .mode-switch button')).toEqual([])
 
     // the app opens with no place chosen; the sections appear once one is picked
     const search = page.getByRole('combobox', { name: 'Search sites and missions' })
@@ -45,6 +56,10 @@ for (const size of SIZES) {
     await expect(page.getByRole('button', { name: 'Power' })).toBeVisible()
     expect(await noSidewaysScroll(page)).toBe(true)
     expect(await outside(page, parts)).toEqual([])
+    // the timeline's labels keep a readable size however narrow the bar is (the strips are not shrunk to fit)
+    const label = page.locator('.timeline.mini .strip .tick text').first()
+    await expect(label).toBeVisible({ timeout: 20_000 })
+    expect((await label.boundingBox())!.height).toBeGreaterThanOrEqual(9)
 
     // a section opens beside the map (or under it on a phone) without pushing anything out
     await page.getByRole('button', { name: 'Power' }).click()

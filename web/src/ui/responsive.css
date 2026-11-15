@@ -160,7 +160,11 @@ button, a, summary { -webkit-tap-highlight-color: transparent; }
   .app.on-map .topbar { row-gap: 2px; }
   .app.on-map .topbar .bar-tools { flex-wrap: nowrap; gap: 6px; align-items: center; }
   .app.on-map .mode-switch { flex: 1 1 auto; min-width: 0; display: flex; }
-  .app.on-map .mode-switch button { flex: 1 1 0; min-width: 0; padding: 6px 8px; white-space: nowrap; font-size: 0.9rem; }
+  /* a mode name that does not fit its half wraps onto two lines instead of being clipped ("Mission plan…") */
+  .app.on-map .mode-switch button { flex: 1 1 0; min-width: 0; padding: 4px 8px; white-space: normal; line-height: 1.1; text-wrap: balance; font-size: 0.9rem; }
+  /* the Cinematic button keeps its icon and its name for screen readers, like the Educational switch */
+  .app.on-map .cinema-btn { flex: none; padding: 3px 10px; }
+  .app.on-map .cinema-btn-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .app.on-map .block-toggle { flex: none; padding-right: 4px; }
   .app.on-map .block-toggle-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
@@ -170,8 +174,27 @@ button, a, summary { -webkit-tap-highlight-color: transparent; }
   .float, .float-left, .float-right, .float-bottom, .quest-card { margin: 6px 8px 0; }
 }
 
-/* A phone on its side: the header is one row, so the Educational switch gives up its word (it keeps its name). */
+/* A phone on its side: the header is one row, so the Educational switch and the Cinematic button give up their
+   words (they keep their names for screen readers) and the whole row fits without a sideways scroll. */
 @media (max-height: 480px) {
   .app.on-map .block-toggle { padding-right: 4px; }
-  .app.on-map .block-toggle-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .app.on-map .block-toggle-label,
+  .app.on-map .cinema-btn-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .app.on-map .cinema-btn { padding: 3px 10px; }
+}
+
+/* ---------------------------------------------------------------- the timeline under the map
+ * Over the map the timeline is a bare bar drawn in light colours on the dark sky. In the stacked column it sits on the
+ * page background instead, which is light in the light theme: it keeps a dark backing of its own so its text and
+ * strips stay readable (WCAG 1.4.3) in both themes.
+ */
+@media (max-width: 760px), (max-height: 480px) {
+  .navigator > .float-bottom:not(.blk-bottom) > .timeline.mini {
+    background: #0b0c0e; border: 1px solid rgba(236, 234, 228, 0.16); border-radius: 12px; padding: 8px 10px;
+  }
+  .timeline.mini .tl-row { gap: 8px; }
+  .timeline.mini .tl-clock { min-width: 0; font-size: 0.74rem; }
+  /* the horizon view's source line is long: a smaller type and three lines at most (it scrolls), so it leaves the
+     skyline, where the Sun and the Earth are drawn, in view */
+  .horizon-notice { font-size: 0.66rem; line-height: 1.3; box-sizing: border-box; padding-bottom: 0; max-height: calc(3 * 1.3em + 3px); overflow-y: auto; pointer-events: auto; }
 }
