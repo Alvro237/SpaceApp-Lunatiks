@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useApp } from '../state/store'
 import { BlockToggle } from '../blocks/BlockToggle'
 import { BrandMark } from '../ui/BrandMark'
+import { GuideButton } from '../ui/GuideDialog'
 
 const TITLES: Record<string, string> = { '/': 'Navigator', '/data': 'Data & methods', '/learn': 'Learn' }
 
@@ -54,18 +55,21 @@ export function Layout() {
             <BlockToggle />
           </div>
         )}
-        <nav aria-label="Main">
-          <ul>
-            <li>
-              <NavLink to="/" end>
-                Navigator
-              </NavLink>
-            </li>
-            <li>
-              <NavLink to="/data">Data & methods</NavLink>
-            </li>
-          </ul>
-        </nav>
+        <div className="bar-end">
+          <nav aria-label="Main">
+            <ul>
+              <li>
+                <NavLink to="/" end>
+                  Navigator
+                </NavLink>
+              </li>
+              <li>
+                <NavLink to="/data">Data & methods</NavLink>
+              </li>
+            </ul>
+          </nav>
+          <GuideButton />
+        </div>
       </header>
       <main id="main" ref={main} tabIndex={-1}>
         <Outlet />
