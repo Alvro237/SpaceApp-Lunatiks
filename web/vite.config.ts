@@ -26,13 +26,14 @@ function preloadNavigator(): Plugin {
     apply: 'build',
     transformIndexHtml: {
       order: 'post',
-      handler(_html, ctx) {
+      handler(html, ctx) {
         if (!ctx.filename.endsWith('index.html')) return []
         const chunks = Object.values(ctx.bundle ?? {}).filter((c) => c.type === 'chunk')
         const navigator = chunks.find((c) => c.isDynamicEntry && c.facadeModuleId?.endsWith('/app/NavigatorPage.tsx'))
         if (!navigator) return []
         const entries = new Set(chunks.filter((c) => c.isEntry).map((c) => c.fileName))
-        const files = [navigator.fileName, ...navigator.imports.filter((f) => !entries.has(f))]
+        // not the entry itself, nor a shared chunk the page already preloads
+        const files = [navigator.fileName, ...navigator.imports].filter((f) => !entries.has(f) && !html.includes(f))
         return files.map((f): HtmlTagDescriptor => ({ tag: 'link', attrs: { rel: 'modulepreload', crossorigin: true, href: base + f }, injectTo: 'head' }))
       },
     },
