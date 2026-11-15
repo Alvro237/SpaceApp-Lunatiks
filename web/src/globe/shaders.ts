@@ -169,9 +169,11 @@ const float R = 1737400.0;
 // unweighted by area, measured 2026-11-15): x2 brings it to about the plain regolith grey, as on the polar map.
 const float PHOTO_GAIN = 2.0;
 const vec3 REGOLITH = vec3(0.72, 0.71, 0.68);
-// brightness of the regolith grey that stands in for the polar mosaic's photographed shadows, against REGOLITH: about
-// the mosaic's own lit ground after PHOTO_GAIN (0.15-0.3 raw, x2)
-const float PHOTO_SHADOW_FILL = 0.6;
+// Brightness of the grey that stands in for the polar mosaic's photographed shadows: the dim end of the mosaic's own
+// lit ground after PHOTO_GAIN (0.15-0.3 raw, x2). A neutral grey like the photo itself, not the warm REGOLITH: the
+// mosaic is assembled from strips photographed under different light, and along their straight seams a tinted
+// stand-in on the dark side showed as a line across the ground.
+const float PHOTO_SHADOW_FILL = 0.34;
 // Brightness of the photo: the mosaic's value x PHOTO_GAIN, rolled off smoothly above TONE_KNEE instead of clipped at
 // white, so sunlit slopes keep their texture (same value and slope up to the knee).
 const float TONE_KNEE = 0.6;
@@ -359,10 +361,14 @@ void main() {
       // The mosaic keeps the shadows it was photographed with, nearly black near the pole (median 0.016 within 60 km
       // of it), and a few blocks without data (0). There the ground eases to the plain regolith grey, lit like the
       // rest by the Sun at the chosen instant, so the LOLA relief reads instead of a black patch.
+      // The stand-in is a floor under the photo, not a blend with it: a blend passed through the photo's darkest
+      // greys on the way (darker than both the stand-in and the lit ground), which drew a dark outline around every
+      // photographed shadow. With the floor the brightness never falls below the stand-in and rises from it without
+      // a step where the photo is brighter.
       float raw = tileAt(uPolarP, qSlot, qCell);
-      float seen = smoothstep(0.015, 0.11, raw);
+      float seen = smoothstep(0.04, 0.5 * PHOTO_SHADOW_FILL, raw);
       fill = pw * (1.0 - seen);
-      vec3 polarAlbedo = mix(REGOLITH * PHOTO_SHADOW_FILL, vec3(photoTone(raw)), seen);
+      vec3 polarAlbedo = vec3(max(photoTone(raw), PHOTO_SHADOW_FILL));
       albedo = photo ? mix(albedo, polarAlbedo, pw) : mix(REGOLITH, polarAlbedo, pw);
       photo = true;
     }
