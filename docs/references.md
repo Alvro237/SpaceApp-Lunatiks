@@ -39,7 +39,8 @@ asks for this list; keep it current when something is added.
 
 | Resource | Used for | URL |
 | --- | --- | --- |
-| USGS / IAU Gazetteer of Planetary Nomenclature (Moon) | Centres of south-polar craters and massifs | https://planetarynames.wr.usgs.gov/ |
+| USGS / IAU Gazetteer of Planetary Nomenclature (Moon) | Centres of south-polar craters and massifs; nearest named feature and the named-feature criterion of the suitability search | https://planetarynames.wr.usgs.gov/ |
+| Barron, F. H. and Barrett, B. E. (1996), Decision quality using ranked attribute weights, Management Science 42(11), 1515-1523 | Rank order centroid weights of the mission planner's category priorities (suitability search) | https://doi.org/10.1287/mnsc.42.11.1515 |
 | Robbins (2018) Lunar Crater Database, USGS Astrogeology Science Center (built from NASA LRO LROC/LOLA and JAXA Kaguya Terrain Camera data) | Crater density for the hazard filter (`data/craters`) | https://astrogeology.usgs.gov/search/map/moon_crater_database_v1_robbins |
 
 ## Ground-station sources consulted (radio link; values not yet in the dataset)

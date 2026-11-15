@@ -366,21 +366,28 @@ shielding and CRaTER record. First call about 0.6 s, then cached.
 
 ## Mission design: suitability search
 
-**Owner:** to be set (the role was not chosen when PR 1 was prepared). Spec: `docs/mission-design-spec.md` (API) and
-`docs/mission-planner-ui-spec.md` (web).
-**Status:** in progress. PR 1 (`logic/bounds.py`, the ephemeris visibility bound, no endpoint yet) is written, tested
-and validated against the LOLA terrain masks; method and validation output in `docs/data-and-computation.md`
-("Ephemeris visibility bound"). Stage A of the web mission design (the "Mission planner inputs" panel, live preview,
-compare selected areas) is built against the existing `/api/v1/areas/search` and merged. The suitability API
-(Stage B / PR 3 below) is not built: every Stage B input in the web panel is shown disabled with "Comes with the
-suitability search".
+**Owner:** SW-2 (PR 3 and web Stage B). Spec: `docs/mission-design-spec.md` (API) and
+`docs/mission-planner-ui-spec.md` (web; its section 6 amends the API).
+**Status:** PR 3 in review on `feat/sw2-suitability-api`. PR 1 (`logic/bounds.py`, the ephemeris visibility bound) is
+merged. Stage A of the web mission design is merged; web Stage B is on `feat/sw2-planner-stage-b`.
+`POST /api/v1/suitability/search`: every planner input is a hard limit (catalogue in `logic/suitability.py`: side,
+battery autonomy, recharge time, avoid permanently shadowed ground, detailed battery model (same model as `/power`
+level 3), longest blackout, maximum slope, crater cover, rim margin in crater radii, Sun height and Earth at landing,
+distance to permanent shadow, hydrogen, near a named IAU feature, past landings away or near, dose; landing ellipse
+radius, Earth disc share and robust delay as request fields). Funnel: geometry, ephemeris bound (tiles proven to
+fail a bounded window criterion, code 5), regional, medium, fine, landing radius, window (quadtree samples with traced
+horizons). Score per switched-on category (power: share sunlit, earth: share with contact, topography, science,
+radiation), weights by rank order centroid over the planner's priority; layers quantised to uint8 so the browser
+re-weights with the same numbers. Top sites (non-maximum suppression, then each re-evaluated exactly with its own
+horizon) with per-category utilities, pros, cons and the nearest IAU feature. `GET /api/v1/suitability/criteria`
+(catalogue, unavailable criteria with reasons) and `GET /api/v1/suitability/features?q=` (IAU names south of 55 S).
+Not done: the crater shape data of PR 2 (elongated craters, host crater depth are not offered).
 **Files, PR 1 (done):** `api/app/logic/bounds.py`, `api/tests/test_bounds.py`, `api/tests/validation_bounds.py`.
 **Files, PR 2 (crater shape, independent, to do):** `pipeline/lunarnav/crater_shape.py`, `pipeline/tests/test_crater_shape.py`,
 `api/app/db/craters.py` (additive), `data/README.md`, `docs/references.md`.
-**Files, PR 3 (suitability API, to do):** `api/app/schemas/suitability.py`, `api/app/logic/suitability.py`,
+**Files, PR 3 (suitability API, in review):** `api/app/schemas/suitability.py`, `api/app/logic/suitability.py`,
 `api/app/suitability_search.py`, `api/app/routers/suitability.py`, `api/app/db/nomenclature.py`, `api/app/db/store.py`
-(additive), `api/app/main.py` (additive), `api/tests/test_suitability_logic.py`, `api/tests/test_suitability.py`,
-`api/tests/bench_suitability.py`.
+(additive), `api/app/main.py` (additive: router and GZip), `api/tests/test_suitability_logic.py`, `api/tests/test_suitability.py`.
 **Files, web Stage A (done):** `web/src/mission/*`, plus additive edits to `app/NavigatorPage.tsx`, `globe/GlobeView.tsx`,
 `globe/orbit.ts`, `terrain/TerrainView.tsx`, `terrain/cameraRig.ts`, `terrain/shaders.ts`, `terrain/engine.ts`,
 `ui/Tip.tsx`, `ui/panels.css`, `map/markerArt.ts`, `map/markerSet.ts`, `map/useMapSites.ts`, `state/areas.ts`,
