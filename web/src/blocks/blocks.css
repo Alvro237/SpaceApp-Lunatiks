@@ -125,7 +125,7 @@
   left: 10px;
   top: calc(var(--inset-top) + 62px);
   width: min(380px, calc(100vw - var(--inset-right) - 40px));
-  max-height: calc(100vh - var(--inset-top) - var(--inset-bottom) - 80px);
+  max-height: calc(100% - var(--inset-top) - var(--inset-bottom) - 80px);
   overflow-y: auto;
   padding: 14px;
   background: var(--glass);
@@ -286,8 +286,13 @@
 }
 @media (prefers-reduced-motion: reduce) { .block-toggle .knob { transition: none; } }
 
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-height: 480px) {
   .blk-cell { min-width: 3px; }
-  .blk-story, .blk-story.is-closed, .blk-story.blk-map { position: static; width: auto; max-width: none; max-height: none; margin: 8px; }
+  /* in the column the card is as tall as its text (the inline cap is for the floating layout) */
+  .blk-story, .blk-story.is-closed, .blk-story.blk-map { position: static; width: auto; max-width: none; max-height: none !important; margin: 8px 8px 0; }
   .float-right.blk-sky { width: auto; }
+}
+/* medium windows: the days run the full width under the sky panel instead of squeezing beside it */
+@media (min-width: 761px) and (max-width: 1023px) and (min-height: 481px) {
+  .blk-bottom.float-bottom { right: 10px; }
 }

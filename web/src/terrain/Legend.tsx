@@ -6,6 +6,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { IconLayers } from '../ui/icons'
 import { type LayerId, useApp } from '../state/store'
 import { ApiStatus } from '../ui/ApiStatus'
+import { useFitViewport } from '../ui/useFitViewport'
 import { type ColormapId, gradientCss } from './colormaps'
 import { CRATER_MIN_DIAM_KM } from './Craters'
 import { liveConfigFromEnv } from './live/config'
@@ -39,6 +40,8 @@ export function LayersControl({ tileset, exaggeration, onExaggeration, craterErr
   const id = useId()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const menu = useRef<HTMLDivElement>(null)
+  useFitViewport(menu, open)
   const layer = useApp((s) => s.layer)
   const lighting = useApp((s) => s.lighting)
   const craters = useApp((s) => s.craters)
@@ -69,7 +72,7 @@ export function LayersControl({ tileset, exaggeration, onExaggeration, craterErr
         <IconLayers />
       </button>
       {open && (
-        <div id={`${id}-menu`} className="layers-menu" role="group" aria-label="Map layers">
+        <div ref={menu} id={`${id}-menu`} className="layers-menu" role="group" aria-label="Map layers">
           <fieldset>
             <legend>Colour</legend>
             {options.map((o) => (

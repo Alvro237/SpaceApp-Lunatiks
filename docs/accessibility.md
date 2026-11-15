@@ -20,7 +20,7 @@ known to fall short. Update the audit table whenever it is re-run.
 | Colour | Never the only carrier: verdicts are symbol + word + colour; the Sun/Earth lines differ by dash pattern; strips use hatching; zone scores are numbers on colour. Palettes are Okabe-Ito based and a viridis-like ramp for the planner. |
 | Contrast | Text and UI colours chosen for AA in both themes (dark default, light via `prefers-color-scheme`); checked in a real browser, see below. |
 | Motion | `prefers-reduced-motion` respected; playback is only started by the user and never autoplays. |
-| Zoom and reflow | Text uses relative units; layout reflows to one column; wide charts scroll horizontally inside their own region (focusable) instead of shrinking text to illegibility. Works at 200 % zoom. |
+| Zoom and reflow | Text uses relative units; layout reflows to one column; wide charts scroll horizontally inside their own region (focusable) instead of shrinking text to illegibility. Works at 200 % zoom. Three window classes (`web/src/ui/responsive.css`): floating panels from 1024 px, the same with a one-row header from 761 px, and one scrolling column at 760 px wide or 480 px tall and below; menus are moved and capped to stay inside the window. `web/e2e/responsive.spec.ts` checks 320 px to 1440 px for sideways scroll and for parts outside the window. |
 | Target size | Buttons and inputs are at least 40 px tall (small buttons 32 px, above the 24 px minimum of WCAG 2.2 SC 2.5.8). |
 | Forced colours | A `forced-colors` block keeps borders and the current tab visible. |
 | Language | Plain wording, units written out, a glossary in *Learn*; no jargon without explanation. |

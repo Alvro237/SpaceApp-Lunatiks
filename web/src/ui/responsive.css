@@ -1,0 +1,116 @@
+/*
+ * Responsive pass. Loaded after theme.css and panels.css; it only places and sizes things (colours and component
+ * styles stay in those two files). Three window classes:
+ *   - wide (1024 px and up): the map fills the window, everything floats over it, the header is one row;
+ *   - medium (761 to 1023 px): the same floating layout; the header drops the product name to stay on one row and
+ *     the side panel lays its content out from its own width, not the window's;
+ *   - narrow (760 px and down) or short (480 px tall and down, a phone on its side): stacked. The map, the
+ *     timeline and the panels in one column that scrolls; on a narrow window the header takes two rows.
+ * The stacked layout's media query, `(max-width: 760px), (max-height: 480px)`, is the same in every stylesheet.
+ * Floating menus (popovers, layers, search results) are kept inside the window by ui/useFitViewport.ts.
+ */
+
+/* The visible height: 100vh is taller than the screen on phones while the browser's bars are showing. */
+:root { --vh: 100vh; }
+@supports (height: 100dvh) {
+  :root { --vh: 100dvh; }
+}
+#root, .app { min-height: var(--vh); }
+.app.on-map { height: var(--vh); }
+
+/* Long words, links and code never push a text page wider than the window; a wide table scrolls in its own box. */
+.page { overflow-wrap: break-word; }
+.page pre { max-width: 100%; overflow-x: auto; }
+img, video { max-width: 100%; height: auto; }
+
+/* ---------------------------------------------------------------- header */
+@media (max-width: 1023px) {
+  /* one row: the mark stays, the name is still read by screen readers (the page's h1 carries it too) */
+  .app.on-map .brand-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+@media (max-width: 760px) {
+  /* two rows, nothing scrolls sideways: mark and navigation, then the mode controls */
+  .app.on-map .topbar { flex-wrap: wrap; overflow-x: visible; justify-content: flex-start; padding: 6px 8px; gap: 4px 8px; }
+  .app.on-map .topbar > * { flex: 0 1 auto; min-width: 0; }
+  .app.on-map .topbar nav { margin-left: auto; }
+  .app.on-map .topbar nav ul { flex-wrap: wrap; justify-content: flex-end; gap: 2px; }
+  .app.on-map .topbar nav a { padding: 6px 8px; }
+  .app.on-map .topbar .bar-tools { order: 3; flex: 1 0 100%; flex-wrap: wrap; }
+  .topbar { padding: 8px 12px; }
+  .page { padding: 16px 12px 32px; }
+}
+@media (max-width: 360px) {
+  /* the smallest phones: tighter labels so the header still takes two rows, not four */
+  .app.on-map .topbar { font-size: 0.86rem; gap: 4px 6px; }
+  .app.on-map .topbar nav a { padding: 6px 5px; }
+  .app.on-map .mode-switch button { padding: 6px 9px; }
+  .app.on-map .block-toggle { gap: 6px; padding-right: 9px; }
+}
+
+/* ---------------------------------------------------------------- bars over the map */
+/* The two bars share one stacking context, so a menu opened from the first is drawn over the second. */
+.top-left .where-when,
+.top-left .toolstrip { z-index: auto; min-width: 0; }
+/* Tools wrap to a new row instead of being squeezed or pushed out when the side panel leaves little room. */
+.top-left .toolstrip,
+.toolslot,
+.toolstrip .map-controls { flex-wrap: wrap; min-width: 0; }
+.site-search { min-width: 0; }
+.search-box { max-width: 100%; }
+.pill-btn { max-width: 100%; }
+.pill-text { overflow: hidden; text-overflow: ellipsis; }
+
+/* Captions and the legend stay inside the free part of the map. */
+.globe-caption,
+.legend-chip { max-width: calc(100% - var(--inset-left) - var(--inset-right) - 20px); }
+.toast { max-width: calc(100% - 20px); }
+/* its height is capped to the window by useFitViewport: the rest scrolls */
+.layers-menu { overflow-y: auto; max-width: calc(100vw - 16px); }
+
+/* ---------------------------------------------------------------- floating panels (medium and wide) */
+@media (min-width: 761px) and (min-height: 481px) {
+  /* percent of the navigator, which is exactly the visible window */
+  .float-left,
+  .float-right { max-height: calc(100% - var(--inset-top) - var(--inset-bottom) - 24px); }
+  /* the five-column strip belongs to a panel that is really wide (container rule below), not to a window size */
+  .is-wide .stat-strip:not(.compact) { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); }
+}
+
+/* The side panel's content answers to the panel's own width. */
+.side-panel > .float-body { container: panel / inline-size; }
+@container panel (min-width: 640px) {
+  .side-panel .stat-strip:not(.compact) { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+@container panel (max-width: 360px) {
+  .side-panel .cards,
+  .side-panel .model-cards,
+  .side-panel .model-cards.three { grid-template-columns: minmax(0, 1fr); }
+  .side-panel .context-chips { margin-left: 0; }
+}
+.drawer-head, .multi-head { min-width: 0; }
+.drawer-title, .multi-title { overflow-wrap: anywhere; }
+
+/* ---------------------------------------------------------------- narrow or short: one scrolling column */
+@media (max-width: 760px), (max-height: 480px) {
+  .navigator { display: flex; flex-direction: column; overflow-x: hidden; padding-bottom: 8px; }
+  .navigator > *,
+  .navigator .map-layer > * { flex-shrink: 0; }
+  /* the map takes the room the panels leave, and never less than 58 % of the window (240 px on a short one) */
+  .navigator .map-view,
+  .navigator .horizon-view { flex: 1 0 max(58vh, 240px); height: auto; }
+  /* the timeline stays next to the map; the open section follows it */
+  .navigator > .float-bottom:not(.blk-bottom) { order: 1; }
+  .navigator > .side-panel,
+  .navigator > .quest-card { order: 2; }
+  .float, .float-left, .float-right, .float-bottom, .quest-card { margin: 8px 8px 0; }
+  .top-left .toolstrip { justify-content: flex-start; }
+  /* the caption and the legend become lines under the map instead of labels over it */
+  .globe-caption,
+  .legend-chip { position: static; width: auto; max-width: none; margin: 6px 8px 0; }
+  .globe-caption { padding: 0; background: none; color: var(--muted); }
+  .toast { top: 8px; }
+  .toast-undo { position: fixed; top: auto; bottom: 14px; }
+  /* the planner asleep under Educational mode keeps its size but leaves the column */
+  .navigator .map-layer.is-dormant > .map-view { position: absolute; top: 0; left: 0; right: 0; height: max(58vh, 240px); flex: none; }
+  .navigator .map-layer.is-dormant > :not(.map-view) { display: none; }
+}

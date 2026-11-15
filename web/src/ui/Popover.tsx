@@ -5,6 +5,7 @@
  * `persistent` keeps it open on clicks outside (the mission panel, whose region is placed by clicking the map).
  */
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
+import { useFitViewport } from './useFitViewport'
 
 export function Popover({
   label,
@@ -36,6 +37,9 @@ export function Popover({
   const [open, setOpen] = useState(false)
   const root = useRef<HTMLDivElement>(null)
   const btn = useRef<HTMLButtonElement>(null)
+  const panel = useRef<HTMLDivElement>(null)
+  // the panel opens under its button; on a narrow or short window it is moved and capped to stay on screen
+  useFitViewport(panel, open)
   // by id, not by ref: `close` is handed to the panel's content during render
   const close = () => {
     setOpen(false)
@@ -78,7 +82,7 @@ export function Popover({
         {button}
       </button>
       {open && (
-        <div id={`${id}-p`} className={`pop-panel pop-${align}`} role="group" aria-label={label}>
+        <div ref={panel} id={`${id}-p`} className={`pop-panel pop-${align}`} role="group" aria-label={label}>
           {typeof children === 'function' ? children(close) : children}
         </div>
       )}
