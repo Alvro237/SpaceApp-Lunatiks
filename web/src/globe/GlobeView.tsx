@@ -15,6 +15,8 @@ import { SkyMap } from './skyMap'
 import { StarField } from './starField'
 import { ToolPortal } from '../ui/ToolSlot'
 import { useGraphics } from '../state/graphics'
+import { GlobeLayers } from './GlobeLayers'
+import { LegendChip } from '../terrain/Legend'
 import { usePlaceStyles } from '../state/placeStyle'
 import { IconCube, IconMinus, IconPin, IconPlus, IconPole } from '../ui/icons'
 import { useCinematic } from '../state/cinematic'
@@ -132,6 +134,7 @@ export function GlobeView() {
     const t = setTimeout(() => prefetchMap(queryClient), OVERVIEW_DELAY_S * 1000)
     return () => clearTimeout(t)
   }, [globeReady, queryClient])
+  const tileset = useQuery({ queryKey: ['static', 'tileset'], queryFn: loadTileset, staleTime: Infinity, retry: 1 }).data
   const sites = useMapSites()
   const markerStyle = useApp((s) => s.markerStyle)
   const select = useApp((s) => s.select)
@@ -449,14 +452,18 @@ export function GlobeView() {
         >
           Photo
         </button>
+        <GlobeLayers surface={surface} onSurface={setSurface} tileset={tileset} />
       </div>
       </ToolPortal>
-      <p className="globe-caption">
-        {surface === 'photo'
-          ? `LROC WAC photo mosaic, 100 m, from NASA Moon Trek, over global LOLA topography (relief ×${exag}; 118 m detail as you zoom)`
-          : `Global LOLA topography (relief ×${exag}; 118 m detail from NASA Moon Trek as you zoom)`}
-        {' · lit by the Sun at the chosen time'}
-      </p>
+      <div className="globe-notes">
+        <p className="globe-caption">
+          {surface === 'photo'
+            ? `LROC WAC photo mosaic, 100 m, from NASA Moon Trek, over global LOLA topography (relief ×${exag}; 118 m detail as you zoom)`
+            : `Global LOLA topography (relief ×${exag}; 118 m detail from NASA Moon Trek as you zoom)`}
+          {' · lit by the Sun at the chosen time'}
+        </p>
+        {tileset && <LegendChip tileset={tileset} globe={globe.data ? [globe.data.meta.min, globe.data.meta.max] : true} />}
+      </div>
       {regionToast && (
         <p className="toast" role="alert">
           {regionToast}
@@ -826,6 +833,10 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
       polar.setPhoto(wantPolarPhoto)
     }
 
+    // the colour layer chosen in the layers menu: elevation and slope everywhere, the polar map's others over the polar cap
+    const chosen = useApp.getState().layer
+    polar.setLayer(chosen === 'none' || chosen === 'photo' ? null : chosen, material, [data.meta.min, data.meta.max])
+
     // detail tiles for the part of the Moon in view
     const e = reliefExaggeration(n.dist)
     setExaggeration(material, e)
@@ -950,8 +961,9 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
     put(sun.x); put(sun.y); put(sun.z)
     put(u.uExag.value as number); put(u.uMaxLevel.value as number); put(u.uPhotoMode.value as number)
     put(u.uPolarMaxZ.value as number); put(u.uPolarShadow.value as number)
+    put(u.uDataMode.value as number); put(u.uGlobalKind.value as number)
     // a detail tile that arrives is written into these textures, which raises their version
-    for (const name of ['uDetail', 'uIndex', 'uPhoto', 'uPhotoIndex', 'uPolarH', 'uPolarHIndex', 'uPolarP', 'uPolarPIndex']) {
+    for (const name of ['uDetail', 'uIndex', 'uPhoto', 'uPhotoIndex', 'uPolarH', 'uPolarHIndex', 'uPolarP', 'uPolarPIndex', 'uPolarD', 'uPolarDIndex', 'uLut']) {
       const t = u[name].value as THREE.Texture
       put(t.id); put(t.version)
     }

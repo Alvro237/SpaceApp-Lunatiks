@@ -146,6 +146,12 @@ uniform sampler2DArray uPolarH;      // south-polar height tiles, 257 x 257 vert
 uniform sampler2D uPolarHIndex;
 uniform sampler2DArray uPolarP;      // south-polar photo tiles, 256 x 256 cells, reflectance 0..1
 uniform sampler2D uPolarPIndex;
+uniform sampler2DArray uPolarD;      // south-polar colour layer tiles (slope, illumination, ...): value and coverage bytes
+uniform sampler2D uPolarDIndex;
+uniform sampler2D uLut;              // 256 x 1 colour scale of that layer
+uniform float uDataMode;             // 1 = a colour layer is drawn over the polar cap
+uniform float uGlobalKind;           // colour layer drawn everywhere from the heights: 0 none, 1 slope, 2 elevation
+uniform vec2 uGlobalRange;           // its value range: degrees (slope) or metres (elevation)
 uniform float uPolarMaxZ;   // finest polar level; -1 = none
 uniform float uPolarExtent; // half-width of the polar quadtree's square, metres
 uniform vec4 uPolarHole;    // drawn by a finer polar mesh instead (patch.ts): centre x, y and half-width (metres); w > 0 = on
@@ -379,6 +385,25 @@ void main() {
       photo = true;
     }
   }
+  // a colour layer of the polar map over the polar cap: the tile's value and coverage, bilinear across the cells
+  vec3 dataColour = vec3(0.0);
+  float dataCover = 0.0;
+  if (uDataMode > 0.5 && pw > 0.0) {
+    vec2 dCell;
+    float dSize;
+    int dSlot = findPolar(uPolarDIndex, pxy, 256.0, dCell, dSize);
+    if (dSlot >= 0) {
+      vec2 g = clamp(dCell - 0.5, vec2(0.0), vec2(255.0));
+      ivec2 i0 = min(ivec2(floor(g)), ivec2(254));
+      vec2 f = g - vec2(i0);
+      vec2 a = mix(mix(texelFetch(uPolarD, ivec3(i0, dSlot), 0).rg, texelFetch(uPolarD, ivec3(i0.x + 1, i0.y, dSlot), 0).rg, f.x),
+                   mix(texelFetch(uPolarD, ivec3(i0.x, i0.y + 1, dSlot), 0).rg, texelFetch(uPolarD, ivec3(i0.x + 1, i0.y + 1, dSlot), 0).rg, f.x), f.y);
+      // value x coverage was filtered: divide by the coverage to get the value back
+      dataCover = a.g;
+      if (dataCover > 0.004) dataColour = texture(uLut, vec2(clamp(a.r / dataCover, 0.0, 1.0) * (255.0 / 256.0) + 0.5 / 256.0, 0.5)).rgb;
+      dataCover *= pw;
+    }
+  }
   vec3 colour;
   {
     float he;
@@ -432,6 +457,24 @@ void main() {
         exag = mix(exag, uDetailShade, pw);
       }
     }
+    // the layers made from the heights themselves, over the whole Moon: the slope of the ground (the heights loaded
+    // here, from the 7.6 km grid to the 118 m detail and the polar tiles) or the height; under the polar map's own
+    // tiles where those are loaded
+    if (uGlobalKind > 0.5) {
+      float v;
+      if (uGlobalKind < 1.5) v = degrees(atan(length(vec2(he, hn))));
+      else v = vHeight;
+      if (pw > 0.0 && uGlobalKind > 1.5) {
+        vec2 hv2;
+        float hs2;
+        int hs = findPolar(uPolarHIndex, pxy, 256.0, hv2, hs2);
+        if (hs >= 0) v = mix(v, polarH(hs, hv2), pw);
+      }
+      float t = clamp((v - uGlobalRange.x) / (uGlobalRange.y - uGlobalRange.x), 0.0, 1.0);
+      float c = uDataMode > 0.5 ? dataCover : 0.0;
+      dataColour = mix(texture(uLut, vec2(t * (255.0 / 256.0) + 0.5 / 256.0, 0.5)).rgb, dataColour, c);
+      dataCover = 1.0;
+    }
     vec3 east = vec3(-sin(lon), cos(lon), 0.0);
     vec3 north = vec3(-sin(lat) * cos(lon), -sin(lat) * sin(lon), cos(lat));
     vec3 n = normalize(up - exag * (he * east + hn * north));
@@ -456,6 +499,8 @@ void main() {
       light = night + (1.0 - night) * sun * day;
     }
     colour = albedo * light;
+    // the layer keeps the relief's shading but never goes fully dark: its colours must stay readable at night
+    if (dataCover > 0.0) colour = mix(colour, dataColour * (0.4 + 0.6 * light), min(1.0, dataCover));
   }
   fragColor = vec4(colour, 1.0);
 }

@@ -438,3 +438,18 @@ button, input:not([type='checkbox']):not([type='radio']):not([type='range']), se
 .quest-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .tag-pill { font-size: 0.72rem; padding: 1px 8px; border: 1px solid var(--border); border-radius: 999px; color: var(--muted); }
 .quest-done { font-size: 0.78rem; color: var(--pass); font-weight: 600; }
+
+/* globe: the caption and the legend share one box at the bottom left, the legend above the caption, so they never
+   overlap however many lines the caption wraps to */
+.globe-notes {
+  position: absolute; z-index: 21; left: calc(var(--inset-left) + 10px); bottom: calc(var(--inset-bottom) + 10px);
+  display: flex; flex-direction: column-reverse; align-items: flex-start; gap: 6px;
+  max-width: calc(100% - var(--inset-left) - var(--inset-right) - 20px); pointer-events: none;
+}
+.globe-notes > .globe-caption, .globe-notes > .legend-chip { position: static; margin: 0; max-width: 100%; pointer-events: auto; }
+.globe-notes > .globe-caption { overflow-wrap: anywhere; line-height: 1.35; }
+
+/* the layers menu: wide enough for one line per option, so it reads as a list and not as paragraphs */
+.layers-menu.is-list { width: max-content; min-width: 250px; max-width: min(340px, calc(100vw - 16px)); }
+.layers-menu.is-list fieldset label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.layers-menu .muted { color: var(--muted); font-size: 0.78rem; }
