@@ -25,8 +25,8 @@ export const PHONE_SCREENSHOT = `${import.meta.env.BASE_URL}media/app-phone.jpg`
 export const API_DOCS_URL: string =
   import.meta.env.VITE_API_DOCS_URL ?? (import.meta.env.VITE_API_URL ? `${String(import.meta.env.VITE_API_URL).replace(/\/$/, '')}/docs` : '')
 
-/** Public source repository. Leave empty while the repository is private. */
-export const REPO_URL = ''
+/** Public source repository (shown on the landing page and in the navigator's footer). Empty hides the link. */
+export const REPO_URL = 'https://github.com/Alvro237/SpaceApp-Lunatiks'
 
 /**
  * Optional scroll-driven background video (for example one made with an AI video tool), served from web/public.

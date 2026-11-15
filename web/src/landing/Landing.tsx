@@ -528,7 +528,7 @@ export function Landing() {
               )}
               {REPO_URL && (
                 <li>
-                  <a href={REPO_URL}>Source code</a>
+                  <a href={REPO_URL}>Source code on GitHub</a>
                 </li>
               )}
             </ul>

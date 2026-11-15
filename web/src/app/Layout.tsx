@@ -7,6 +7,7 @@ import { BrandMark } from '../ui/BrandMark'
 import { TourButton } from '../ui/Walkthrough'
 import { useCinematic } from '../state/cinematic'
 import { CinematicButton } from './Cinematic'
+import { REPO_URL } from '../landing/links'
 
 const TITLES: Record<string, string> = { '/': 'Navigator', '/data': 'Data & methods', '/learn': 'Learn' }
 
@@ -81,6 +82,12 @@ export function Layout() {
       {!onMap && (
         <footer className="footer">
           NASA Space Apps Challenge 2026 · team Lunatiks · NASA LRO/LOLA, JPL SPICE, USGS data · Built with AI assistance (see Data & methods)
+          {REPO_URL && (
+            <>
+              {' · '}
+              <a href={REPO_URL}>Source code on GitHub</a>
+            </>
+          )}
         </footer>
       )}
     </div>
