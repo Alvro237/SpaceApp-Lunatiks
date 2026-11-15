@@ -25,6 +25,8 @@ import { SOLAR_CONSTANT_W_M2 } from '../time/engine'
 import type { WindowSeries } from '../time/hooks'
 import { IconClose, IconExpand, IconMore } from '../ui/icons'
 import { openMenuFrom } from '../panels/PlaceMenu'
+import { ModelResults } from './ModelResults'
+import { ParamsPanel } from './ParamsPanel'
 import { type ComparedPlace, useComparePlaces } from './useComparePlaces'
 
 interface Axis {
@@ -139,6 +141,9 @@ export function ComparePanel({ titleId }: { titleId: string }) {
         head={['Place', ...AXES.map((a) => a.label)]}
         rows={ready.map((p) => [`${p.num} ${p.info.name}`, ...AXES.map((a) => a.text(p.win!))])}
       />
+
+      <ParamsPanel />
+      <ModelResults places={places} />
 
       {big && <BigRadar places={places} onClose={() => setBig(false)} />}
     </div>

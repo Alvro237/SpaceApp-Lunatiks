@@ -129,7 +129,7 @@ export const api = {
   suitabilityFeatures: (text: string, limit: number, signal?: AbortSignal) =>
     request<FeatureList>('GET', `/api/v1/suitability/features?${q({ q: text, limit })}`, undefined, signal),
   suitabilityCriteria: (signal?: AbortSignal) => request<SuitabilityCatalogue>('GET', '/api/v1/suitability/criteria', undefined, signal),
-  power: (body: PowerRequest) => request<PowerResponse>('POST', '/api/v1/power', body),
+  power: (body: PowerRequest, signal?: AbortSignal) => request<PowerResponse>('POST', '/api/v1/power', body, signal),
   radiation: (body: RadiationRequest, signal?: AbortSignal) => request<RadiationResponse>('POST', '/api/v1/radiation', body, signal),
   craters: (bbox: [number, number, number, number], minDiamKm: number, signal?: AbortSignal) =>
     request<CraterList>('GET', `/api/v1/craters?${q({ bbox: bbox.join(','), min_diam_km: minDiamKm })}`, undefined, signal),
