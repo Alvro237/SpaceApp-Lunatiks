@@ -23,7 +23,7 @@ import { prefetchMap } from '../terrain/prefetch'
 import { useEphemeris, useMasks } from '../time/hooks'
 import { DATA_BASE } from '../time/staticData'
 import { GlobeDetail } from './detail/globeDetail'
-import { MIN_DIST, MOON_R_KM, type Orbit, OrbitRig, RELIEF_MAX, TILT_3D, cameraPose, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon } from './orbit'
+import { MIN_DIST, MOON_R_KM, type Orbit, OrbitRig, RELIEF_MAX, TILT_3D, cameraPose, latLonToScene, nearPlaneKm, raySphere, reliefExaggeration, sceneToLatLon } from './orbit'
 import { PATCH_LEVELS, holeOf, patchGeometry, patchWindows } from './patch'
 import { GLOBE_FRAG, GLOBE_VERT, PATCH_VERT } from './shaders'
 
@@ -360,12 +360,23 @@ function placeCamera(cam: THREE.PerspectiveCamera, n: Orbit, tiltDeg: number, he
   cam.position.set(...pose.position)
   cam.up.set(...pose.up)
   cam.lookAt(...pose.target)
-  // tilted, the camera is lower than its distance to the place it looks at
+  // the near plane clips by depth along the view axis: bound it by the widest corner of the view (orbit.ts,
+  // nearPlaneKm), or a tilted view from far out loses the ground below the camera
   const fromCentre = cam.position.length()
-  cam.near = Math.max(1, fromCentre - MOON_R_KM * 1.05)
   cam.far = fromCentre + MOON_R_KM * 2
   cam.updateProjectionMatrix()
+  let cosMax = 1
+  for (const [x, y] of CORNERS) {
+    const v = corner.set(x, y, -1).applyMatrix4(cam.projectionMatrixInverse)
+    cosMax = Math.min(cosMax, -v.z / v.length())
+  }
+  cam.getWorldDirection(axis)
+  cam.near = nearPlaneKm([cam.position.x, cam.position.y, cam.position.z], [axis.x, axis.y, axis.z], cosMax)
+  cam.updateProjectionMatrix()
 }
+const CORNERS = [[-1, -1], [1, -1], [-1, 1], [1, 1]] as const
+const corner = new THREE.Vector3()
+const axis = new THREE.Vector3()
 
 function setExaggeration(m: THREE.ShaderMaterial, e: number) {
   m.uniforms.uExag.value = e

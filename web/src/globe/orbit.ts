@@ -111,6 +111,29 @@ export function cameraPose(o: Orbit, tiltDeg = 0, headingDeg = 0): { position: V
   }
 }
 
+/** Every point of the surface, exaggerated relief included, lies within this radius (km): LOLA heights span about
+ * -9 to +11 km, times RELIEF_MAX is under 45 km. */
+export const SURFACE_MAX_R_KM = MOON_R_KM * 1.05
+
+/**
+ * Near clipping distance (km) that leaves the whole visible surface in front of the near plane. The plane clips by
+ * depth along the view axis, not by distance: a point `d` km away at an angle θ off the axis is `d cos θ` deep. A
+ * tilted camera far out sees the ground below itself well off the axis, and a near plane set from the distance alone
+ * (|camera| − 1.05 R) cut a hole there. Two lower bounds of the depth of any surface point the camera can see, the
+ * larger one is used:
+ *   - distance ≥ |camera| − R_max, and inside the view θ ≤ θ_max, so depth ≥ (|camera| − R_max) cos θ_max;
+ *   - the sphere of radius R_max lies beyond the plane tangent to it across the view axis:
+ *     depth ≥ (−camera · axis) − R_max.
+ * `axis` is the unit view direction; `cosMaxOffAxis` the cosine of the widest angle between it and a corner of the
+ * view. Never under 1 km.
+ */
+export function nearPlaneKm(camera: Vec3, axis: Vec3, cosMaxOffAxis: number, rMax = SURFACE_MAX_R_KM): number {
+  const fromCentre = Math.hypot(camera[0], camera[1], camera[2])
+  const byAngle = (fromCentre - rMax) * cosMaxOffAxis
+  const byTangent = -(camera[0] * axis[0] + camera[1] * axis[1] + camera[2] * axis[2]) - rMax
+  return Math.max(1, byAngle, byTangent)
+}
+
 /** Idle time after which the Moon starts turning by itself, ms. */
 export const IDLE_BEFORE_SPIN_MS = 20_000
 /** Slow turn: about two minutes a revolution. */

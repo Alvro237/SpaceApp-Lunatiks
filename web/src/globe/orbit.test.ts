@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { IDLE_BEFORE_SPIN_MS, MAX_TILT, MOON_R_KM, OrbitRig, cameraPose, RELIEF_MAX, SPIN_DEG_PER_S, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon, zoomOrbitToward } from './orbit'
+import { IDLE_BEFORE_SPIN_MS, MAX_TILT, MOON_R_KM, OrbitRig, SURFACE_MAX_R_KM, TILT_3D, cameraPose, nearPlaneKm, RELIEF_MAX, SPIN_DEG_PER_S, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon, zoomOrbitToward } from './orbit'
 
 describe('globe geometry', () => {
   it('puts the north pole up and longitude 0 toward +x', () => {
@@ -157,5 +157,38 @@ describe('tilted view of the globe', () => {
     o.drag(0, 50, 1000, 35, true)
     expect(o.goal.lat).toBeCloseTo(0, 9)
     expect(o.goal.lon).toBeGreaterThan(0)
+  })
+})
+
+describe('near clipping plane', () => {
+  const R = SURFACE_MAX_R_KM
+  const len = (v: number[]) => Math.hypot(v[0], v[1], v[2])
+  const unit = (v: number[]): [number, number, number] => [v[0] / len(v), v[1] / len(v), v[2] / len(v)]
+  const dot = (a: number[], b: number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+  it('straight down, it is the height above the outermost relief', () => {
+    // hand-worked: camera 3000 km from the centre on +Y looking at the centre. Tangent bound 3000 - 1824.27 =
+    // 1175.73 km; angle bound (3000 - 1824.27) x cos 20° = 1104.83 km. The larger one wins.
+    expect(nearPlaneKm([0, 3000, 0], [0, -1, 0], Math.cos((20 * Math.PI) / 180))).toBeCloseTo(3000 - R, 9)
+  })
+
+  it('tilted from far out, it keeps the ground below the camera in front of the plane', () => {
+    // the view that drew a black hole: 3500 km up, tilted to the 3D button's angle
+    const p = cameraPose({ lat: -7, lon: 43, dist: MOON_R_KM + 3500 }, TILT_3D, 0)
+    const axis = unit([p.target[0] - p.position[0], p.target[1] - p.position[1], p.target[2] - p.position[2]])
+    // the highest ground straight below the camera, and how deep it lies along the view axis
+    const below = unit(p.position).map((c) => c * R)
+    const toBelow = [below[0] - p.position[0], below[1] - p.position[1], below[2] - p.position[2]]
+    const depth = dot(toBelow, axis)
+    // a view whose corner just reaches that point
+    const cosOff = depth / len(toBelow)
+    const near = nearPlaneKm(p.position, axis, cosOff)
+    expect(near).toBeLessThanOrEqual(depth + 1e-6)
+    // the old rule (distance from the centre minus 1.05 R) put the plane beyond it by tens of kilometres
+    expect(len(p.position) - R - depth).toBeGreaterThan(10)
+  })
+
+  it('never goes under 1 km', () => {
+    expect(nearPlaneKm([0, R - 10, 0], [0, -1, 0], 0.9)).toBe(1)
   })
 })
