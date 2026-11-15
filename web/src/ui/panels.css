@@ -487,6 +487,44 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
 .timeline.mini .sav-line { stroke: #ffd166; stroke-width: 1.5; }
 .timeline.mini .sav-range { opacity: 0.8; }
 .timeline.mini .sav-text { fill: #ffd166; font-size: 11px; font-weight: 700; font-family: var(--font); }
+/* multiselect: Sunlit / Earth switch next to the playback icons, one strip per compared place */
+.timeline.mini .tl-seg {
+  display: inline-flex;
+  flex: none;
+  padding: 2px;
+  gap: 2px;
+  border-radius: 999px;
+  border: 1px solid rgba(236, 234, 228, 0.45);
+  background: rgba(11, 12, 14, 0.55);
+}
+.timeline.mini .tl-seg-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #eceae4;
+  font: 600 0.8rem var(--font);
+  text-shadow: inherit;
+  cursor: pointer;
+}
+.timeline.mini .tl-seg-item:hover:not(.is-on) { background: rgba(236, 234, 228, 0.12); }
+.timeline.mini .tl-seg-item.is-on { background: #eceae4; color: #0b0c0e; text-shadow: none; }
+.timeline.mini .tl-seg-item:focus-visible { outline: 3px solid var(--focus); outline-offset: 1px; }
+.timeline.mini .compare-strips { cursor: pointer; }
+.timeline.mini .cs-label { cursor: pointer; }
+.timeline.mini .cs-label:hover .row-label { text-decoration: underline; }
+.timeline.mini .cs-num { fill: #f2f0ea; stroke: rgba(0, 0, 0, 0.6); stroke-width: 1; }
+.timeline.mini .cs-c-2 { fill: #c792ea; }
+.timeline.mini .cs-c-3 { fill: #5fd4c4; }
+.timeline.mini .cs-c-4 { fill: #ff8fb1; }
+.timeline.mini .cs-num-text { fill: #0b0c0e; font: 800 10px var(--font); text-shadow: none; }
+.timeline.mini .cs-share { font-family: var(--mono); }
+.timeline.mini .is-current .row-label { fill: #ffd166; }
+.timeline.mini .is-current .row-bg { fill: rgba(255, 209, 102, 0.16); }
 .timeline.mini .inside-line { fill: none; stroke: #ffb4e0; stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 
 /* ---------------------------------------------------------------- level 4 form and result */
@@ -1025,18 +1063,99 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
   font-size: 0.74rem;
   font-weight: 800;
 }
-.multi-places { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
-.multi-places li {
-  display: inline-flex;
-  align-items: center;
+/* one card per place, side by side: header, small radar and the metrics as numbers */
+.cmp-note { margin: -4px 0 0; font-size: 0.8rem; }
+.cmp-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 10px;
+}
+.cmp-card {
+  --c: var(--s1);
+  display: grid;
   gap: 6px;
-  max-width: 100%;
-  padding: 3px 4px 3px 5px;
-  border-radius: 999px;
+  min-width: 0;
+  padding: 8px 10px 10px;
+  border-radius: 12px;
   border: 1px solid var(--border);
+  border-top: 3px solid var(--c);
   background: var(--surface-2);
 }
-.multi-places li.is-current { border-color: var(--accent); }
+.cmp-c-2 { --c: var(--s2); }
+.cmp-c-3 { --c: var(--s3); }
+.cmp-c-4 { --c: var(--s4); }
+.cmp-card.is-current { border-color: var(--accent); border-top-color: var(--c); box-shadow: 0 0 0 1px var(--accent); }
+.cmp-card-head { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.cmp-card-head .multi-name { flex: 1; min-width: 0; max-width: none; text-align: left; }
+.cmp-card-head .icon.small { min-width: 26px; min-height: 26px; border-radius: 50%; }
+.cmp-tag { justify-self: start; }
+.cmp-body { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 10px; align-items: center; }
+.cmp-radar { width: 112px; height: 112px; display: block; overflow: visible; }
+.cmp-radar-axis { fill: var(--muted); font-size: 8.5px; font-weight: 700; font-family: var(--font); }
+.cmp-radar-best { fill: none; stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 2; opacity: 0.8; }
+.cmp-radar .radar-series polygon { fill-opacity: 0.22; stroke-dasharray: none; }
+.cmp-metrics { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 0.78rem; }
+.cmp-metrics li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1px 6px; align-items: baseline; }
+.cmp-m-label {
+  justify-self: start;
+  max-width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: help;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.cmp-m-label:hover, .cmp-metrics li.is-active .cmp-m-label { color: var(--text); }
+.cmp-m-label:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: 3px; }
+
+/* radar axes: a wide invisible hit area, the hovered axis drawn stronger */
+.cmp-body { position: relative; }
+.cmp-axis { cursor: help; }
+.cmp-axis-hit { fill: transparent; stroke: transparent; stroke-width: 10; pointer-events: all; }
+.cmp-axis.is-active .radar-spoke { stroke: var(--text); stroke-width: 1.5; }
+.cmp-axis.is-active .cmp-radar-axis, .cmp-axis:hover .cmp-radar-axis { fill: var(--text); }
+
+/* the explanation pop-up */
+.cmp-tip {
+  position: absolute;
+  z-index: 6;
+  width: 250px;
+  max-width: calc(100vw - 48px);
+  padding: 9px 11px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--c);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  font-size: 0.78rem;
+  line-height: 1.35;
+  pointer-events: none;
+  transform: translateX(-18px);
+  animation: cmp-tip-in 0.12s ease-out;
+}
+.cmp-tip.is-above { transform: translate(-18px, -100%); }
+.cmp-tip p { margin: 5px 0 0; }
+.cmp-tip-title { display: block; font-size: 0.86rem; }
+.cmp-tip-value { display: block; margin-top: 1px; font-family: var(--mono); font-size: 0.74rem; color: var(--c); font-weight: 600; }
+.cmp-tip-good span { color: #7ee2a8; }
+.cmp-tip-bad span { color: #ff8f8f; }
+@keyframes cmp-tip-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .cmp-tip { animation: none; } }
+.cmp-m-value { font-family: var(--mono); font-weight: 600; white-space: nowrap; }
+.cmp-metrics li.is-best .cmp-m-value { color: var(--c); }
+.cmp-m-bar { grid-column: 1 / -1; height: 4px; border-radius: 2px; background: var(--grid); overflow: hidden; }
+.cmp-m-bar > span { display: block; height: 100%; border-radius: 2px; background: var(--c); }
 .multi-name {
   border: 0;
   background: transparent;
@@ -1050,8 +1169,6 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
   white-space: nowrap;
 }
 .multi-name:hover:not(:disabled) { text-decoration: underline; }
-.multi-places .icon.small { min-width: 26px; min-height: 26px; border-radius: 50%; }
-.multi-switch { max-width: 280px; }
 .seg-icon { display: inline-flex; align-items: center; gap: 6px; }
 
 /* series styles: colour, line pattern and the number at every vertex */
@@ -1090,10 +1207,6 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
 .rs-3 .radar-dot text { fill: var(--s3); }
 .rs-4 .radar-dot text { fill: var(--s4); }
 
-.multi-strips { width: 100%; height: auto; display: block; cursor: pointer; }
-.strip-label { fill: var(--text); font-size: 13px; font-weight: 600; font-family: var(--font); }
-.strip-value { fill: var(--text); font-size: 13px; font-weight: 600; font-family: var(--mono); }
-.strip-tick { fill: var(--muted); font-size: 11px; font-family: var(--font); }
 
 /* undo toast after a right click */
 .toast-undo {

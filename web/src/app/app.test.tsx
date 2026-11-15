@@ -276,7 +276,7 @@ describe('navigator', () => {
     await noAxeViolations(container)
   })
 
-  it('multiselect: two places open the comparison with a radar, strips over time and removal with undo', async () => {
+  it('multiselect: two places open the comparison with a card per place, strips per place in the timeline and removal with undo', async () => {
     const user = userEvent.setup()
     const { container } = renderAt('/')
     await screen.findByRole('img', { name: /Sunlit .*% and Earth in view/ }, { timeout: 5000 })
@@ -293,9 +293,18 @@ describe('navigator', () => {
     }
     expect(useApp.getState().compare).toHaveLength(3)
     expect(await screen.findByRole('heading', { level: 2, name: 'Comparing 3 places' })).toBeInTheDocument()
-    expect(await screen.findByRole('img', { name: /Radar of 3 places/ })).toBeInTheDocument()
-    expect(screen.getByRole('img', { name: /When each place is sunlit: 1 IM-2.*2 Mons Malapert.*3 Shackleton crater/ })).toBeInTheDocument()
-    await user.click(screen.getByRole('radio', { name: /Earth/ }))
+    // one card per place, each with its own radar (not three shapes piled on one chart)
+    const items = within(screen.getByRole('list', { name: 'Places compared' })).getAllByRole('listitem')
+    expect(items.filter((li) => li.classList.contains('cmp-card'))).toHaveLength(3)
+    expect(await screen.findAllByRole('img', { name: /^Radar of \d / })).toHaveLength(3)
+    // a metric name explains its axis and which way is better, also from the keyboard
+    await user.hover(screen.getAllByRole('button', { name: 'Longest night' })[0])
+    expect(screen.getByRole('tooltip')).toHaveTextContent(/Better:.*Worse:/)
+    await user.unhover(screen.getAllByRole('button', { name: 'Longest night' })[0])
+    // the timeline under the map shows one strip per place, switched between Sunlit and Earth
+    const timeline = screen.getByRole('region', { name: 'Mission window and playback' })
+    expect(within(timeline).getByRole('img', { name: /When each place is sunlit: 1 IM-2.*2 Mons Malapert.*3 Shackleton crater/ })).toBeInTheDocument()
+    await user.click(within(timeline).getByRole('radio', { name: /Earth/ }))
     expect(screen.getByRole('img', { name: /When each place is in view of the Earth/ })).toBeInTheDocument()
     const table = screen.getByRole('table', { name: /Places compared over the window/ })
     expect(within(table).getAllByRole('columnheader').map((h) => h.textContent).join('|')).toMatch(/Place\|Sunlight\|Earth contact\|Short nights\|Steady contact\|Power/)
