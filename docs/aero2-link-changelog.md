@@ -109,3 +109,31 @@ The link is now in the interface. The section is still opened with the "Earth li
   and `gt_basis` stay in the API response.
 - Shared frontend files touched, additions only apart from the rewrite of `LinkPanel.tsx` and the strip of
   `Timeline.tsx`: `app/Layout.tsx` (one component), `ui/panels.css` (new classes at the end), `api/*`.
+## 5. Mission planner (branch `feat/aero2-planner-link`)
+
+The planner's Earth contact is now the radio link, in geometry only (owner decisions of 2026-11-15). It touches files of SW-2
+(`suitability_search.py`, `logic/suitability.py`, `schemas/suitability.py`, `web/src/mission/*`) with additive edits; SW-2 to review.
+
+- **Contact in the search** = some part of the Earth's disc is above the site's horizon (`ANY_EARTH_FRACTION`, 1e-6 of the
+  engine's fraction) AND at least one antenna of the chosen networks sees the Moon above its elevation limit. The share of the
+  disc (`comms_min_fraction`) is no longer an input of the planner and is not used when the request has `link`. It is looser than
+  the 0.5 of the single-site Link panel, so the planner shows more contact than that panel for the same place.
+- **Request**: new optional field `link` (`networks`, `custom_stations`, `direction`). Without it the search behaves as before.
+  `direction` is how the planner asks for "can send commands": uplink low or high power uses the transmit limits (DSN only).
+- **Per sample** the antennas' view of the Moon depends on time only (each antenna looks at the Moon's centre), so it is computed
+  once per time grid (`services.link_antenna_mask`) and combined with each sample's Earth series (`logic/link.py`:
+  `planner_contact`). With `robust_delay_h` the mask is also computed for the shifted window. The cost of the search does not change.
+- **Criteria** (category Earth contact, all hard limits, none with a default): `blackout_h` (now the longest time without link),
+  `link_min_daily_h` (every full 24 h block has at least this many hours of contact; needs a window of 24 h or more) and
+  `link_min_pass_h` (every pass that starts and ends inside the window lasts at least this long; passes cut by the window edges are
+  not checked; no contact at all fails). `earth_at_landing` means link at landing. The Earth score is the share of the window with link.
+- **Ephemeris bound**: unchanged and still sound, because contact with an antenna is a subset of the Earth being in view (tested in
+  `tests/test_suitability_link.py`).
+- **Budget (level 2)** is not a filter: the margin is the same at every site, so it cannot rank them. With "Show the link budget for
+  each proposed site" on, each of the proposed sites calls `POST /api/v1/link` with the user's budget (same window, same antennas, the
+  planner's contact) and shows the hours with a closed link, the longest gap and the best margin.
+- **Interface**: Earth contact has a "Radio link" block (networks, direction and own antennas, the budget switch) that shares its state with
+  the Link panel; the "Earth disc needed for contact" input is gone. The settings go to the search only when the Earth category or
+  one of its criteria is on; an unfinished own antenna blocks the search and says why.
+- Known approximations (also in `assumptions` of the answer): geometry only; the direction to each antenna is to the Moon's centre
+  (the site's position, up to 0.26 deg, is ignored); window values come from the quadtree samples and their traced horizons.

@@ -4,9 +4,10 @@
  *
  * Stage B: every input is sent to `POST /api/v1/suitability/search` as a hard limit (a criterion of the API's
  * catalogue, `api/app/logic/suitability.py`, or one of its three request-level parameters); "unavailable" inputs
- * show the data-gap reason. Thresholds have no defaults (CLAUDE.md) except the region radius and
- * `comms_min_fraction` (team parameter, section 1 of the spec): a category contributes to the request only once the
- * planner switches it on, and within it a field left empty is simply inactive (not sent), per section 3.3.
+ * show the data-gap reason. Thresholds have no defaults (CLAUDE.md) except the region radius: a category contributes
+ * to the request only once the planner switches it on, and within it a field left empty is simply inactive (not sent),
+ * per section 3.3. Earth contact is the radio link (AERO-2): the networks, direction and own antennas come from the link
+ * settings and go as the request's `link`; the Earth's disc share is no longer an input.
  */
 
 import type { CriterionInput, SuitabilityCategory } from '../api/types'
@@ -105,6 +106,9 @@ export type PlannerField =
   | (PlannerFieldBase & { kind: 'battery-model' })
   /** Near a named feature: an IAU name (searched) and a distance. */
   | (PlannerFieldBase & { kind: 'feature' })
+  /** The radio link settings (networks, direction, own antennas, budget for the proposed sites): kept in the link store
+   * the Link panel shares, sent as the request's `link`, never as a criterion. */
+  | (PlannerFieldBase & { kind: 'link' })
   | (PlannerFieldBase & { kind: 'unavailable'; reason: string })
 
 export interface PlannerCategory {
@@ -178,9 +182,15 @@ export const PLANNER_CATEGORIES: PlannerCategory[] = [
   {
     id: 'earth',
     title: 'Earth contact',
-    scoreNote: 'share of the window with Earth contact',
+    scoreNote: 'share of the window with radio contact',
     hasSwitch: true,
     fields: [
+      {
+        id: 'link_settings',
+        kind: 'link',
+        label: 'Radio link',
+        tip: 'Contact means the Earth is above the site’s horizon and an antenna of the networks you pick sees the Moon (above its own elevation limit). Geometry only: the signal margin is the same at every site, so it is shown for each proposed site instead.',
+      },
       {
         id: 'max_blackout',
         kind: 'number',
@@ -188,18 +198,26 @@ export const PLANNER_CATEGORIES: PlannerCategory[] = [
         label: 'Longest blackout',
         unit: 'h',
         min: 0,
-        tip: 'The longest time without direct radio contact with Earth that the mission accepts (data storage, operations).',
+        tip: 'The longest time without radio contact that the mission accepts (data storage, operations).',
       },
       {
-        id: 'comms_fraction',
+        id: 'link_min_daily',
         kind: 'number',
-        key: 'comms_min_fraction',
-        label: 'Earth disc needed for contact',
-        unit: '%',
+        key: 'link_min_daily_h',
+        label: 'Contact per day',
+        unit: 'h',
         min: 0,
-        max: 100,
-        minExclusive: true,
-        tip: "How much of the Earth's disc must be above the horizon to count as contact.",
+        max: 24,
+        tip: 'Every full day of the mission must have at least this many hours of contact: the data that can be sent down. Needs a mission of at least 24 h.',
+      },
+      {
+        id: 'link_min_pass',
+        kind: 'number',
+        key: 'link_min_pass_h',
+        label: 'Shortest contact pass',
+        unit: 'h',
+        min: 0,
+        tip: 'Every contact pass must last at least this long (time to set up the link, send commands and bring data down). A pass cut by the start or the end of the mission is not checked.',
       },
     ],
   },
@@ -277,7 +295,7 @@ export const PLANNER_CATEGORIES: PlannerCategory[] = [
         kind: 'switch',
         criterion: 'earth_at_landing',
         label: 'Earth in view at landing',
-        tip: 'The Earth must be in contact at touchdown, for live telemetry.',
+        tip: 'The Earth must be in contact at touchdown, for live telemetry: above the site’s horizon and seen by an antenna of the networks set in Earth contact.',
       },
     ],
   },
@@ -356,9 +374,12 @@ export const PLANNER_CATEGORIES: PlannerCategory[] = [
 ]
 
 /** Inputs sent as request fields, not criteria (the API's REQUEST_PARAMETERS). */
-export const REQUEST_KEYS = new Set(['landing_radius_km', 'robust_delay_h', 'comms_min_fraction'])
+export const REQUEST_KEYS = new Set(['landing_radius_km', 'robust_delay_h'])
+/** Criteria that need the radio link settings (the request's `link`): the Earth ones, which then mean contact with an
+ * antenna, and the two that only exist with the link. */
+export const LINK_CRITERIA = new Set(['blackout_h', 'earth_at_landing', 'link_min_daily_h', 'link_min_pass_h'])
 /** Criteria evaluated over the mission window (stage "window" of the API's catalogue). */
-export const WINDOW_CRITERIA = new Set(['battery_autonomy_h', 'recharge_h', 'battery_model', 'blackout_h', 'sun_el_at_landing_deg', 'earth_at_landing'])
+export const WINDOW_CRITERIA = new Set(['battery_autonomy_h', 'recharge_h', 'battery_model', 'blackout_h', 'sun_el_at_landing_deg', 'earth_at_landing', 'link_min_daily_h', 'link_min_pass_h'])
 
 /** Criterion id -> label, for the funnel, the unknown list and the site details. */
 export const CRITERION_LABEL: Record<string, string> = {
@@ -368,6 +389,8 @@ export const CRITERION_LABEL: Record<string, string> = {
   avoid_psr: 'Avoid permanently shadowed ground',
   battery_model: 'Detailed battery model',
   blackout_h: 'Longest blackout',
+  link_min_daily_h: 'Contact per day',
+  link_min_pass_h: 'Shortest contact pass',
   max_slope_deg: 'Maximum slope',
   crater_cover_pct: 'Crater cover in the landing area',
   rim_margin_radii: 'Margin from crater rims',
@@ -396,8 +419,9 @@ export type PlannerSelects = Record<string, string>
 
 export const DEFAULT_PLANNER_SWITCHES: PlannerSwitches = {}
 export const DEFAULT_PLANNER_SELECTS: PlannerSelects = { past_landings: 'away' }
-/** The one input with a real default (section 1 of the spec: the team parameter `comms_min_fraction` = 0.5). */
-export const DEFAULT_PLANNER_VALUES: PlannerValues = { comms_fraction: '50' }
+/** No input has a default: contact is decided by the antennas of the networks picked (the radio link settings), not by a
+ * share of the Earth's disc. */
+export const DEFAULT_PLANNER_VALUES: PlannerValues = {}
 
 export interface SuitabilityInputs {
   /** Categories switched on (`search` when the side switch is on), in catalogue order. */
@@ -449,7 +473,7 @@ export function buildSuitability(
     if (!categoriesOn[cat.id]) continue
     categories.push(cat.id)
     for (const f of cat.fields) {
-      if (f.kind === 'unavailable' || f.kind === 'side') continue
+      if (f.kind === 'unavailable' || f.kind === 'side' || f.kind === 'link') continue
       if (f.kind === 'switch') {
         if (switches[f.id]) criteria.push({ id: f.criterion })
         continue
@@ -460,8 +484,6 @@ export function buildSuitability(
         if (!raw) continue
         const v = parseNumber(f.label, raw, f.min, f.max, f.unit, f.minExclusive)
         if (typeof v === 'string') return v
-        // comms_min_fraction is sent whatever the category (commsMinFractionOf below); here it is only checked
-        if (f.key === 'comms_min_fraction') continue
         if (f.key === 'landing_radius_km') out.landing_radius_km = v
         else if (f.key === 'robust_delay_h') out.robust_delay_h = v
         else criteria.push({ id: f.key, limit: v })
@@ -536,11 +558,7 @@ export function buildSuitability(
   return out
 }
 
-/** `comms_min_fraction` (request-level, 0-1): typed as a percent in "Earth disc needed for contact", with the
- * team's default of 50 % (section 1 of the spec) when left blank or invalid — it is read whether or not Earth
- * contact is switched on, since the engine's own notion of "contact" always needs it. */
-export function commsMinFractionOf(values: PlannerValues): number {
-  const raw = (values.comms_fraction ?? '').trim()
-  const n = raw ? Number(raw.replace(',', '.')) : 50
-  return (Number.isFinite(n) && n > 0 && n <= 100 ? n : 50) / 100
+/** Whether the search needs the radio link settings: the Earth category is on, or a criterion that uses contact is. */
+export function needsLink(built: SuitabilityInputs): boolean {
+  return built.categories.includes('earth') || built.criteria.some((c) => LINK_CRITERIA.has(c.id))
 }

@@ -7,7 +7,9 @@
 import { useId } from 'react'
 import './planner.css'
 import type { SuitabilityResponse, TopSite } from '../api/types'
+import type { LinkSummary } from '../panels/linkModel'
 import { useAreas } from '../state/areas'
+import { usePlannerSiteLinks } from '../state/link'
 import { usePanels } from '../state/panels'
 import { MAX_COMPARE, useApp } from '../state/store'
 import { CloseButton } from '../ui/PanelNav'
@@ -91,7 +93,19 @@ export function ResultsPanel({ titleId }: { titleId: string }) {
   return <Results r={a.suit} titleId={titleId} />
 }
 
-function SiteItem({ s, landing }: { s: TopSite; landing: boolean }) {
+/** The link budget at one proposed site, for the user's radio (Earth contact, "Show the link budget"): the hours with a closed link
+ * and the margin. The margin is the same at every site (the search cannot rank by it); here it says whether this one closes. */
+function SiteLink({ link }: { link: LinkSummary }) {
+  const pctText = (f: number) => `${f * 100 >= 99.95 || f * 100 < 0.05 ? (f * 100).toFixed(0) : (f * 100).toFixed(1)} %`
+  return (
+    <span className="site-link">
+      <span aria-hidden="true">📡 </span>Link budget: closed {pctText(link.linkFraction)} of the window · longest gap {link.gapHours.toFixed(0)} h
+      {link.margin ? ` · best margin ${link.margin.max.toFixed(1)} dB (needs +${link.needMarginDb} dB)` : ' · no antenna in contact'}
+    </span>
+  )
+}
+
+function SiteItem({ s, landing, link }: { s: TopSite; landing: boolean; link: LinkSummary | null }) {
   const a = useAreas()
   const selected = a.compareSelected.includes(s.rank)
   const atLimit = a.compareSelected.length >= MAX_COMPARE
@@ -131,6 +145,7 @@ function SiteItem({ s, landing }: { s: TopSite; landing: boolean }) {
             <span aria-hidden="true">✗ </span>Weak: {s.cons.map(catLabel).join(', ')}
           </span>
         )}
+        {link && <SiteLink link={link} />}
         {s.unknown.length > 0 && (
           <span className="muted">
             <span aria-hidden="true">? </span>No data: {s.unknown.map(critLabel).join(', ')}
@@ -177,6 +192,9 @@ function Results({ r, titleId }: { r: SuitabilityResponse; titleId: string }) {
   const n = (k: keyof SuitabilityResponse['counts']) => r.counts[k] ?? 0
   const compareCount = a.compareSelected.length
   const landing = a.suitRequest?.landing_radius_km != null
+  // the link budget of each proposed site (only while "Show the link budget" is on), for the window of this answer
+  const req = a.suitRequest
+  const siteLinks = usePlannerSiteLinks(r.sites, req ? { startIso: req.start, durationH: req.duration_h } : null)
   // the map follows the priorities at once; the sites were ranked with the order of the request
   const cats = r.layers.map((l) => l.category)
   const stale = cats.length > 1 && byWeight(cats, r.weights) !== byWeight(cats, a.weights)
@@ -271,10 +289,15 @@ function Results({ r, titleId }: { r: SuitabilityResponse; titleId: string }) {
         <p className="muted pad">No cell passes every input. The funnel below shows which input removed the most.</p>
       ) : (
         <ol className="area-list">
-          {r.sites.map((s) => (
-            <SiteItem key={s.rank} s={s} landing={landing} />
+          {r.sites.map((s, i) => (
+            <SiteItem key={s.rank} s={s} landing={landing} link={siteLinks.links[i] ?? null} />
           ))}
         </ol>
+      )}
+      {siteLinks.on && siteLinks.problem && (
+        <p className="error link-hint" role="status">
+          Link budget for the sites: {siteLinks.problem}
+        </p>
       )}
       {r.sites_dropped > 0 && (
         <p className="fine">

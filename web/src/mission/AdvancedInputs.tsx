@@ -7,6 +7,7 @@
 import { useEffect, useId, useState } from 'react'
 import { api, isMissing } from '../api/client'
 import type { FeatureMatch } from '../api/types'
+import { PlannerLinkSettings } from '../panels/LinkPanel'
 import { useAreas } from '../state/areas'
 import { IconChevron } from '../ui/icons'
 import { Tip } from '../ui/Tip'
@@ -185,6 +186,7 @@ function FieldRow({ field, disabled }: { field: PlannerField; disabled: boolean 
   }
   if (field.kind === 'battery-model') return <BatteryModelField field={field} nameId={nameId} />
   if (field.kind === 'feature') return <FeatureField field={field} />
+  if (field.kind === 'link') return <LinkField field={field} />
   // unavailable (data gap)
   return (
     <div className="filter-row is-na" key={field.id}>
@@ -230,6 +232,19 @@ export function AdvancedInputs() {
         })}
       {a.advancedOpen && <Priorities />}
     </section>
+  )
+}
+
+/** The radio link settings (AERO-2): which antennas count as contact. */
+function LinkField({ field }: { field: PlannerField & { kind: 'link' } }) {
+  return (
+    <div className="ios-row stack planner-link-field">
+      <div className="ios-row-top">
+        <span className="ios-label">{field.label}</span>
+        <Tip label={field.label.toLowerCase()}>{field.tip}</Tip>
+      </div>
+      <PlannerLinkSettings />
+    </div>
   )
 }
 

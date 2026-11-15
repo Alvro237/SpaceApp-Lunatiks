@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { LinkResponse } from '../api/types'
-import { DEFAULT_FORM, type LinkForm, buildLinkRequest, buildLinkRequestWithFallback, formatRate, inRanges, linkStepMin, nextChange, noLinkReason, rankStations, summarize } from './linkModel'
+import { ANY_EARTH_FRACTION, DEFAULT_FORM, type LinkForm, buildPlannerLink, buildLinkRequest, buildLinkRequestWithFallback, formatRate, inRanges, linkStepMin, nextChange, noLinkReason, rankStations, summarize } from './linkModel'
 
 const HOUR = 3_600_000
 const win = { startIso: '2027-03-01T00:00', durationH: 720, commsMinFraction: 0.5 }
@@ -27,6 +27,40 @@ describe('buildLinkRequest', () => {
 
   it('needs a network or an antenna', () => {
     expect(buildLinkRequest(site, win, form({ networks: [] })).problem).toBe('Pick a network or add an antenna')
+  })
+
+  it('takes the sampling step of the window when it is given (the planner uses its own 60 minutes)', () => {
+    expect(buildLinkRequest(site, { ...win, stepMin: 60 }, form()).body).toMatchObject({ step_min: 60 })
+  })
+})
+
+describe('buildPlannerLink (the search settings of the mission planner)', () => {
+  const own = { key: 1, lat: '40.4', lon: '-4.2', height: '', minEl: '5', diameter: '', gt: '' }
+
+  it('sends the networks, the direction and the own antennas; never the budget', () => {
+    const { link, problem } = buildPlannerLink(form({ networks: ['dsn', 'jaxa'], direction: 'uplink_low_power', level: 2, eirp: '5', custom: [own] }))
+    expect(problem).toBeNull()
+    expect(link).toEqual({
+      networks: ['dsn', 'jaxa'],
+      direction: 'uplink_low_power',
+      custom_stations: [{ id: 'own-1', name: 'My antenna 1', lat_deg: 40.4, lon_deg: -4.2, min_elevation_deg: 5, height_m: 0 }],
+    })
+  })
+
+  it('does not ask for the budget fields: the geometry is enough for the search', () => {
+    expect(buildPlannerLink(form({ level: 2 })).problem).toBeNull()
+    // an own antenna needs no G/T or diameter here (only the budget uses them)
+    expect(buildPlannerLink(form({ level: 2, custom: [own] })).problem).toBeNull()
+  })
+
+  it('needs a network or an antenna, and a complete own antenna', () => {
+    expect(buildPlannerLink(form({ networks: [] })).problem).toBe('Link: pick a network or add an antenna')
+    expect(buildPlannerLink(form({ custom: [{ ...own, minEl: '' }] })).problem).toMatch(/Antenna 1: latitude, longitude and minimum elevation/)
+    expect(buildPlannerLink(form({ networks: [], custom: [own] })).problem).toBeNull()
+  })
+
+  it('the contact asks for any part of the Earth, the same number the search uses', () => {
+    expect(ANY_EARTH_FRACTION).toBe(1e-6)
   })
 
   it('level 2 needs the radio data: EIRP, data rate and the Eb/N0 needed; kbit/s become bit/s', () => {

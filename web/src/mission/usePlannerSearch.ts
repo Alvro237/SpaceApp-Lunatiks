@@ -9,11 +9,13 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { api } from '../api/client'
-import type { SuitabilityRequest } from '../api/types'
+import type { SuitabilityLinkInput, SuitabilityRequest } from '../api/types'
+import { buildPlannerLink } from '../panels/linkModel'
+import { useLinkStore } from '../state/link'
 import { useAreas } from '../state/areas'
 import { useApp } from '../state/store'
 import { isoMinute } from '../time/clock'
-import { type SuitabilityInputs, buildSuitability, commsMinFractionOf, resolveCellKm } from './plannerInputs'
+import { type SuitabilityInputs, buildSuitability, needsLink, resolveCellKm } from './plannerInputs'
 import { priorityOrder } from './score'
 
 export const PREVIEW_SAMPLES = 60
@@ -45,7 +47,8 @@ export interface RequestContext {
   durationH: number
   mastM: number
   panel: 'tracking' | 'vertical' | 'horizontal'
-  commsMinFraction: number
+  /** Radio link settings, when the search uses contact (the Earth category or a criterion of it is on). */
+  link: SuitabilityLinkInput | null
   azStepDeg: number
   horizonKm: number
   unknownPasses: boolean
@@ -67,7 +70,7 @@ export function suitabilityRequest(built: SuitabilityInputs, ctx: RequestContext
     ...(built.robust_delay_h != null ? { robust_delay_h: built.robust_delay_h } : {}),
     mast_m: ctx.mastM,
     panel: ctx.panel,
-    comms_min_fraction: ctx.commsMinFraction,
+    ...(ctx.link ? { link: ctx.link } : {}),
     horizon_az_step_deg: ctx.azStepDeg,
     horizon_radius_km: ctx.horizonKm,
     max_window_samples: samples,
@@ -86,7 +89,12 @@ export function usePlannerSearch(): PlannerSearch {
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const built = buildSuitability(a.categoriesOn, a.sideOn, a.plannerSwitches, a.plannerSelects, a.plannerValues)
-  const buildError = typeof built === 'string' ? built : null
+  // the radio link settings (shared with the Link panel): only what contact needs, geometry. The budget is not asked here.
+  const networks = useLinkStore((s) => s.networks)
+  const direction = useLinkStore((s) => s.direction)
+  const custom = useLinkStore((s) => s.custom)
+  const linkBuilt = typeof built !== 'string' && needsLink(built) ? buildPlannerLink({ ...useLinkStore.getState(), networks, direction, custom }) : null
+  const buildError = typeof built === 'string' ? built : (linkBuilt?.problem ?? null)
   const cellKm = resolveCellKm(a.cellMode, a.radiusKm)
   const ready = typeof built !== 'string' && built.categories.length > 0
   const hasWindow = typeof built !== 'string' && built.window
@@ -110,7 +118,7 @@ export function usePlannerSearch(): PlannerSearch {
         durationH,
         mastM,
         panel,
-        commsMinFraction: commsMinFractionOf(s.plannerValues),
+        link: linkBuilt?.link ?? null,
         azStepDeg: s.azStepDeg,
         horizonKm: s.horizonKm,
         unknownPasses: s.unknownPasses,
@@ -132,7 +140,7 @@ export function usePlannerSearch(): PlannerSearch {
   }
 
   // Everything that should start a fresh preview, as one comparable value (not the priority order: see the top).
-  const sig = JSON.stringify([a.center, a.radiusKm, cellKm, built, commsMinFractionOf(a.plannerValues), startMs, durationH, mastM, panel, a.rerankSeq])
+  const sig = JSON.stringify([a.center, a.radiusKm, cellKm, built, linkBuilt?.link ?? null, startMs, durationH, mastM, panel, a.rerankSeq])
 
   useEffect(() => {
     if (timerRef.current) clearTimeout(timerRef.current)

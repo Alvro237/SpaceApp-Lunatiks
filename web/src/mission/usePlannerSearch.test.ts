@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAreas } from '../state/areas'
+import { useLinkStore } from '../state/link'
 import { defaultScene, useApp } from '../state/store'
 import { FULL_SAMPLES, PREVIEW_SAMPLES, usePlannerSearch } from './usePlannerSearch'
 
@@ -80,7 +81,9 @@ describe('usePlannerSearch', () => {
     expect(calls[0].body.categories).toEqual(['power'])
     expect(calls[0].body.criteria).toEqual([{ id: 'battery_autonomy_h', limit: 48 }])
     expect(calls[0].body.priority).toEqual(['power'])
-    expect(calls[0].body.comms_min_fraction).toBe(0.5)
+    // no Earth category: no radio link settings, and the share of the Earth's disc is no longer sent at all
+    expect(calls[0].body.comms_min_fraction).toBeUndefined()
+    expect(calls[0].body.link).toBeUndefined()
     expect(calls[0].body.top_k).toBe(10)
     expect(calls[0].body.region).toEqual({ center_lat: -84.79, center_lon: 29.2, radius_km: 20 })
   })
@@ -101,6 +104,36 @@ describe('usePlannerSearch', () => {
     expect(useAreas.getState().isPreview).toBe(true)
     expect(useAreas.getState().raster?.score[0]).toBe(Math.floor((196 / 250) * 255 + 0.5))
     expect(useAreas.getState().suitRequest?.max_window_samples).toBe(PREVIEW_SAMPLES)
+  })
+
+  it('Earth contact sends the radio link settings (networks, direction, own antennas) instead of a disc share', async () => {
+    const { calls, fetchMock } = pendingFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    useLinkStore.setState({ networks: ['dsn', 'jaxa'], direction: 'uplink_low_power', custom: [] })
+    useAreas.setState({ categoriesOn: { earth: true }, plannerValues: { link_min_daily: '4' } })
+    renderHook(() => usePlannerSearch())
+    act(() => {
+      vi.advanceTimersByTime(500)
+    })
+    expect(calls).toHaveLength(1)
+    expect(calls[0].body.link).toEqual({ networks: ['dsn', 'jaxa'], custom_stations: [], direction: 'uplink_low_power' })
+    expect(calls[0].body.criteria).toEqual([{ id: 'link_min_daily_h', limit: 4 }])
+    expect(calls[0].body.comms_min_fraction).toBeUndefined()
+    useLinkStore.setState({ networks: ['dsn', 'estrack', 'jaxa'], direction: 'downlink', custom: [] })
+  })
+
+  it('an own antenna left half-filled blocks the search and says so', () => {
+    const { calls, fetchMock } = pendingFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    useLinkStore.setState({ custom: [{ key: 1, lat: '40', lon: '', height: '', minEl: '', diameter: '', gt: '' }] })
+    useAreas.setState({ categoriesOn: { earth: true } })
+    const { result } = renderHook(() => usePlannerSearch())
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+    expect(calls).toHaveLength(0)
+    expect(result.current.error).toMatch(/Antenna 1/)
+    useLinkStore.setState({ custom: [] })
   })
 
   it('reordering the priorities sends no request; the next request carries the order', async () => {

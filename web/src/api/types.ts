@@ -396,6 +396,14 @@ export interface CriterionInput {
   params?: Record<string, number | string>
 }
 
+/** Radio link settings of the search (SuitabilityLink): contact with the antennas of these networks replaces the share of
+ * the Earth's disc. */
+export interface SuitabilityLinkInput {
+  networks: string[]
+  custom_stations: LinkCustomStation[]
+  direction: LinkDirection
+}
+
 export interface SuitabilityRequest {
   region: { center_lat: number; center_lon: number; radius_km: number }
   start: string
@@ -409,7 +417,9 @@ export interface SuitabilityRequest {
   step_min?: number
   mast_m: number
   panel: 'tracking' | 'vertical' | 'horizontal'
-  comms_min_fraction: number
+  /** Not used when `link` is sent (the planner always sends it). */
+  comms_min_fraction?: number
+  link?: SuitabilityLinkInput
   horizon_az_step_deg: number
   horizon_radius_km: number
   max_window_samples: number

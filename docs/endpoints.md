@@ -203,6 +203,11 @@ without it they keep using the Earth's line of sight alone.
   2. Link budget: EIRP, free-space loss with the real distance (`series.earth_dist_km`), receiver G/T, required
      Eb/N0, margin, achievable data rate. Contact then means margin >= a minimum margin given by the user.
      Every parameter has a unit and a source.
+- Mission planner (`feat/aero2-planner-link`, in review): `POST /api/v1/suitability/search` takes an optional `link`
+  (`networks`, `custom_stations`, `direction`). Contact there is the Earth above the site's horizon (any part of the disc) AND an
+  antenna of those networks seeing the Moon; the Earth criteria use it (`blackout_h`, `earth_at_landing`, the Earth score) and two
+  new criteria, `link_min_daily_h` and `link_min_pass_h`, are added. Geometry only: the budget is shown per proposed site through
+  `POST /api/v1/link`. Details: `docs/aero2-link-changelog.md`, section 5.
 - Satellite relays in lunar orbit are out of scope for now (team decision 2026-11-14).
 - The hard filters `comms_hours` and `max_blackout` use the combined contact series of level 1 when the
   `ConstraintContext` carries it (`ctx.contact`, filled by `services.constraint_context(link_networks=...)`).

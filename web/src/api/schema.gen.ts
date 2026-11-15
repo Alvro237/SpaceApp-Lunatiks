@@ -276,6 +276,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/suitability/criteria": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Criteria the mission design can use, with units, categories, parameters and coverage */
+        get: operations["suitability_criteria_api_v1_suitability_criteria_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/suitability/features": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** IAU feature names south of 55 S that contain the query (for the named-feature criterion) */
+        get: operations["suitability_features_api_v1_suitability_features_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/suitability/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Score the cells of a region for a mission and propose the best landing sites */
+        post: operations["suitability_search_api_v1_suitability_search_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/sun": {
         parameters: {
             query?: never;
@@ -752,6 +803,49 @@ export interface components {
              */
             visible_fraction: number;
         };
+        /** BoundInfo */
+        BoundInfo: {
+            /**
+             * By Criterion
+             * @description Cells proven failed, by the first criterion (catalogue order) that failed
+             */
+            by_criterion: {
+                [key: string]: number;
+            };
+            /** Cells Proven Failed */
+            cells_proven_failed: number;
+            /** Elev Margin M */
+            elev_margin_m: number;
+            /**
+             * H Min M
+             * @description Lowest terrain height assumed, m (grid minimum minus the margin)
+             */
+            h_min_m: number;
+            /** Margin Deg */
+            margin_deg: number;
+            /**
+             * Tile Km
+             * @description Tile sides used, coarse to fine, km
+             */
+            tile_km: number[];
+            /** Tiles Evaluated */
+            tiles_evaluated: number;
+        };
+        /** CategoryInfo */
+        CategoryInfo: {
+            /**
+             * Id
+             * @enum {string}
+             */
+            id: "search" | "power" | "earth" | "topography" | "landing" | "science" | "radiation" | "schedule";
+            /**
+             * Score
+             * @description What the category adds to the score, in words (None: no score)
+             */
+            score: string | null;
+            /** Title */
+            title: string;
+        };
         /** CheckOut */
         CheckOut: {
             /**
@@ -782,6 +876,101 @@ export interface components {
             source: string;
             /** Tolerance */
             tolerance: string;
+        };
+        /** CriteriaCatalogue */
+        CriteriaCatalogue: {
+            /** Categories */
+            categories: components["schemas"]["CategoryInfo"][];
+            /** Criteria */
+            criteria: components["schemas"]["CriterionInfo"][];
+            /** Fixed Inputs */
+            fixed_inputs: components["schemas"]["FixedInput"][];
+            /**
+             * Request Parameters
+             * @description Inputs sent as request fields, not criteria (landing_radius_km, robust_delay_h, comms_min_fraction)
+             */
+            request_parameters: components["schemas"]["FixedInput"][];
+        };
+        /** CriterionInfo */
+        CriterionInfo: {
+            /** Available */
+            available: boolean;
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "search" | "power" | "earth" | "topography" | "landing" | "science" | "radiation" | "schedule";
+            /**
+             * Comparator
+             * @description value criteria: how the value is compared with the limit
+             */
+            comparator: (">=" | "<=") | null;
+            /** Coverage */
+            coverage: string;
+            /** Id */
+            id: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "value" | "range" | "choice" | "flag";
+            /** Label */
+            label: string;
+            /**
+             * Options
+             * @description choice criteria: the options
+             */
+            options: string[];
+            /** Params */
+            params: components["schemas"]["ParamInfo"][];
+            /** Source */
+            source: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "geometry" | "regional" | "medium" | "fine" | "window";
+            /** Tip */
+            tip: string;
+            /** Unavailable Reason */
+            unavailable_reason: string | null;
+            /** Unit */
+            unit: string | null;
+        };
+        /** CriterionInput */
+        CriterionInput: {
+            /**
+             * Choice
+             * @description Chosen option of a choice criterion (side: near | far; past_landings: away | near)
+             */
+            choice?: string | null;
+            /**
+             * Id
+             * @description Criterion id from GET /api/v1/suitability/criteria
+             */
+            id: string;
+            /**
+             * Limit
+             * @description Limit of a value criterion, in the criterion unit (the catalogue says which side passes)
+             */
+            limit?: number | null;
+            /**
+             * Max
+             * @description Highest allowed value of a range criterion, criterion unit
+             */
+            max?: number | null;
+            /**
+             * Min
+             * @description Lowest allowed value of a range criterion, criterion unit
+             */
+            min?: number | null;
+            /**
+             * Params
+             * @description Criterion parameters (see the catalogue): target_distance_km takes feature (IAU name); battery_model takes the flat fields of POST /api/v1/power level 3 (panel_area_m2, cell_efficiency, derating, load_w, battery_capacity_wh, battery_initial_soc, battery_min_soc, charge_efficiency, discharge_efficiency, optional night_load_w)
+             */
+            params?: {
+                [key: string]: number | string;
+            };
         };
         /**
          * CustomStation
@@ -1186,6 +1375,39 @@ export interface components {
              */
             sun_area_m2: number;
         };
+        /** FeatureList */
+        FeatureList: {
+            /**
+             * Features
+             * @description Named features south of 55 S whose name contains the query, largest first
+             */
+            features: components["schemas"]["FeatureMatch"][];
+        };
+        /** FeatureMatch */
+        FeatureMatch: {
+            /** Diameter Km */
+            diameter_km: number | null;
+            /**
+             * Lat
+             * @description Centre latitude, degrees
+             */
+            lat: number;
+            /**
+             * Lon
+             * @description Centre longitude, degrees east -180..180
+             */
+            lon: number;
+            /**
+             * Name
+             * @description IAU name, as accepted by target_distance_km's feature parameter
+             */
+            name: string;
+            /**
+             * Type
+             * @description Feature type (crater, mons, ...)
+             */
+            type: string;
+        };
         /** FilterCount */
         FilterCount: {
             /**
@@ -1244,6 +1466,42 @@ export interface components {
             unit: string;
             /** Value */
             value: number | null;
+        };
+        /** FixedInput */
+        FixedInput: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Tip */
+            tip: string;
+        };
+        /** FunnelStep */
+        FunnelStep: {
+            /**
+             * Cells In
+             * @description Cells alive when it ran
+             */
+            cells_in: number;
+            /**
+             * Cells Out
+             * @description Cells it removed
+             */
+            cells_out: number;
+            /**
+             * Cells Unknown
+             * @description Alive cells without data for it
+             */
+            cells_unknown: number;
+            /** Id */
+            id: string;
+            /** Seconds */
+            seconds: number;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "geometry" | "bound" | "regional" | "medium" | "fine" | "landing_radius" | "window";
         };
         /** GridInfo */
         GridInfo: {
@@ -1435,6 +1693,31 @@ export interface components {
              * @description True when neighbour masks exist for this site
              */
             zone_available: boolean;
+        };
+        /** Layer */
+        Layer: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "search" | "power" | "earth" | "topography" | "landing" | "science" | "radiation" | "schedule";
+            /** Label */
+            label: string;
+            /**
+             * Measure
+             * @description What the 0..1 utility measures, in words
+             */
+            measure: string;
+            /**
+             * Utility B64
+             * @description uint8 per cell, row-major: floor(utility x 250 + 0.5), 255 = no data or not scored
+             */
+            utility_b64: string;
+            /**
+             * Weight
+             * @description Normalised weight in the score, 0..1
+             */
+            weight: number;
         };
         /** LibrationWander */
         LibrationWander: {
@@ -1802,6 +2085,38 @@ export interface components {
              * @description Same quantity from this engine over the smooth-sphere horizon at the point, 2025-2035 every 6 h, 0..1
              */
             smooth_sphere: number;
+        };
+        /** NearFeature */
+        NearFeature: {
+            /**
+             * Bearing Deg
+             * @description From the feature centre to the site, clockwise from north
+             */
+            bearing_deg: number;
+            /** Distance Km */
+            distance_km: number;
+            /** Name */
+            name: string;
+        };
+        /** ParamInfo */
+        ParamInfo: {
+            /** Key */
+            key: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "number" | "text";
+            /** Label */
+            label: string;
+            /** Max */
+            max: number | null;
+            /** Min */
+            min: number | null;
+            /** Required */
+            required: boolean;
+            /** Unit */
+            unit: string | null;
         };
         /** Place */
         Place: {
@@ -3026,6 +3341,52 @@ export interface components {
              */
             t: string[];
         };
+        /** SiteCategory */
+        SiteCategory: {
+            /**
+             * Category
+             * @enum {string}
+             */
+            category: "search" | "power" | "earth" | "topography" | "landing" | "science" | "radiation" | "schedule";
+            /**
+             * Contribution
+             * @description weight x utility
+             */
+            contribution: number | null;
+            /** Label */
+            label: string;
+            /**
+             * Utility
+             * @description 0..1 at the site (None: no data)
+             */
+            utility: number | null;
+            /** Weight */
+            weight: number;
+        };
+        /** SiteCriterion */
+        SiteCriterion: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Margin
+             * @description Distance to the limit on the passing side, criterion unit (range: to the nearer bound)
+             */
+            margin: number | null;
+            /**
+             * Passes
+             * @description Hard test at the site; None without data
+             */
+            passes: boolean | null;
+            /** Unit */
+            unit: string | null;
+            /**
+             * Value
+             * @description At the site, criterion unit (window values exact when window_exact); None without data or unbounded
+             */
+            value: number | null;
+        };
         /** SiteDetail */
         SiteDetail: {
             /** Group */
@@ -3393,6 +3754,215 @@ export interface components {
             mean_k: number;
             /** Min K */
             min_k: number;
+        };
+        /**
+         * SuitabilityLink
+         * @description Radio link settings (AERO-2). When given, Earth contact means a radio link: some part of the Earth's disc is above
+         *     the site's horizon AND an antenna of the chosen networks sees the Moon above its elevation limit. It replaces the
+         *     share-of-disc rule (`comms_min_fraction`), which is then not used. Geometry only: no link budget in the search
+         *     (the margin is the same at every site; ask POST /api/v1/link for the proposed sites).
+         */
+        SuitabilityLink: {
+            /**
+             * Custom Stations
+             * @description Antennas you add
+             */
+            custom_stations?: components["schemas"]["CustomStation"][];
+            /**
+             * Direction
+             * @description downlink = receive limits; uplink_low_power and uplink_high_power = the antenna must be able to send commands (transmit limits; DSN only, the other antennas have none and are left out)
+             * @default downlink
+             * @enum {string}
+             */
+            direction: "downlink" | "uplink_low_power" | "uplink_high_power";
+            /**
+             * Networks
+             * @description Antenna networks to use (GET /api/v1/link/stations lists them): dsn, estrack, jaxa. May be empty when custom_stations is given
+             */
+            networks?: string[];
+        };
+        /** SuitabilityRegion */
+        SuitabilityRegion: {
+            /**
+             * Center Lat
+             * @description Centre of the search disc, degrees (south of 60 S: the LOLA grids)
+             */
+            center_lat: number;
+            /**
+             * Center Lon
+             * @description Centre longitude, degrees east
+             */
+            center_lon: number;
+            /**
+             * Radius Km
+             * @description Radius of the search disc, km
+             */
+            radius_km: number;
+        };
+        /** SuitabilityRequest */
+        SuitabilityRequest: {
+            /**
+             * Categories
+             * @description Categories switched on. A criterion is accepted only when its category is on; a category on with no criterion still scores with its natural measure when it has one (power: share sunlit, earth: share with contact)
+             */
+            categories?: ("search" | "power" | "earth" | "topography" | "landing" | "science" | "radiation" | "schedule")[];
+            /**
+             * Cell Km
+             * @description Cell size of the raster, km
+             * @default 0.96
+             */
+            cell_km: number;
+            /**
+             * Comms Min Fraction
+             * @description Share of the Earth's disc above the horizon that counts as contact (team parameter, 0.5); not used when `link` is given
+             * @default 0.5
+             */
+            comms_min_fraction: number;
+            /**
+             * Criteria
+             * @description Hard limits set by the planner
+             */
+            criteria?: components["schemas"]["CriterionInput"][];
+            /**
+             * Duration H
+             * @description Mission window, hours
+             */
+            duration_h: number;
+            /**
+             * Horizon Az Step Deg
+             * @description Azimuth step of the traced horizons, degrees
+             * @default 0.5
+             */
+            horizon_az_step_deg: number;
+            /**
+             * Horizon Radius Km
+             * @description How far each horizon ray goes, km
+             * @default 150
+             */
+            horizon_radius_km: number;
+            /**
+             * Landing Radius Km
+             * @description Landing ellipse radius, km: a cell survives only if no cell failing a static criterion lies within it; the site score is the worst score within it
+             */
+            landing_radius_km?: number | null;
+            /** @description Radio link settings. Given: the Earth criteria (longest blackout, Earth in view at landing, the Earth score) and the link criteria use contact with the antennas of these networks instead of the share of the Earth's disc */
+            link?: components["schemas"]["SuitabilityLink"] | null;
+            /**
+             * Mast M
+             * @description Height of panel and antenna above the ground, m
+             * @default 2
+             */
+            mast_m: number;
+            /**
+             * Max Window Samples
+             * @description Most quadtree samples for the window criteria
+             * @default 300
+             */
+            max_window_samples: number;
+            /**
+             * Min Separation Km
+             * @description Least ground distance between two proposed sites, km (display spacing, not a physical threshold)
+             * @default 10
+             */
+            min_separation_km: number;
+            /**
+             * Panel
+             * @description Panel orientation (battery model)
+             * @default vertical
+             * @enum {string}
+             */
+            panel: "tracking" | "vertical" | "horizontal";
+            /**
+             * Priority
+             * @description Scored categories, most important first; weights by rank order centroid (Barron and Barrett 1996). Scored categories missing from the list follow in catalogue order
+             */
+            priority?: string[] | null;
+            region: components["schemas"]["SuitabilityRegion"];
+            /**
+             * Robust Delay H
+             * @description Hard window criteria must also pass if the landing slips by this many hours, h
+             */
+            robust_delay_h?: number | null;
+            /**
+             * Start
+             * Format: date-time
+             * @description Start of the mission window (landing), ISO 8601 UTC
+             */
+            start: string;
+            /**
+             * Step Min
+             * @description Time step of the window criteria and of the bound, minutes
+             * @default 60
+             */
+            step_min: number;
+            /**
+             * Top K
+             * @description Number of proposed landing sites
+             * @default 10
+             */
+            top_k: number;
+            /**
+             * Unknown Passes
+             * @description True: a criterion without data at a cell lets it through
+             * @default false
+             */
+            unknown_passes: boolean;
+            /**
+             * Use Bounds
+             * @description Method switch: drop tiles the ephemeris bound proves to fail (false only for validation)
+             * @default true
+             */
+            use_bounds: boolean;
+        };
+        /** SuitabilityResponse */
+        SuitabilityResponse: {
+            /** Assumptions */
+            assumptions: string[];
+            bound: components["schemas"]["BoundInfo"] | null;
+            /**
+             * Codes B64
+             * @description uint8 per cell, row-major (row 0 = top): 0 outside, 1 fails a static criterion or the landing radius, 2 fails a window criterion (sampled), 3 viable, 4 unknown, 5 proven to fail a window criterion by the ephemeris bound
+             */
+            codes_b64: string;
+            /**
+             * Counts
+             * @description Cells by code: outside, failed_static, failed_window, viable, unknown, failed_bound
+             */
+            counts: {
+                [key: string]: number;
+            };
+            /** Funnel */
+            funnel: components["schemas"]["FunnelStep"][];
+            grid: components["schemas"]["GridInfo"];
+            /** Layers */
+            layers: components["schemas"]["Layer"][];
+            /**
+             * Limiting B64
+             * @description uint8 per cell: index in `layers` of the category that costs the most score (largest weight x (1 - utility)), 255 = none
+             */
+            limiting_b64: string;
+            /**
+             * Score B64
+             * @description uint8 per cell: 0 not viable, 1..255 = score x 255 for viable cells
+             */
+            score_b64: string;
+            /** Seconds */
+            seconds: number;
+            /** Sites */
+            sites: components["schemas"]["TopSite"][];
+            /**
+             * Sites Dropped
+             * @description Candidates that failed a hard window criterion when evaluated exactly
+             */
+            sites_dropped: number;
+            /**
+             * Weights
+             * @description Category -> normalised weight
+             */
+            weights: {
+                [key: string]: number;
+            };
+            window: components["schemas"]["WindowInfo"] | null;
         };
         /** SunNow */
         SunNow: {
@@ -3835,6 +4405,62 @@ export interface components {
              * @description Sample times, ISO 8601 UTC
              */
             t: string[];
+        };
+        /** TopSite */
+        TopSite: {
+            /**
+             * Area Score
+             * @description 0..1, worst score within the landing radius (= score without one)
+             */
+            area_score: number;
+            /** Categories */
+            categories: components["schemas"]["SiteCategory"][];
+            /**
+             * Clearance Km
+             * @description Distance to the nearest cell that is not viable, km (map distance)
+             */
+            clearance_km: number;
+            /**
+             * Cons
+             * @description Category ids that cost the site most (utility < 0.5), strongest first
+             */
+            cons: string[];
+            /**
+             * Coverage
+             * @description Share of the preference weight with data at the site, 0..1
+             */
+            coverage: number;
+            /** Criteria */
+            criteria: components["schemas"]["SiteCriterion"][];
+            /** Horizon Kind */
+            horizon_kind: "terrain" | null;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+            near: components["schemas"]["NearFeature"] | null;
+            /**
+             * Pros
+             * @description Category ids that help the site most (utility >= 0.5), strongest first
+             */
+            pros: string[];
+            /** Rank */
+            rank: number;
+            /**
+             * Score
+             * @description 0..1 at the site cell
+             */
+            score: number;
+            /**
+             * Unknown
+             * @description Active criteria without data at the site
+             */
+            unknown: string[];
+            /**
+             * Window Exact
+             * @description True: window values evaluated at the site with its own traced horizon; None: no window run
+             */
+            window_exact: boolean | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -4705,6 +5331,93 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suitability_criteria_api_v1_suitability_criteria_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CriteriaCatalogue"];
+                };
+            };
+        };
+    };
+    suitability_features_api_v1_suitability_features_get: {
+        parameters: {
+            query?: {
+                /** @description Part of the name, case-insensitive */
+                q?: string;
+                /** @description Most names returned */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeatureList"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    suitability_search_api_v1_suitability_search_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SuitabilityRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SuitabilityResponse"];
                 };
             };
             /** @description Validation Error */
