@@ -158,34 +158,55 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
     }
   }, [series])
 
+  // At most one drawing a frame: pointer and wheel events can come faster than the screen refreshes, and each
+  // drawing of the relief costs tens of milliseconds. The effect hands over the latest drawing; the frame runs it.
+  const pending = useRef<(() => void) | null>(null)
+  const raf = useRef(0)
+  useEffect(() => () => cancelAnimationFrame(raf.current), [])
+
   useEffect(() => {
     const cv = canvas.current
     if (!cv || !view || !info || size.w === 0) return
     const dpr = window.devicePixelRatio || 1
-    cv.width = Math.round(size.w * dpr)
-    cv.height = Math.round(size.h * dpr)
-    const ctx = cv.getContext('2d')
-    if (!ctx) return
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    const h = info.model.horizon
-    // during the descent: the smooth-Moon horizon of the current altitude, blending into the real mask
-    const k = easeOut(arrival)
-    const dip = -dipDeg(from.km * (1 - k))
-    drawHorizon(ctx, size.w, size.h, camera, {
-      horizonAt: arrival < 1 ? (az) => dip * (1 - k) + h.at(az) * k : (az) => h.at(az),
-      sun: view.sun,
-      earth: view.earth,
-      sunTrack: tracks.sun,
-      earthTrack: tracks.earth,
-      free,
-      showLabels: arrival >= 1,
-      stars,
-      // during the descent the eye comes down over the same ground
-      // (from up there the rings end before the horizon: the band up to it is painted)
-      relief: relief.scene
-        ? { scene: arrival < 1 ? { ...relief.scene, eyeM: relief.scene.eyeM + from.km * 1000 * (1 - k), fillToMask: true } : relief.scene, fine: fine && arrival >= 1 }
-        : null,
-    })
+    const pw = Math.round(size.w * dpr)
+    const ph = Math.round(size.h * dpr)
+    pending.current = () => {
+      // a new backing store only when the size changes (setting the size clears and reallocates the canvas)
+      if (cv.width !== pw || cv.height !== ph) {
+        cv.width = pw
+        cv.height = ph
+      }
+      const ctx = cv.getContext('2d')
+      if (!ctx) return
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+      const h = info.model.horizon
+      // during the descent: the smooth-Moon horizon of the current altitude, blending into the real mask
+      const k = easeOut(arrival)
+      const dip = -dipDeg(from.km * (1 - k))
+      drawHorizon(ctx, size.w, size.h, camera, {
+        horizonAt: arrival < 1 ? (az) => dip * (1 - k) + h.at(az) * k : (az) => h.at(az),
+        sun: view.sun,
+        earth: view.earth,
+        sunTrack: tracks.sun,
+        earthTrack: tracks.earth,
+        free,
+        showLabels: arrival >= 1,
+        stars,
+        // during the descent the eye comes down over the same ground
+        // (from up there the rings end before the horizon: the band up to it is painted)
+        relief: relief.scene
+          ? { scene: arrival < 1 ? { ...relief.scene, eyeM: relief.scene.eyeM + from.km * 1000 * (1 - k), fillToMask: true } : relief.scene, fine: fine && arrival >= 1 }
+          : null,
+      })
+    }
+    if (!raf.current) {
+      raf.current = requestAnimationFrame(() => {
+        raf.current = 0
+        const draw = pending.current
+        pending.current = null
+        draw?.()
+      })
+    }
   }, [camera, view, info, size, tracks, free, arrival, stars, grainReady, relief.scene, fine, from.km])
 
   const turn = (dYaw: number, dPitch: number) => look(cam.yaw + dYaw, cam.pitch + dPitch)
