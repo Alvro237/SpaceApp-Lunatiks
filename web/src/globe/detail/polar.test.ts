@@ -15,9 +15,9 @@ describe('south-polar detail tiles on the globe', () => {
   })
 
   it('from far away keeps the root: its 7.68 km cells are under SPLIT_PX pixels', () => {
-    // 12 000 km from the centre over the pole, 35° over 1000 px (0.61 mrad a pixel); the root's nearest point is
-    // 10 263 − 1 390 = 8 873 km away, where 1.5 px span 8.1 km > 7.68 km
-    const cam = { position: latLonToScene(-90, 0, 12_000) as [number, number, number], pixelRad: (35 * Math.PI) / 180 / 1000, visible: () => true }
+    // 12 000 km from the centre over the pole, 35° over 500 px (1.22 mrad a pixel); the root's nearest point, the
+    // pole, is 10 263 km away, where a pixel spans 12.5 km > 7.68 km
+    const cam = { position: latLonToScene(-90, 0, 12_000) as [number, number, number], pixelRad: (35 * Math.PI) / 180 / 500, visible: () => true }
     expect(polarWanted(TS, all, cam)).toEqual([{ z: 0, x: 0, y: 0 }])
   })
 

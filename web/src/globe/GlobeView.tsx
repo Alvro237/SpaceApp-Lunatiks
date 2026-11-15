@@ -628,8 +628,8 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
     }),
   )
   useEffect(() => {
-    if (tileset) polar.setTileset(tileset, TILES_BASE, material)
-  }, [tileset, polar, material])
+    if (tileset) polar.setTileset(tileset, TILES_BASE, material, gl.extensions.has('OES_texture_float_linear'))
+  }, [tileset, polar, material, gl])
   const frustum = useMemo(() => new THREE.Frustum(), [])
   const projView = useMemo(() => new THREE.Matrix4(), [])
   const sphere = useMemo(() => new THREE.Sphere(), [])
@@ -858,7 +858,7 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
     const sun = u.uSun.value as THREE.Vector3
     put(sun.x); put(sun.y); put(sun.z)
     put(u.uExag.value as number); put(u.uMaxLevel.value as number); put(u.uPhotoMode.value as number)
-    put(u.uPolarMaxZ.value as number)
+    put(u.uPolarMaxZ.value as number); put(u.uPolarShadow.value as number)
     // a detail tile that arrives is written into these textures, which raises their version
     for (const name of ['uDetail', 'uIndex', 'uPhoto', 'uPhotoIndex', 'uPolarH', 'uPolarHIndex', 'uPolarP', 'uPolarPIndex']) {
       const t = u[name].value as THREE.Texture

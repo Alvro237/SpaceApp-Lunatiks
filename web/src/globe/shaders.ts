@@ -148,6 +148,8 @@ uniform sampler2D uPolarPIndex;
 uniform float uPolarMaxZ;   // finest polar level; -1 = none
 uniform float uPolarExtent; // half-width of the polar quadtree's square, metres
 uniform vec4 uPolarHole;    // drawn by a finer polar mesh instead (patch.ts): centre x, y and half-width (metres); w > 0 = on
+uniform sampler2D uPolarOverview; // heights of the whole polar square, 2049 x 2049 vertices, metres (detail/polar.ts)
+uniform float uPolarShadow; // 1 once the overview is loaded: the terrain casts shadows south of 60 S
 uniform sampler2DArray uDetail;        // DEM detail tiles, 256 x 256 cells each, heights in metres
 uniform sampler2D uIndex;              // R8: layer + 1 of each loaded DEM tile of every level, 0 = none (slots.ts)
 uniform sampler2DArray uPhoto;         // photo detail tiles, 256 x 256 cells each, reflectance 0..1
@@ -169,6 +171,53 @@ const vec3 REGOLITH = vec3(0.72, 0.71, 0.68);
 // brightness of the regolith grey that stands in for the polar mosaic's photographed shadows, against REGOLITH: about
 // the mosaic's own lit ground after PHOTO_GAIN (0.15-0.3 raw, x2)
 const float PHOTO_SHADOW_FILL = 0.6;
+// Brightness of the photo: the mosaic's value x PHOTO_GAIN, rolled off smoothly above TONE_KNEE instead of clipped at
+// white, so sunlit slopes keep their texture (same value and slope up to the knee).
+const float TONE_KNEE = 0.6;
+float photoTone(float raw) {
+  float a = raw * PHOTO_GAIN;
+  return a <= TONE_KNEE ? a : TONE_KNEE + (1.0 - TONE_KNEE) * (1.0 - exp(-(a - TONE_KNEE) / (1.0 - TONE_KNEE)));
+}
+
+// Overview height (metres) at a point of the polar square, bilinear (vertex-registered samples); far below the ground
+// outside the square, so it blocks nothing.
+float ovH(vec2 xy) {
+  vec2 f = vec2(xy.x + uPolarExtent, uPolarExtent - xy.y) / (2.0 * uPolarExtent);
+  if (f.x < 0.0 || f.y < 0.0 || f.x > 1.0 || f.y > 1.0) return -1e5;
+  vec2 n = vec2(textureSize(uPolarOverview, 0));
+  return texture(uPolarOverview, (f * (n - 1.0) + 0.5) / n).r;
+}
+
+// Share of the solar disc above the terrain's horizon at a point (0 in the terrain's shadow, 1 in full Sun). The Sun's
+// direction along the ground is turned into the polar map's directions; the march takes SHADOW_STEPS points toward
+// it, from 400 m out to about 165 km, 25 % farther each, and keeps the steepest elevation of the overview heights
+// (960 m cells) above the point, less the drop of the curved surface (d² / 2R). The solar disc is 0.53° wide, so the
+// shadow's edge is eased over ±0.27° of elevation. Real heights (no exaggeration): the shadows are the real ones.
+const int SHADOW_STEPS = 28;
+float polarSunVisible(vec2 xy, vec3 up, vec3 east, vec3 north, float lat, float lon) {
+  float se = dot(up, uSun);
+  vec3 hz = uSun - up * se;
+  float hl = length(hz);
+  if (hl < 1e-6) return 1.0;
+  hz /= hl;
+  float elev = asin(clamp(se, -1.0, 1.0));
+  // relief at the pole rises a few degrees at most over these distances: a Sun higher than 20 degrees casts none
+  if (elev > 0.35) return 1.0;
+  float k = 1.0 / pow(cos(0.5 * (0.5 * PI + lat)), 2.0);
+  float ce = dot(hz, east);
+  float cn = dot(hz, north);
+  vec2 dir = normalize(vec2(ce * cos(lon) + cn * sin(lon), -ce * sin(lon) + cn * cos(lon)));
+  float h0 = ovH(xy) + 15.0;
+  float steepest = -1.0;
+  float d = 400.0;
+  for (int i = 0; i < SHADOW_STEPS; i++) {
+    float h = ovH(xy + dir * d * k);
+    steepest = max(steepest, (h - h0 - d * d / (2.0 * R)) / d);
+    d *= 1.25;
+  }
+  return smoothstep(-0.0046, 0.0046, elev - atan(steepest));
+}
+
 // share of the LOLA slope shading laid over the photo (the photo already holds some shading of its own)
 const float PHOTO_RELIEF = 0.7;
 
@@ -202,7 +251,7 @@ void main() {
     float pDeg;
     int pSlot = findTile(uPhotoIndex, degrees(lon), degrees(lat), pCell, pDeg);
     if (pSlot >= 0) {
-      albedo = vec3(min(1.0, tileAt(uPhoto, pSlot, pCell) * PHOTO_GAIN));
+      albedo = vec3(photoTone(tileAt(uPhoto, pSlot, pCell)));
       photo = true;
     }
   }
@@ -218,7 +267,7 @@ void main() {
       float raw = tileAt(uPolarP, qSlot, qCell);
       float seen = smoothstep(0.015, 0.11, raw);
       fill = pw * (1.0 - seen);
-      vec3 polarAlbedo = mix(REGOLITH * PHOTO_SHADOW_FILL, vec3(min(1.0, raw * PHOTO_GAIN)), seen);
+      vec3 polarAlbedo = mix(REGOLITH * PHOTO_SHADOW_FILL, vec3(photoTone(raw)), seen);
       albedo = photo ? mix(albedo, polarAlbedo, pw) : mix(REGOLITH, polarAlbedo, pw);
       photo = true;
     }
@@ -277,16 +326,22 @@ void main() {
     vec3 north = vec3(-sin(lat) * cos(lon), -sin(lat) * sin(lon), cos(lat));
     vec3 n = normalize(up - exag * (he * east + hn * north));
     float sun = max(0.0, dot(n, uSun));
+    // the shadows the terrain casts, south of 60 S (eased in from the disc's edge like the polar tiles)
+    float lit = 1.0;
+    if (pw > 0.0 && uPolarShadow > 0.5 && dot(up, uSun) > -0.01) lit = mix(1.0, polarSunVisible(pxy, up, east, north, lat, lon), pw);
+    sun *= lit;
     float light;
+    // a faint fixed light (like earthshine) keeps the shape of the ground readable at night and in shadow
+    vec3 fixedLight = normalize(up + 0.6 * east + 0.4 * north);
     if (photo) {
       // photo: the slope's Sun relative to flat ground's (1 on the flat, brighter facing the Sun, darker away from
       // it; the 0.2 keeps it finite at the terminator), over the day and night of the chosen instant
       float rel = clamp((sun + 0.2) / (max(0.0, dot(up, uSun)) + 0.2), 0.0, 1.8);
       // where the regolith stands in for the photo's shadows, the relief is shaded in full (no photo shading there)
-      light = (0.10 + 0.90 * day) * mix(1.0, rel, mix(PHOTO_RELIEF, 1.0, fill));
+      float ambient = 0.05 + 0.09 * max(0.0, dot(n, fixedLight));
+      light = ambient + (1.0 - ambient) * day * lit * mix(1.0, rel, mix(PHOTO_RELIEF, 1.0, fill));
     } else {
-      // the night side keeps a faint fixed-light relief (like earthshine) so its shape stays readable
-      vec3 fixedLight = normalize(up + 0.6 * east + 0.4 * north);
+      // the night side keeps a faint fixed-light relief so its shape stays readable
       float night = 0.07 + 0.12 * max(0.0, dot(n, fixedLight));
       light = night + (1.0 - night) * sun * day;
     }

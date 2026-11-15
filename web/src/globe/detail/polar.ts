@@ -27,21 +27,21 @@ export const POLAR_PHOTO_MAX_Z = 7
 /** Height tiles are 257 × 257 vertices (the map's tileSamples). */
 export const POLAR_SAMPLES = 257
 /**
- * Layers per kind: the view's tiles and their ancestors, and some kept from before (144 height tiles of 257 × 257
- * float32 are 38 MB).
+ * Layers per kind: the view's tiles and their ancestors, and some kept from before (176 height tiles of 257 × 257
+ * float32 are 46 MB).
  */
-export const POLAR_CAPACITY = 144
+export const POLAR_CAPACITY = 176
 /** Index texture: the finest level's columns, every level's rows stacked (1 + 2 + … + 256 = 511). */
 export const POLAR_INDEX_W = 2 ** POLAR_MAX_Z
 export const POLAR_INDEX_H = 2 ** (POLAR_MAX_Z + 1) - 1
 export const polarIndexRow = (z: number, y: number): number => 2 ** z - 1 + y
 /** A tile splits while its cells would be wider than this many pixels. */
-export const SPLIT_PX = 1.5
+export const SPLIT_PX = 1
 /**
  * Tiles drawn at most (the leaves of the selection). Close over the pole the four quadrants meet under the camera at
  * every level, so the finest level needs four chains of tiles there: about 4 × 3 a level.
  */
-export const MAX_TILES = 96
+export const MAX_TILES = 120
 /** Relief allowance of a tile's bounding sphere for culling, km (LOLA spans about −9 to +11 km, exaggerated). */
 const RELIEF_KM = 25
 const INTERVAL_S = 0.15
@@ -221,6 +221,8 @@ export class PolarDetail {
   private readonly heights = new PolarSlots(POLAR_SAMPLES, true)
   private readonly photos = new PolarSlots(PHOTO_CELLS, false)
   private readonly loader = new TileLoader(2)
+  /** The overview heights for the shadows; a 1 × 1 placeholder until they load. */
+  private overview: THREE.DataTexture = new THREE.DataTexture(new Float32Array(1), 1, 1, THREE.RedFormat, THREE.FloatType)
   private ts: Tileset | null = null
   private live = new Map<string, LiveSource>()
   private base = ''
@@ -239,11 +241,16 @@ export class PolarDetail {
       // -1 until the tileset is known
       uPolarMaxZ: { value: -1 },
       uPolarExtent: { value: 983_040 },
+      uPolarOverview: { value: this.overview },
+      // 1 once the overview heights (the shadows' terrain) are loaded
+      uPolarShadow: { value: 0 },
     }
   }
 
   /** The polar map's tileset (tiles/tileset.json) and the base URL of its files; detail starts once it is known. */
-  setTileset(ts: Tileset, base: string, material: THREE.ShaderMaterial): void {
+  setTileset(ts: Tileset, base: string, material: THREE.ShaderMaterial, floatLinear: boolean): void {
+    if (this.ts) return
+    this.loadOverview(ts, base, material, floatLinear)
     const live = cachedLiveLevels(ts, GLOBE_LIVE)
     this.ts = live.tileset
     this.live = live.live
@@ -251,6 +258,28 @@ export class PolarDetail {
     material.uniforms.uPolarExtent.value = ts.extentM[2]
     material.uniforms.uPolarMaxZ.value = Math.min(POLAR_MAX_Z, live.tileset.levels.length - 1)
     this.since = Infinity
+  }
+
+  /**
+   * The polar map's overview: the heights of the whole disc as one 2049 × 2049 image (960 m cells, about 6 MB; the
+   * map's shadow pass reads it too, so it is usually in the browser's cache already). The fragment shader marches
+   * toward the Sun over it for the shadows the terrain casts (shaders.ts, polarSunVisible).
+   */
+  private loadOverview(ts: Tileset, base: string, material: THREE.ShaderMaterial, floatLinear: boolean): void {
+    const ov = ts.overview
+    this.loader
+      .request('overview', { url: base + ov.path, kind: 'height', min: ov.min, max: ov.max })
+      .then((r) => {
+        const tex = new THREE.DataTexture(r.heights!, r.width, r.height, THREE.RedFormat, THREE.FloatType)
+        tex.minFilter = tex.magFilter = floatLinear ? THREE.LinearFilter : THREE.NearestFilter
+        tex.generateMipmaps = false
+        tex.needsUpdate = true
+        this.overview.dispose()
+        this.overview = tex
+        material.uniforms.uPolarOverview.value = tex
+        material.uniforms.uPolarShadow.value = 1
+      })
+      .catch(() => {}) // no overview: no cast shadows, the slopes are still shaded
   }
 
   /** Photo mode loads the polar photo tiles as well. */
@@ -356,5 +385,6 @@ export class PolarDetail {
     this.loader.dispose()
     this.heights.dispose()
     this.photos.dispose()
+    this.overview.dispose()
   }
 }
