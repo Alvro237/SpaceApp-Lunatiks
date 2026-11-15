@@ -91,6 +91,62 @@ JAXA_STATIONS = [
 ]
 
 
+# ------------------------------------------------------------------------------------------------ receive G/T
+
+# Downlink bands for the Moon (space-to-Earth, near-Earth / category A): S 2200-2290 MHz, X 8450-8500 MHz,
+# Ka 25.5-27.0 GHz. The DSN's 32 GHz Ka and 8400-8450 MHz X are deep-space (category B) bands, not used for the Moon.
+DSN_101 = "DSN 810-005 module 101 Rev. G (70 m), gains p. 13/18, Top Table 4 p. 22-23"
+DSN_103 = "DSN 810-005 module 103 Rev. D (34 m HEF), gains p. 15, Top Table 5 p. 19-20"
+DSN_104 = "DSN 810-005 module 104 Rev. O (34 m BWG), gains p. 38-42, Top Table 11 p. 48-51"
+DSN_CONDITIONS = ("G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first "
+                  "listed configuration; G/T drops at low elevation")
+# DSS number -> band -> (antenna gain dBi, system operating noise temperature Top K, source)
+DSN_RX = {
+    14: {"S": (63.59, 16.90, DSN_101), "X": (74.55, 16.69, DSN_101)},
+    43: {"S": (63.59, 18.43, DSN_101), "X": (74.63, 17.49, DSN_101)},
+    63: {"S": (63.59, 20.10, DSN_101), "X": (74.66, 16.73, DSN_101)},
+    65: {"S": (56.07, 38.80, DSN_103), "X": (68.41, 20.70, DSN_103)},
+    24: {"S": (56.74, 30.78, DSN_104), "X": (68.27, 26.32, DSN_104), "Ka": (77.2, 27.8, DSN_104)},
+    25: {"X": (68.32, 21.20, DSN_104)},
+    26: {"S": (56.74, 22.30, DSN_104), "X": (68.32, 21.33, DSN_104), "Ka": (77.2, 41.9, DSN_104)},
+    34: {"S": (56.74, 29.74, DSN_104), "X": (68.32, 21.67, DSN_104), "Ka": (77.2, 38.5, DSN_104)},
+    35: {"X": (68.32, 20.09, DSN_104)},
+    36: {"S": (56.74, 26.43, DSN_104), "X": (68.32, 17.98, DSN_104), "Ka": None},   # K-band receiver, Top not listed
+    54: {"S": (56.74, 30.53, DSN_104), "X": (68.32, 23.58, DSN_104), "Ka": (77.2, 40.0, DSN_104)},
+    55: {"X": (68.32, 22.69, DSN_104)},
+}
+ESA_BANDS = {"esa-dsa1-new-norcia": ("S", "X"), "esa-dsa2-cebreros": ("X",), "esa-dsa3-malargue": ("X",)}
+ESA_BANDS_SOURCE = "ESA ESOC ground station pages: New Norcia S and X; Cebreros and Malargue X (their Ka is 32 GHz deep space)"
+JAXA_BANDS = {"misasa": ("X",), "usuda": ("S", "X"), "uchinoura": ("S", "X")}
+JAXA_BANDS_SOURCE = "JAXA station coordinates page (S/X VLBI at Usuda and Uchinoura; the Misasa 54 m has no S-band receiver)"
+MISASA_GT = {"gt_db_per_k": 53.35, "basis": "spec", "source": "JAXA GREAT2 project page",
+             "note": "design specification, at least this value at 15-80 deg elevation, propagation loss included"}
+
+
+def _cited(gain_dbi: float, top_k: float, source: str) -> dict:
+    return {"gt_db_per_k": round(gain_dbi - 10.0 * np.log10(top_k), 2), "basis": "cited", "gain_dbi": gain_dbi,
+            "system_noise_k": top_k, "source": source, "note": DSN_CONDITIONS}
+
+
+def _supported(source: str) -> dict:
+    """The antenna receives in this band but no G/T is published: the API estimates one from the diameter."""
+    return {"gt_db_per_k": None, "basis": "unpublished", "source": source}
+
+
+def receive_gt(station_id: str, dss: int | None = None, jaxa_key: str | None = None) -> dict:
+    """Band -> G/T entry for one antenna. A band that is absent means the antenna has no receiver there."""
+    if dss is not None:
+        return {band: (_cited(*v) if v else _supported(DSN_104)) for band, v in DSN_RX.get(dss, {}).items()}
+    if station_id in ESA_BANDS:
+        return {band: _supported(ESA_BANDS_SOURCE) for band in ESA_BANDS[station_id]}
+    if jaxa_key is not None:
+        out = {band: _supported(JAXA_BANDS_SOURCE) for band in JAXA_BANDS[jaxa_key]}
+        if jaxa_key == "misasa":
+            out["X"] = dict(MISASA_GT)
+        return out
+    return {}
+
+
 # ------------------------------------------------------------------------------------------------ downloads
 
 def _sha256(path) -> str:
@@ -276,6 +332,7 @@ def build() -> dict:
                     "agency": "NASA / JPL Deep Space Network", "site": complex_name, "country": spec["country"],
                     "lat_deg": round(lat, 6), "lon_deg": round(lon, 6), "height_m": round(h, 1),
                     "diameter_m": mask["diameter_m"], "dish": mask["dish"], "bands": None,
+                    "receive_gt": receive_gt(f"dss-{number}", dss=number),
                     "position_source": "NAIF station SPK earthstns_itrf93_260814.bsp (ITRF93, epoch 2027-01-01)",
                     "elevation_limits": {
                         "source": "cited",
@@ -294,6 +351,7 @@ def build() -> dict:
                 "id": e["id"], "name": e["name"], "network": "estrack", "agency": "ESA ESTRACK",
                 "site": e["site"], "country": e["country"], "lat_deg": round(lat, 6), "lon_deg": round(lon, 6),
                 "height_m": round(h, 1), "diameter_m": 35.0, "dish": "35 m deep-space antenna", "bands": e["bands"],
+                "receive_gt": receive_gt(e["id"]),
                 "position_source": e["position_source"] + "; the GNSS station of the site, not the dish reference point",
                 "position_url": e["position_url"],
                 "elevation_limits": {
@@ -314,6 +372,7 @@ def build() -> dict:
                 "id": j["id"], "name": j["name"], "network": "jaxa", "agency": "JAXA", "site": j["key"].capitalize(),
                 "country": "Japan", "lat_deg": j["lat"], "lon_deg": j["lon"], "height_m": j["height_m"],
                 "diameter_m": j["diameter_m"], "dish": f"{j['diameter_m']:.0f} m deep-space antenna", "bands": None,
+                "receive_gt": receive_gt(j["id"], jaxa_key=j["key"]),
                 "position_source": f"JAXA station coordinates page, GRS80 at epoch 2026.0 (DSN id DSS-{j['dss']})",
                 "elevation_limits": {
                     "source": "cited",

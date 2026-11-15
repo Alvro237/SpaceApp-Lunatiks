@@ -133,7 +133,7 @@ function useStoryEffects(ctx: StoryCtx) {
   const sceneSet = active && stage === null
   // the sunlight and Earth contact of each catalogue site the explorer opens, for the missions that compare places
   useEffect(() => {
-    if (!sceneSet || selection.kind !== 'site' || !series) return
+    if (!sceneSet || selection?.kind !== 'site' || !series) return
     const visited = useStory.getState().memory.visited
     if (visited[selection.id]) return
     remember({ visited: { ...visited, [selection.id]: { sunPct: series.metrics.sunlightPct, earthPct: series.metrics.commsPct } } })
@@ -402,7 +402,7 @@ export function StoryCard() {
   const { steps, complete, ready, sceneSet } = useStoryEffects(ctx)
   const headingId = useId()
   const top = useBelowTopBars()
-  const place: CSSProperties | undefined = top === undefined ? undefined : { top, maxHeight: `calc(100vh - ${top}px - var(--inset-bottom) - 20px)` }
+  const place: CSSProperties | undefined = top === undefined ? undefined : { top, maxHeight: `calc(100% - ${top}px - var(--inset-bottom) - 20px)` }
   const ch = CHAPTERS[chapter]
   const total = CHAPTERS.length
   const stars = CHAPTERS.filter((c) => done.includes(c.id)).length

@@ -119,8 +119,10 @@
   left: 10px;
   top: calc(var(--inset-top) + 62px);
   width: min(380px, calc(100vw - var(--inset-right) - 40px));
-  max-height: calc(100vh - var(--inset-top) - var(--inset-bottom) - 80px);
+  max-height: calc(100% - var(--inset-top) - var(--inset-bottom) - 80px);
   overflow-y: auto;
+  /* the confetti flies past the card's edge: it is cut there instead of giving the card a sideways scroll */
+  overflow-x: hidden;
   padding: 14px;
   background: var(--glass);
   backdrop-filter: blur(12px);
@@ -240,7 +242,10 @@
 .blk-ask { margin-top: 10px; padding: 10px; border-radius: 12px; background: var(--surface-2); border: 2px solid var(--sun); }
 .blk-question { margin: 0; font-weight: 700; font-size: 1.08rem; line-height: 1.3; }
 .blk-choices { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
-.blk-choices.n3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* three choices share one row only while each keeps room for its longest word; on a narrow card the third wraps */
+.blk-choices.n3 { grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); }
+.blk-choices.n3 button { padding-left: 4px; padding-right: 4px; }
+.blk-choice-label, .blk-strip-text, .blk-mission-name, .blk-stat-l { max-width: 100%; overflow-wrap: anywhere; }
 .blk-choices button {
   position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
   min-height: 104px; padding: 10px 6px; border-radius: 14px; text-align: center; font-size: 0.95rem; font-weight: 700; line-height: 1.2;
@@ -325,8 +330,13 @@
 }
 @media (prefers-reduced-motion: reduce) { .block-toggle .knob { transition: none; } }
 
-@media (max-width: 760px) {
+@media (max-width: 760px), (max-height: 480px) {
   .blk-cell { min-width: 3px; }
-  .blk-story, .blk-story.is-closed, .blk-story.blk-map { position: static; width: auto; max-width: none; max-height: none; margin: 8px; }
+  /* in the column the card is as tall as its text (the inline cap is for the floating layout) */
+  .blk-story, .blk-story.is-closed, .blk-story.blk-map { position: static; width: auto; max-width: none; max-height: none !important; margin: 8px 8px 0; }
   .float-right.blk-sky { width: auto; }
+}
+/* medium windows: the days run the full width under the sky panel instead of squeezing beside it */
+@media (min-width: 761px) and (max-width: 1023px) and (min-height: 481px) {
+  .blk-bottom.float-bottom { right: 10px; }
 }

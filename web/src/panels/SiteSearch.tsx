@@ -15,6 +15,7 @@ import { pointName } from '../time/place'
 import { ApiStatus } from '../ui/ApiStatus'
 import { IconCrosshair, IconSearch } from '../ui/icons'
 import { Popover } from '../ui/Popover'
+import { useFitViewport } from '../ui/useFitViewport'
 import { fmtLat, fmtLon, parseCoordinates } from './format'
 import { useCatalogue } from './useCatalogue'
 
@@ -29,6 +30,7 @@ export function SiteSearch() {
   const [active, setActive] = useState(0)
   const input = useRef<HTMLInputElement>(null)
   const list = useRef<HTMLDivElement>(null)
+  useFitViewport(list, open)
 
   const q = query.trim().toLowerCase()
   const shown = useMemo(() => sites.filter((s) => !q || `${s.name} ${s.region ?? ''} ${s.group}`.toLowerCase().includes(q)), [sites, q])
@@ -39,8 +41,10 @@ export function SiteSearch() {
   }, [shown])
   const ordered = useMemo(() => groups.flatMap((g) => shown.filter((s) => s.group === g)), [groups, shown])
 
-  const current =
-    names.get(placeKey(selection)) ??
+  // with no place chosen the box says how to choose one
+  const current = !selection
+    ? 'Search a site or click the Moon'
+    : names.get(placeKey(selection)) ??
     (selection.kind === 'site' ? (sites.find((s) => s.id === selection.id)?.name ?? selection.id) : pointName(selection.lat, selection.lon))
 
   useEffect(() => {
@@ -129,7 +133,7 @@ export function SiteSearch() {
                 .filter((s) => s.group === g)
                 .map((s) => {
                   const i = ordered.indexOf(s)
-                  const isCurrent = selection.kind === 'site' && selection.id === s.id
+                  const isCurrent = selection?.kind === 'site' && selection.id === s.id
                   return (
                     <div
                       key={s.id}
@@ -184,8 +188,8 @@ function ManualPoint({ onDone }: { onDone: () => void }) {
   const id = useId()
   const select = useApp((s) => s.select)
   const selection = useApp((s) => s.selection)
-  const [lat, setLat] = useState(selection.kind === 'point' ? String(selection.lat) : '-89.45')
-  const [lon, setLon] = useState(selection.kind === 'point' ? String(selection.lon) : '137.3')
+  const [lat, setLat] = useState(selection?.kind === 'point' ? String(selection.lat) : '-89.45')
+  const [lon, setLon] = useState(selection?.kind === 'point' ? String(selection.lon) : '137.3')
   const [error, setError] = useState<string | null>(null)
   const submit = (e: FormEvent) => {
     e.preventDefault()

@@ -66,7 +66,7 @@ export function DataPage() {
                 <a href="https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/cylindrical/img/">LOLA LDEM_16</a>, NASA PDS
                 (4 px/deg area means for the globe, 8 px/deg for the horizon grid)
               </td>
-              <td>Globe lit by the Sun at the chosen time (relief exaggerated ×4); the 3.8 km grid that traces horizons outside the south pole</td>
+              <td>Globe lit by the Sun at the chosen time (relief exaggerated ×4 for the whole Moon, ×2 close in); the 3.8 km grid that traces horizons outside the south pole</td>
             </tr>
             <tr>
               <th scope="row">The whole Moon, read while you zoom</th>
@@ -74,7 +74,7 @@ export function DataPage() {
                 <a href="https://trek.nasa.gov/moon/">NASA Moon Trek</a> LOLA DEMs (global 256 px/deg between 45° S and 45° N, 100 m polar DEMs beyond;
                 down to 83 m cells) and LROC WAC global mosaic (303 px/deg, 100 m), read on demand and kept in this browser's storage
               </td>
-              <td>Sharper relief shading on the globe; the optional photo view (the WAC mosaic keeps the lighting it was photographed with)</td>
+              <td>Sharper relief shading on the globe; the photo view (shown by default), the WAC mosaic draped over the 3D LOLA relief, whose slopes the Sun at the chosen time shades (it keeps the shadows it was photographed with)</td>
             </tr>
             <tr>
               <th scope="row">Relief tiles and elevation</th>
@@ -93,6 +93,13 @@ export function DataPage() {
                 {import.meta.env.DEV || import.meta.env.VITE_PGDA_PROXY ? '' : ' (the PGDA ones are not enabled in this build)'}
               </td>
               <td>2D and 3D terrain when you zoom in</td>
+            </tr>
+            <tr>
+              <th scope="row">Photo layer of the map</th>
+              <td>
+                <a href="https://trek.nasa.gov/moon/">NASA Moon Trek</a> LROC WAC south polar mosaic (100 m, covering the whole map), cut tile by tile in the map's own projection, down to 60 m cells
+              </td>
+              <td>The photo layer (shown by default): the WAC mosaic as the ground's brightness on the 3D LOLA relief, lit by the chosen light (it keeps the shadows it was photographed with)</td>
             </tr>
             <tr>
               <th scope="row">Slope</th>
@@ -151,6 +158,16 @@ export function DataPage() {
               <th scope="row">Site coordinates</th>
               <td>NASA NSSDCA, LROC, USGS/IAU Gazetteer</td>
               <td>Catalogue of 21 sites, each with its citation</td>
+            </tr>
+            <tr>
+              <th scope="row">The sky behind the Moon</th>
+              <td>
+                <a href="https://svs.gsfc.nasa.gov/4851/">NASA SVS Deep Star Maps 2020</a> (about 1.7 billion stars from Hipparcos-2, Tycho-2 and
+                Gaia DR2; J2000, 4k or 8k) and the{' '}
+                <a href="https://heasarc.gsfc.nasa.gov/W3Browse/star-catalog/bsc5p.html">Bright Star Catalogue</a> (NASA HEASARC, 2 887 stars to
+                magnitude 5.5); the 25 brightest catalogue stars fall within 0.33 pixels of their place on the map
+              </td>
+              <td>The Milky Way and the stars behind the globe and in the horizon view, turned with the Moon (IAU orientation) at the chosen time</td>
             </tr>
           </tbody>
         </table>

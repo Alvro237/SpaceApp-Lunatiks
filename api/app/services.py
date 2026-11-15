@@ -15,6 +15,7 @@ import numpy as np
 from .db.sites import Site
 from .db.store import DataStore
 from .logic.constraints import ConstraintContext
+from .logic.link import Contact, StationSpec, StationView, combine_contact, station_view
 from .logic.horizon import RAY_AZIMUTHS, RAY_MAX_RANGE_M, HorizonProfile, destination, horizon_from_heights, ray_distances
 from .logic.engine import (DEFAULT_PARAMS, AnalysisParams, Metrics, RefinedRange, Series, SiteModel, Transition,
                            compute_metrics, evaluate, make_model, next_transition, refined_ranges, time_grid)
@@ -168,13 +169,21 @@ def evaluate_window(store: DataStore, model: SiteModel, start_ms: float, duratio
 
 def constraint_context(store: DataStore, model: SiteModel, start_ms: float, duration_h: float,
                        site: Site | None = None, step_min: float = 60.0,
-                       params: AnalysisParams = DEFAULT_PARAMS) -> ConstraintContext:
-    """Everything the hard filters need for one candidate and one mission window."""
+                       params: AnalysisParams = DEFAULT_PARAMS, link_networks: list[str] | None = None,
+                       link_direction: str = "downlink") -> ConstraintContext:
+    """Everything the hard filters need for one candidate and one mission window.
+
+    ``link_networks`` (AERO-2): when given, the context also carries the radio-link contact series (the lunar site sees
+    the Earth AND an antenna of those networks sees the Moon) and the communication filters use it instead of the
+    Earth's line of sight alone. Left as None the behaviour is unchanged."""
     series = evaluate_window(store, model, start_ms, duration_h, step_min, params)
+    contact = None
+    if link_networks is not None:
+        contact = link_contact(store, series, params, link_stations(store, link_networks, link_direction)).contact
     return ConstraintContext(site_id=site.id if site else None, lat=model.lat, lon=model.lon, start_ms=start_ms,
                              duration_h=duration_h, series=series, metrics=compute_metrics(series, params),
                              params=params, horizon_kind=model.horizon.kind,
-                             lookups=point_lookups(store, model.lat, model.lon, site))
+                             lookups=point_lookups(store, model.lat, model.lon, site), contact=contact)
 
 
 # ---------------------------------------------------------------------------- SW-1: state at one instant
@@ -303,3 +312,106 @@ def pgda_long_term(store: DataStore, lat: float, lon: float) -> LongTermValues |
 
 def period_label() -> str:
     return f"{iso_utc(to_ms(LONG_TERM_START))} .. {iso_utc(to_ms(LONG_TERM_START) + LONG_TERM_HOURS * 3_600_000.0)}"
+
+
+# ---------------------------------------------------------------------------- AERO-2: radio link
+
+LINK_DIRECTION_KIND = {"downlink": "receive", "uplink_low_power": "transmit_low", "uplink_high_power": "transmit_high"}
+
+
+@dataclass(frozen=True)
+class LinkStations:
+    """The antennas of one link request, reduced to what the geometry needs."""
+    specs: list[StationSpec]
+    meta: dict[str, dict]                # antenna id -> name, network, source ("cited", "owner_estimate" or "user")
+    skipped: list[tuple[str, str]]       # (antenna id, reason): catalogue antennas with no limit for this direction
+
+
+def link_stations(store: DataStore, networks, direction: str = "downlink", custom=()) -> LinkStations:
+    """Resolve the selected networks and the user's own antennas.
+
+    ``custom`` items need ``id``, ``name``, ``lat_deg``, ``lon_deg``, ``height_m`` and ``min_elevation_deg``.
+    Raises LookupError when the dataset is not loaded, KeyError for an unknown network id, ValueError for an id that
+    clashes with a catalogue id or when no antenna is usable in this direction.
+    """
+    repo = store.stations
+    if repo is None:
+        raise LookupError("the ground-station dataset is not loaded (data/ground_stations.json)")
+    catalogue = repo.in_networks(list(networks))
+    clash = sorted({c.id for c in custom} & {s.id for s in repo.all()})
+    if clash:
+        raise ValueError(f"custom station ids clash with catalogue ids: {clash}")
+    kind = LINK_DIRECTION_KIND[direction]
+    specs: list[StationSpec] = []
+    meta: dict[str, dict] = {}
+    skipped: list[tuple[str, str]] = []
+    for s in catalogue:
+        limit, step = s.limit(kind)
+        if limit is None:
+            skipped.append((s.id, f"no {direction} elevation limit is published for this antenna"))
+            continue
+        specs.append(StationSpec(s.id, s.lat_deg, s.lon_deg, s.height_m, limit, step))
+        meta[s.id] = dict(name=s.name, network=s.network, source=s.elevation_limits["source"])
+    for c in custom:
+        specs.append(StationSpec(c.id, c.lat_deg, c.lon_deg, c.height_m, c.min_elevation_deg, None))
+        meta[c.id] = dict(name=c.name or c.id, network="custom", source="user")
+    if not specs:
+        raise ValueError(f"no selected antenna has a {direction} elevation limit; choose another direction or add a "
+                         "custom station")
+    return LinkStations(specs=specs, meta=meta, skipped=skipped)
+
+
+def link_views(store: DataStore, series: Series, stations: LinkStations) -> dict[str, StationView]:
+    """The Moon from each antenna at the samples of ``series``. Raises OutOfCoverage outside the Moon table (2025-2035)."""
+    moon = store.stations.moon.positions(series.t_ms)
+    return {sp.id: station_view(sp, moon) for sp in stations.specs}
+
+
+def link_contact(store: DataStore, series: Series, params: AnalysisParams, stations: LinkStations) -> Contact:
+    """Level-1 contact: the lunar site sees the Earth AND some antenna sees the Moon (see app/logic/link.py)."""
+    views = link_views(store, series, stations)
+    return combine_contact(series.comms(params), {k: v.sees_moon for k, v in views.items()})
+
+
+#: Reference receiver class for G/T estimates: the DSN 34 m beam-waveguide antennas, the most numerous deep-space dish
+#: with published values in every lunar band.
+GT_REFERENCE_DISH = "34 m BWG"
+GT_REFERENCE_DIAMETER_M = 34.0
+
+
+def gt_reference(store: DataStore, band: str) -> float | None:
+    """Mean published G/T of the DSN 34 m BWG antennas in a band, dB/K (None when none is published)."""
+    vals = [s.gt(band)[0] for s in store.stations.all()
+            if s.network == "dsn" and s.dish == GT_REFERENCE_DISH and s.gt(band)[1] == "cited"]
+    return float(np.mean(vals)) if vals else None
+
+
+def link_receive_gt(store: DataStore, stations: LinkStations, band: str, custom=()) -> dict[str, tuple[float | None, str]]:
+    """Downlink G/T per antenna for a band: antenna id -> (dB/K or None, basis).
+
+    basis: "cited" or "spec" (published), "estimated" (the antenna receives in the band but publishes no G/T, or a
+    custom antenna gave only its diameter: scaled from the DSN 34 m BWG mean by 20 log10(D / 34 m)), "user" (given in
+    the request), "no_receiver" (the antenna has no receiver in this band) or "unknown" (a custom antenna with
+    neither a G/T nor a diameter)."""
+    from .logic.link import scale_gt_db_per_k
+
+    ref = gt_reference(store, band)
+    by_custom = {c.id: c for c in custom}
+    out: dict[str, tuple[float | None, str]] = {}
+    for sp in stations.specs:
+        c = by_custom.get(sp.id)
+        if c is not None:
+            if getattr(c, "gt_db_per_k", None) is not None:
+                out[sp.id] = (float(c.gt_db_per_k), "user")
+            elif getattr(c, "diameter_m", None) and ref is not None:
+                out[sp.id] = (round(scale_gt_db_per_k(ref, GT_REFERENCE_DIAMETER_M, c.diameter_m), 2), "estimated")
+            else:
+                out[sp.id] = (None, "unknown")
+            continue
+        s = store.stations.get(sp.id)
+        value, basis = s.gt(band)
+        if basis == "unpublished":
+            value = None if ref is None else round(scale_gt_db_per_k(ref, GT_REFERENCE_DIAMETER_M, s.diameter_m), 2)
+            basis = "estimated" if value is not None else "unknown"
+        out[sp.id] = (value, basis)
+    return out

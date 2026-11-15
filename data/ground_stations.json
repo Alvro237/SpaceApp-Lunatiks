@@ -70,7 +70,7 @@
    "url": "https://deepspace.jpl.nasa.gov/dsndocs/810-005/301/Horizon-Masks-Download-V2-301O.xlsx",
    "bytes": 441329,
    "sha256": "2d85b0be77c1116c842346ce6a601e33944d0dd62fb3ffc575f4c3fd33fd0ec0",
-   "retrieved": "2026-11-14",
+   "retrieved": "2026-11-15",
    "handbook": "https://deepspace.jpl.nasa.gov/dsndocs/810-005/301/301N.pdf"
   },
   "jaxa_horizon_masks": {
@@ -79,21 +79,21 @@
     "url": "https://ddor.nav.isas.jaxa.jp/station_coordinates/Misasa_horizon_mask.xls",
     "bytes": 93696,
     "sha256": "4b4e57d8574449468d2aa9304a45024c66cb48149f0725b0b8fcbe2f2d8ec9b7",
-    "retrieved": "2026-11-14"
+    "retrieved": "2026-11-15"
    },
    "usuda": {
     "file": "UDSC_horizon_mask.xls",
     "url": "https://ddor.nav.isas.jaxa.jp/station_coordinates/UDSC_horizon_mask.xls",
     "bytes": 43520,
     "sha256": "2c93c2ab07405b7d906f9911184eb3dd4c24663eab3e572496c6190131f53cf2",
-    "retrieved": "2026-11-14"
+    "retrieved": "2026-11-15"
    },
    "uchinoura": {
     "file": "USC_horizon_mask.xls",
     "url": "https://ddor.nav.isas.jaxa.jp/station_coordinates/USC_horizon_mask.xls",
     "bytes": 55296,
     "sha256": "60254259571bcee8dcf2f67114ff40fb5f2a4f68ca5a62c3f235b3c296a8c265",
-    "retrieved": "2026-11-14"
+    "retrieved": "2026-11-15"
    }
   },
   "jaxa_page": "https://ddor.nav.isas.jaxa.jp/station_coordinates"
@@ -112,6 +112,24 @@
    "diameter_m": 70.0,
    "dish": "70 m",
    "bands": null,
+   "receive_gt": {
+    "S": {
+     "gt_db_per_k": 51.31,
+     "basis": "cited",
+     "gain_dbi": 63.59,
+     "system_noise_k": 16.9,
+     "source": "DSN 810-005 module 101 Rev. G (70 m), gains p. 13/18, Top Table 4 p. 22-23",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    },
+    "X": {
+     "gt_db_per_k": 62.33,
+     "basis": "cited",
+     "gain_dbi": 74.55,
+     "system_noise_k": 16.69,
+     "source": "DSN 810-005 module 101 Rev. G (70 m), gains p. 13/18, Top Table 4 p. 22-23",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    }
+   },
    "position_source": "NAIF station SPK earthstns_itrf93_260814.bsp (ITRF93, epoch 2027-01-01)",
    "elevation_limits": {
     "source": "cited",
@@ -1218,6 +1236,32 @@
    "diameter_m": 34.0,
    "dish": "34 m BWG",
    "bands": null,
+   "receive_gt": {
+    "S": {
+     "gt_db_per_k": 41.86,
+     "basis": "cited",
+     "gain_dbi": 56.74,
+     "system_noise_k": 30.78,
+     "source": "DSN 810-005 module 104 Rev. O (34 m BWG), gains p. 38-42, Top Table 11 p. 48-51",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    },
+    "X": {
+     "gt_db_per_k": 54.07,
+     "basis": "cited",
+     "gain_dbi": 68.27,
+     "system_noise_k": 26.32,
+     "source": "DSN 810-005 module 104 Rev. O (34 m BWG), gains p. 38-42, Top Table 11 p. 48-51",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    },
+    "Ka": {
+     "gt_db_per_k": 62.76,
+     "basis": "cited",
+     "gain_dbi": 77.2,
+     "system_noise_k": 27.8,
+     "source": "DSN 810-005 module 104 Rev. O (34 m BWG), gains p. 38-42, Top Table 11 p. 48-51",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    }
+   },
    "position_source": "NAIF station SPK earthstns_itrf93_260814.bsp (ITRF93, epoch 2027-01-01)",
    "elevation_limits": {
     "source": "cited",
@@ -2324,6 +2368,16 @@
    "diameter_m": 34.0,
    "dish": "34 m BWG",
    "bands": null,
+   "receive_gt": {
+    "X": {
+     "gt_db_per_k": 55.06,
+     "basis": "cited",
+     "gain_dbi": 68.32,
+     "system_noise_k": 21.2,
+     "source": "DSN 810-005 module 104 Rev. O (34 m BWG), gains p. 38-42, Top Table 11 p. 48-51",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    }
+   },
    "position_source": "NAIF station SPK earthstns_itrf93_260814.bsp (ITRF93, epoch 2027-01-01)",
    "elevation_limits": {
     "source": "cited",
@@ -3430,6 +3484,32 @@
    "diameter_m": 34.0,
    "dish": "34 m BWG",
    "bands": null,
+   "receive_gt": {
+    "S": {
+     "gt_db_per_k": 43.26,
+     "basis": "cited",
+     "gain_dbi": 56.74,
+     "system_noise_k": 22.3,
+     "source": "DSN 810-005 module 104 Rev. O (34 m BWG), gains p. 38-42, Top Table 11 p. 48-51",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    },
+    "X": {
+     "gt_db_per_k": 55.03,
+     "basis": "cited",
+     "gain_dbi": 68.32,
+     "system_noise_k": 21.33,
+     "source": "DSN 810-005 module 104 Rev. O (34 m BWG), gains p. 38-42, Top Table 11 p. 48-51",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    },
+    "Ka": {
+     "gt_db_per_k": 60.98,
+     "basis": "cited",
+     "gain_dbi": 77.2,
+     "system_noise_k": 41.9,
+     "source": "DSN 810-005 module 104 Rev. O (34 m BWG), gains p. 38-42, Top Table 11 p. 48-51",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    }
+   },
    "position_source": "NAIF station SPK earthstns_itrf93_260814.bsp (ITRF93, epoch 2027-01-01)",
    "elevation_limits": {
     "source": "cited",
@@ -4536,6 +4616,32 @@
    "diameter_m": 34.0,
    "dish": "34 m BWG",
    "bands": null,
+   "receive_gt": {
+    "S": {
+     "gt_db_per_k": 42.01,
+     "basis": "cited",
+     "gain_dbi": 56.74,
+     "system_noise_k": 29.74,
+     "source": "DSN 810-005 module 104 Rev. O (34 m BWG), gains p. 38-42, Top Table 11 p. 48-51",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    },
+    "X": {
+     "gt_db_per_k": 54.96,
+     "basis": "cited",
+     "gain_dbi": 68.32,
+     "system_noise_k": 21.67,
+     "source": "DSN 810-005 module 104 Rev. O (34 m BWG), gains p. 38-42, Top Table 11 p. 48-51",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    },
+    "Ka": {
+     "gt_db_per_k": 61.35,
+     "basis": "cited",
+     "gain_dbi": 77.2,
+     "system_noise_k": 38.5,
+     "source": "DSN 810-005 module 104 Rev. O (34 m BWG), gains p. 38-42, Top Table 11 p. 48-51",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    }
+   },
    "position_source": "NAIF station SPK earthstns_itrf93_260814.bsp (ITRF93, epoch 2027-01-01)",
    "elevation_limits": {
     "source": "cited",
@@ -5642,6 +5748,16 @@
    "diameter_m": 34.0,
    "dish": "34 m BWG",
    "bands": null,
+   "receive_gt": {
+    "X": {
+     "gt_db_per_k": 55.29,
+     "basis": "cited",
+     "gain_dbi": 68.32,
+     "system_noise_k": 20.09,
+     "source": "DSN 810-005 module 104 Rev. O (34 m BWG), gains p. 38-42, Top Table 11 p. 48-51",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    }
+   },
    "position_source": "NAIF station SPK earthstns_itrf93_260814.bsp (ITRF93, epoch 2027-01-01)",
    "elevation_limits": {
     "source": "cited",
@@ -6748,6 +6864,29 @@
    "diameter_m": 34.0,
    "dish": "34 m BWG",
    "bands": null,
+   "receive_gt": {
+    "S": {
+     "gt_db_per_k": 42.52,
+     "basis": "cited",
+     "gain_dbi": 56.74,
+     "system_noise_k": 26.43,
+     "source": "DSN 810-005 module 104 Rev. O (34 m BWG), gains p. 38-42, Top Table 11 p. 48-51",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    },
+    "X": {
+     "gt_db_per_k": 55.77,
+     "basis": "cited",
+     "gain_dbi": 68.32,
+     "system_noise_k": 17.98,
+     "source": "DSN 810-005 module 104 Rev. O (34 m BWG), gains p. 38-42, Top Table 11 p. 48-51",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    },
+    "Ka": {
+     "gt_db_per_k": null,
+     "basis": "unpublished",
+     "source": "DSN 810-005 module 104 Rev. O (34 m BWG), gains p. 38-42, Top Table 11 p. 48-51"
+    }
+   },
    "position_source": "NAIF station SPK earthstns_itrf93_260814.bsp (ITRF93, epoch 2027-01-01)",
    "elevation_limits": {
     "source": "cited",
@@ -7854,6 +7993,24 @@
    "diameter_m": 70.0,
    "dish": "70 m",
    "bands": null,
+   "receive_gt": {
+    "S": {
+     "gt_db_per_k": 50.93,
+     "basis": "cited",
+     "gain_dbi": 63.59,
+     "system_noise_k": 18.43,
+     "source": "DSN 810-005 module 101 Rev. G (70 m), gains p. 13/18, Top Table 4 p. 22-23",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    },
+    "X": {
+     "gt_db_per_k": 62.2,
+     "basis": "cited",
+     "gain_dbi": 74.63,
+     "system_noise_k": 17.49,
+     "source": "DSN 810-005 module 101 Rev. G (70 m), gains p. 13/18, Top Table 4 p. 22-23",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    }
+   },
    "position_source": "NAIF station SPK earthstns_itrf93_260814.bsp (ITRF93, epoch 2027-01-01)",
    "elevation_limits": {
     "source": "cited",
@@ -8960,6 +9117,32 @@
    "diameter_m": 34.0,
    "dish": "34 m BWG",
    "bands": null,
+   "receive_gt": {
+    "S": {
+     "gt_db_per_k": 41.89,
+     "basis": "cited",
+     "gain_dbi": 56.74,
+     "system_noise_k": 30.53,
+     "source": "DSN 810-005 module 104 Rev. O (34 m BWG), gains p. 38-42, Top Table 11 p. 48-51",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    },
+    "X": {
+     "gt_db_per_k": 54.59,
+     "basis": "cited",
+     "gain_dbi": 68.32,
+     "system_noise_k": 23.58,
+     "source": "DSN 810-005 module 104 Rev. O (34 m BWG), gains p. 38-42, Top Table 11 p. 48-51",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    },
+    "Ka": {
+     "gt_db_per_k": 61.18,
+     "basis": "cited",
+     "gain_dbi": 77.2,
+     "system_noise_k": 40.0,
+     "source": "DSN 810-005 module 104 Rev. O (34 m BWG), gains p. 38-42, Top Table 11 p. 48-51",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    }
+   },
    "position_source": "NAIF station SPK earthstns_itrf93_260814.bsp (ITRF93, epoch 2027-01-01)",
    "elevation_limits": {
     "source": "cited",
@@ -10066,6 +10249,16 @@
    "diameter_m": 34.0,
    "dish": "34 m BWG",
    "bands": null,
+   "receive_gt": {
+    "X": {
+     "gt_db_per_k": 54.76,
+     "basis": "cited",
+     "gain_dbi": 68.32,
+     "system_noise_k": 22.69,
+     "source": "DSN 810-005 module 104 Rev. O (34 m BWG), gains p. 38-42, Top Table 11 p. 48-51",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    }
+   },
    "position_source": "NAIF station SPK earthstns_itrf93_260814.bsp (ITRF93, epoch 2027-01-01)",
    "elevation_limits": {
     "source": "cited",
@@ -11172,6 +11365,24 @@
    "diameter_m": 70.0,
    "dish": "70 m",
    "bands": null,
+   "receive_gt": {
+    "S": {
+     "gt_db_per_k": 50.56,
+     "basis": "cited",
+     "gain_dbi": 63.59,
+     "system_noise_k": 20.1,
+     "source": "DSN 810-005 module 101 Rev. G (70 m), gains p. 13/18, Top Table 4 p. 22-23",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    },
+    "X": {
+     "gt_db_per_k": 62.43,
+     "basis": "cited",
+     "gain_dbi": 74.66,
+     "system_noise_k": 16.73,
+     "source": "DSN 810-005 module 101 Rev. G (70 m), gains p. 13/18, Top Table 4 p. 22-23",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    }
+   },
    "position_source": "NAIF station SPK earthstns_itrf93_260814.bsp (ITRF93, epoch 2027-01-01)",
    "elevation_limits": {
     "source": "cited",
@@ -12278,6 +12489,24 @@
    "diameter_m": 34.0,
    "dish": "34 m HEF",
    "bands": null,
+   "receive_gt": {
+    "S": {
+     "gt_db_per_k": 40.18,
+     "basis": "cited",
+     "gain_dbi": 56.07,
+     "system_noise_k": 38.8,
+     "source": "DSN 810-005 module 103 Rev. D (34 m HEF), gains p. 15, Top Table 5 p. 19-20",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    },
+    "X": {
+     "gt_db_per_k": 55.25,
+     "basis": "cited",
+     "gain_dbi": 68.41,
+     "system_noise_k": 20.7,
+     "source": "DSN 810-005 module 103 Rev. D (34 m HEF), gains p. 15, Top Table 5 p. 19-20",
+     "note": "G/T = gain - 10 log10(Top), Top at zenith with 25% CD average clear weather, LNA-1 / HEMT-1, first listed configuration; G/T drops at low elevation"
+    }
+   },
    "position_source": "NAIF station SPK earthstns_itrf93_260814.bsp (ITRF93, epoch 2027-01-01)",
    "elevation_limits": {
     "source": "cited",
@@ -13384,6 +13613,18 @@
    "diameter_m": 35.0,
    "dish": "35 m deep-space antenna",
    "bands": null,
+   "receive_gt": {
+    "S": {
+     "gt_db_per_k": null,
+     "basis": "unpublished",
+     "source": "ESA ESOC ground station pages: New Norcia S and X; Cebreros and Malargue X (their Ka is 32 GHz deep space)"
+    },
+    "X": {
+     "gt_db_per_k": null,
+     "basis": "unpublished",
+     "source": "ESA ESOC ground station pages: New Norcia S and X; Cebreros and Malargue X (their Ka is 32 GHz deep space)"
+    }
+   },
    "position_source": "IGS site log NNOR (2025-11-07), ITRF XYZ; the GNSS station of the site, not the dish reference point",
    "position_url": "https://files.igs.org/pub/station/log/nnor00aus_20251107.log",
    "elevation_limits": {
@@ -13415,6 +13656,13 @@
      "X",
      "Ka"
     ]
+   },
+   "receive_gt": {
+    "X": {
+     "gt_db_per_k": null,
+     "basis": "unpublished",
+     "source": "ESA ESOC ground station pages: New Norcia S and X; Cebreros and Malargue X (their Ka is 32 GHz deep space)"
+    }
    },
    "position_source": "IGS site log CEBR (2025-11-07), ITRF XYZ; the GNSS station of the site, not the dish reference point",
    "position_url": "https://files.igs.org/pub/station/log/cebr00esp_20251107.log",
@@ -13448,6 +13696,13 @@
      "Ka"
     ]
    },
+   "receive_gt": {
+    "X": {
+     "gt_db_per_k": null,
+     "basis": "unpublished",
+     "source": "ESA ESOC ground station pages: New Norcia S and X; Cebreros and Malargue X (their Ka is 32 GHz deep space)"
+    }
+   },
    "position_source": "IGS site log MGUE (2026-10-21), ITRF XYZ; the GNSS station of the site, not the dish reference point",
    "position_url": "https://files.igs.org/pub/station/log/mgue00arg_20261021.log",
    "elevation_limits": {
@@ -13472,6 +13727,14 @@
    "diameter_m": 54.0,
    "dish": "54 m deep-space antenna",
    "bands": null,
+   "receive_gt": {
+    "X": {
+     "gt_db_per_k": 53.35,
+     "basis": "spec",
+     "source": "JAXA GREAT2 project page",
+     "note": "design specification, at least this value at 15-80 deg elevation, propagation loss included"
+    }
+   },
    "position_source": "JAXA station coordinates page, GRS80 at epoch 2026.0 (DSN id DSS-30)",
    "elevation_limits": {
     "source": "cited",
@@ -13856,6 +14119,18 @@
    "diameter_m": 64.0,
    "dish": "64 m deep-space antenna",
    "bands": null,
+   "receive_gt": {
+    "S": {
+     "gt_db_per_k": null,
+     "basis": "unpublished",
+     "source": "JAXA station coordinates page (S/X VLBI at Usuda and Uchinoura; the Misasa 54 m has no S-band receiver)"
+    },
+    "X": {
+     "gt_db_per_k": null,
+     "basis": "unpublished",
+     "source": "JAXA station coordinates page (S/X VLBI at Usuda and Uchinoura; the Misasa 54 m has no S-band receiver)"
+    }
+   },
    "position_source": "JAXA station coordinates page, GRS80 at epoch 2026.0 (DSN id DSS-48)",
    "elevation_limits": {
     "source": "cited",
@@ -14240,6 +14515,18 @@
    "diameter_m": 34.0,
    "dish": "34 m deep-space antenna",
    "bands": null,
+   "receive_gt": {
+    "S": {
+     "gt_db_per_k": null,
+     "basis": "unpublished",
+     "source": "JAXA station coordinates page (S/X VLBI at Usuda and Uchinoura; the Misasa 54 m has no S-band receiver)"
+    },
+    "X": {
+     "gt_db_per_k": null,
+     "basis": "unpublished",
+     "source": "JAXA station coordinates page (S/X VLBI at Usuda and Uchinoura; the Misasa 54 m has no S-band receiver)"
+    }
+   },
    "position_source": "JAXA station coordinates page, GRS80 at epoch 2026.0 (DSN id DSS-38)",
    "elevation_limits": {
     "source": "cited",

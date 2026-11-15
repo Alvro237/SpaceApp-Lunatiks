@@ -103,3 +103,40 @@ def test_matches_the_engine_on_a_real_site():
     assert hours.value == pytest.approx(ctx.metrics.comms_pct / 100.0 * ctx.metrics.window_hours)
     assert blackout.value == pytest.approx(ctx.metrics.longest_blackout_h)
     assert "smooth-sphere" not in hours.note                    # terrain horizon: no caveat needed
+
+
+# ------------------------------------------------------------------------------ radio-link contact series (AERO-2)
+
+def test_filters_use_the_contact_series_when_the_context_carries_one():
+    """Same Earth line of sight as above, but the antennas leave a gap: contact flags are 1,1,0,0,0,0,1,0,0,1 (hours
+    0-1, 6 and 9) -> 4 contact hours' worth of samples (0.4), longest blackout hours 2-5 = 4 h."""
+    base = _ctx()
+    contact = np.array([1, 1, 0, 0, 0, 0, 1, 0, 0, 1], dtype=bool)
+    ctx = ConstraintContext(**{**base.__dict__, "contact": contact})
+    hours = evaluate_constraints(ctx, {"comms_hours": {"min_hours": 3.0}})[0]
+    assert hours.fraction == pytest.approx(0.4) and hours.value == pytest.approx(0.4 * 9.0)       # 3.6 h
+    assert hours.passed is True and "ground antenna" in hours.note
+    assert evaluate_constraints(ctx, {"comms_hours": {"min_hours": 3.7}})[0].passed is False
+    blackout = evaluate_constraints(ctx, {"max_blackout": {"max_hours": 4.0}})[0]
+    assert blackout.value == pytest.approx(4.0) and blackout.passed is True
+    assert evaluate_constraints(ctx, {"max_blackout": {"max_hours": 3.9}})[0].passed is False
+    # without the series the same context falls back to the Earth's line of sight (unchanged behaviour)
+    plain = evaluate_constraints(base, {"max_blackout": {"max_hours": 3.0}})[0]
+    assert plain.value == pytest.approx(3.0) and "line of sight only" in plain.note
+
+
+def test_constraint_context_with_link_networks_on_a_real_site():
+    store = get_store()
+    site = store.sites.get("mons-malapert")
+    model = services.model_for_site(store, site, 2.0)
+    plain = services.constraint_context(store, model, T0, 24 * 14, site=site)
+    linked = services.constraint_context(store, model, T0, 24 * 14, site=site, link_networks=["dsn"])
+    assert plain.contact is None and linked.contact is not None and linked.contact.shape == plain.series.t_ms.shape
+    assert linked.contact.all()                                   # the Earth is always up here and the DSN covers the Moon
+    one_complex = services.constraint_context(store, model, T0, 24 * 14, site=site, link_networks=["jaxa"])
+    assert one_complex.contact.mean() < 1.0                       # a single country cannot see the Moon all day
+    res = evaluate_constraints(one_complex, {"comms_hours": {"min_fraction": 0.99}, "max_blackout": {"max_hours": 6.0}})
+    assert res[0].fraction == pytest.approx(float(one_complex.contact.mean()))
+    assert res[0].passed is False and res[1].value > 6.0 and res[1].passed is False
+    with pytest.raises(KeyError):
+        services.constraint_context(store, model, T0, 24, site=site, link_networks=["nasa"])
