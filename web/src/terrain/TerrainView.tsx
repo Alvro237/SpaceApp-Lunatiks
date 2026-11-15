@@ -24,6 +24,7 @@ import { Craters } from './Craters'
 import { type LayerMode, type Quality, TerrainEngine } from './engine'
 import { type Exaggeration, LayersControl, LegendChip } from './Legend'
 import { IconCrosshair, IconCube, IconFit, IconGlobe, IconMinus, IconPlus } from '../ui/icons'
+import { WebGLGuard } from '../ui/WebGLGuard'
 import { terrainRegistry } from './registry'
 import { type Tileset, inExtent, polarLatLon, polarXY, scaleFactor } from './tileset'
 
@@ -254,6 +255,7 @@ function MapView({ tileset }: { tileset: Tileset }) {
         {/* Multisampling only where a CSS pixel is one device pixel. On a denser screen the edges are already drawn
             at twice the detail and it made no visible difference, while a frame of the tilted map took 7.2 ms of an
             Apple M2 with it and 4.2 ms without (2880 x 1800, time playing; measured 2026-11-14). */}
+        <WebGLGuard what="south-polar 3D map">
         <Canvas camera={{ fov: FOV_DEG, near: 1, far: 10_000, position: [0, 1500, 0] }} dpr={[1, 2]} flat linear gl={{ antialias: window.devicePixelRatio < 2 }} aria-hidden="true" frameloop={covered ? 'never' : 'always'}>
           <Driver
             tileset={tileset}
@@ -266,6 +268,7 @@ function MapView({ tileset }: { tileset: Tileset }) {
             onCraterStatus={setCraterError}
           />
         </Canvas>
+        </WebGLGuard>
         <p id="map-help" className="sr-only">
           Arrow keys move, plus and minus zoom, T tilts to 3D, Q and E rotate, R shows the whole pole, Space plays. A
           double click comes closer to the place under the pointer.

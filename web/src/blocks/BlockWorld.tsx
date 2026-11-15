@@ -23,6 +23,7 @@ import { IconGlobe, IconInfo, IconMinus, IconMountain, IconPlus } from '../ui/ic
 import { Popover } from '../ui/Popover'
 import { ToolPortal } from '../ui/ToolSlot'
 import { useHud } from './useStory'
+import { WebGLGuard } from '../ui/WebGLGuard'
 import { voxelBodyMaterial } from './voxelMaterial'
 import {
   type Blocks,
@@ -725,6 +726,7 @@ export function BlockWorld() {
             {status}
           </p>
         ) : (
+          <WebGLGuard what="world of cubes">
           <Canvas key={showGround ? `g${groundKey}` : 'moon'} shadows camera={{ fov: FOV, position: [0, 40, 120] }} dpr={[1, 2]} flat gl={{ antialias: true }} aria-hidden="true">
             {showGround && ground.blocks ? (
               <GroundScene blocks={ground.blocks} sun={now?.sun ?? null} earth={now?.earth ?? null} eclipse={now?.eclipse ?? 0} cam={groundCam} />
@@ -732,6 +734,7 @@ export function BlockWorld() {
               <MoonScene blocks={moon} cam={moonCam} site={ll} pickRef={pickRef} />
             ) : null}
           </Canvas>
+          </WebGLGuard>
         )}
         <p id="block-help" className="sr-only">
           Arrow keys turn the view, plus and minus zoom. On the whole Moon, a click chooses that spot. The panels say, in words, whether the Sun and the
