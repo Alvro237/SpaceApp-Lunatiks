@@ -32,6 +32,8 @@ longitude, planetocentric latitude, degrees. The API reads these files only thro
 
 South polar stereographic, true scale at the pole: `x = r sin(lon)`, `y = r cos(lon)`,
 `r = 2R tan((90 + lat)/2)`. Row 0 is the top (`yTopM`), column 0 the left (`xLeftM`).
+The one exception is `lola_elevation_global`, marked `"projection": "equirectangular"` in `grids.json`:
+simple cylindrical, row 0 at 90 N, column 0 at longitude 0, longitude growing east 0..360 with wrap.
 
 | Grid | Unit | Cell | Coverage | Source |
 | --- | --- | --- | --- | --- |
@@ -39,6 +41,7 @@ South polar stereographic, true scale at the pole: `x = r sin(lon)`, `y = r cos(
 | `lola_slope_80s` | degrees | 320 m | south of 80 S | LOLA `LDSM_80S_80MPP_ADJ`, PGDA product 90 |
 | `lola_elevation_60s` | metres above the sphere | 960 m | south of 60 S | LOLA `LDEM_60S_240MPP_ADJ`, PGDA product 90 |
 | `lola_elevation_80s` | metres above the sphere | 240 m (source pixels, not averaged) | 608 km box on the pole (south of about 80 S) | LOLA `LDEM_60S_240MPP_ADJ`, PGDA product 90; near field of the ray-traced horizons of manual coordinates |
+| `lola_elevation_global` | metres above the sphere | 3.79 km at the equator (8 px/deg, equirectangular) | whole Moon | LOLA `LDEM_16` v3.1, PDS Geosciences Node, 2 x 2 area mean; coarsest level of the ray-traced horizon, so any point outside the polar grids still gets a terrain skyline (relief narrower than a few cells is smoothed away) |
 | `sun_illumination_65s` | fraction of time, 0..1 | 960 m | south of 65 S | `AVGVISIB_65S_240M_201608`, PGDA product 69 |
 | `earth_visibility_65s` | fraction of time, 0..1 | 960 m | south of 65 S | `AVGVISIB_65S_240M_201608_EARTH`, PGDA product 69 |
 | `permanent_shadow_65s` | fraction of the cell, 0..1 | 960 m | south of 65 S | `LPSR_65S_240M_201608`, PGDA product 69 |
@@ -87,6 +90,7 @@ uv run python -m lunarnav.build           # ephemeris, sites, horizons, basemap,
 uv run python -m lunarnav.polar_grids     # screening grids
 uv run python -m lunarnav.craters         # crater catalogue
 uv run python -m lunarnav.globe           # global LOLA topography for the web globe (downloads LDEM_16, 33 MB)
+uv run python -m lunarnav.global_grid     # whole-Moon elevation grid for the ray-traced horizon (same LDEM_16)
 ```
 
 The four product 69 GeoTIFFs are fetched by hand into `data/raw/illumination/` from
