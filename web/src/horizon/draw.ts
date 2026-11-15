@@ -7,6 +7,7 @@
  */
 import { type Camera, compass16, earthPhase, project, tickStep, wrap180, wrap360 } from './project'
 import { drawGround, drawStars } from './scenery'
+import type { ReliefScene } from './relief/render'
 
 export interface Body {
   az: number
@@ -28,6 +29,8 @@ export interface Scene {
   showLabels?: boolean
   /** Azimuth and elevation of every catalogue star at this instant (stars.ts); none while the camera comes down. */
   stars?: Float32Array | null
+  /** The real ground around the place (relief/), drawn instead of the illustration once loaded; fine = full resolution. */
+  relief?: { scene: ReliefScene; fine: boolean } | null
 }
 
 const SUN = '#ffb547'
@@ -51,7 +54,7 @@ export function drawHorizon(ctx: CanvasRenderingContext2D, W: number, H: number,
   drawTrack(ctx, W, c, s.earthTrack, EARTH)
   drawSun(ctx, c, s.sun)
   drawEarth(ctx, c, s.earth, s.sun)
-  drawGround(ctx, W, H, c, { horizonAt: s.horizonAt, daylight: s.sun.fraction })
+  drawGround(ctx, W, H, c, { horizonAt: s.horizonAt, daylight: s.sun.fraction, relief: s.relief })
   if (s.showLabels !== false) drawLabels(ctx, W, c, s)
   drawCompass(ctx, W, H, c, s)
 }

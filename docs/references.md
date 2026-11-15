@@ -12,7 +12,7 @@ asks for this list; keep it current when something is added.
 | LOLA south-pole digital elevation and slope models, PGDA product 90 (Barker et al.): `LDEM_*`, `LDSM_60S_240MPP_ADJ`, `LDSM_80S_80MPP_ADJ`, `LDSM_83S_10MPP_ADJ` | Terrain horizon, ground height, slope, hillshade basemap, slope and elevation screening grids; the map's live slope layer (240, 80 and 10 m, read block by block through the PGDA proxy) | https://pgda.gsfc.nasa.gov/products/90 |
 | LOLA 80 m south-pole DEM `LDEM_80S_80MPP_ADJ.TIF`, PGDA product 90 (Barker et al.) | Web terrain tiles z4-z7 (480 to 60 m cells) within about 300 km of the pole; downloaded to `data/raw/dem_full/`, not committed | https://pgda.gsfc.nasa.gov/data/LOLA_20mpp/LDEM_80S_80MPP_ADJ.TIF , https://pgda.gsfc.nasa.gov/products/90 |
 | LOLA south-pole DEMs `LDEM_80S_20MPP_ADJ.TIF` (20 m) and `LDEM_83S_10MPP_ADJ.TIF` (10 m), PGDA product 90 (Barker et al.) | Live terrain levels z8-z10 (30, 15, 7.5 m cells): Cloud Optimized GeoTIFFs read block by block by the browser through a CORS proxy | https://pgda.gsfc.nasa.gov/data/LOLA_20mpp/LDEM_80S_20MPP_ADJ.TIF , https://pgda.gsfc.nasa.gov/data/LOLA_20mpp/LDEM_83S_10MPP_ADJ.TIF |
-| NASA Moon Trek (JPL) ArcGIS ImageServer: LOLA DEMs `LRO_LOLA_DEM_SPole45_100mp_v04` (100 m), `LRO_LOLA_DEM_SPole75_30mp_v04` (30 m), `LRO_LOLA_DEM_SPole875_5mp_v04` (5 m) | Live terrain levels z4-z7 outside the 80 m DEM and z11 (3.75 m) near the pole, read by the browser with `exportImage` | https://trek.nasa.gov/moon/trekarcgis/rest/services/ , https://trek.nasa.gov/tiles/apidoc/trekAPI.html?body=moon |
+| NASA Moon Trek (JPL) ArcGIS ImageServer: LOLA DEMs `LRO_LOLA_DEM_SPole45_100mp_v04` (100 m), `LRO_LOLA_DEM_SPole75_30mp_v04` (30 m), `LRO_LOLA_DEM_SPole875_5mp_v04` (5 m) | Live terrain levels z4-z7 outside the 80 m DEM and z11 (3.75 m) near the pole, read by the browser with `exportImage`; the ground of the Horizon view (`web/src/horizon/relief`): four nested 512 x 512 grids around the observer, from the finest DEM covering the place (5, 20, 80, 320 m cells to 164 km near the pole; 30 m or 100 m first cells farther out) | https://trek.nasa.gov/moon/trekarcgis/rest/services/ , https://trek.nasa.gov/tiles/apidoc/trekAPI.html?body=moon |
 | NASA Moon Trek (JPL): ImageServer DEMs `LRO_LOLA_DEM_Global_256ppd_v06` (LOLA, 256 px/deg, 118 m), `LRO_LOLA_DEM_SPole45_100mp_v04_EQ` and `LRO_LOLA_DEM_NPole45_100mp_v04_EQ` (LOLA polar DEMs, 100 m, geographic), and the WMTS tiles of `LRO_WAC_Mosaic_Global_303ppd_v02` (LROC WAC global morphologic mosaic, 303 px/deg, 100 m; Speyerer et al. 2011, LPSC XLII abstract 2387) | Live detail tiles of the web globe while zooming (`web/src/globe/detail`): DEMs for the relief shading (global between 45° S and 45° N, polar beyond), WAC mosaic for the optional photo view and, as a fixed patch of 16 tiles (WMTS matrix 7, 11.25-16.875 S, 0-5.625 E), for the ground texture of the Horizon view (labelled on screen as another place on the Moon). Measured on 2026-11-14: tile means within 0.25 m (global) and 13 m (south polar) of LDEM_16 over the same boxes | https://trek.nasa.gov/moon/trekarcgis/rest/services/ , https://trek.nasa.gov/tiles/Moon/EQ/LRO_WAC_Mosaic_Global_303ppd_v02/1.0.0/WMTSCapabilities.xml |
 | LOLA Gridded Data Record `LDEM_16` v3.1 (PDS `LRO-L-LOLA-4-GDR-V1.0`), NASA PDS Geosciences Node | Global topography of the web globe (`data/globe`, 4 px/deg) and the whole-Moon elevation grid of the ray-traced horizon (`data/grids/lola_elevation_global`, 8 px/deg): terrain skylines anywhere on the Moon, not only south of 60 S | https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/cylindrical/img/ |
 | LOLA high-resolution site topography, PGDA product 78 | Background on uncertainty (not yet read by the pipeline) | https://pgda.gsfc.nasa.gov/products/78 |
@@ -53,6 +53,9 @@ asks for this list; keep it current when something is added.
 
 ## Papers and documents consulted
 
+- McEwen, A. S. (1991). Photometric functions for photoclinometry and other applications. Icarus 92, 298-311.
+  doi:10.1016/0019-1035(91)90053-V (lunar-Lambert function used to shade the Horizon view's LOLA ground; the
+  limb-darkening weight is approximated as falling linearly with phase angle)
 - Smith, D. E., et al. (2010). The Lunar Orbiter Laser Altimeter investigation on the Lunar Reconnaissance
   Orbiter mission. Space Science Reviews 150, 209-241. doi:10.1007/s11214-009-9512-y (LOLA global DEM)
 - van der Walt, S., Smith, N. (2015). viridis, magma, inferno colour maps for matplotlib (perceptually uniform,
@@ -141,8 +144,8 @@ Exact versions: `api/uv.lock` and `pipeline/uv.lock`.
 
 No third-party fonts, analytics, trackers or CDNs are loaded at runtime. The only external data read at
 runtime is the live terrain levels: byte ranges of the two NASA PGDA DEMs above, through the project's proxy, and
-tiles cut by NASA Moon Trek's ImageServer (polar DEMs for the map; the global LOLA DEM and LROC WAC mosaic for the
-globe). The only photographic image shown is the LROC WAC mosaic in the globe's optional photo view, labelled as
+tiles cut by NASA Moon Trek's ImageServer (polar DEMs for the map and for the Horizon view's ground; the global LOLA
+DEM and LROC WAC mosaic for the globe). The only photographic image shown is the LROC WAC mosaic in the globe's optional photo view, labelled as
 such; everything else is hillshade generated by this project from LOLA data.
 
 ## AI assistance
