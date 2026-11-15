@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useApp } from '../state/store'
 import { BlockToggle } from '../blocks/BlockToggle'
+import { TimelineFilters } from '../panels/TimelineFilters'
 import { BrandMark } from '../ui/BrandMark'
 import { TourButton } from '../ui/Walkthrough'
 
@@ -50,6 +51,7 @@ export function Layout() {
                     Mission planner
                   </button>
                 </div>
+                <TimelineFilters />
               </>
             )}
             <BlockToggle />

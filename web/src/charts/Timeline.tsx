@@ -16,19 +16,20 @@
  */
 import { type MouseEvent, useId, useMemo, useState } from 'react'
 import { useApiSeries } from '../api/hooks'
-import type { PowerResponse } from '../api/types'
+import type { LinkResponse, PowerResponse } from '../api/types'
 import { type ComparedPlace, useComparePlaces, useComparing } from '../compare/useComparePlaces'
 import { useCurrentPowerResult } from '../state/power'
 import { sameSelection, useApp } from '../state/store'
 import { SPEEDS, type SpeedId, formatUtc, isoMinute } from '../time/clock'
 import { MS_PER_DAY, MS_PER_HOUR } from '../time/engine'
 import { useParams, useThrottledTime } from '../time/hooks'
+import { toRanges } from '../panels/linkModel'
 import { useNow } from '../panels/useNow'
+import { useLinkResult, useLinkStore } from '../state/link'
 import { IconAntenna, IconPause, IconPlay, IconSpeed, IconSun } from '../ui/icons'
 
 const W = 1000
 const ROW = 14
-const H = ROW * 2 + 24
 /** Width of the label column: the row names for one place, number + name + share when comparing. */
 const LEFT_SINGLE = 70
 const LEFT_COMPARE = 230
@@ -78,6 +79,8 @@ export function Timeline() {
   const comparing = useComparing()
   const compared = useComparePlaces()
   const [strip, setStrip] = useState<Strip>('sun')
+  const link = useLinkResult()
+  const showEarthRow = useLinkStore((s) => s.showEarthRow)
   const LEFT = comparing ? LEFT_COMPARE : LEFT_SINGLE
 
   const data: TimelineData | null = useMemo(() => {
@@ -191,54 +194,103 @@ export function Timeline() {
       )}
       {data && (
         <>
-          {!comparing && (
-          <svg
-            className="strip"
-            viewBox={`${-LEFT} 0 ${W + LEFT + 6} ${H}`}
-            role="img"
-            aria-label={`Sunlit ${data.sunlightPct.toFixed(1)}% and Earth in view ${data.commsPct.toFixed(1)}% of the window, longest dark ${data.longestDarkH.toFixed(1)} h, longest without Earth ${data.longestBlackoutH.toFixed(1)} h.`}
-            onClick={seek}
-          >
-            <defs>
-              <pattern id={`${id}-hatch`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-                <rect width="6" height="6" className="hatch-bg" />
-                <line x1="0" y1="0" x2="0" y2="6" className="hatch-line" />
-              </pattern>
-            </defs>
-            <text x={-8} y={ROW * 0.78} textAnchor="end" className="row-label">
-              Sunlit
-            </text>
-            <text x={-8} y={ROW * 1.78 + 4} textAnchor="end" className="row-label">
-              Earth
-            </text>
-            <rect x={0} y={0} width={W} height={ROW - 2} className="row-bg" />
-            <rect x={0} y={ROW + 4} width={W} height={ROW - 2} className="row-bg" />
-            {data.sunlit.map(([a, b], i) => (
-              <rect key={`s${i}`} x={x(a)} y={0} width={Math.max(1, x(b) - x(a))} height={ROW - 2} className="range-sun" />
-            ))}
-            {data.comms.map(([a, b], i) => (
-              <rect key={`c${i}`} x={x(a)} y={ROW + 4} width={Math.max(1, x(b) - x(a))} height={ROW - 2} fill={`url(#${id}-hatch)`} className="range-earth" />
-            ))}
-            {ticks.map((t) => (
-              <g key={t} className="tick">
-                <line x1={x(t)} x2={x(t)} y1={ROW * 2 + 4} y2={ROW * 2 + 9} />
-                <text x={x(t)} y={ROW * 2 + 21} textAnchor="middle">
-                  {new Date(t).toISOString().slice(5, durationH <= 72 ? 13 : 10).replace('T', ' ')}
-                </text>
-              </g>
-            ))}
-            {tMs >= startMs && tMs <= endMs && <line className="cursor" x1={x(tMs)} x2={x(tMs)} y1={-2} y2={ROW * 2 + 6} />}
-          </svg>
-          )}
+          {!comparing && <PlaceStrip id={id} data={data} link={link.data ?? null} showEarth={showEarthRow || !link.data} left={LEFT} x={x} ticks={ticks} durationH={durationH} startMs={startMs} endMs={endMs} tMs={tMs} onSeek={seek} />}
           {battery && <BatteryChart r={battery} startMs={startMs} endMs={endMs} tMs={tMs} x={x} left={LEFT} onSeek={seek} />}
           {inside && <InsideChart r={inside} startMs={startMs} endMs={endMs} tMs={tMs} x={x} left={LEFT} onSeek={seek} />}
-          <TimelineText data={data} battery={battery} inside={inside} tMs={tMs} />
+          <TimelineText data={data} battery={battery} inside={inside} tMs={tMs} link={link.data ?? null} />
         </>
       )}
     </section>
   )
 }
 
+
+/**
+ * The strips of one place on the window's time axis: Sunlit, optionally Earth up (the place sees the Earth), and Link
+ * (the place sees the Earth AND an antenna of the chosen networks sees the Moon; with the link budget on, the solid bars
+ * are where the budget closes and the dotted ones where there is contact but too little margin). While the link answer
+ * is not there (no place data yet, API down) the Earth row stands in so the timeline never goes blank.
+ */
+interface PlaceStripProps {
+  id: string
+  data: TimelineData
+  link: LinkResponse | null
+  showEarth: boolean
+  left: number
+  x: (t: number) => number
+  ticks: number[]
+  durationH: number
+  startMs: number
+  endMs: number
+  tMs: number
+  onSeek: (e: MouseEvent<SVGSVGElement>) => void
+}
+
+function PlaceStrip({ id, data, link, showEarth, left, x, ticks, durationH, startMs, endMs, tMs, onSeek }: PlaceStripProps) {
+  const level2 = !!link?.budget
+  const linkRanges = link ? toRanges(level2 ? link.budget!.link_ranges : link.contact_ranges) : []
+  const contactRanges = link && level2 ? toRanges(link.contact_ranges) : []
+  const rows: { key: 'sun' | 'earth' | 'link'; label: string }[] = [
+    { key: 'sun', label: 'Sunlit' },
+    ...(showEarth ? [{ key: 'earth' as const, label: link ? 'Earth up' : 'Earth' }] : []),
+    ...(link ? [{ key: 'link' as const, label: 'Link' }] : []),
+  ]
+  const pitch = ROW + 4
+  const tickY = (rows.length - 1) * pitch + ROW
+  const height = tickY + 20
+  const summary =
+    `Sunlit ${data.sunlightPct.toFixed(1)}% and Earth in view ${data.commsPct.toFixed(1)}% of the window, longest dark ${data.longestDarkH.toFixed(1)} h, longest without Earth ${data.longestBlackoutH.toFixed(1)} h.` +
+    (link ? ` Link ${((level2 ? link.budget!.link_window_fraction : link.contact_window_fraction) * 100).toFixed(1)}% of the window, longest gap ${(level2 ? link.budget!.longest_link_blackout_h : link.longest_blackout_h).toFixed(1)} h.` : '')
+
+  return (
+    <svg className="strip" viewBox={`${-left} 0 ${W + left + 6} ${height}`} role="img" aria-label={summary} onClick={onSeek}>
+      <defs>
+        <pattern id={`${id}-hatch`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width="6" height="6" className="hatch-bg" />
+          <line x1="0" y1="0" x2="0" y2="6" className="hatch-line" />
+        </pattern>
+        <pattern id={`${id}-dots`} width="5" height="5" patternUnits="userSpaceOnUse">
+          <rect width="5" height="5" className="hatch-bg" />
+          <circle cx="2.5" cy="2.5" r="1.1" className="dot-link" />
+        </pattern>
+      </defs>
+      {rows.map((r, i) => {
+        const y = i * pitch
+        const bars: [number, number][] = r.key === 'sun' ? data.sunlit : r.key === 'earth' ? data.comms : linkRanges
+        return (
+          <g key={r.key}>
+            <text x={-8} y={y + ROW * 0.78} textAnchor="end" className="row-label">
+              {r.label}
+            </text>
+            <rect x={0} y={y} width={W} height={ROW - 2} className="row-bg" />
+            {r.key === 'link' &&
+              contactRanges.map(([a, b], k) => <rect key={`g${k}`} x={x(a)} y={y} width={Math.max(1, x(b) - x(a))} height={ROW - 2} fill={`url(#${id}-dots)`} className="range-link-geo" />)}
+            {bars.map(([a, b], k) => (
+              <rect
+                key={k}
+                x={x(a)}
+                y={y}
+                width={Math.max(1, x(b) - x(a))}
+                height={ROW - 2}
+                className={r.key === 'sun' ? 'range-sun' : r.key === 'link' ? 'range-link' : 'range-earth'}
+                fill={r.key === 'earth' ? `url(#${id}-hatch)` : undefined}
+              />
+            ))}
+          </g>
+        )
+      })}
+      {ticks.map((t) => (
+        <g key={t} className="tick">
+          <line x1={x(t)} x2={x(t)} y1={tickY} y2={tickY + 5} />
+          <text x={x(t)} y={tickY + 17} textAnchor="middle">
+            {new Date(t).toISOString().slice(5, durationH <= 72 ? 13 : 10).replace('T', ' ')}
+          </text>
+        </g>
+      ))}
+      {tMs >= startMs && tMs <= endMs && <line className="cursor" x1={x(tMs)} x2={x(tMs)} y1={-2} y2={tickY + 2} />}
+    </svg>
+  )
+}
 const CROW = 14
 const CGAP = 6
 const NAME_CHARS = 22
@@ -497,7 +549,7 @@ function InsideChart({ r, startMs, endMs, tMs, x, left: LEFT, onSeek }: RowProps
  * Earth ranges, and the battery / inside-temperature series. They are plain tables, always open, so a screen
  * reader finds them in order; the same figures are in the Power and Earth link sections for everyone else.
  */
-function TimelineText({ data, battery, inside, tMs }: { data: TimelineData; battery: PowerResponse | null; inside: PowerResponse | null; tMs: number }) {
+function TimelineText({ data, battery, inside, tMs, link }: { data: TimelineData; battery: PowerResponse | null; inside: PowerResponse | null; tMs: number; link: LinkResponse | null }) {
   const hours = ([a, b]: [number, number]) => ((b - a) / MS_PER_HOUR).toFixed(1)
   const series = battery ?? inside
   const every = series ? Math.max(1, Math.ceil(series.t.length / 48)) : 1
@@ -533,6 +585,14 @@ function TimelineText({ data, battery, inside, tMs }: { data: TimelineData; batt
           {data.sunlit.map((q, i) => (
             <tr key={`s${i}`}>
               <th scope="row">Sunlit</th>
+              <td>{formatUtc(q[0])}</td>
+              <td>{formatUtc(q[1])}</td>
+              <td>{hours(q)}</td>
+            </tr>
+          ))}
+          {(link ? toRanges(link.budget ? link.budget.link_ranges : link.contact_ranges) : []).map((q, i) => (
+            <tr key={`l${i}`}>
+              <th scope="row">Link</th>
               <td>{formatUtc(q[0])}</td>
               <td>{formatUtc(q[1])}</td>
               <td>{hours(q)}</td>

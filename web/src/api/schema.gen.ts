@@ -4,6 +4,74 @@
  */
 
 export interface paths {
+    "/api/v1/areas/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Paint the cells of a region that pass every filter switched on, and the connected areas */
+        post: operations["area_search_api_v1_areas_search_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/earth": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Earth visibility windows, time to Earthset and libration wander */
+        post: operations["earth_api_v1_earth_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/link": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Radio link over a mission window: geometric contact with Earth antennas */
+        post: operations["link_api_v1_link_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/link/stations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Antenna networks and stations available for the radio link */
+        get: operations["stations_api_v1_link_stations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/meta/constraints": {
         parameters: {
             query?: never;
@@ -38,6 +106,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/points/horizon": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 360-degree skyline of manual coordinates, ray-traced over LOLA terrain where covered */
+        get: operations["point_horizon_api_v1_points_horizon_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/points/series": {
         parameters: {
             query?: never;
@@ -45,7 +130,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Sun and Earth over a mission window at manual coordinates (smooth-sphere horizon) */
+        /** Sun and Earth over a mission window at manual coordinates (smooth sphere, or traced terrain on request) */
         get: operations["point_series_api_v1_points_series_get"];
         put?: never;
         post?: never;
@@ -62,10 +147,44 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Sun and Earth at manual coordinates and an instant (smooth-sphere horizon) */
+        /** Sun and Earth at manual coordinates and an instant (smooth sphere, or traced terrain on request) */
         get: operations["point_state_api_v1_points_state_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/power": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Solar power levels: visible Sun, array power, battery balance */
+        post: operations["power_api_v1_power_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/radiation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Galactic-cosmic-ray dose at a site over a mission (LRO CRaTER) */
+        post: operations["radiation_api_v1_radiation_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -157,6 +276,94 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sun": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Solar elevation, sunlight duration, time to sunset and eclipses */
+        post: operations["sun_api_v1_sun_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/sweep": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Replanning: compare landing dates (and places) for one stay */
+        post: operations["sweep_api_v1_sweep_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/thermal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Regolith surface and equipment temperature over a mission */
+        post: operations["thermal_api_v1_thermal_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/validation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Validation of the models against references (live)
+         * @description The checks run once per loaded data store (about a second) and are then served from memory.
+         */
+        get: operations["validation_api_v1_validation_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/verdict": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Viability verdict for one site and mission window */
+        post: operations["verdict_api_v1_verdict_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -178,6 +385,304 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Area */
+        Area: {
+            /** Area Km2 */
+            area_km2: number;
+            /**
+             * Best Lat
+             * @description Cell with the highest score
+             */
+            best_lat: number;
+            /** Best Lon */
+            best_lon: number;
+            /**
+             * Best Score
+             * @description 0..1
+             */
+            best_score: number;
+            /** Cells */
+            cells: number;
+            /** Centroid Lat */
+            centroid_lat: number;
+            /** Centroid Lon */
+            centroid_lon: number;
+            /** Id */
+            id: number;
+            /**
+             * Mean Score
+             * @description 0..1
+             */
+            mean_score: number;
+            /**
+             * Sites
+             * @description Catalogue sites inside the area
+             */
+            sites: string[];
+        };
+        /** AreaFilters */
+        AreaFilters: {
+            /**
+             * Away From Landings Km
+             * @description At least this far from every past landing (NSSDCA), km
+             */
+            away_from_landings_km?: number | null;
+            /**
+             * Crater Min Diam Km
+             * @description Smallest crater counted, km (required with max_crater_density_per_km2)
+             */
+            crater_min_diam_km?: number | null;
+            /**
+             * Crater Radius Km
+             * @description Radius of the crater count, km (required with max_crater_density_per_km2)
+             */
+            crater_radius_km?: number | null;
+            /**
+             * Earth Visible At Landing
+             * @description True: the Earth must be in contact at the start of the window
+             */
+            earth_visible_at_landing?: boolean | null;
+            /**
+             * Max Blackout H
+             * @description Longest stretch without the Earth at most, hours
+             */
+            max_blackout_h?: number | null;
+            /**
+             * Max Crater Density Per Km2
+             * @description Craters per km2 (Robbins 2018) counted within crater_radius_km
+             */
+            max_crater_density_per_km2?: number | null;
+            /**
+             * Max Dark H
+             * @description Longest stretch without Sun at most, hours
+             */
+            max_dark_h?: number | null;
+            /**
+             * Max Dose Mgy
+             * @description Cosmic-ray dose over the window at most, mGy (silicon): CRaTER climatology x open sky / 4 pi
+             */
+            max_dose_mgy?: number | null;
+            /**
+             * Max Elevation M
+             * @description Highest ground height allowed, m above the 1737.4 km sphere
+             */
+            max_elevation_m?: number | null;
+            /**
+             * Max Permanent Shadow
+             * @description Share of the cell in permanent shadow at most (PGDA 69), 0..1; 0 = no shadow at all
+             */
+            max_permanent_shadow?: number | null;
+            /**
+             * Max Psr Distance Km
+             * @description Within this distance of a permanently shadowed pixel (PGDA 69, at least half of a 960 m pixel in shadow), km
+             */
+            max_psr_distance_km?: number | null;
+            /**
+             * Max Sky Sr
+             * @description Open sky at most, steradians (terrain shielding; PGDA 69, south of 65 S)
+             */
+            max_sky_sr?: number | null;
+            /**
+             * Max Slope Deg
+             * @description Steepest LOLA slope anywhere in the cell, degrees (320 m grid south of 80 S, 960 m elsewhere)
+             */
+            max_slope_deg?: number | null;
+            /**
+             * Max Sun El At Landing Deg
+             * @description Solar elevation at the start of the window at most, degrees
+             */
+            max_sun_el_at_landing_deg?: number | null;
+            /**
+             * Min Both Fraction
+             * @description Share of the window with the Sun visible and the Earth in contact at once, at least
+             */
+            min_both_fraction?: number | null;
+            /**
+             * Min Comms Fraction
+             * @description Share of the window with the Earth in contact at least, 0..1
+             */
+            min_comms_fraction?: number | null;
+            /**
+             * Min Contact Left H
+             * @description Hours of continuous Earth contact from the start of the window at least
+             */
+            min_contact_left_h?: number | null;
+            /**
+             * Min Elevation M
+             * @description Lowest ground height allowed, m above the 1737.4 km sphere
+             */
+            min_elevation_m?: number | null;
+            /**
+             * Min Hydrogen Ppm
+             * @description Hydrogen at least this abundant, ppm by weight (Lunar Prospector neutron spectrometer, 0.5 deg bins, footprint about 45 km: a regional signal, not a cell-scale one)
+             */
+            min_hydrogen_ppm?: number | null;
+            /**
+             * Min Light Left H
+             * @description Hours of continuous light from the start of the window at least
+             */
+            min_light_left_h?: number | null;
+            /**
+             * Min Long Term Earth
+             * @description Share of time with any of the Earth visible over 18.6 years at least, 0..1 (PGDA 69, south of 65 S)
+             */
+            min_long_term_earth?: number | null;
+            /**
+             * Min Long Term Sun
+             * @description Mean share of the solar disc visible over 18.6 years at least, 0..1 (PGDA 69, south of 65 S)
+             */
+            min_long_term_sun?: number | null;
+            /**
+             * Min Mean Power W M2
+             * @description Mean solar power on 1 m2 of panel over the window at least, W/m2
+             */
+            min_mean_power_w_m2?: number | null;
+            /**
+             * Min Rim Distance Km
+             * @description At least this far from the rim of every crater of rim_min_diam_km or more (Robbins 2018), km
+             */
+            min_rim_distance_km?: number | null;
+            /**
+             * Min Sun El At Landing Deg
+             * @description Solar elevation at the start of the window at least, degrees
+             */
+            min_sun_el_at_landing_deg?: number | null;
+            /**
+             * Min Sunlit Fraction
+             * @description Share of the window with some Sun visible at least, 0..1
+             */
+            min_sunlit_fraction?: number | null;
+            /**
+             * Rim Min Diam Km
+             * @description Smallest crater whose rim counts, km (required with min_rim_distance_km)
+             */
+            rim_min_diam_km?: number | null;
+            /**
+             * Robust Delay H
+             * @description The window filters must also pass if the landing slips by this many hours (same duration), h
+             */
+            robust_delay_h?: number | null;
+            /**
+             * Side
+             * @description Near side: longitude within 90 deg of the mean sub-Earth meridian (0 E); far side: the rest
+             */
+            side?: ("near" | "far") | null;
+        };
+        /** AreaSearchRequest */
+        AreaSearchRequest: {
+            /**
+             * Cell Km
+             * @description Cell size of the search raster, km
+             * @default 1.92
+             */
+            cell_km: number;
+            /**
+             * Comms Min Fraction
+             * @description Share of the Earth's disc above the horizon that counts as contact
+             * @default 0.5
+             */
+            comms_min_fraction: number;
+            /**
+             * Duration H
+             * @description Mission window, hours
+             */
+            duration_h?: number | null;
+            filters: components["schemas"]["AreaFilters"];
+            /**
+             * Horizon Az Step Deg
+             * @description Azimuth step of the ray-traced horizons of the window samples, degrees
+             * @default 0.5
+             */
+            horizon_az_step_deg: number;
+            /**
+             * Horizon Radius Km
+             * @description How far each horizon ray goes, km (terrain beyond is ignored)
+             * @default 150
+             */
+            horizon_radius_km: number;
+            /**
+             * Landing Radius Km
+             * @description A cell survives only if no cell failing a static filter lies within this radius, km (room for a landing ellipse)
+             */
+            landing_radius_km?: number | null;
+            /**
+             * Mast M
+             * @description Height of the panel and antenna above the ground, m
+             * @default 2
+             */
+            mast_m: number;
+            /**
+             * Max Window Samples
+             * @description Most samples for the window filters, placed by a quadtree that refines where neighbours disagree
+             * @default 300
+             */
+            max_window_samples: number;
+            /**
+             * Panel
+             * @description Panel orientation for the power filter
+             * @default vertical
+             * @enum {string}
+             */
+            panel: "tracking" | "vertical" | "horizontal";
+            region: components["schemas"]["Region"];
+            /**
+             * Start
+             * @description Start of the mission window, ISO 8601 UTC (needed by window filters and the dose)
+             */
+            start?: string | null;
+            /**
+             * Step Min
+             * @description Time step of the window filters, minutes
+             * @default 60
+             */
+            step_min: number;
+            /**
+             * Unknown Passes
+             * @description True: a filter without data at a cell lets it through
+             * @default false
+             */
+            unknown_passes: boolean;
+            /**
+             * Weights
+             * @description Score weights among viable cells: sunlight, comms (default equal)
+             */
+            weights?: {
+                [key: string]: number;
+            } | null;
+        };
+        /** AreaSearchResponse */
+        AreaSearchResponse: {
+            /**
+             * Areas
+             * @description Largest connected viable areas, best first (at most 12)
+             */
+            areas: components["schemas"]["Area"][];
+            /** Assumptions */
+            assumptions: string[];
+            /**
+             * Codes B64
+             * @description uint8 per cell, row-major (row 0 = top): 0 outside, 1 fails a static filter or the landing radius, 2 fails a window filter, 3 viable, 4 unknown
+             */
+            codes_b64: string;
+            /**
+             * Counts
+             * @description Cells by code: outside, failed_static, failed_window, viable, unknown
+             */
+            counts: {
+                [key: string]: number;
+            };
+            /** Funnel */
+            funnel: components["schemas"]["FilterCount"][];
+            grid: components["schemas"]["GridInfo"];
+            /**
+             * Score B64
+             * @description uint8 per cell: score 0..255 for viable cells, 0 elsewhere
+             */
+            score_b64: string;
+            /** Seconds */
+            seconds: number;
+            window: components["schemas"]["WindowInfo"] | null;
+        };
         /**
          * BodySeries
          * @description One value per sample, aligned with ``SeriesResponse.t``.
@@ -247,10 +752,598 @@ export interface components {
              */
             visible_fraction: number;
         };
+        /** CheckOut */
+        CheckOut: {
+            /**
+             * Computed
+             * @description What our code gives
+             */
+            computed: string;
+            /** Description */
+            description: string;
+            /** Id */
+            id: string;
+            /**
+             * Model
+             * @description Which part of the product the check covers
+             */
+            model: string;
+            /** Passed */
+            passed: boolean;
+            /**
+             * Reference
+             * @description The value we compare with
+             */
+            reference: string;
+            /**
+             * Source
+             * @description Where the reference comes from
+             */
+            source: string;
+            /** Tolerance */
+            tolerance: string;
+        };
+        /**
+         * CustomStation
+         * @description An antenna the user adds. Its elevation limit is one number for every azimuth.
+         */
+        CustomStation: {
+            /**
+             * Diameter M
+             * @description Dish diameter, metres. Level 2 only: used to estimate the G/T when gt_db_per_k is not given
+             */
+            diameter_m?: number | null;
+            /**
+             * Gt Db Per K
+             * @description Downlink G/T of this antenna, dB/K (level 2, optional)
+             */
+            gt_db_per_k?: number | null;
+            /**
+             * Height M
+             * @description Height above the WGS84 ellipsoid, metres
+             * @default 0
+             */
+            height_m: number;
+            /**
+             * Id
+             * @description Your own identifier; must not clash with a catalogue id (GET /api/v1/link/stations)
+             */
+            id: string;
+            /**
+             * Lat Deg
+             * @description Geodetic latitude, degrees, north positive
+             */
+            lat_deg: number;
+            /**
+             * Lon Deg
+             * @description Longitude, degrees, east positive
+             */
+            lon_deg: number;
+            /**
+             * Min Elevation Deg
+             * @description Lowest elevation at which the antenna can track the Moon, degrees; used for every azimuth and every direction. Required: no default is assumed.
+             */
+            min_elevation_deg: number;
+            /**
+             * Name
+             * @description Label shown in the response; defaults to the id
+             */
+            name?: string | null;
+        };
+        /** DailyStats */
+        DailyStats: {
+            /**
+             * Days
+             * @description Days of record used
+             */
+            days: number;
+            /** Max */
+            max: number;
+            /** Mean */
+            mean: number;
+            /** P05 */
+            p05: number;
+            /** P50 */
+            p50: number;
+            /** P95 */
+            p95: number;
+        };
+        /** DatasetRef */
+        DatasetRef: {
+            /** First */
+            first: string;
+            /** Last */
+            last: string;
+            /** Name */
+            name: string;
+            /** Url */
+            url: string;
+        };
+        /** EarthNow */
+        EarthNow: {
+            /** Angular Radius Deg */
+            angular_radius_deg: number;
+            /**
+             * Azimuth Deg
+             * @description Azimuth of the Earth's centre at start, degrees clockwise from north
+             */
+            azimuth_deg: number;
+            /** Distance Km */
+            distance_km: number;
+            /**
+             * Elevation Deg
+             * @description Elevation of the Earth's centre at start, degrees
+             */
+            elevation_deg: number;
+            /**
+             * Horizon Elevation Deg
+             * @description Height of the skyline in the Earth's direction at start, degrees
+             */
+            horizon_elevation_deg: number;
+            /**
+             * Visible
+             * @description visible_fraction >= comms_min_fraction
+             */
+            visible: boolean;
+            /**
+             * Visible Fraction
+             * @description Fraction of the Earth's disc above the local horizon at start, 0..1
+             */
+            visible_fraction: number;
+        };
+        /** EarthRequest */
+        EarthRequest: {
+            /**
+             * Comms Min Fraction
+             * @description Share of the Earth's disc that must be above the horizon to count as visible for a direct link, 0..1 (team convention 0.5 = the centre, CLAUDE.md)
+             * @default 0.5
+             */
+            comms_min_fraction: number;
+            /**
+             * Duration H
+             * @description Mission window length, hours
+             */
+            duration_h: number;
+            /**
+             * Horizon
+             * @description Manual coordinates only: 'terrain' ray-traces the skyline over the LOLA elevation grids (240-960 m south of 60 S, a 3.8 km global grid elsewhere; GET /api/v1/points/horizon shows it); 'smooth_sphere' (default) uses the geometric dip. Catalogue sites use their stored masks, or the traced skyline where they have none
+             * @default smooth_sphere
+             * @enum {string}
+             */
+            horizon: "smooth_sphere" | "terrain";
+            /**
+             * Lat
+             * @description Planetocentric latitude, degrees, MOON_ME
+             */
+            lat?: number | null;
+            /**
+             * Lon
+             * @description East-positive longitude, degrees, -180..180
+             */
+            lon?: number | null;
+            /**
+             * Site Id
+             * @description Catalogue site id (GET /api/v1/sites); or give lat and lon
+             */
+            site_id?: string | null;
+            /**
+             * Start
+             * Format: date-time
+             * @description Start of the mission window, ISO 8601 UTC
+             */
+            start: string;
+            /**
+             * Step Min
+             * @description Sampling step, minutes
+             * @default 60
+             */
+            step_min: number;
+        };
+        /** EarthResponse */
+        EarthResponse: {
+            /**
+             * Assumptions
+             * @description Idealisations and limits behind these numbers
+             */
+            assumptions: string[];
+            /** Comms Min Fraction */
+            comms_min_fraction: number;
+            /** Duration H */
+            duration_h: number;
+            /**
+             * Earth Az Deg
+             * @description Azimuth of the Earth's centre at each sample, degrees
+             */
+            earth_az_deg: number[];
+            /**
+             * Earth El Deg
+             * @description Elevation of the Earth's centre at each sample, degrees
+             */
+            earth_el_deg: number[];
+            /**
+             * Horizon Kind
+             * @description terrain (LOLA mask) or smooth_sphere (no terrain mask: an estimate, not a bound; real terrain shortens light and comms in craters and lengthens them on peaks)
+             */
+            horizon_kind: string;
+            /**
+             * Hours To Earthset
+             * @description Hours from start to the next Earthset when the Earth is visible at start
+             */
+            hours_to_earthset: number | null;
+            /** Lat */
+            lat: number;
+            libration: components["schemas"]["LibrationWander"];
+            /** Lon */
+            lon: number;
+            /**
+             * Longest Blackout H
+             * @description Longest stretch without a direct link, hours
+             */
+            longest_blackout_h: number;
+            /**
+             * Longest Visible H
+             * @description Longest continuous visibility window, hours
+             */
+            longest_visible_h: number;
+            /**
+             * Mast M Used
+             * @description Height above the ground the horizon is seen from (panels, antenna, habitat): fixed at 2 m, team decision, m
+             */
+            mast_m_used: number;
+            /** @description Next Earthset or Earthrise after start (searched up to 45 days); null when none (always or never visible) */
+            next_transition: components["schemas"]["EarthTransition"] | null;
+            now: components["schemas"]["EarthNow"];
+            /** Site Id */
+            site_id: string | null;
+            /** Start */
+            start: string;
+            /** Step Min */
+            step_min: number;
+            /**
+             * T
+             * @description Sample times, ISO 8601 UTC
+             */
+            t: string[];
+            /**
+             * Visible Fraction
+             * @description Fraction of the Earth's disc above the horizon at each sample, 0..1
+             */
+            visible_fraction: number[];
+            /**
+             * Visible Hours
+             * @description Samples with a link possible x step, hours
+             */
+            visible_hours: number;
+            /**
+             * Visible Ranges
+             * @description Earth visibility windows
+             */
+            visible_ranges: components["schemas"]["app__schemas__common__TimeRange"][];
+            /**
+             * Visible Window Fraction
+             * @description Fraction of samples with a direct link possible, 0..1
+             */
+            visible_window_fraction: number;
+        };
+        /** EarthTransition */
+        EarthTransition: {
+            /**
+             * At
+             * @description ISO 8601 UTC, to about one second
+             */
+            at: string;
+            /**
+             * In Hours
+             * @description Hours from start
+             */
+            in_hours: number;
+            /**
+             * Kind
+             * @description set = Earthset (link lost), rise = Earthrise (link regained)
+             * @enum {string}
+             */
+            kind: "set" | "rise";
+        };
+        /** EclipseEvent */
+        EclipseEvent: {
+            /**
+             * Duration H
+             * @description Samples x step, hours (grid resolution)
+             */
+            duration_h: number;
+            /**
+             * End
+             * @description Last sample inside the eclipse, ISO 8601 UTC
+             */
+            end: string;
+            /**
+             * Kind
+             * @description Deepest phase reached: Earth covers part or all of the Sun
+             * @enum {string}
+             */
+            kind: "partial" | "total";
+            /**
+             * Max Obscuration
+             * @description Largest fraction of the solar disc covered by the Earth, 0..1
+             */
+            max_obscuration: number;
+            /**
+             * Start
+             * @description First sample inside the eclipse, ISO 8601 UTC
+             */
+            start: string;
+        };
+        /** ElevationStats */
+        ElevationStats: {
+            /** Max Deg */
+            max_deg: number;
+            /**
+             * Mean Sunlit Deg
+             * @description Mean elevation while sunlit; null when never sunlit
+             */
+            mean_sunlit_deg: number | null;
+            /** Min Deg */
+            min_deg: number;
+        };
+        /** EnergyBreakdown */
+        EnergyBreakdown: {
+            /**
+             * Battery Change Wh
+             * @description Battery energy at the end minus at the start, Wh
+             */
+            battery_change_wh: number;
+            /**
+             * Charge Losses Wh
+             * @description Energy lost charging (1 - charge efficiency), Wh
+             */
+            charge_losses_wh: number;
+            /**
+             * Comms Served Wh
+             * @description Comms load served, Wh
+             */
+            comms_served_wh: number;
+            /**
+             * Critical Served Wh
+             * @description Critical load served (heater not included), Wh
+             */
+            critical_served_wh: number;
+            /**
+             * Critical Unserved Wh
+             * @description Critical load (with heater) not served, Wh
+             */
+            critical_unserved_wh: number;
+            /**
+             * Curtailed Wh
+             * @description Array energy not used: battery full or charge power limit, Wh
+             */
+            curtailed_wh: number;
+            /**
+             * Deferrable Served Wh
+             * @description Deferrable load served, Wh
+             */
+            deferrable_served_wh: number;
+            /**
+             * Discharge Losses Wh
+             * @description Energy lost discharging, Wh
+             */
+            discharge_losses_wh: number;
+            /**
+             * Generated Wh
+             * @description Array energy over the window, Wh
+             */
+            generated_wh: number;
+            /**
+             * Heater Served Wh
+             * @description Heater energy served, Wh
+             */
+            heater_served_wh: number;
+            /**
+             * Noncritical Unserved Wh
+             * @description Non-critical load asked for but not served, Wh
+             */
+            noncritical_unserved_wh: number;
+            /**
+             * Shed Wh
+             * @description Non-critical load switched off by the shedding rule, Wh
+             */
+            shed_wh: number;
+        };
+        /** EquipmentIn */
+        EquipmentIn: {
+            /**
+             * Absorptivity
+             * @description Solar absorptivity of the sun-facing surface, 0..1
+             */
+            absorptivity: number;
+            /**
+             * Emissivity
+             * @description Infrared emissivity of the radiator, 0..1
+             */
+            emissivity: number;
+            /**
+             * Ground View Factor
+             * @description Share of the radiator's view filled by the ground
+             */
+            ground_view_factor: number;
+            /**
+             * Heat Capacity J K
+             * @description Heat capacity of the box, J K-1
+             */
+            heat_capacity_j_k: number;
+            /**
+             * Internal Power W
+             * @description Internal dissipation (electronics, heaters), W
+             */
+            internal_power_w: number;
+            /**
+             * Radiator Area M2
+             * @description Radiating area, m2
+             */
+            radiator_area_m2: number;
+            /**
+             * Sun Area M2
+             * @description Area projected towards the Sun, m2
+             */
+            sun_area_m2: number;
+        };
+        /** FilterCount */
+        FilterCount: {
+            /**
+             * Cells In
+             * @description Cells reaching this filter
+             */
+            cells_in: number;
+            /**
+             * Cells Out
+             * @description Cells it removed
+             */
+            cells_out: number;
+            /**
+             * Cells Unknown
+             * @description Cells without data for it
+             */
+            cells_unknown: number;
+            /** Id */
+            id: string;
+            /**
+             * Stage
+             * @enum {string}
+             */
+            stage: "static" | "landing_radius" | "window";
+        };
+        /** FilterResult */
+        FilterResult: {
+            /** Basis */
+            basis: string;
+            /** Comparator */
+            comparator: string;
+            /** Fraction */
+            fraction?: number | null;
+            /** Id */
+            id: string;
+            /**
+             * Margin
+             * @description Positive = passes with room to spare
+             */
+            margin: number | null;
+            /**
+             * Note
+             * @default
+             */
+            note: string;
+            /**
+             * Passed
+             * @description null = could not be evaluated here
+             */
+            passed: boolean | null;
+            /** Ranges */
+            ranges?: components["schemas"]["app__schemas__common__TimeRange"][] | null;
+            /** Threshold */
+            threshold: number | null;
+            /** Unit */
+            unit: string;
+            /** Value */
+            value: number | null;
+        };
+        /** GridInfo */
+        GridInfo: {
+            /**
+             * Cell M
+             * @description Cell size, m
+             */
+            cell_m: number;
+            /** Nx */
+            nx: number;
+            /** Ny */
+            ny: number;
+            /**
+             * Projection
+             * @description South polar stereographic, true scale at the pole, R = 1737.4 km, MOON_ME
+             */
+            projection: string;
+            /**
+             * X Left M
+             * @description Projected x of the left edge of the first column, m
+             */
+            x_left_m: number;
+            /**
+             * Y Top M
+             * @description Projected y of the top edge of the first row, m
+             */
+            y_top_m: number;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
             detail?: components["schemas"]["ValidationError"][];
+        };
+        /**
+         * HabitatIn
+         * @description Two-node habitat (level 4). Sun-facing area = 0.5 x area_m2 and ground view factor = 0.5 are fixed
+         *     (team decision); every other value has no cited default, so the caller gives it.
+         */
+        HabitatIn: {
+            /**
+             * Air Pressure Pa
+             * @description Cabin pressure, Pa (Earth-like air composition assumed)
+             */
+            air_pressure_pa: number;
+            /**
+             * Air Volume M3
+             * @description Pressurised volume, m3
+             */
+            air_volume_m3: number;
+            /**
+             * Area M2
+             * @description External (radiating) surface area, m2
+             */
+            area_m2: number;
+            /**
+             * Crew Count
+             * @description Crew members inside
+             */
+            crew_count: number;
+            /**
+             * Metabolic W Per Crew
+             * @description Metabolic heat per crew member, W; default 140.6 W = mean of the 40-year-old male and female rates of NASA BVAD Rev 1 (NASA/TP-2015-218570, 2018) Table 3-21
+             * @default 140.55555555555554
+             */
+            metabolic_w_per_crew: number;
+            /**
+             * Skin Absorptivity
+             * @description Solar absorptivity of the outer skin, 0..1
+             */
+            skin_absorptivity: number;
+            /**
+             * Skin Emissivity
+             * @description Infrared emissivity of the outer skin, 0..1
+             */
+            skin_emissivity: number;
+            /**
+             * Structure Mass Kg
+             * @description Mass of structure and contents at interior temperature, kg
+             */
+            structure_mass_kg: number;
+            /**
+             * Structure Specific Heat J Kgk
+             * @description Mean specific heat of that mass, J kg-1 K-1
+             */
+            structure_specific_heat_j_kgk: number;
+            /**
+             * T Min K
+             * @description Lowest safe interior temperature, K
+             */
+            t_min_k: number;
+            /**
+             * T Set K
+             * @description Interior setpoint temperature held by the heater, K
+             */
+            t_set_k: number;
+            /**
+             * Ua W K
+             * @description Thermal conductance of the insulation, interior to outer skin, W/K
+             */
+            ua_w_k: number;
         };
         /** HorizonResponse */
         HorizonResponse: {
@@ -343,6 +1436,355 @@ export interface components {
              */
             zone_available: boolean;
         };
+        /** LibrationWander */
+        LibrationWander: {
+            /**
+             * Azimuth Span Deg
+             * @description Range of the Earth's azimuth over the window, degrees
+             */
+            azimuth_span_deg: number;
+            /**
+             * Elevation Span Deg
+             * @description Range of the Earth's elevation over the window, degrees
+             */
+            elevation_span_deg: number;
+            /** Mean Azimuth Deg */
+            mean_azimuth_deg: number;
+            /** Mean Elevation Deg */
+            mean_elevation_deg: number;
+        };
+        /** LimitResult */
+        LimitResult: {
+            /**
+             * Fraction Beyond
+             * @description Share of samples beyond the limit, 0..1
+             */
+            fraction_beyond: number;
+            /** Limit K */
+            limit_k: number;
+            /** Longest Beyond H */
+            longest_beyond_h: number;
+            /** Passed */
+            passed: boolean;
+            /** Ranges Beyond */
+            ranges_beyond: components["schemas"]["app__schemas__common__TimeRange"][];
+        };
+        /** LimitsIn */
+        LimitsIn: {
+            /**
+             * Max Hours Beyond
+             * @description Continuous mode: allowed hours beyond a limit
+             * @default 0
+             */
+            max_hours_beyond: number;
+            /**
+             * Max K
+             * @description Upper limit, K
+             */
+            max_k?: number | null;
+            /**
+             * Min K
+             * @description Lower limit, K
+             */
+            min_k?: number | null;
+            /**
+             * Mode
+             * @description discrete: any sample beyond the limit fails; continuous: fails when beyond it for longer than max_hours_beyond
+             * @default discrete
+             * @enum {string}
+             */
+            mode: "discrete" | "continuous";
+        };
+        /**
+         * LinkBudgetInput
+         * @description Level 2 inputs. Only the lunar terminal's EIRP and the data rate are required: the band picks the frequency,
+         *     the antennas' G/T comes from the catalogue (published, or estimated from the dish diameter), and the rest have
+         *     stated defaults.
+         */
+        LinkBudgetInput: {
+            /**
+             * Band
+             * @description Lunar band: S (2200-2290 MHz down, 2025-2110 MHz up), X (8450-8500 MHz down), Ka (25.5-27.0 GHz down). The centre of the band is used unless frequency_ghz is given
+             * @default X
+             * @enum {string}
+             */
+            band: "S" | "X" | "Ka";
+            /**
+             * Data Rate Bps
+             * @description Information data rate, bits per second
+             */
+            data_rate_bps: number;
+            /**
+             * Frequency Ghz
+             * @description Exact carrier frequency, GHz, to type a mission's channel instead of the band centre. The G/T is taken from the band that contains it (or the nearest band)
+             */
+            frequency_ghz?: number | null;
+            /**
+             * Min Margin Db
+             * @description Margin required above required_ebn0_db for the link to count as closed, dB. Default 3 dB, a usual design margin
+             * @default 3
+             */
+            min_margin_db: number;
+            /**
+             * Other Losses Db
+             * @description Losses not modelled (pointing, polarisation, atmosphere, implementation), dB. 0 = ignored
+             * @default 0
+             */
+            other_losses_db: number;
+            /**
+             * Receive Gt Db Per K
+             * @description G/T of the receiving end, dB/K. Downlink: optional, overrides every antenna's catalogue value. Uplink: required, it is the lunar terminal's G/T
+             */
+            receive_gt_db_per_k?: number | null;
+            /**
+             * Required Ebn0 Db
+             * @description Eb/N0 the modulation and coding need, dB. Default 9.6 dB = uncoded BPSK/QPSK at a bit error rate of 1e-5 (conservative: coded links need less)
+             * @default 9.6
+             */
+            required_ebn0_db: number;
+            /**
+             * Transmit Eirp Dbw
+             * @description EIRP of the transmitting end, dBW: the lunar terminal for a downlink, the ground antenna for an uplink
+             */
+            transmit_eirp_dbw: number;
+        };
+        /**
+         * LinkBudgetResult
+         * @description Level 2: the link budget on top of the geometric contact.
+         */
+        LinkBudgetResult: {
+            /**
+             * Band Used
+             * @description Band whose G/T values were used
+             */
+            band_used: string;
+            /**
+             * Best Margin Db
+             * @description At each sample, the best Eb/N0 margin among the antennas in geometric contact, dB; null with no antenna in contact
+             */
+            best_margin_db: (number | null)[];
+            /**
+             * Frequency Ghz Used
+             * @description Carrier frequency used for the free-space loss, GHz
+             */
+            frequency_ghz_used: number;
+            /** @description The budget inputs used, echoed */
+            inputs: components["schemas"]["LinkBudgetInput"];
+            /**
+             * Link
+             * @description At each sample: geometric contact with some antenna AND that antenna's Eb/N0 margin >= min_margin_db
+             */
+            link: boolean[];
+            /** Link Hours */
+            link_hours: number;
+            /** Link Ranges */
+            link_ranges: components["schemas"]["app__schemas__common__TimeRange"][];
+            /**
+             * Link Window Fraction
+             * @description Share of samples with the link closed, 0..1
+             */
+            link_window_fraction: number;
+            /**
+             * Longest Link Blackout H
+             * @description Longest stretch without a closed link, hours
+             */
+            longest_link_blackout_h: number;
+            /** Longest Link H */
+            longest_link_h: number;
+        };
+        /** LinkNow */
+        LinkNow: {
+            /** Any Station Sees Moon */
+            any_station_sees_moon: boolean;
+            /**
+             * Contact
+             * @description Both of the above at start
+             */
+            contact: boolean;
+            /**
+             * Earth Visible
+             * @description The lunar site sees the Earth at start
+             */
+            earth_visible: boolean;
+            /**
+             * Stations In Contact
+             * @description Ids of the antennas in contact at start
+             */
+            stations_in_contact: string[];
+        };
+        /** LinkRequest */
+        LinkRequest: {
+            /** @description Required at level 2, not allowed at level 1 */
+            budget?: components["schemas"]["LinkBudgetInput"] | null;
+            /**
+             * Comms Min Fraction
+             * @description Share of the Earth's disc that must be above the lunar site's horizon to count as visible, 0..1 (team convention 0.5 = the centre, CLAUDE.md)
+             * @default 0.5
+             */
+            comms_min_fraction: number;
+            /**
+             * Custom Stations
+             * @description Antennas you add, used together with the selected networks
+             */
+            custom_stations?: components["schemas"]["CustomStation"][];
+            /**
+             * Direction
+             * @description downlink = the Moon transmits and the antenna receives (receive elevation limit); uplink_low_power and uplink_high_power = the antenna transmits (transmit limits; DSN only, other antennas have none and are skipped)
+             * @default downlink
+             * @enum {string}
+             */
+            direction: "downlink" | "uplink_low_power" | "uplink_high_power";
+            /**
+             * Duration H
+             * @description Mission window length, hours
+             */
+            duration_h: number;
+            /**
+             * Horizon
+             * @description Manual coordinates only: 'terrain' ray-traces the skyline over the LOLA elevation grids (240-960 m south of 60 S, a 3.8 km global grid elsewhere; GET /api/v1/points/horizon shows it); 'smooth_sphere' (default) uses the geometric dip. Catalogue sites use their stored masks, or the traced skyline where they have none
+             * @default smooth_sphere
+             * @enum {string}
+             */
+            horizon: "smooth_sphere" | "terrain";
+            /**
+             * Lat
+             * @description Planetocentric latitude, degrees, MOON_ME
+             */
+            lat?: number | null;
+            /**
+             * Level
+             * @description 1 = geometric contact; 2 = level 1 plus the link budget (needs `budget`)
+             * @default 1
+             * @enum {integer}
+             */
+            level: 1 | 2;
+            /**
+             * Lon
+             * @description East-positive longitude, degrees, -180..180
+             */
+            lon?: number | null;
+            /**
+             * Networks
+             * @description Antenna networks to use (GET /api/v1/link/stations lists them): dsn, estrack, jaxa. An empty list is allowed when custom_stations is given.
+             */
+            networks?: string[];
+            /**
+             * Site Id
+             * @description Catalogue site id (GET /api/v1/sites); or give lat and lon
+             */
+            site_id?: string | null;
+            /**
+             * Start
+             * Format: date-time
+             * @description Start of the mission window, ISO 8601 UTC
+             */
+            start: string;
+            /**
+             * Step Min
+             * @description Sampling step, minutes
+             * @default 60
+             */
+            step_min: number;
+        };
+        /** LinkResponse */
+        LinkResponse: {
+            /**
+             * Any Station Fraction
+             * @description Share of samples where at least one antenna sees the Moon, 0..1
+             */
+            any_station_fraction: number;
+            /** Any Station Ranges */
+            any_station_ranges: components["schemas"]["app__schemas__common__TimeRange"][];
+            /**
+             * Assumptions
+             * @description Idealisations and limits behind these numbers
+             */
+            assumptions: string[];
+            /** @description Level 2 only */
+            budget?: components["schemas"]["LinkBudgetResult"] | null;
+            /** Comms Min Fraction */
+            comms_min_fraction: number;
+            /**
+             * Contact
+             * @description Contact at each sample: the site sees the Earth and some antenna sees the Moon
+             */
+            contact: boolean[];
+            /**
+             * Contact Hours
+             * @description Samples with contact x step, hours
+             */
+            contact_hours: number;
+            /**
+             * Contact Ranges
+             * @description Time ranges with contact
+             */
+            contact_ranges: components["schemas"]["app__schemas__common__TimeRange"][];
+            /**
+             * Contact Window Fraction
+             * @description Share of samples with contact, 0..1
+             */
+            contact_window_fraction: number;
+            /** Direction */
+            direction: string;
+            /** Duration H */
+            duration_h: number;
+            /**
+             * Earth Visible Fraction
+             * @description Share of samples where the lunar site sees the Earth, 0..1
+             */
+            earth_visible_fraction: number;
+            /** Earth Visible Ranges */
+            earth_visible_ranges: components["schemas"]["app__schemas__common__TimeRange"][];
+            /**
+             * Estimated Limits
+             * @description Ids of the antennas whose elevation limit is an owner estimate: the result depends on an unconfirmed value
+             */
+            estimated_limits: string[];
+            /**
+             * Horizon Kind
+             * @description terrain (LOLA mask) or smooth_sphere (no terrain mask: an estimate, not a bound; real terrain shortens light and comms in craters and lengthens them on peaks)
+             */
+            horizon_kind: string;
+            /** Lat */
+            lat: number;
+            /** Level */
+            level: number;
+            /** Lon */
+            lon: number;
+            /**
+             * Longest Blackout H
+             * @description Longest stretch without contact, hours
+             */
+            longest_blackout_h: number;
+            /** Longest Contact H */
+            longest_contact_h: number;
+            /**
+             * Mast M Used
+             * @description Height above the ground the horizon is seen from (panels, antenna, habitat): fixed at 2 m, team decision, m
+             */
+            mast_m_used: number;
+            /** Networks Used */
+            networks_used: string[];
+            now: components["schemas"]["LinkNow"];
+            /** Site Id */
+            site_id: string | null;
+            /** Skipped Stations */
+            skipped_stations: components["schemas"]["SkippedStation"][];
+            /** Start */
+            start: string;
+            /**
+             * Stations
+             * @description One entry per antenna used, with its own windows
+             */
+            stations: components["schemas"]["StationResult"][];
+            /** Step Min */
+            step_min: number;
+            /**
+             * T
+             * @description Sample times, ISO 8601 UTC
+             */
+            t: string[];
+        };
         /** LongTermComparison */
         LongTermComparison: {
             /**
@@ -361,6 +1803,197 @@ export interface components {
              */
             smooth_sphere: number;
         };
+        /** Place */
+        Place: {
+            /**
+             * Lat
+             * @description Planetocentric latitude, degrees, MOON_ME
+             */
+            lat?: number | null;
+            /**
+             * Lon
+             * @description East-positive longitude, degrees
+             */
+            lon?: number | null;
+            /**
+             * Site Id
+             * @description Catalogue site id; or give lat and lon
+             */
+            site_id?: string | null;
+        };
+        /** PlaceSweep */
+        PlaceSweep: {
+            /**
+             * Battery Min Soc
+             * @description Per landing: lowest state of charge, fraction
+             */
+            battery_min_soc?: number[] | null;
+            /**
+             * Battery Survived
+             * @description Per landing: load always served (with battery)
+             */
+            battery_survived?: boolean[] | null;
+            /**
+             * Both Fraction
+             * @description Per landing: share with Sun and Earth together, 0..1
+             */
+            both_fraction: number[];
+            /**
+             * Comms Fraction
+             * @description Per landing: share of the stay with a direct Earth link, 0..1
+             */
+            comms_fraction: number[];
+            /**
+             * Eclipse Hours
+             * @description Per landing: hours with the Earth covering part of the Sun
+             */
+            eclipse_hours: number[];
+            /**
+             * Gcr Dose Mgy Si
+             * @description GCR dose over one stay (CRaTER climatology mean, same for every landing), mGy(Si); null without sky data
+             */
+            gcr_dose_mgy_si?: number | null;
+            /** Horizon Kind */
+            horizon_kind: string;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+            /**
+             * Longest Blackout H
+             * @description Per landing: longest stretch without Earth link, hours
+             */
+            longest_blackout_h: number[];
+            /**
+             * Longest Dark H
+             * @description Per landing: longest stretch without Sun, hours
+             */
+            longest_dark_h: number[];
+            /**
+             * Mean Array W
+             * @description Per landing: mean array power, W (with array)
+             */
+            mean_array_w?: number[] | null;
+            /**
+             * Mean Power W M2
+             * @description Per landing: mean power per m2 of panel, eclipses included, W/m2
+             */
+            mean_power_w_m2: number[];
+            /** Name */
+            name: string | null;
+            /** Site Id */
+            site_id: string | null;
+            /**
+             * Sunlight Fraction
+             * @description Per landing: share of the stay with any of the Sun visible, 0..1
+             */
+            sunlight_fraction: number[];
+            /**
+             * Unserved Energy Wh
+             * @description Per landing: load energy not served, Wh
+             */
+            unserved_energy_wh?: number[] | null;
+        };
+        /** PointHorizonResponse */
+        PointHorizonResponse: {
+            /**
+             * Az
+             * @description Azimuths, degrees clockwise from north, 0 to 360 - az_step_deg
+             */
+            az: number[];
+            /**
+             * Az Step Deg
+             * @description Azimuth spacing, degrees
+             */
+            az_step_deg: number;
+            /**
+             * Elevation Deg
+             * @description Skyline elevation at each azimuth, degrees
+             */
+            elevation_deg: number[];
+            /**
+             * Ground M
+             * @description Ground height above the 1737.4 km reference sphere, metres (bilinear on the finest LOLA grid; 0 on the smooth sphere)
+             */
+            ground_m: number;
+            /**
+             * Ground Source
+             * @description Where the ground height comes from
+             * @enum {string}
+             */
+            ground_source: "lola_grid" | "reference_sphere";
+            /**
+             * Horizon Kind
+             * @description 'terrain': ray-traced over the LOLA elevation grids (lola_elevation_80s at 240 m south of about 80 S, lola_elevation_60s at 960 m to about 60 S); 'smooth_sphere': outside them, geometric dip -acos(R/(R+h))
+             * @enum {string}
+             */
+            horizon_kind: "terrain" | "smooth_sphere";
+            /**
+             * Lat
+             * @description Planetocentric latitude, degrees, Moon Mean-Earth frame
+             */
+            lat: number;
+            /**
+             * Lon
+             * @description East-positive longitude, degrees, -180..180
+             */
+            lon: number;
+            /**
+             * Mast M
+             * @description Height of the observer above the ground, metres (computed for this value)
+             */
+            mast_m: number;
+            /**
+             * Max Az Deg
+             * @description Azimuth of the highest skyline point, degrees clockwise from north
+             */
+            max_az_deg: number;
+            /**
+             * Max Deg
+             * @description Highest skyline elevation, degrees
+             */
+            max_deg: number;
+            /**
+             * Mean Deg
+             * @description Mean skyline elevation over the 720 azimuths, degrees
+             */
+            mean_deg: number;
+            /**
+             * Method
+             * @description How the skyline was computed
+             */
+            method: string;
+            /**
+             * Min Az Deg
+             * @description Azimuth of the lowest skyline point, degrees clockwise from north
+             */
+            min_az_deg: number;
+            /**
+             * Min Deg
+             * @description Lowest skyline elevation, degrees
+             */
+            min_deg: number;
+            /**
+             * Near Cell M
+             * @description Cell size of that grid, metres
+             */
+            near_cell_m: number | null;
+            /**
+             * Near Grid
+             * @description Finest grid at the point, which decides the near field; null on the smooth sphere
+             */
+            near_grid: string | null;
+            /**
+             * Terrain Range Km
+             * @description Shortest distance, over all azimuths, up to which terrain data exists, km. Below 250 km a ray leaves the grids early and far terrain in that direction is missing (points near 60 S)
+             */
+            terrain_range_km: number | null;
+            /**
+             * Validation
+             * @description Measured accuracy of the method against the catalogue's fine masks
+             */
+            validation: string;
+        };
         /** PointSeriesResponse */
         PointSeriesResponse: {
             /**
@@ -372,7 +2005,7 @@ export interface components {
              * Comms Ranges
              * @description Stretches with the Earth visible for comms
              */
-            comms_ranges: components["schemas"]["TimeRange"][];
+            comms_ranges: components["schemas"]["app__schemas__state__TimeRange"][];
             /**
              * Duration H
              * @description Requested window length, hours
@@ -388,7 +2021,7 @@ export interface components {
              * Eclipse Ranges
              * @description Stretches with any eclipse (partial or total)
              */
-            eclipse_ranges: components["schemas"]["TimeRange"][];
+            eclipse_ranges: components["schemas"]["app__schemas__state__TimeRange"][];
             /**
              * End
              * @description Last sample, ISO 8601 UTC
@@ -401,7 +2034,7 @@ export interface components {
             ground_m: number;
             /**
              * Ground Source
-             * @description Where ground_m comes from: 'lola_site' (pipeline value at a catalogue terrain site), 'lola_grid' (LOLA elevation grid south of 60 S, 960 m cells) or 'reference_sphere' (no height data there: 0 m assumed; it only shifts parallax, < 0.001 deg)
+             * @description Where ground_m comes from: 'lola_site' (pipeline value at a catalogue terrain site), 'lola_grid' (finest LOLA elevation grid covering the point: 240-960 m cells south of 60 S, 3.8 km whole-Moon grid elsewhere) or 'reference_sphere' (no height data there: 0 m assumed; it only shifts parallax, < 0.001 deg)
              * @enum {string}
              */
             ground_source: "lola_site" | "lola_grid" | "reference_sphere";
@@ -462,7 +2095,7 @@ export interface components {
              * Sunlit Ranges
              * @description Stretches with the Sun visible
              */
-            sunlit_ranges: components["schemas"]["TimeRange"][];
+            sunlit_ranges: components["schemas"]["app__schemas__state__TimeRange"][];
             /**
              * T
              * @description Sample instants, ISO 8601 UTC
@@ -492,7 +2125,7 @@ export interface components {
             ground_m: number;
             /**
              * Ground Source
-             * @description Where ground_m comes from: 'lola_site' (pipeline value at a catalogue terrain site), 'lola_grid' (LOLA elevation grid south of 60 S, 960 m cells) or 'reference_sphere' (no height data there: 0 m assumed; it only shifts parallax, < 0.001 deg)
+             * @description Where ground_m comes from: 'lola_site' (pipeline value at a catalogue terrain site), 'lola_grid' (finest LOLA elevation grid covering the point: 240-960 m cells south of 60 S, 3.8 km whole-Moon grid elsewhere) or 'reference_sphere' (no height data there: 0 m assumed; it only shifts parallax, < 0.001 deg)
              * @enum {string}
              */
             ground_source: "lola_site" | "lola_grid" | "reference_sphere";
@@ -523,9 +2156,9 @@ export interface components {
              */
             mast_used_m: number;
             /** @description Next Earthset or Earthrise for comms; null if none within the search span */
-            next_earth_transition: components["schemas"]["Transition"] | null;
+            next_earth_transition: components["schemas"]["app__schemas__state__Transition"] | null;
             /** @description Next sunset (kind 'set') or sunrise ('rise'); null if none within the search span */
-            next_sun_transition: components["schemas"]["Transition"] | null;
+            next_sun_transition: components["schemas"]["app__schemas__state__Transition"] | null;
             /**
              * Site Id
              * @description Catalogue id; null for manual coordinates
@@ -549,6 +2182,675 @@ export interface components {
              * @description Days searched ahead for the transitions (capped by the end of the ephemeris tables)
              */
             transition_search_days: number;
+        };
+        /** PowerRequest */
+        PowerRequest: {
+            /**
+             * Battery Capacity Wh
+             * @description Nominal battery capacity, Wh (level 3)
+             */
+            battery_capacity_wh?: number | null;
+            /**
+             * Battery Initial Soc
+             * @description State of charge at start, 0..1 (level 3)
+             */
+            battery_initial_soc?: number | null;
+            /**
+             * Battery Min Soc
+             * @description Lowest allowed state of charge, 0..1 (level 3)
+             */
+            battery_min_soc?: number | null;
+            /**
+             * Cell Efficiency
+             * @description Array conversion efficiency, 0..1 (level 2+)
+             */
+            cell_efficiency?: number | null;
+            /**
+             * Charge Efficiency
+             * @description One-way charge efficiency, 0..1 (level 3)
+             */
+            charge_efficiency?: number | null;
+            /**
+             * Comms Critical
+             * @description Level 4: treat the comms load as critical instead of deferrable
+             * @default false
+             */
+            comms_critical: boolean;
+            /**
+             * Comms Load W
+             * @description Level 4: Earth link load, drawn only while the Earth is visible, W
+             */
+            comms_load_w?: number | null;
+            /**
+             * Comms Min Fraction
+             * @description Level 4: share of the Earth's disc needed for a link
+             * @default 0.5
+             */
+            comms_min_fraction: number;
+            /**
+             * Critical Load W
+             * @description Level 4: life support and other loads that must never stop, W (heater added by the model)
+             */
+            critical_load_w?: number | null;
+            /**
+             * Deferrable Load W
+             * @description Level 4: loads that can be switched off (science, rovers), W
+             */
+            deferrable_load_w?: number | null;
+            /**
+             * Derating
+             * @description Product of other losses, 0..1; 1 = none (level 2+)
+             */
+            derating?: number | null;
+            /**
+             * Discharge Efficiency
+             * @description One-way discharge efficiency, 0..1 (level 3)
+             */
+            discharge_efficiency?: number | null;
+            /**
+             * Duration H
+             * @description Mission window length, hours
+             */
+            duration_h: number;
+            /** @description Level 4: habitat thermal model */
+            habitat?: components["schemas"]["HabitatIn"] | null;
+            /**
+             * Horizon
+             * @description Manual coordinates only: 'terrain' ray-traces the skyline over the LOLA elevation grids (240-960 m south of 60 S, a 3.8 km global grid elsewhere; GET /api/v1/points/horizon shows it); 'smooth_sphere' (default) uses the geometric dip. Catalogue sites use their stored masks, or the traced skyline where they have none
+             * @default smooth_sphere
+             * @enum {string}
+             */
+            horizon: "smooth_sphere" | "terrain";
+            /**
+             * Include Sizing
+             * @description Level 4: also search the smallest battery and array that survive independently
+             * @default true
+             */
+            include_sizing: boolean;
+            /**
+             * Lat
+             * @description Planetocentric latitude, degrees, MOON_ME
+             */
+            lat?: number | null;
+            /**
+             * Level
+             * @description 1 visible solar disc; 2 adds array power (panel_area_m2, cell_efficiency, derating); 3 adds the battery balance (load_w, battery_capacity_wh, battery_initial_soc, battery_min_soc, charge_efficiency, discharge_efficiency); 4 colony analysis: the battery fields without load_w, plus critical_load_w, deferrable_load_w, comms_load_w, shed_soc, max_charge_w, max_discharge_w and habitat (regolith optional); window of at least one synodic month (708.7 h)
+             * @enum {integer}
+             */
+            level: 1 | 2 | 3 | 4;
+            /**
+             * Load W
+             * @description Electrical load, W (level 3)
+             */
+            load_w?: number | null;
+            /**
+             * Lon
+             * @description East-positive longitude, degrees, -180..180
+             */
+            lon?: number | null;
+            /**
+             * Max Charge W
+             * @description Level 4: highest charging power the battery accepts (array side), W
+             */
+            max_charge_w?: number | null;
+            /**
+             * Max Discharge W
+             * @description Level 4: highest power the battery can deliver, W
+             */
+            max_discharge_w?: number | null;
+            /**
+             * Night Load W
+             * @description Extra: load while no Sun is visible, W; load_w when omitted
+             */
+            night_load_w?: number | null;
+            /**
+             * Panel
+             * @description Array orientation: always facing the Sun, vertical turning in azimuth, or flat on the ground
+             * @default vertical
+             * @enum {string}
+             */
+            panel: "tracking" | "vertical" | "horizontal";
+            /**
+             * Panel Area M2
+             * @description Active solar array area, m2 (level 2+)
+             */
+            panel_area_m2?: number | null;
+            /** @description Level 4, optional: regolith properties for the ground temperature; default lunar values from Hayne et al. 2017 */
+            regolith?: components["schemas"]["RegolithIn"] | null;
+            /**
+             * Shed Soc
+             * @description Level 4: below this state of charge the deferrable loads are switched off, 0..1
+             */
+            shed_soc?: number | null;
+            /**
+             * Site Id
+             * @description Catalogue site id (GET /api/v1/sites); or give lat and lon
+             */
+            site_id?: string | null;
+            /**
+             * Start
+             * Format: date-time
+             * @description Start of the mission window, ISO 8601 UTC
+             */
+            start: string;
+            /**
+             * Step Min
+             * @description Sampling step, minutes
+             * @default 60
+             */
+            step_min: number;
+        };
+        /** PowerResponse */
+        PowerResponse: {
+            /**
+             * Assumptions
+             * @description Idealisations and limits behind these numbers
+             */
+            assumptions: string[];
+            /**
+             * Autonomy H
+             * @description Hours the battery alone could carry the critical demand of that moment; null when that demand is zero
+             */
+            autonomy_h?: (number | null)[] | null;
+            /**
+             * Battery Soc
+             * @description Battery state of charge at each sample, fraction of capacity
+             */
+            battery_soc?: number[] | null;
+            /**
+             * Cold Soak H
+             * @description Hours from t_set_k to t_min_k with all electrical power lost, at the coldest moment; null if never reached
+             */
+            cold_soak_h?: number | null;
+            /**
+             * Colony Status
+             * @description survives_independently: no critical failure and the battery ends the last whole synodic month at least as full as it started (repeating the window never fails); survives_window_declining: no failure but the battery ends lower; failure_after_x_days: critical load unserved after failure_after_days
+             */
+            colony_status?: ("survives_independently" | "survives_window_declining" | "failure_after_x_days") | null;
+            /**
+             * Cooling Demand W
+             * @description Heat in excess of the leak, to be rejected, W (electrical cost not modelled)
+             */
+            cooling_demand_w?: number[] | null;
+            /**
+             * Critical Load Profile W
+             * @description Critical demand at each sample (critical load + heater, + comms if critical), W
+             */
+            critical_load_profile_w?: number[] | null;
+            /**
+             * Curtailed Energy Wh
+             * @description Extra: array energy lost because the battery was full, Wh
+             */
+            curtailed_energy_wh?: number | null;
+            /**
+             * Degraded Days
+             * @description Total time in degraded mode, days
+             */
+            degraded_days?: number | null;
+            /**
+             * Depleted Ranges
+             * @description Extra: time ranges with load unserved
+             */
+            depleted_ranges?: components["schemas"]["app__schemas__common__TimeRange"][] | null;
+            /** Duration H */
+            duration_h: number;
+            /**
+             * Eclipse Energy Loss Wh
+             * @description Extra: array energy lost to eclipses, Wh
+             */
+            eclipse_energy_loss_wh?: number | null;
+            /**
+             * Eclipse Ranges
+             * @description Extra: time ranges with the Earth covering part of the Sun
+             */
+            eclipse_ranges: components["schemas"]["app__schemas__common__TimeRange"][];
+            energy_breakdown?: components["schemas"]["EnergyBreakdown"] | null;
+            /**
+             * Energy Margin Wh
+             * @description Energy above the battery floor at the worst moment, Wh; negative = load energy that could not be served
+             */
+            energy_margin_wh?: number | null;
+            /**
+             * Energy Wh
+             * @description Array energy over the window (left Riemann sum), Wh
+             */
+            energy_wh?: number | null;
+            /**
+             * Failure After Days
+             * @description Days from start to the first critical load not served
+             */
+            failure_after_days?: number | null;
+            /**
+             * Failure At
+             * @description Time of that failure, ISO 8601 UTC
+             */
+            failure_at?: string | null;
+            /**
+             * Final Soc
+             * @description Extra: state of charge at the end, fraction
+             */
+            final_soc?: number | null;
+            /**
+             * First Depletion At
+             * @description First sample with load unserved, ISO 8601 UTC; null if it survives
+             */
+            first_depletion_at?: string | null;
+            /**
+             * Ground K
+             * @description Regolith surface temperature at each sample, K
+             */
+            ground_k?: number[] | null;
+            /**
+             * Habitat Heat Capacity J K
+             * @description Interior heat capacity (structure + air), J/K
+             */
+            habitat_heat_capacity_j_k?: number | null;
+            /**
+             * Heater W
+             * @description Heater electrical demand at each sample, W
+             */
+            heater_w?: number[] | null;
+            /**
+             * Horizon Kind
+             * @description terrain (LOLA mask) or smooth_sphere (no terrain mask: an estimate, not a bound; real terrain shortens light and comms in craters and lengthens them on peaks)
+             */
+            horizon_kind: string;
+            /**
+             * Interior Below Min Ranges
+             * @description Time ranges with the interior below t_min_k
+             */
+            interior_below_min_ranges?: components["schemas"]["app__schemas__common__TimeRange"][] | null;
+            /**
+             * Interior K
+             * @description Habitat interior temperature at each sample, K
+             */
+            interior_k?: number[] | null;
+            /**
+             * Irradiance W M2
+             * @description Irradiance reaching the panel at each sample, W/m2: solar irradiance x visible fraction x panel orientation factor x (1 - eclipse obscuration)
+             */
+            irradiance_w_m2?: number[] | null;
+            /** Lat */
+            lat: number;
+            /** Level */
+            level: number;
+            /**
+             * Load Profile W
+             * @description Extra: load applied at each sample, W
+             */
+            load_profile_w?: number[] | null;
+            /** Lon */
+            lon: number;
+            /**
+             * Longest Dark Energy Wh
+             * @description Extra: battery energy to carry the night load through the longest dark stretch, Wh
+             */
+            longest_dark_energy_wh?: number | null;
+            /**
+             * Longest Dark H
+             * @description Longest stretch with no part of the Sun visible, hours
+             */
+            longest_dark_h: number;
+            /**
+             * Mast M Used
+             * @description Height above the ground the horizon is seen from (panels, antenna, habitat): fixed at 2 m, team decision, m
+             */
+            mast_m_used: number;
+            /**
+             * Mean Power W
+             * @description Mean array power over the window, W
+             */
+            mean_power_w?: number | null;
+            /**
+             * Mean Power W M2
+             * @description Extra: mean solar power incident on 1 m2 of panel over the window (mean of irradiance_w_m2, eclipses included), W/m2. Needs no panel size, so it compares places directly; same as /sweep mean_power_w_m2
+             */
+            mean_power_w_m2: number;
+            /**
+             * Metabolic Heat W
+             * @description Crew metabolic heat, W
+             */
+            metabolic_heat_w?: number | null;
+            /**
+             * Min Battery Capacity Wh
+             * @description Smallest battery capacity that gives survives_independently with the given array; null if not reached at 4096 x the given capacity or not requested
+             */
+            min_battery_capacity_wh?: number | null;
+            /**
+             * Min Panel Area M2
+             * @description Smallest array area that gives survives_independently with the given battery; null if not reached
+             */
+            min_panel_area_m2?: number | null;
+            /**
+             * Min Soc
+             * @description Lowest state of charge reached, fraction of capacity
+             */
+            min_soc?: number | null;
+            /**
+             * Month Soc Change
+             * @description Battery state-of-charge change over each whole synodic month, fraction
+             */
+            month_soc_change?: number[] | null;
+            /**
+             * Net Power W
+             * @description Array power minus load at each sample, W
+             */
+            net_power_w?: number[] | null;
+            /**
+             * Obscuration
+             * @description Extra: fraction of the solar disc covered by the Earth (eclipse), 0..1
+             */
+            obscuration: number[];
+            /** Panel */
+            panel: string;
+            /**
+             * Peak Power W
+             * @description Extra: highest array power, W
+             */
+            peak_power_w?: number | null;
+            /**
+             * Power W
+             * @description Array electrical power at each sample, W
+             */
+            power_w?: number[] | null;
+            /**
+             * Shed Ranges
+             * @description Degraded mode: time ranges with the deferrable loads off
+             */
+            shed_ranges?: components["schemas"]["app__schemas__common__TimeRange"][] | null;
+            /** Site Id */
+            site_id: string | null;
+            /**
+             * Skin K
+             * @description Habitat outer skin temperature at each sample, K
+             */
+            skin_k?: number[] | null;
+            /** Start */
+            start: string;
+            /** Step Min */
+            step_min: number;
+            /**
+             * Sun El Deg
+             * @description Solar elevation of the disc centre at each sample, degrees
+             */
+            sun_el_deg: number[];
+            /**
+             * Sun Fraction
+             * @description Fraction of the solar disc above the local horizon at each sample, 0..1
+             */
+            sun_fraction: number[];
+            /**
+             * Sunlit Fraction
+             * @description Extra: share of samples with any of the Sun visible, 0..1
+             */
+            sunlit_fraction: number;
+            /** Sunlit Ranges */
+            sunlit_ranges: components["schemas"]["app__schemas__common__TimeRange"][];
+            /**
+             * Sunrise Margin Wh
+             * @description In the dark: battery energy above the floor minus what the critical demand needs until the next sunrise, Wh; null while sunlit or when no sunrise comes within the window
+             */
+            sunrise_margin_wh?: (number | null)[] | null;
+            /**
+             * Survives
+             * @description True when the load was always served
+             */
+            survives?: boolean | null;
+            /**
+             * Synodic Months
+             * @description Whole synodic months in the window, used for the status
+             */
+            synodic_months?: number | null;
+            /**
+             * T
+             * @description Sample times, ISO 8601 UTC
+             */
+            t: string[];
+            /**
+             * Unheated Equilibrium K
+             * @description Interior temperature with all electrical power lost (crew heat only), at the coldest moment of the window, K
+             */
+            unheated_equilibrium_k?: number | null;
+            /**
+             * Unserved Energy Wh
+             * @description Extra: load energy not served, Wh
+             */
+            unserved_energy_wh?: number | null;
+            /**
+             * Usable Capacity Wh
+             * @description Extra: capacity x (1 - battery_min_soc), Wh
+             */
+            usable_capacity_wh?: number | null;
+        };
+        /** RadiationRequest */
+        RadiationRequest: {
+            /**
+             * Duration H
+             * @description Mission window length, hours
+             */
+            duration_h: number;
+            /**
+             * Horizon
+             * @description Manual coordinates only: 'terrain' ray-traces the skyline over the LOLA elevation grids (240-960 m south of 60 S, a 3.8 km global grid elsewhere; GET /api/v1/points/horizon shows it); 'smooth_sphere' (default) uses the geometric dip. Catalogue sites use their stored masks, or the traced skyline where they have none
+             * @default smooth_sphere
+             * @enum {string}
+             */
+            horizon: "smooth_sphere" | "terrain";
+            /**
+             * Lat
+             * @description Planetocentric latitude, degrees, MOON_ME
+             */
+            lat?: number | null;
+            /**
+             * Lon
+             * @description East-positive longitude, degrees, -180..180
+             */
+            lon?: number | null;
+            /**
+             * Quality Factor
+             * @description Mean GCR quality factor to turn absorbed dose (mGy) into effective dose (mSv); give it with a source (MSL RAD cruise measurements, Zeitlin et al. 2013, imply about 3.8: verify). Needed for mSv and the risk index
+             */
+            quality_factor?: number | null;
+            /**
+             * Si To Tissue Factor
+             * @description Absorbed dose in water per absorbed dose in silicon; default 1.333, the CRaTER team's conversion (NASA ISWA CRaTER data page)
+             * @default 1.333
+             */
+            si_to_tissue_factor: number;
+            /**
+             * Site Id
+             * @description Catalogue site id (GET /api/v1/sites); or give lat and lon
+             */
+            site_id?: string | null;
+            /**
+             * Start
+             * Format: date-time
+             * @description Start of the mission window, ISO 8601 UTC
+             */
+            start: string;
+            /**
+             * Step Min
+             * @description Sampling step, minutes
+             * @default 60
+             */
+            step_min: number;
+        };
+        /** RadiationResponse */
+        RadiationResponse: {
+            /** Assumptions */
+            assumptions: string[];
+            /**
+             * Basis
+             * @description climatology: the mission date is outside the record, statistics of the record are used
+             */
+            basis: string;
+            /**
+             * Career Limit Msv
+             * @description NASA-STD-3001 career effective dose limit, mSv
+             */
+            career_limit_msv: number;
+            dataset: components["schemas"]["DatasetRef"];
+            /** Duration H */
+            duration_h: number;
+            /**
+             * Fraction Of Career Limit
+             * @description Mean mission effective dose / career limit
+             */
+            fraction_of_career_limit: number | null;
+            /** @description CRaTER GCR dose rate, free-space equivalent, mGy(Si)/day */
+            gcr_free_space_daily_mgy_si: components["schemas"]["DailyStats"];
+            /** @description Same scaled to the point, mGy(Si)/day */
+            gcr_surface_daily_mgy_si: components["schemas"]["DailyStats"] | null;
+            /** Horizon Kind */
+            horizon_kind: string;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+            /** @description Effective dose over the mission, mSv; null without both factors */
+            mission_effective_dose_msv: components["schemas"]["Range3"] | null;
+            /** @description GCR dose over the mission at the point, mGy(Si) */
+            mission_gcr_dose_mgy_si: components["schemas"]["Range3"] | null;
+            /** @description Astronaut risk on a 1-10 scale; null without quality_factor or sky data */
+            risk?: components["schemas"]["Risk"] | null;
+            /**
+             * Shielding Factor
+             * @description Share of the free-space dose that reaches the point: sky / 4 pi
+             */
+            shielding_factor: number | null;
+            /** Site Id */
+            site_id: string | null;
+            /**
+             * Sky Solid Angle Sr
+             * @description Open sky at the point, sr (flat ground 2 pi = 6.283)
+             */
+            sky_solid_angle_sr: number | null;
+            /**
+             * Sky Source
+             * @description dataset (PGDA 69 grid), computed (smooth sphere: 2 pi) or unavailable
+             */
+            sky_source: string;
+            spe_record: components["schemas"]["SpeRecord"];
+            /** Start */
+            start: string;
+        };
+        /** Range3 */
+        Range3: {
+            /**
+             * High
+             * @description With the 95th-percentile daily rate
+             */
+            high: number;
+            /**
+             * Low
+             * @description With the 5th-percentile daily rate
+             */
+            low: number;
+            /**
+             * Mean
+             * @description With the mean daily rate
+             */
+            mean: number;
+        };
+        /** Region */
+        Region: {
+            /**
+             * Center Lat
+             * @description Centre of the search disc, degrees (south of 60 S: the LOLA grids)
+             */
+            center_lat: number;
+            /**
+             * Center Lon
+             * @description Centre longitude, degrees east
+             */
+            center_lon: number;
+            /**
+             * Radius Km
+             * @description Radius of the search disc, km (keeps the search bounded)
+             */
+            radius_km: number;
+        };
+        /** RegolithIn */
+        RegolithIn: {
+            /**
+             * Albedo
+             * @description Bolometric albedo of the surface, 0..1
+             */
+            albedo: number;
+            /**
+             * Conductivity W Mk
+             * @description Thermal conductivity, W m-1 K-1 (constant)
+             */
+            conductivity_w_mk: number;
+            /**
+             * Density Kg M3
+             * @description Bulk density, kg m-3 (constant)
+             */
+            density_kg_m3: number;
+            /**
+             * Emissivity
+             * @description Infrared emissivity, 0..1
+             */
+            emissivity: number;
+            /**
+             * Geothermal Flux W M2
+             * @description Heat flow from the interior, W m-2
+             */
+            geothermal_flux_w_m2: number;
+            /**
+             * Heat Capacity J Kgk
+             * @description Specific heat capacity, J kg-1 K-1 (constant)
+             */
+            heat_capacity_j_kgk: number;
+        };
+        /** Risk */
+        Risk: {
+            /**
+             * Index
+             * @description 1 (negligible) .. 10 (whole career limit in one mission), GCR only
+             */
+            index: number;
+            /**
+             * Index With Worst Storm
+             * @description Same scale if the record's largest solar storm day also hit the mission (storm counted with Q = 1, the minimum: a lower bound)
+             */
+            index_with_worst_storm: number | null;
+            /** Scale */
+            scale: string;
+            /**
+             * Share Of Career Limit
+             * @description Mean mission effective dose / 600 mSv
+             */
+            share_of_career_limit: number;
+            /**
+             * Worst Storm Msv
+             * @description That storm day at this point, mSv (lower bound, isotropic approximation)
+             */
+            worst_storm_msv: number | null;
+        };
+        /** ScoreOut */
+        ScoreOut: {
+            /** Formula */
+            formula: string;
+            /**
+             * Parts
+             * @description Each criterion's value, 0..1 (higher is better)
+             */
+            parts: {
+                [key: string]: number;
+            };
+            /**
+             * Score
+             * @description 0..100, weighted mean of the criteria
+             */
+            score: number;
+            /**
+             * Weights
+             * @description Weights actually used
+             */
+            weights: {
+                [key: string]: number;
+            };
         };
         /**
          * SeriesMetrics
@@ -627,7 +2929,7 @@ export interface components {
              * Comms Ranges
              * @description Stretches with the Earth visible for comms
              */
-            comms_ranges: components["schemas"]["TimeRange"][];
+            comms_ranges: components["schemas"]["app__schemas__state__TimeRange"][];
             /**
              * Duration H
              * @description Requested window length, hours
@@ -643,7 +2945,7 @@ export interface components {
              * Eclipse Ranges
              * @description Stretches with any eclipse (partial or total)
              */
-            eclipse_ranges: components["schemas"]["TimeRange"][];
+            eclipse_ranges: components["schemas"]["app__schemas__state__TimeRange"][];
             /**
              * End
              * @description Last sample, ISO 8601 UTC
@@ -656,7 +2958,7 @@ export interface components {
             ground_m: number;
             /**
              * Ground Source
-             * @description Where ground_m comes from: 'lola_site' (pipeline value at a catalogue terrain site), 'lola_grid' (LOLA elevation grid south of 60 S, 960 m cells) or 'reference_sphere' (no height data there: 0 m assumed; it only shifts parallax, < 0.001 deg)
+             * @description Where ground_m comes from: 'lola_site' (pipeline value at a catalogue terrain site), 'lola_grid' (finest LOLA elevation grid covering the point: 240-960 m cells south of 60 S, 3.8 km whole-Moon grid elsewhere) or 'reference_sphere' (no height data there: 0 m assumed; it only shifts parallax, < 0.001 deg)
              * @enum {string}
              */
             ground_source: "lola_site" | "lola_grid" | "reference_sphere";
@@ -717,7 +3019,7 @@ export interface components {
              * Sunlit Ranges
              * @description Stretches with the Sun visible
              */
-            sunlit_ranges: components["schemas"]["TimeRange"][];
+            sunlit_ranges: components["schemas"]["app__schemas__state__TimeRange"][];
             /**
              * T
              * @description Sample instants, ISO 8601 UTC
@@ -794,6 +3096,13 @@ export interface components {
             /** Terrain Available */
             terrain_available: boolean;
         };
+        /** SkippedStation */
+        SkippedStation: {
+            /** Id */
+            id: string;
+            /** Reason */
+            reason: string;
+        };
         /** SourceRef */
         SourceRef: {
             /** Label */
@@ -802,6 +3111,24 @@ export interface components {
             note?: string | null;
             /** Url */
             url: string;
+        };
+        /** SpeRecord */
+        SpeRecord: {
+            /**
+             * Days Flagged
+             * @description Full days in the record without a GCR value (solar-particle-event days)
+             */
+            days_flagged: number;
+            /**
+             * Largest Day
+             * @description Date of the largest daily dose in the record, measured in orbit
+             */
+            largest_day: string;
+            /**
+             * Largest Day Mgy Si
+             * @description That day's dose as measured in lunar orbit, mGy(Si); not scaled to the surface
+             */
+            largest_day_mgy_si: number;
         };
         /** StateResponse */
         StateResponse: {
@@ -824,7 +3151,7 @@ export interface components {
             ground_m: number;
             /**
              * Ground Source
-             * @description Where ground_m comes from: 'lola_site' (pipeline value at a catalogue terrain site), 'lola_grid' (LOLA elevation grid south of 60 S, 960 m cells) or 'reference_sphere' (no height data there: 0 m assumed; it only shifts parallax, < 0.001 deg)
+             * @description Where ground_m comes from: 'lola_site' (pipeline value at a catalogue terrain site), 'lola_grid' (finest LOLA elevation grid covering the point: 240-960 m cells south of 60 S, 3.8 km whole-Moon grid elsewhere) or 'reference_sphere' (no height data there: 0 m assumed; it only shifts parallax, < 0.001 deg)
              * @enum {string}
              */
             ground_source: "lola_site" | "lola_grid" | "reference_sphere";
@@ -855,9 +3182,9 @@ export interface components {
              */
             mast_used_m: number;
             /** @description Next Earthset or Earthrise for comms; null if none within the search span */
-            next_earth_transition: components["schemas"]["Transition"] | null;
+            next_earth_transition: components["schemas"]["app__schemas__state__Transition"] | null;
             /** @description Next sunset (kind 'set') or sunrise ('rise'); null if none within the search span */
-            next_sun_transition: components["schemas"]["Transition"] | null;
+            next_sun_transition: components["schemas"]["app__schemas__state__Transition"] | null;
             /**
              * Site Id
              * @description Catalogue id; null for manual coordinates
@@ -879,6 +3206,470 @@ export interface components {
              * @description Days searched ahead for the transitions (capped by the end of the ephemeris tables)
              */
             transition_search_days: number;
+        };
+        /**
+         * StationBudget
+         * @description Level 2 numbers for one antenna, over the samples where it is in geometric contact.
+         */
+        StationBudget: {
+            /** Free Space Loss Db Max */
+            free_space_loss_db_max: number | null;
+            /**
+             * Free Space Loss Db Min
+             * @description Smallest free-space loss while in contact, dB
+             */
+            free_space_loss_db_min: number | null;
+            /**
+             * Gt Basis
+             * @description cited = operator tables; spec = operator design specification; estimated = from the dish diameter (scaled from the DSN 34 m antennas); user = given in the request; no_receiver = no receiver in this band; unknown = a custom antenna without G/T or diameter
+             * @enum {string}
+             */
+            gt_basis: "cited" | "spec" | "estimated" | "user" | "no_receiver" | "unknown";
+            /**
+             * Gt Db Per K
+             * @description Receive G/T used for this antenna, dB/K; null when it has none
+             */
+            gt_db_per_k: number | null;
+            /**
+             * Link Fraction
+             * @description Share of samples with geometric contact AND margin >= min_margin_db, 0..1
+             */
+            link_fraction: number;
+            /** Link Hours */
+            link_hours: number;
+            /** Margin Db Max */
+            margin_db_max: number | null;
+            /** Margin Db Mean */
+            margin_db_mean: number | null;
+            /**
+             * Margin Db Min
+             * @description Lowest Eb/N0 margin while in contact, dB; null when never in contact
+             */
+            margin_db_min: number | null;
+            /**
+             * Max Data Rate Bps Median
+             * @description Median over the samples in contact of the highest data rate that keeps min_margin_db of margin, bit/s
+             */
+            max_data_rate_bps_median: number | null;
+        };
+        /** StationCatalogue */
+        StationCatalogue: {
+            /**
+             * Networks
+             * @description Network id -> description
+             */
+            networks: {
+                [key: string]: string;
+            };
+            /** Stations */
+            stations: components["schemas"]["StationInfo"][];
+        };
+        /** StationInfo */
+        StationInfo: {
+            /** Agency */
+            agency: string;
+            /**
+             * Bands
+             * @description Transmit/receive bands when a source states them, else null
+             */
+            bands: {
+                [key: string]: unknown;
+            } | null;
+            /** Country */
+            country: string;
+            /** Dish */
+            dish: string;
+            /**
+             * Has Azimuth Mask
+             * @description True when the receive limit varies with azimuth
+             */
+            has_azimuth_mask: boolean;
+            /** Has Transmit Limits */
+            has_transmit_limits: boolean;
+            /** Height M */
+            height_m: number;
+            /** Id */
+            id: string;
+            /** Lat Deg */
+            lat_deg: number;
+            /**
+             * Limit Source
+             * @description cited = published by the operator; owner_estimate = a value chosen by the project (see limit_source_note)
+             * @enum {string}
+             */
+            limit_source: "cited" | "owner_estimate";
+            /** Limit Source Note */
+            limit_source_note: string;
+            /** Lon Deg */
+            lon_deg: number;
+            /** Name */
+            name: string;
+            /** Network */
+            network: string;
+            /**
+             * Receive Limit Deg
+             * @description min and max of the receive elevation limit over azimuth, degrees
+             */
+            receive_limit_deg: {
+                [key: string]: unknown;
+            };
+            /** Site */
+            site: string;
+        };
+        /** StationResult */
+        StationResult: {
+            /** @description Level 2 only */
+            budget?: components["schemas"]["StationBudget"] | null;
+            /**
+             * Contact Fraction
+             * @description Share of samples with the Earth visible from the lunar site AND the Moon visible from this antenna, 0..1
+             */
+            contact_fraction: number;
+            /** Contact Hours */
+            contact_hours: number;
+            /** Height M */
+            height_m: number;
+            /** Id */
+            id: string;
+            /** Lat Deg */
+            lat_deg: number;
+            /**
+             * Limit Max Deg
+             * @description Highest elevation limit over azimuth for this direction, degrees
+             */
+            limit_max_deg: number;
+            /**
+             * Limit Min Deg
+             * @description Lowest elevation limit over azimuth for this direction, degrees
+             */
+            limit_min_deg: number;
+            /**
+             * Limit Source
+             * @enum {string}
+             */
+            limit_source: "cited" | "owner_estimate" | "user";
+            /** Lon Deg */
+            lon_deg: number;
+            /**
+             * Moon Visible Fraction
+             * @description Share of samples with the Moon above this antenna's limit, 0..1
+             */
+            moon_visible_fraction: number;
+            /**
+             * Moon Visible Hours
+             * @description Samples with the Moon visible x step, hours
+             */
+            moon_visible_hours: number;
+            /** Moon Visible Ranges */
+            moon_visible_ranges: components["schemas"]["app__schemas__common__TimeRange"][];
+            /** Name */
+            name: string;
+            /**
+             * Network
+             * @description dsn, estrack, jaxa or custom
+             */
+            network: string;
+            /**
+             * Now Limit Deg
+             * @description The antenna's elevation limit in that direction at start, degrees
+             */
+            now_limit_deg: number;
+            /**
+             * Now Moon Azimuth Deg
+             * @description Azimuth of the Moon from the antenna at start, degrees from north
+             */
+            now_moon_azimuth_deg: number;
+            /**
+             * Now Moon Elevation Deg
+             * @description Elevation of the Moon from the antenna at start, degrees
+             */
+            now_moon_elevation_deg: number;
+        };
+        /** Stats */
+        Stats: {
+            /** Max K */
+            max_k: number;
+            /** Mean K */
+            mean_k: number;
+            /** Min K */
+            min_k: number;
+        };
+        /** SunNow */
+        SunNow: {
+            /**
+             * Azimuth Deg
+             * @description Solar azimuth at start, degrees clockwise from north
+             */
+            azimuth_deg: number;
+            /**
+             * Elevation Deg
+             * @description Solar elevation of the disc centre at start, degrees (refraction-free)
+             */
+            elevation_deg: number;
+            /**
+             * Horizon Elevation Deg
+             * @description Height of the skyline in the Sun's direction at start, degrees
+             */
+            horizon_elevation_deg: number;
+            /** Sunlit */
+            sunlit: boolean;
+            /**
+             * Visible Fraction
+             * @description Fraction of the solar disc above the local horizon at start, 0..1
+             */
+            visible_fraction: number;
+        };
+        /** SunRequest */
+        SunRequest: {
+            /**
+             * Duration H
+             * @description Mission window length, hours
+             */
+            duration_h: number;
+            /**
+             * Horizon
+             * @description Manual coordinates only: 'terrain' ray-traces the skyline over the LOLA elevation grids (240-960 m south of 60 S, a 3.8 km global grid elsewhere; GET /api/v1/points/horizon shows it); 'smooth_sphere' (default) uses the geometric dip. Catalogue sites use their stored masks, or the traced skyline where they have none
+             * @default smooth_sphere
+             * @enum {string}
+             */
+            horizon: "smooth_sphere" | "terrain";
+            /**
+             * Lat
+             * @description Planetocentric latitude, degrees, MOON_ME
+             */
+            lat?: number | null;
+            /**
+             * Lon
+             * @description East-positive longitude, degrees, -180..180
+             */
+            lon?: number | null;
+            /**
+             * Site Id
+             * @description Catalogue site id (GET /api/v1/sites); or give lat and lon
+             */
+            site_id?: string | null;
+            /**
+             * Start
+             * Format: date-time
+             * @description Start of the mission window, ISO 8601 UTC
+             */
+            start: string;
+            /**
+             * Step Min
+             * @description Sampling step, minutes
+             * @default 60
+             */
+            step_min: number;
+        };
+        /** SunResponse */
+        SunResponse: {
+            /**
+             * Assumptions
+             * @description Idealisations and limits behind these numbers
+             */
+            assumptions: string[];
+            /** Duration H */
+            duration_h: number;
+            /**
+             * Eclipse Fraction
+             * @description Fraction of samples with the Earth covering part of the Sun, 0..1
+             */
+            eclipse_fraction: number;
+            /** Eclipse Ranges */
+            eclipse_ranges: components["schemas"]["app__schemas__common__TimeRange"][];
+            /** Eclipses */
+            eclipses: components["schemas"]["EclipseEvent"][];
+            elevation: components["schemas"]["ElevationStats"];
+            /**
+             * Horizon Kind
+             * @description terrain (LOLA mask) or smooth_sphere (no terrain mask: an estimate, not a bound; real terrain shortens light and comms in craters and lengthens them on peaks)
+             */
+            horizon_kind: string;
+            /**
+             * Hours To Sunset
+             * @description Hours from start to the next sunset when the Sun is up at start
+             */
+            hours_to_sunset: number | null;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+            /**
+             * Longest Dark H
+             * @description Longest stretch with no part of the Sun visible, hours
+             */
+            longest_dark_h: number;
+            /**
+             * Longest Sunlit H
+             * @description Longest continuous sunlit stretch, hours
+             */
+            longest_sunlit_h: number;
+            /**
+             * Mast M Used
+             * @description Height above the ground the horizon is seen from (panels, antenna, habitat): fixed at 2 m, team decision, m
+             */
+            mast_m_used: number;
+            /** @description Next sunset or sunrise after start (searched up to 45 days); null when none in that time or the tables end */
+            next_transition: components["schemas"]["app__schemas__sun__Transition"] | null;
+            now: components["schemas"]["SunNow"];
+            /**
+             * Obscuration
+             * @description Fraction of the solar disc covered by the Earth at each sample, 0..1
+             */
+            obscuration: number[];
+            /** Site Id */
+            site_id: string | null;
+            /** Start */
+            start: string;
+            /** Step Min */
+            step_min: number;
+            /**
+             * Sun Az Deg
+             * @description Solar azimuth at each sample, degrees clockwise from north
+             */
+            sun_az_deg: number[];
+            /**
+             * Sun El Deg
+             * @description Solar elevation of the disc centre at each sample, degrees
+             */
+            sun_el_deg: number[];
+            /**
+             * Sunlit Fraction
+             * @description Fraction of samples with any part of the Sun visible, 0..1
+             */
+            sunlit_fraction: number;
+            /**
+             * Sunlit Hours
+             * @description Sunlit samples x step, hours
+             */
+            sunlit_hours: number;
+            /** Sunlit Ranges */
+            sunlit_ranges: components["schemas"]["app__schemas__common__TimeRange"][];
+            /**
+             * T
+             * @description Sample times, ISO 8601 UTC
+             */
+            t: string[];
+            /**
+             * Visible Fraction
+             * @description Fraction of the solar disc above the horizon at each sample, 0..1
+             */
+            visible_fraction: number[];
+        };
+        /**
+         * SweepRequest
+         * @description Panel fields (panel_area_m2, cell_efficiency, derating) give array power per landing; adding the battery
+         *     fields (load_w, battery_*, charge_efficiency, discharge_efficiency) gives survival per landing.
+         */
+        SweepRequest: {
+            /**
+             * Battery Capacity Wh
+             * @description Nominal battery capacity, Wh (level 3)
+             */
+            battery_capacity_wh?: number | null;
+            /**
+             * Battery Initial Soc
+             * @description State of charge at start, 0..1 (level 3)
+             */
+            battery_initial_soc?: number | null;
+            /**
+             * Battery Min Soc
+             * @description Lowest allowed state of charge, 0..1 (level 3)
+             */
+            battery_min_soc?: number | null;
+            /**
+             * Cell Efficiency
+             * @description Array conversion efficiency, 0..1 (level 2+)
+             */
+            cell_efficiency?: number | null;
+            /**
+             * Charge Efficiency
+             * @description One-way charge efficiency, 0..1 (level 3)
+             */
+            charge_efficiency?: number | null;
+            /**
+             * Comms Min Fraction
+             * @description Share of the Earth's disc needed for a link
+             * @default 0.5
+             */
+            comms_min_fraction: number;
+            /**
+             * Derating
+             * @description Product of other losses, 0..1; 1 = none (level 2+)
+             */
+            derating?: number | null;
+            /**
+             * Discharge Efficiency
+             * @description One-way discharge efficiency, 0..1 (level 3)
+             */
+            discharge_efficiency?: number | null;
+            /**
+             * First Landing
+             * Format: date-time
+             * @description First landing time, ISO 8601 UTC
+             */
+            first_landing: string;
+            /**
+             * Landing Step H
+             * @description Hours between consecutive landing times
+             * @default 24
+             */
+            landing_step_h: number;
+            /**
+             * Landings
+             * @description Number of landing times to try
+             */
+            landings: number;
+            /**
+             * Load W
+             * @description Electrical load, W (level 3)
+             */
+            load_w?: number | null;
+            /**
+             * Night Load W
+             * @description Extra: load while no Sun is visible, W; load_w when omitted
+             */
+            night_load_w?: number | null;
+            /**
+             * Panel
+             * @default vertical
+             * @enum {string}
+             */
+            panel: "tracking" | "vertical" | "horizontal";
+            /**
+             * Panel Area M2
+             * @description Active solar array area, m2 (level 2+)
+             */
+            panel_area_m2?: number | null;
+            /** Places */
+            places: components["schemas"]["Place"][];
+            /**
+             * Stay H
+             * @description Mission duration after each landing, hours
+             */
+            stay_h: number;
+            /**
+             * Step Min
+             * @description Sampling step, minutes; must divide landing_step_h and stay_h
+             * @default 60
+             */
+            step_min: number;
+        };
+        /** SweepResponse */
+        SweepResponse: {
+            /** Assumptions */
+            assumptions: string[];
+            /**
+             * Landings
+             * @description Landing times, ISO 8601 UTC
+             */
+            landings: string[];
+            /** Places */
+            places: components["schemas"]["PlaceSweep"][];
+            /** Stay H */
+            stay_h: number;
+            /** Step Min */
+            step_min: number;
         };
         /** TerrainReference */
         TerrainReference: {
@@ -927,52 +3718,123 @@ export interface components {
              */
             slope_deg?: number | null;
         };
-        /** TimeRange */
-        TimeRange: {
+        /** ThermalRequest */
+        ThermalRequest: {
             /**
              * Duration H
-             * @description end - start, hours (a lower bound when cut by the window)
+             * @description Mission window length, hours
              */
             duration_h: number;
+            /** @description Lumped equipment box; limits then apply to it */
+            equipment?: components["schemas"]["EquipmentIn"] | null;
             /**
-             * End
-             * @description First instant out of the state, ISO 8601 UTC (refined to ~1 s), or the window end when ends_after_window
+             * Horizon
+             * @description Manual coordinates only: 'terrain' ray-traces the skyline over the LOLA elevation grids (240-960 m south of 60 S, a 3.8 km global grid elsewhere; GET /api/v1/points/horizon shows it); 'smooth_sphere' (default) uses the geometric dip. Catalogue sites use their stored masks, or the traced skyline where they have none
+             * @default smooth_sphere
+             * @enum {string}
              */
-            end: string;
+            horizon: "smooth_sphere" | "terrain";
             /**
-             * Ends After Window
-             * @description Still in the state at the window end
+             * Lat
+             * @description Planetocentric latitude, degrees, MOON_ME
              */
-            ends_after_window: boolean;
+            lat?: number | null;
+            limits?: components["schemas"]["LimitsIn"] | null;
+            /**
+             * Lon
+             * @description East-positive longitude, degrees, -180..180
+             */
+            lon?: number | null;
+            /** @description Regolith properties; default lunar values from Hayne et al. 2017 (constant-property equivalent) */
+            regolith?: components["schemas"]["RegolithIn"] | null;
+            /**
+             * Site Id
+             * @description Catalogue site id (GET /api/v1/sites); or give lat and lon
+             */
+            site_id?: string | null;
             /**
              * Start
-             * @description First instant in the state, ISO 8601 UTC (refined to ~1 s), or the window start when starts_before_window
+             * Format: date-time
+             * @description Start of the mission window, ISO 8601 UTC
              */
             start: string;
             /**
-             * Starts Before Window
-             * @description Already in the state at the window start
+             * Step Min
+             * @description Sampling step, minutes
+             * @default 60
              */
-            starts_before_window: boolean;
+            step_min: number;
         };
-        /** Transition */
-        Transition: {
+        /** ThermalResponse */
+        ThermalResponse: {
+            above_max?: components["schemas"]["LimitResult"] | null;
             /**
-             * At
-             * @description Instant of the change, ISO 8601 UTC, resolved to about one second
+             * Assumptions
+             * @description Idealisations and limits behind these numbers
              */
-            at: string;
+            assumptions: string[];
+            below_min?: components["schemas"]["LimitResult"] | null;
             /**
-             * In Hours
-             * @description Hours from the requested instant t to the change
+             * Deep K
+             * @description Temperature of the deepest grid node at each sample, K
              */
-            in_hours: number;
+            deep_k: number[];
+            /** Duration H */
+            duration_h: number;
+            equipment?: components["schemas"]["Stats"] | null;
             /**
-             * Kind
-             * @description 'set': the body leaves view at that instant; 'rise': it comes into view
-             * @enum {string}
+             * Equipment K
+             * @description Equipment node temperature at each sample, K
              */
-            kind: "set" | "rise";
+            equipment_k?: number[] | null;
+            /** Grid Depth M */
+            grid_depth_m: number;
+            /**
+             * Horizon Kind
+             * @description terrain (LOLA mask) or smooth_sphere (no terrain mask: an estimate, not a bound; real terrain shortens light and comms in craters and lengthens them on peaks)
+             */
+            horizon_kind: string;
+            /**
+             * Initial K
+             * @description Uniform starting temperature (equilibrium with the mean absorbed plus geothermal flux), K
+             */
+            initial_k: number;
+            /** Lat */
+            lat: number;
+            /**
+             * Limits Apply To
+             * @description equipment or surface
+             */
+            limits_apply_to?: string | null;
+            /** Lon */
+            lon: number;
+            /**
+             * Mast M Used
+             * @description Height above the ground the horizon is seen from (panels, antenna, habitat): fixed at 2 m, team decision, m
+             */
+            mast_m_used: number;
+            /** Site Id */
+            site_id: string | null;
+            /**
+             * Skin Depth M
+             * @description Diurnal thermal skin depth for these properties, m
+             */
+            skin_depth_m: number;
+            /** Start */
+            start: string;
+            /** Step Min */
+            step_min: number;
+            surface: components["schemas"]["Stats"];
+            /**
+             * Surface K
+             * @description Regolith surface temperature at each sample, K
+             */
+            surface_k: number[];
+            /**
+             * T
+             * @description Sample times, ISO 8601 UTC
+             */
+            t: string[];
         };
         /** ValidationError */
         ValidationError: {
@@ -986,6 +3848,182 @@ export interface components {
             msg: string;
             /** Error Type */
             type: string;
+        };
+        /** ValidationReport */
+        ValidationReport: {
+            /** All Passed */
+            all_passed: boolean;
+            /** Model Checks */
+            model_checks: components["schemas"]["CheckOut"][];
+            /** Passed */
+            passed: number;
+            /**
+             * Pipeline
+             * @description Ephemeris vs JPL Horizons and Apollo tables, terrain vs LROC (data/validation.json)
+             */
+            pipeline: {
+                [key: string]: unknown;
+            };
+            /** Total */
+            total: number;
+        };
+        /** VerdictRequest */
+        VerdictRequest: {
+            /**
+             * Comms Min Fraction
+             * @description Share of the Earth's disc needed for a link
+             * @default 0.5
+             */
+            comms_min_fraction: number;
+            /**
+             * Duration H
+             * @description Mission window length, hours
+             */
+            duration_h: number;
+            /**
+             * Favourable Min
+             * @description Score at or above which the verdict is favourable
+             * @default 75
+             */
+            favourable_min: number;
+            /**
+             * Hard Filters
+             * @description Hard filter id -> its threshold object (ids and shapes: GET /api/v1/meta/constraints and docs/endpoints.md)
+             */
+            hard_filters?: {
+                [key: string]: {
+                    [key: string]: unknown;
+                };
+            };
+            /**
+             * Horizon
+             * @description Manual coordinates only: 'terrain' ray-traces the skyline over the LOLA elevation grids (240-960 m south of 60 S, a 3.8 km global grid elsewhere; GET /api/v1/points/horizon shows it); 'smooth_sphere' (default) uses the geometric dip. Catalogue sites use their stored masks, or the traced skyline where they have none
+             * @default smooth_sphere
+             * @enum {string}
+             */
+            horizon: "smooth_sphere" | "terrain";
+            /**
+             * Lat
+             * @description Planetocentric latitude, degrees, MOON_ME
+             */
+            lat?: number | null;
+            /**
+             * Lon
+             * @description East-positive longitude, degrees, -180..180
+             */
+            lon?: number | null;
+            /**
+             * Marginal Min
+             * @description Score at or above which the verdict is marginal
+             * @default 50
+             */
+            marginal_min: number;
+            /**
+             * Panel
+             * @default vertical
+             * @enum {string}
+             */
+            panel: "tracking" | "vertical" | "horizontal";
+            /**
+             * Site Id
+             * @description Catalogue site id (GET /api/v1/sites); or give lat and lon
+             */
+            site_id?: string | null;
+            /**
+             * Start
+             * Format: date-time
+             * @description Start of the mission window, ISO 8601 UTC
+             */
+            start: string;
+            /**
+             * Step Min
+             * @description Sampling step, minutes
+             * @default 60
+             */
+            step_min: number;
+            /**
+             * Unknown Passes
+             * @description Treat a hard filter that cannot be evaluated as passed
+             * @default false
+             */
+            unknown_passes: boolean;
+            /**
+             * Weights
+             * @description Soft-score weights by criterion; default the team's weights
+             */
+            weights?: {
+                [key: string]: number;
+            } | null;
+        };
+        /** VerdictResponse */
+        VerdictResponse: {
+            /**
+             * Assumptions
+             * @description Idealisations and limits behind these numbers
+             */
+            assumptions: string[];
+            /** Duration H */
+            duration_h: number;
+            /** Hard Filters */
+            hard_filters: components["schemas"]["FilterResult"][];
+            /**
+             * Horizon Kind
+             * @description terrain (LOLA mask) or smooth_sphere (no terrain mask: an estimate, not a bound; real terrain shortens light and comms in craters and lengthens them on peaks)
+             */
+            horizon_kind: string;
+            /** Lat */
+            lat: number;
+            /** Lon */
+            lon: number;
+            /**
+             * Mast M Used
+             * @description Height above the ground the horizon is seen from (panels, antenna, habitat): fixed at 2 m, team decision, m
+             */
+            mast_m_used: number;
+            /**
+             * Reasons
+             * @description Why: failed or unknown hard filters, or the score band
+             */
+            reasons: string[];
+            score: components["schemas"]["ScoreOut"];
+            /** Site Id */
+            site_id: string | null;
+            /** Start */
+            start: string;
+            /** Step Min */
+            step_min: number;
+            /**
+             * T
+             * @description Sample times, ISO 8601 UTC
+             */
+            t: string[];
+            /**
+             * Verdict
+             * @enum {string}
+             */
+            verdict: "favourable" | "marginal" | "poor" | "unfeasible" | "unknown";
+        };
+        /** WindowInfo */
+        WindowInfo: {
+            /**
+             * Coarsest Tile Km
+             * @description Side of the largest quadtree tile (uniform interiors), km
+             */
+            coarsest_tile_km: number;
+            /**
+             * Finest Tile Km
+             * @description Side of the smallest quadtree tile (boundaries), km
+             */
+            finest_tile_km: number;
+            /** Horizon Az Step Deg */
+            horizon_az_step_deg: number;
+            /** Horizon Radius Km */
+            horizon_radius_km: number;
+            /**
+             * Samples
+             * @description Window samples evaluated, each with its own ray-traced horizon
+             */
+            samples: number;
         };
         /** Zone */
         Zone: {
@@ -1058,6 +4096,85 @@ export interface components {
              */
             min_deg: number;
         };
+        /** TimeRange */
+        app__schemas__common__TimeRange: {
+            /**
+             * End
+             * @description ISO 8601 UTC, last sample inside the range
+             */
+            end: string;
+            /**
+             * Start
+             * @description ISO 8601 UTC
+             */
+            start: string;
+        };
+        /** TimeRange */
+        app__schemas__state__TimeRange: {
+            /**
+             * Duration H
+             * @description end - start, hours (a lower bound when cut by the window)
+             */
+            duration_h: number;
+            /**
+             * End
+             * @description First instant out of the state, ISO 8601 UTC (refined to ~1 s), or the window end when ends_after_window
+             */
+            end: string;
+            /**
+             * Ends After Window
+             * @description Still in the state at the window end
+             */
+            ends_after_window: boolean;
+            /**
+             * Start
+             * @description First instant in the state, ISO 8601 UTC (refined to ~1 s), or the window start when starts_before_window
+             */
+            start: string;
+            /**
+             * Starts Before Window
+             * @description Already in the state at the window start
+             */
+            starts_before_window: boolean;
+        };
+        /** Transition */
+        app__schemas__state__Transition: {
+            /**
+             * At
+             * @description Instant of the change, ISO 8601 UTC, resolved to about one second
+             */
+            at: string;
+            /**
+             * In Hours
+             * @description Hours from the requested instant t to the change
+             */
+            in_hours: number;
+            /**
+             * Kind
+             * @description 'set': the body leaves view at that instant; 'rise': it comes into view
+             * @enum {string}
+             */
+            kind: "set" | "rise";
+        };
+        /** Transition */
+        app__schemas__sun__Transition: {
+            /**
+             * At
+             * @description ISO 8601 UTC, to about one second
+             */
+            at: string;
+            /**
+             * In Hours
+             * @description Hours from start
+             */
+            in_hours: number;
+            /**
+             * Kind
+             * @description set = sunset (Sun leaves view), rise = sunrise
+             * @enum {string}
+             */
+            kind: "set" | "rise";
+        };
     };
     responses: never;
     parameters: never;
@@ -1067,6 +4184,125 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    area_search_api_v1_areas_search_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AreaSearchRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AreaSearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    earth_api_v1_earth_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EarthRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EarthResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    link_api_v1_link_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LinkResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    stations_api_v1_link_stations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StationCatalogue"];
+                };
+            };
+        };
+    };
     constraints_api_v1_meta_constraints_get: {
         parameters: {
             query?: never;
@@ -1111,6 +4347,42 @@ export interface operations {
             };
         };
     };
+    point_horizon_api_v1_points_horizon_get: {
+        parameters: {
+            query: {
+                /** @description Planetocentric latitude, degrees, Moon Mean-Earth frame, -89.9999..89.9999 (the exact poles have no azimuth reference) */
+                lat: number;
+                /** @description East-positive longitude, degrees. -180..180 or 0..360, normalised to -180..180 (330 = -30) */
+                lon: number;
+                /** @description Panel or antenna height above the ground, metres, 0..20. Absent, empty or null = 0 m (the ground). Terrain masks exist for 0, 2, 5 and 10 m; the nearest is used (see mast_used_m) */
+                mast_m?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PointHorizonResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     point_series_api_v1_points_series_get: {
         parameters: {
             query: {
@@ -1128,6 +4400,8 @@ export interface operations {
                 mast_m?: number;
                 /** @description Share of the Earth's disc that must be above the horizon to count as direct-to-Earth comms */
                 comms_min_fraction?: number;
+                /** @description 'terrain': skyline ray-traced over the LOLA elevation grids (the polar grids south of 60 S, the whole-Moon 3.8 km grid elsewhere; see /points/horizon); 'smooth_sphere' (default): geometric dip */
+                horizon?: "smooth_sphere" | "terrain";
             };
             header?: never;
             path?: never;
@@ -1168,6 +4442,8 @@ export interface operations {
                 mast_m?: number;
                 /** @description Share of the Earth's disc that must be above the horizon to count as direct-to-Earth comms */
                 comms_min_fraction?: number;
+                /** @description 'terrain': skyline ray-traced over the LOLA elevation grids (the polar grids south of 60 S, the whole-Moon 3.8 km grid elsewhere; see /points/horizon); 'smooth_sphere' (default): geometric dip */
+                horizon?: "smooth_sphere" | "terrain";
             };
             header?: never;
             path?: never;
@@ -1182,6 +4458,72 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PointStateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    power_api_v1_power_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PowerRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PowerResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    radiation_api_v1_radiation_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RadiationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RadiationResponse"];
                 };
             };
             /** @description Validation Error */
@@ -1363,6 +4705,158 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sun_api_v1_sun_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SunResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    sweep_api_v1_sweep_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SweepRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SweepResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    thermal_api_v1_thermal_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThermalRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThermalResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validation_api_v1_validation_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ValidationReport"];
+                };
+            };
+        };
+    };
+    verdict_api_v1_verdict_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerdictRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VerdictResponse"];
                 };
             };
             /** @description Validation Error */
