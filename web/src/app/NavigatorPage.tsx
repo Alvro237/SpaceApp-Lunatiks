@@ -220,6 +220,10 @@ function useMeasureInsets(root: { current: HTMLDivElement | null }) {
   useLayoutEffect(() => {
     const el = root.current
     if (!el) return
+    // What this element was last given. Compared with this, not with the store: the store outlives the navigator
+    // (it keeps the last insets while another page is open), and a new element starts with none of the CSS
+    // variables set, so equal numbers in the store must not skip writing them.
+    let applied: { left: number; right: number; top: number; bottom: number } | null = null
     const measure = () => {
       const W = window.innerWidth
       const H = window.innerHeight
@@ -240,8 +244,8 @@ function useMeasureInsets(root: { current: HTMLDivElement | null }) {
         else if (side && r.right > W - 40) ins.right = Math.max(ins.right, W - r.left)
         else if (bottomBar || r.top > H / 2) ins.bottom = Math.max(ins.bottom, H - r.top)
       }
-      const prev = useInsets.getState()
-      if (prev.left === ins.left && prev.right === ins.right && prev.top === ins.top && prev.bottom === ins.bottom) return
+      if (applied && applied.left === ins.left && applied.right === ins.right && applied.top === ins.top && applied.bottom === ins.bottom) return
+      applied = ins
       setInsets(ins)
       el.style.setProperty('--inset-left', `${ins.left}px`)
       el.style.setProperty('--inset-right', `${ins.right}px`)
