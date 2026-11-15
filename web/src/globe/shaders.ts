@@ -180,7 +180,7 @@ const float PHOTO_SHADOW_FILL = 0.6;
 // light from the top left of the screen (so craters never read as domes, as they do lit from below), MORPH_ELEV_DEG
 // up, slopes exaggerated MORPH_EXAG times. The real light and shadows stay in relief mode and in the whole-Moon view.
 const float MORPH_ELEV_DEG = 35.0;
-const float MORPH_EXAG = 2.0;
+const float MORPH_EXAG = 1.8;
 const float MORPH_ALBEDO = 0.86;
 // Brightness of the photo: the mosaic's value x PHOTO_GAIN, rolled off smoothly above TONE_KNEE instead of clipped at
 // white, so sunlit slopes keep their texture (same value and slope up to the knee).
@@ -249,15 +249,21 @@ void main() {
   vec2 pxy = lat < 0.0 ? polarXY(lat, lon) : vec2(0.0);
   if (uPolarHole.w > 0.0 && lat < 0.0 && abs(pxy.x - uPolarHole.x) < uPolarHole.z && abs(pxy.y - uPolarHole.y) < uPolarHole.z) discard;
   float day = smoothstep(-0.02, 0.05, dot(up, uSun));
+  // Close in over the polar cap in photo mode the morphologic look replaces the photo and the real light (below);
+  // well inside the cap the polar tiles replace the latitude/longitude ones. What is replaced is not looked up: the
+  // shadow march alone is 28 reads a pixel, each tile lookup up to 9 index reads and 4 texel reads.
+  float morph = uPhotoMode > 0.5 ? uMorph * pw : 0.0;
+  bool onlyMorph = morph > 0.999;
+  bool onlyPolar = pw > 0.999;
   vec2 cell;
   float tileDeg;
-  int slot = uMaxLevel >= 0.0 ? findTile(uIndex, degrees(lon), degrees(lat), cell, tileDeg) : -1;
+  int slot = uMaxLevel >= 0.0 && !onlyPolar ? findTile(uIndex, degrees(lon), degrees(lat), cell, tileDeg) : -1;
   // ground brightness: the WAC photograph where a photo tile is loaded (photo mode), else plain regolith grey
   vec3 albedo = REGOLITH;
   bool photo = false;
   // share of the ground where the polar mosaic's photographed shadow is replaced by plain regolith (below)
   float fill = 0.0;
-  if (uPhotoMode > 0.5 && uMaxLevel >= 0.0) {
+  if (uPhotoMode > 0.5 && uMaxLevel >= 0.0 && !onlyPolar && !onlyMorph) {
     vec2 pCell;
     float pDeg;
     int pSlot = findTile(uPhotoIndex, degrees(lon), degrees(lat), pCell, pDeg);
@@ -267,7 +273,7 @@ void main() {
     }
   }
   // south of 60 S the polar mosaic (same gain as the polar map), eased in from the disc's edge
-  if (uPhotoMode > 0.5 && pw > 0.0) {
+  if (uPhotoMode > 0.5 && pw > 0.0 && !onlyMorph) {
     vec2 qCell;
     float qSize;
     int qSlot = findPolar(uPolarPIndex, pxy, 256.0, qCell, qSize);
@@ -293,7 +299,12 @@ void main() {
     float he;
     float hn;
     float exag;
-    if (slot >= 0) {
+    if (onlyPolar) {
+      // replaced by the polar slopes below
+      he = 0.0;
+      hn = 0.0;
+      exag = uDetailShade;
+    } else if (slot >= 0) {
       // slopes from the detail heights, one cell either side
       // (inside the tile: next to its edge the step shrinks rather than reading the clamped border, which drew
       // lines along the tile edges)
@@ -311,8 +322,9 @@ void main() {
       hn = (hAt(uv - vec2(0.0, 1.0 / size.y)) - hAt(uv + vec2(0.0, 1.0 / size.y))) / (2.0 * R * dLat);
       exag = 3.0;
     }
-    // south of 60 S the slopes of the polar height tiles, eased in from the disc's edge: one vertex either side in
-    // map metres, times the scale factor k = 1 / cos²((90° + lat) / 2) for ground metres, turned to east and north
+    // south of 60 S the slopes of the polar height tiles, eased in from the disc's edge: one and a half vertices
+    // either side in map metres (wider than one: the bilinear heights' slope then changes smoothly across a cell
+    // instead of in steps at its edges, which drew fine terraces on crater walls), times the scale factor k = 1 / cos²((90° + lat) / 2) for ground metres, turned to east and north
     // (map north is away from the pole, (sin lon, cos lon); east is (cos lon, −sin lon))
     if (pw > 0.0) {
       vec2 hv;
@@ -320,10 +332,10 @@ void main() {
       int hSlot = findPolar(uPolarHIndex, pxy, 256.0, hv, hSize);
       if (hSlot >= 0) {
         float cellM = hSize / 256.0;
-        float xm = max(hv.x - 1.0, 0.0);
-        float xp = min(hv.x + 1.0, 256.0);
-        float ym = max(hv.y - 1.0, 0.0);
-        float yp = min(hv.y + 1.0, 256.0);
+        float xm = max(hv.x - 1.5, 0.0);
+        float xp = min(hv.x + 1.5, 256.0);
+        float ym = max(hv.y - 1.5, 0.0);
+        float yp = min(hv.y + 1.5, 256.0);
         float k = 1.0 / pow(cos(0.5 * (0.5 * PI + lat)), 2.0);
         float gx = k * (polarH(hSlot, vec2(xp, hv.y)) - polarH(hSlot, vec2(xm, hv.y))) / (cellM * max(xp - xm, 0.5));
         // rows run down the map (toward smaller y)
@@ -339,7 +351,7 @@ void main() {
     float sun = max(0.0, dot(n, uSun));
     // the shadows the terrain casts, south of 60 S (eased in from the disc's edge like the polar tiles)
     float lit = 1.0;
-    if (pw > 0.0 && uPolarShadow > 0.5 && dot(up, uSun) > -0.01) lit = mix(1.0, polarSunVisible(pxy, up, east, north, lat, lon), pw);
+    if (pw > 0.0 && !onlyMorph && uPolarShadow > 0.5 && dot(up, uSun) > -0.01) lit = mix(1.0, polarSunVisible(pxy, up, east, north, lat, lon), pw);
     sun *= lit;
     float light;
     // a faint fixed light (like earthshine) keeps the shape of the ground readable at night and in shadow
@@ -356,7 +368,6 @@ void main() {
       float night = 0.07 + 0.12 * max(0.0, dot(n, fixedLight));
       light = night + (1.0 - night) * sun * day;
     }
-    float morph = uPhotoMode > 0.5 ? uMorph * pw : 0.0;
     if (morph > 0.0) {
       // the light: toward the top left of the screen along the ground, raised to MORPH_ELEV_DEG
       vec3 hz = uMorphLight - up * dot(up, uMorphLight);

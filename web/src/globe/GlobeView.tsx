@@ -666,10 +666,9 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
   )
 
   // the surface shown picks which detail tiles the shader reads; work out the wanted tiles again at once
-  useEffect(() => {
-    detail.setKind(material, surface === 'photo' ? 'photo' : 'dem')
-    polar.setPhoto(surface === 'photo')
-  }, [surface, material, detail, polar])
+  useEffect(() => detail.setKind(material, surface === 'photo' ? 'photo' : 'dem'), [surface, material, detail])
+  /** Whether the polar photo tiles are asked for (set in the frame loop: not when the morphologic look covers them). */
+  const polarPhoto = useRef<boolean | null>(null)
 
   useEffect(() => {
     scene.add(markersSet.group)
@@ -784,6 +783,12 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
     }
 
     setMorph(material, cam, n.dist - MOON_R_KM)
+    // close in, photo mode draws the polar cap in the morphologic look, which shows no photo: none is downloaded
+    const wantPolarPhoto = surface === 'photo' && material.uniforms.uMorph.value < 0.999
+    if (polarPhoto.current !== wantPolarPhoto) {
+      polarPhoto.current = wantPolarPhoto
+      polar.setPhoto(wantPolarPhoto)
+    }
 
     // detail tiles for the part of the Moon in view
     const e = reliefExaggeration(n.dist)
