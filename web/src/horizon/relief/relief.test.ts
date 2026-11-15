@@ -140,7 +140,7 @@ describe('rendering', () => {
       return a
     })
     const sunDir: [number, number, number] = [0, -Math.cos(20 * D), Math.sin(20 * D)]
-    renderRelief(img, 1, c, () => 10, { stack, normals, sunlight, eyeM: 1.7, sun: sunDir, grain: null })
+    renderRelief(img, 1, c, () => 10, { stack, normals, sunlight, eyeM: 1.7, sun: sunDir })
     const bright = 200 * tone(0.5)
     let top = H
     for (let j = 0; j < H; j++) {
@@ -166,7 +166,7 @@ describe('rendering', () => {
     const c = { yaw: 0, pitch: 0, cx: W / 2, cy: H / 2, degPerPx: 0.1 }
     const img = { width: W, height: H, data: new Uint8ClampedArray(W * H * 4), colorSpace: 'srgb' } as ImageData
     // the cliff would rise to atan(398.3 / 300) = 53°; the mask says 2°
-    renderRelief(img, 1, c, () => 2, { stack, normals, sunlight: null, eyeM: 1.7, sun: [0, 1, 0], grain: null })
+    renderRelief(img, 1, c, () => 2, { stack, normals, sunlight: null, eyeM: 1.7, sun: [0, 1, 0] })
     const maskRow = Math.ceil(H / 2 - 2 / 0.1 - 0.5)
     for (let j = 0; j < maskRow; j++) expect(img.data[4 * (j * W + W / 2) + 3]).toBe(0)
     expect(img.data[4 * (maskRow * W + W / 2) + 3]).toBe(255)
@@ -206,7 +206,6 @@ describe('earthshine', () => {
         earth: [0, -Math.cos(30 * D), Math.sin(30 * D)],
         earthRatio: ratio,
         exposure: 0.6 / ratio,
-        grain: null,
       })
       return img.data[4 * ((H - 1) * W + W / 2) + 1]
     }
