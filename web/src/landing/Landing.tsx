@@ -312,6 +312,13 @@ const DATASETS = [
 export function Landing() {
   const [active, setActive] = useState(0)
 
+  // A link to a section (…/#demo) arrives before React has drawn it, so the browser finds nothing to scroll to and
+  // stays at the top. Go there once the sections exist, without the smooth scroll (the visitor asked for that place).
+  useEffect(() => {
+    const id = decodeURIComponent(window.location.hash.slice(1))
+    if (id) document.getElementById(id)?.scrollIntoView({ behavior: 'instant', block: 'start' })
+  }, [])
+
   // fade the cards in as they enter the view (skipped with reduced motion: CSS shows them at once)
   useEffect(() => {
     const els = document.querySelectorAll('.reveal')
