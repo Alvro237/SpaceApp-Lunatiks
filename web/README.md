@@ -51,6 +51,10 @@ cd .vercel-stage && npx vercel deploy --prod
 The production URL is public; preview URLs sit behind Vercel's deployment protection, so give the judges the
 production one and open it in a private window before submitting.
 
+Every push to `main` deploys on its own (`.github/workflows/vercel.yml`, also runnable by hand from Actions): it
+builds the tiles and the web, copies the demo video from the live site, stages and deploys, then checks the live
+URLs. It needs the repository secret `VERCEL_TOKEN`, which only the repository owner can add.
+
 ## Where the numbers come from
 
 - **The API** computes everything it exposes. Views use `/sites`, `/meta/*` today and call `/state`, `/series`,

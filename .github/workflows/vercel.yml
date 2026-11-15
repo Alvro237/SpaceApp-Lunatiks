@@ -1,0 +1,82 @@
+name: vercel
+
+# Deploys the site and the API to Vercel production on every push to main (and by hand: Actions, "vercel",
+# Run workflow): https://lunar-landing-site-navigator-neon.vercel.app
+#   /  landing page   /app  navigator   /api, /health, /docs  the FastAPI app (deploy/vercel/README in web/README.md)
+#
+# Needs one repository secret, set once by the repository owner (Settings, Secrets and variables, Actions):
+#   VERCEL_TOKEN   a token from vercel.com/account/settings/tokens with access to the team that owns the project.
+# Without it the job stops at the first step with a message, and nothing is deployed.
+#
+# The demo video (web/public/media/demo.mp4, 36 MB) is not in git: the job copies it from the live site before it
+# deploys, so every deployment carries it on. To replace the video, set the repository variable DEMO_VIDEO_URL to
+# the new file's public URL (or deploy once by hand with the new file, see web/README.md).
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# one deployment at a time; a newer push to main replaces a queued one
+concurrency:
+  group: vercel-production
+  cancel-in-progress: true
+
+env:
+  VERCEL_ORG_ID: team_qTBIMTlZR9XaDMjfSt62BUrq
+  VERCEL_PROJECT_ID: prj_MmwzakRaM7wMmeiwX0JvSoIVtmGG
+  SITE_URL: https://lunar-landing-site-navigator-neon.vercel.app
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the Vercel token
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: |
+          if [ -z "$VERCEL_TOKEN" ]; then
+            echo "::error::Repository secret VERCEL_TOKEN is not set (see the comment at the top of .github/workflows/vercel.yml)"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      # uv runs the pipeline's Python to build the terrain tiles, as in web.yml
+      - uses: astral-sh/setup-uv@v6
+      - name: Install and build the terrain tiles
+        working-directory: web
+        run: |
+          npm ci
+          npm run tiles
+      - name: Fetch the demo video
+        env:
+          DEMO_VIDEO_URL: ${{ vars.DEMO_VIDEO_URL }}
+        run: |
+          mkdir -p web/public/media
+          curl -fsSL --retry 3 -o web/public/media/demo.mp4 "${DEMO_VIDEO_URL:-$SITE_URL/media/demo.mp4}"
+          ls -l web/public/media/demo.mp4
+      - name: Build the web for Vercel
+        working-directory: web
+        run: npm run build
+        env:
+          VERCEL: '1'
+      - name: Stage web, API and data
+        run: bash deploy/vercel/stage.sh
+      - name: Deploy to production
+        working-directory: .vercel-stage
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: npx --yes vercel@65.16.0 deploy --prod --yes --token "$VERCEL_TOKEN"
+      - name: Check the live site
+        run: |
+          for p in / /app /health /api/v1/sites /media/demo.mp4; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$SITE_URL$p")
+            echo "$p $code"
+            [ "$code" = 200 ] || exit 1
+          done
