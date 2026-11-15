@@ -4,10 +4,20 @@ Team-level state and decisions. It is updated on `main` by whoever merges a pull
 log), not inside feature branches, so that five branches never conflict on it. Work in progress lives in the
 Status line of each section of `docs/endpoints.md`.
 
-## Current state (2026-11-14)
+## Current state (2026-11-15)
 
-**Phase: scaffold on `main`, shared core in place, endpoints to build on feature branches.**
+**Phase: feature-complete on `main`; deployment, demo video and submission form remain.**
 Deadline: Sunday 2026-11-15 23:59 local.
+
+On `main` (all tests pass: API 393, web 234, pipeline 28; CI green): every endpoint in the table of `CLAUDE.md`
+("Implemented endpoints and filters"), the web app (globe, polar map with 3D relief and shadows, study, compare,
+horizon view, power levels 1-4, mission area search, Educational mode), and the datasets in `data/README.md`
+(including the Lunar Prospector hydrogen grid, the 3.8 km global elevation grid and the ground-station dataset).
+
+Still open for the submission: public hosting of the site and the API (both with no login) and a public repository;
+the demo video (`docs/demo-script.md`); the form (`docs/submission.md`: links and the team's own SI paragraph).
+
+Earlier snapshot (2026-11-14), kept for the record:
 
 Works and is tested (15 API tests, 22 pipeline tests):
 
@@ -40,6 +50,11 @@ Works and is tested (15 API tests, 22 pipeline tests):
 4. Evening checkpoint: decide what ships. Sunday: video, form, links tested in a private window.
 
 ## Log
+
+- 2026-11-15 — Merged #21 (mission area search, hydrogen grid), #22-#26 (Block Moon, audit fixes, globe), #27 (terrain
+  horizon anywhere on the Moon), #28 (Educational missions), #29 (horizon-view ground texture), #30 (example
+  mission), #31 (radio link level 1). Docs brought up to date: `docs/submission.md`, `docs/demo-script.md`, the
+  implemented table in `CLAUDE.md`, section statuses in `docs/endpoints.md`.
 
 - 2026-11-14 — Repository created from the first prototype's pipeline and data. Engine ported from TypeScript to
   Python and validated against the Horizons fixture. Added screening grids from PGDA products 90 and 69 and the
