@@ -35,6 +35,8 @@ export interface KTile {
   col: number
   row: number
   weight: number
+  /** Nearest ground of the tile in view, metres from the observer (the order the tiles are read in). */
+  distM: number
 }
 
 export const kKey = (col: number, row: number) => `${col},${row}`
@@ -89,8 +91,9 @@ export function visibleKaguyaTiles(stack: GroundStack, eyeM: number, lat0: numbe
         const col = Math.floor(gx(ll[1]) / KTILE_PX)
         const row = Math.floor(gy(ll[0]) / KTILE_PX)
         const key = kKey(col, row)
-        const w = weights.get(key) ?? { col, row, weight: 0 }
+        const w = weights.get(key) ?? { col, row, weight: 0, distM: t }
         w.weight += gain + 0.002
+        w.distM = Math.min(w.distM, t)
         weights.set(key, w)
         best = slope
       }

@@ -3,7 +3,9 @@
  * active instant (light.worker.ts) and hands the renderer a scene (render.ts). The rings load once per place; the
  * sunlight is recomputed when the Sun has moved enough to move a shadow visibly (SUN_EPS), one job at a time.
  * Once the rings are in, the far ground the eye can see gets the mosaic's 100 m detail tiles (detailPhoto.ts) and
- * finer heights on the hills of its skyline (patches.ts), which join the stack once they have all arrived.
+ * finer heights on the hills of its skyline (patches.ts), which join the stack in batches as they arrive.
+ * Everything is read gradually, nearest ground first (nearFirst.ts): the finest ring before the wider ones, and the
+ * photo tiles and patches in the order of the nearest ground of each that the eye can see.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { GroundStack, PATCH_N, type PatchGrid, type SunDir, patchFromRing, ringNormals } from './light'
@@ -12,6 +14,7 @@ import { type Ring, loadRing, photoAlbedo, placePhotoMean, planeFrame, ringSpecs
 import { detailSampler, detailTileUrl, loadDetailTile, tileKey, visibleFarTiles } from './detailPhoto'
 import { MAX_LAT, kKey, kaguyaMean, kaguyaSampler, kaguyaTileUrl, loadKaguyaTile, pixelGrid, visibleKaguyaTiles } from './kaguya'
 import { type PatchSpec, loadPatch, visibleFarPatches } from './patches'
+import { NEAR_FIRST_CONCURRENCY, loadNearFirst } from './nearFirst'
 import { groundTexture } from '../groundTexture'
 import type { ReliefScene } from './render'
 
@@ -23,8 +26,14 @@ const SUN_EPS = { el: 0.02, az: 0.15 }
 const BATCH_MS = 700
 /** Most workers that share a lighting pass. */
 const MAX_WORKERS = 4
-/** The patches that have arrived join the stack after this long even if others are still on their way, ms. */
-const PATCH_WAIT_MS = 9000
+/**
+ * Patches that have arrived join the stack at most this often while others are still on their way, ms (each new set
+ * is lit again from scratch, so they go up in batches, nearest first).
+ */
+const PATCH_FLUSH_MS = 2500
+/** Photo tiles that have arrived go on screen this soon, ms: the first set at once, later ones a few at a time. */
+const TILE_FIRST_MS = 120
+const TILE_FLUSH_MS = 500
 
 export type ReliefStatus = 'unavailable' | 'loading' | 'ready' | 'failed'
 
@@ -86,22 +95,26 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
     let live = true
     // state of another place is replaced on the first answer for this one
     const fresh = (prev: typeof loaded) => (prev.key === key ? prev : { key, rings: [], failed: 0 })
-    specs.forEach((s, i) =>
-      loadRing(s).then(
-        (r) =>
-          live &&
-          setLoaded((prev) => {
-            const base = fresh(prev)
-            const rings = base.rings.slice()
-            rings[i] = r
-            return { ...base, rings }
-          }),
-        // a ring that fails leaves the others on screen; all of them failing means no relief here
-        () => live && setLoaded((prev) => ({ ...fresh(prev), failed: fresh(prev).failed + 1 })),
-      ),
+    // nearest first: the finest ring (the ground at the feet) is read before the wider ones
+    const cancel = loadNearFirst(
+      specs.map((s, i) => ({ s, i })),
+      ({ s }) => s.cellM,
+      ({ s }) => loadRing(s),
+      ({ i }, r) =>
+        live &&
+        setLoaded((prev) => {
+          const base = fresh(prev)
+          // a ring that fails leaves the others on screen; all of them failing means no relief here
+          if (!r) return { ...base, failed: base.failed + 1 }
+          const rings = base.rings.slice()
+          rings[i] = r
+          return { ...base, rings }
+        }),
+      NEAR_FIRST_CONCURRENCY.rings,
     )
     return () => {
       live = false
+      cancel()
     }
   }, [specs, key])
 
@@ -142,19 +155,32 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
     if (wanted.length === 0) return
     const got: PatchGrid[] = []
     let pending = wanted.length
-    const flush = () => live && setPatches({ key, specs: wanted, grids: got.slice(), done: pending === 0 })
-    const timer = setTimeout(flush, PATCH_WAIT_MS)
-    for (const w of wanted)
-      void loadPatch(w).then((g) => {
+    let shown = 0
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const flush = () => {
+      timer = null
+      if (!live || (got.length === shown && pending > 0)) return
+      shown = got.length
+      setPatches({ key, specs: wanted, grids: got.slice(), done: pending === 0 })
+    }
+    // nearest first, a few at a time; the ones that have arrived join the stack every PATCH_FLUSH_MS, the rest at the end
+    const cancel = loadNearFirst(
+      wanted,
+      (w) => w.distM,
+      (w) => loadPatch(w),
+      (_, g) => {
         if (g) got.push(g)
         if (--pending === 0) {
-          clearTimeout(timer)
+          if (timer) clearTimeout(timer)
           flush()
-        }
-      })
+        } else timer ??= setTimeout(flush, PATCH_FLUSH_MS)
+      },
+      NEAR_FIRST_CONCURRENCY.patches,
+    )
     return () => {
       live = false
-      clearTimeout(timer)
+      cancel()
+      if (timer) clearTimeout(timer)
     }
   }, [allStack, specs, key, lat, lon, mastM])
   const stack = useMemo(() => {
@@ -185,9 +211,9 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
     let live = true
     const eye = stack.heightAt(0, (512 - 1) / 2, (512 - 1) / 2) + Math.max(mastM, EYE_MIN_M)
     const source = kaguya ? 'kaguya' : 'wac'
-    const jobs: { key: string; url: string; load: (u: string) => Promise<Uint8Array | null> }[] = kaguya
-      ? visibleKaguyaTiles(stack, eye, lat, lon).map((t) => ({ key: kKey(t.col, t.row), url: kaguyaTileUrl(t.col, t.row), load: loadKaguyaTile }))
-      : visibleFarTiles(stack, eye).map((t) => ({ key: tileKey(t.ix, t.iy), url: detailTileUrl(lat, lon, t.ix, t.iy), load: loadDetailTile }))
+    const jobs: { key: string; url: string; distM: number; load: (u: string) => Promise<Uint8Array | null> }[] = kaguya
+      ? visibleKaguyaTiles(stack, eye, lat, lon).map((t) => ({ key: kKey(t.col, t.row), url: kaguyaTileUrl(t.col, t.row), distM: t.distM, load: loadKaguyaTile }))
+      : visibleFarTiles(stack, eye).map((t) => ({ key: tileKey(t.ix, t.iy), url: detailTileUrl(lat, lon, t.ix, t.iy), distM: t.distM, load: loadDetailTile }))
     const got = new Map<string, Uint8Array>()
     setDetail({ key, tiles: new Map(), wanted: jobs.length, source })
     let timer: ReturnType<typeof setTimeout> | null = null
@@ -195,15 +221,21 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
       timer = null
       if (live) setDetail({ key, tiles: new Map(got), wanted: jobs.length, source })
     }
-    for (const j of jobs)
-      void j.load(j.url).then((g) => {
-        if (!live || !g) return
+    // nearest ground in view first, six at a time; a few tiles go on screen at once (each new set costs a render)
+    const cancel = loadNearFirst(
+      jobs,
+      (j) => j.distM,
+      (j) => j.load(j.url),
+      (j, g) => {
+        if (!g) return
         got.set(j.key, g)
-        // a few tiles at a time: each new set costs a render
-        timer ??= setTimeout(flush, 500)
-      })
+        timer ??= setTimeout(flush, got.size === 1 ? TILE_FIRST_MS : TILE_FLUSH_MS)
+      },
+      NEAR_FIRST_CONCURRENCY.tiles,
+    )
     return () => {
       live = false
+      cancel()
       if (timer) clearTimeout(timer)
     }
   }, [allStack, key, lat, lon, mastM, kaguya])

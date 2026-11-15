@@ -359,6 +359,9 @@ describe('far detail tiles', () => {
     const tiles = visibleFarTiles(stack, 1.7)
     expect(tiles.length).toBeGreaterThan(0)
     expect(tiles[0]).toMatchObject({ ix: 0, iy: Math.floor(60_000 / TILE_M + 0.5) })
+    // read in the order of the nearest ground seen in each: the wall's foot, within one ray step (2 %) of 60 km
+    expect(tiles[0].distM).toBeGreaterThanOrEqual(60_000)
+    expect(tiles[0].distM).toBeLessThan(60_000 * 1.02 + 1)
     const g = new Uint8Array(TILE_PX * TILE_PX).fill(150)
     const at = detailSampler(new Map([[tileKey(tiles[0].ix, tiles[0].iy), g]]), 100)
     expect(at(0, 60_500)).toBeCloseTo(1.5, 5)
