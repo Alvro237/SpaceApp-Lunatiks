@@ -30,13 +30,13 @@ float hAt(vec2 uv) {
 }
 `
 
-// The detail tiles: which one holds a point, and its value there (needs uMaxLevel, DETAIL_MAX_LEVEL). Each kind of
-// tile (heights, photo) has its own texture array and index, passed in.
+// The detail tiles: which one holds a point, and its value there (needs DETAIL_MAX_LEVEL). Each kind of tile
+// (heights, photo) has its own texture array and index, passed in.
 const DETAIL_LOOKUP = /* glsl */ `
-// Finest loaded tile that holds the point (degrees) and is not finer than the view: from the view's level down, the
-// tile under the point in the index (slots.ts, findSlot). cell = position in the tile in cells, size = side (degrees).
-int findTile(sampler2D index, float lonDeg, float latDeg, out vec2 cell, out float size) {
-  for (int z = min(int(uMaxLevel), DETAIL_MAX_LEVEL); z >= 0; z--) {
+// Finest loaded tile that holds the point (degrees) and is not finer than maxLevel: from that level down, the tile
+// under the point in the index (slots.ts, findSlot). cell = position in the tile in cells, size = side (degrees).
+int findTile(sampler2D index, float lonDeg, float latDeg, int maxLevel, out vec2 cell, out float size) {
+  for (int z = min(maxLevel, DETAIL_MAX_LEVEL); z >= 0; z--) {
     float s = 90.0 / float(1 << z);
     vec2 f = vec2((lonDeg + 180.0) / s, (90.0 - latDeg) / s);
     ivec2 t = clamp(ivec2(floor(f)), ivec2(0), ivec2((4 << z) - 1, (2 << z) - 1));
@@ -236,8 +236,86 @@ ${H_AT}
 
 ${DETAIL_LOOKUP}
 ${POLAR_LOOKUP}
+// Level of a tile from its side (degrees).
+int levelOf(float sizeDeg) { return int(floor(log2(90.0 / sizeDeg) + 0.5)); }
+float wrapLonDeg(float d) { return mod(d + 180.0, 360.0) - 180.0; }
+
+// The edges of the finest tiles fade into the next coarser ones. The view rarely has its finest level everywhere: the
+// close-up's block of 83 m tiles sits in a view of coarser tiles (at most MAX_VIEW_TILES per view), and a quad
+// arrives before its neighbours. Where such a tile ended the ground changed from sharp to soft along a straight line.
+// Within EDGE_FADE cells of an edge with nothing as fine beyond it, the tile's value is mixed with the coarser tile's,
+// which it reaches at the edge.
+const float EDGE_FADE = 64.0;
+// whether a tile at least as fine as sizeDeg is loaded at the point
+bool hasLevel(sampler2D index, float lonDeg, float latDeg, int maxLevel, float sizeDeg) {
+  vec2 c;
+  float s;
+  return findTile(index, wrapLonDeg(lonDeg), clamp(latDeg, -89.999, 89.999), maxLevel, c, s) >= 0 && s <= sizeDeg * 1.001;
+}
+// weight of the tile at the point (cell, sizeDeg from findTile) against the next coarser one: 1 inside, 0 on an edge
+// with nothing as fine beyond it
+float edgeWeight(sampler2D index, float lonDeg, float latDeg, int maxLevel, vec2 cell, float sizeDeg) {
+  // cells to the west, east, north and south edges (cell.y counts from the north edge)
+  float dw = cell.x;
+  float de = 256.0 - cell.x;
+  float dn = cell.y;
+  float ds = 256.0 - cell.y;
+  if (min(min(dw, de), min(dn, ds)) >= EDGE_FADE) return 1.0;
+  // a point half a cell beyond each edge
+  float c = sizeDeg / 256.0;
+  float lw = lonDeg - (dw + 0.5) * c;
+  float le = lonDeg + (de + 0.5) * c;
+  float ln = latDeg + (dn + 0.5) * c;
+  float ls = latDeg - (ds + 0.5) * c;
+  bool w = dw < EDGE_FADE;
+  bool e = de < EDGE_FADE;
+  bool n = dn < EDGE_FADE;
+  bool s = ds < EDGE_FADE;
+  float d = EDGE_FADE;
+  if (w && !hasLevel(index, lw, latDeg, maxLevel, sizeDeg)) d = min(d, dw);
+  if (e && !hasLevel(index, le, latDeg, maxLevel, sizeDeg)) d = min(d, de);
+  if (n && !hasLevel(index, lonDeg, ln, maxLevel, sizeDeg)) d = min(d, dn);
+  if (s && !hasLevel(index, lonDeg, ls, maxLevel, sizeDeg)) d = min(d, ds);
+  // corners: the diagonal tile alone may be missing
+  if (w && n && !hasLevel(index, lw, ln, maxLevel, sizeDeg)) d = min(d, max(dw, dn));
+  if (e && n && !hasLevel(index, le, ln, maxLevel, sizeDeg)) d = min(d, max(de, dn));
+  if (w && s && !hasLevel(index, lw, ls, maxLevel, sizeDeg)) d = min(d, max(dw, ds));
+  if (e && s && !hasLevel(index, le, ls, maxLevel, sizeDeg)) d = min(d, max(de, ds));
+  return smoothstep(0.0, 1.0, d / EDGE_FADE);
+}
+
+// East and north slopes (metres per metre) at latitude and longitude (radians): from DEM tile 'slot', one cell either
+// side (inside the tile: next to its edge the step shrinks rather than reading the clamped border, which drew lines
+// along the tile edges), or, for slot -1, from the shipped grid.
+vec2 slopes(int slot, vec2 cell, float tileDeg, float lat, float lon) {
+  float coslat = max(cos(lat), 0.05);
+  if (slot >= 0) {
+    float c = radians(tileDeg / 256.0);
+    float xm = max(cell.x - 1.0, 0.5);
+    float xp = min(cell.x + 1.0, 255.5);
+    float ym = max(cell.y - 1.0, 0.5);
+    float yp = min(cell.y + 1.0, 255.5);
+    return vec2((dAt(slot, vec2(xp, cell.y)) - dAt(slot, vec2(xm, cell.y))) / (R * coslat * c * max(xp - xm, 0.5)),
+                (dAt(slot, vec2(cell.x, ym)) - dAt(slot, vec2(cell.x, yp))) / (R * c * max(yp - ym, 0.5)));
+  }
+  vec2 uv = vec2(fract(lon / (2.0 * PI)), (0.5 * PI - lat) / PI);
+  vec2 size = vec2(textureSize(uHeight, 0));
+  return vec2((hAt(uv + vec2(1.0 / size.x, 0.0)) - hAt(uv - vec2(1.0 / size.x, 0.0))) / (2.0 * R * coslat * (2.0 * PI / size.x)),
+              (hAt(uv - vec2(0.0, 1.0 / size.y)) - hAt(uv + vec2(0.0, 1.0 / size.y))) / (2.0 * R * (PI / size.y)));
+}
+// relief shading exaggeration of the shipped grid's slopes, for legibility at 7.6 km pixels
+const float GRID_SHADE = 3.0;
+
 void main() {
   vec3 up = normalize(vMe);
+  // Finest tile level worth reading at this pixel: the level whose cells match the ground the pixel spans (as
+  // grid.ts, levelFor, does for the centre of the view), like a mipmap. The view may hold finer tiles than that (the
+  // close-up's 83 m block around the place, tiles kept from a closer zoom); read where a pixel covers several of
+  // their cells they alias into streaks, and where they end the view showed a straight seam between streaked and
+  // smooth ground. Taken before the discards below, where the derivatives are still defined.
+  float pixRad = max(max(length(dFdx(up)), length(dFdy(up))), 1e-9);
+  int pixLevel = int(floor(log2(radians(90.0 / 256.0) / pixRad) + 0.5));
+  int maxLevel = min(int(uMaxLevel), pixLevel);
   float lat = asin(clamp(up.z, -1.0, 1.0));
   float lon = length(up.xy) > 1e-9 ? atan(up.y, up.x) : 0.0;
   if (uHole.y > 0.0) {
@@ -257,7 +335,7 @@ void main() {
   bool onlyPolar = pw > 0.999;
   vec2 cell;
   float tileDeg;
-  int slot = uMaxLevel >= 0.0 && !onlyPolar ? findTile(uIndex, degrees(lon), degrees(lat), cell, tileDeg) : -1;
+  int slot = uMaxLevel >= 0.0 && !onlyPolar ? findTile(uIndex, degrees(lon), degrees(lat), maxLevel, cell, tileDeg) : -1;
   // ground brightness: the WAC photograph where a photo tile is loaded (photo mode), else plain regolith grey
   vec3 albedo = REGOLITH;
   bool photo = false;
@@ -266,9 +344,18 @@ void main() {
   if (uPhotoMode > 0.5 && uMaxLevel >= 0.0 && !onlyPolar && !onlyMorph) {
     vec2 pCell;
     float pDeg;
-    int pSlot = findTile(uPhotoIndex, degrees(lon), degrees(lat), pCell, pDeg);
+    int pSlot = findTile(uPhotoIndex, degrees(lon), degrees(lat), maxLevel, pCell, pDeg);
     if (pSlot >= 0) {
-      albedo = vec3(photoTone(tileAt(uPhoto, pSlot, pCell)));
+      // faded into the coarser photo tile toward a lone edge (edgeWeight)
+      float raw = tileAt(uPhoto, pSlot, pCell);
+      float w = edgeWeight(uPhotoIndex, degrees(lon), degrees(lat), maxLevel, pCell, pDeg);
+      if (w < 1.0) {
+        vec2 cCell;
+        float cDeg;
+        int coarse = findTile(uPhotoIndex, degrees(lon), degrees(lat), levelOf(pDeg) - 1, cCell, cDeg);
+        if (coarse >= 0) raw = mix(tileAt(uPhoto, coarse, cCell), raw, w);
+      }
+      albedo = vec3(photoTone(raw));
       photo = true;
     }
   }
@@ -291,11 +378,6 @@ void main() {
   }
   vec3 colour;
   {
-    vec2 uv = vec2(fract(lon / (2.0 * PI)), (0.5 * PI - lat) / PI);
-    vec2 size = vec2(textureSize(uHeight, 0));
-    float dLon = 2.0 * PI / size.x;
-    float dLat = PI / size.y;
-    float coslat = max(cos(lat), 0.05);
     float he;
     float hn;
     float exag;
@@ -305,22 +387,24 @@ void main() {
       hn = 0.0;
       exag = uDetailShade;
     } else if (slot >= 0) {
-      // slopes from the detail heights, one cell either side
-      // (inside the tile: next to its edge the step shrinks rather than reading the clamped border, which drew
-      // lines along the tile edges)
-      float c = radians(tileDeg / 256.0);
-      float xm = max(cell.x - 1.0, 0.5);
-      float xp = min(cell.x + 1.0, 255.5);
-      float ym = max(cell.y - 1.0, 0.5);
-      float yp = min(cell.y + 1.0, 255.5);
-      he = (dAt(slot, vec2(xp, cell.y)) - dAt(slot, vec2(xm, cell.y))) / (R * coslat * c * max(xp - xm, 0.5));
-      hn = (dAt(slot, vec2(cell.x, ym)) - dAt(slot, vec2(cell.x, yp))) / (R * c * max(yp - ym, 0.5));
+      // slopes from the detail heights, faded into the coarser tile's toward a lone edge (edgeWeight)
+      vec2 g = slopes(slot, cell, tileDeg, lat, lon);
       exag = uDetailShade;
+      float w = edgeWeight(uIndex, degrees(lon), degrees(lat), maxLevel, cell, tileDeg);
+      if (w < 1.0) {
+        vec2 cCell;
+        float cDeg;
+        int coarse = findTile(uIndex, degrees(lon), degrees(lat), levelOf(tileDeg) - 1, cCell, cDeg);
+        g = mix(slopes(coarse, cCell, cDeg, lat, lon), g, w);
+        exag = mix(coarse >= 0 ? uDetailShade : GRID_SHADE, uDetailShade, w);
+      }
+      he = g.x;
+      hn = g.y;
     } else {
-      // slopes in metres per metre, east and north; relief shading exaggerated x3 for legibility at 7.6 km pixels
-      he = (hAt(uv + vec2(1.0 / size.x, 0.0)) - hAt(uv - vec2(1.0 / size.x, 0.0))) / (2.0 * R * coslat * dLon);
-      hn = (hAt(uv - vec2(0.0, 1.0 / size.y)) - hAt(uv + vec2(0.0, 1.0 / size.y))) / (2.0 * R * dLat);
-      exag = 3.0;
+      vec2 g = slopes(-1, cell, tileDeg, lat, lon);
+      he = g.x;
+      hn = g.y;
+      exag = GRID_SHADE;
     }
     // south of 60 S the slopes of the polar height tiles, eased in from the disc's edge: one and a half vertices
     // either side in map metres (wider than one: the bilinear heights' slope then changes smoothly across a cell
@@ -420,7 +504,7 @@ float wrapLon(float d) { return mod(d + 180.0, 360.0) - 180.0; }
 bool none(float lonDeg, float latDeg) {
   vec2 c;
   float s;
-  return findTile(uIndex, wrapLon(lonDeg), latDeg, c, s) < 0;
+  return findTile(uIndex, wrapLon(lonDeg), latDeg, int(uMaxLevel), c, s) < 0;
 }
 void main() {
   // position.xy counts cells from the centre of the window
@@ -433,7 +517,7 @@ void main() {
   if (uMaxLevel >= 0.0) {
     vec2 cell;
     float size;
-    int slot = findTile(uIndex, lonDeg, latDeg, cell, size);
+    int slot = findTile(uIndex, lonDeg, latDeg, int(uMaxLevel), cell, size);
     if (slot >= 0) {
       float c = size / 256.0;
       float w = 1.0;
