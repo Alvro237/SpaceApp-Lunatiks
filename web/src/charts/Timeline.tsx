@@ -29,10 +29,10 @@ import { useComparedLinks, useLinkResult } from '../state/link'
 import { IconAntenna, IconPause, IconPlay, IconSpeed, IconSun } from '../ui/icons'
 
 /**
- * Width of the time axis in SVG units. A wide bar keeps 1000 units and is scaled to fit; a narrower one (a phone, a
- * small window) draws one unit per pixel, so its labels keep their real size instead of shrinking with the bar.
+ * Width of the time axis in SVG units: one unit per pixel, so the labels keep their real size on a phone and on a wide
+ * screen alike (up to MAX_W; a wider bar is scaled to fit).
  */
-const MAX_W = 1000
+const MAX_W = 2400
 /** Below this the strips would be too short to read: the bar scales down instead. */
 const MIN_W = 180
 const PlotWidth = createContext(MAX_W)
@@ -44,6 +44,12 @@ const ROW = 14
 /** Width of the label column: the row names for one place, number + name + share when comparing. */
 const LEFT_SINGLE = 70
 const LEFT_COMPARE = 230
+/** The label column when comparing on a narrow bar (a phone): shorter names, so the strips keep most of the width. */
+const LEFT_COMPARE_NARROW = 150
+/** Below this bar width the narrow label column is used, px. */
+const NARROW_BAR = 560
+/** Room right of the axis for the charts' scale labels (100 %, 300 K) and the last date, which used to spill out. */
+const RIGHT = 40
 
 type Strip = 'sun' | 'link'
 
@@ -92,10 +98,10 @@ export function Timeline() {
   const comparedLinks = useComparedLinks(comparing ? compared : [])
   const [strip, setStrip] = useState<Strip>('sun')
   const link = useLinkResult()
-  const LEFT = comparing ? LEFT_COMPARE : LEFT_SINGLE
   const box = useRef<HTMLElement>(null)
   const boxW = useBoxWidth(box)
-  const W = boxW > 0 ? Math.min(MAX_W, Math.max(MIN_W, Math.round(boxW - LEFT - 6))) : MAX_W
+  const LEFT = comparing ? (boxW > 0 && boxW < NARROW_BAR ? LEFT_COMPARE_NARROW : LEFT_COMPARE) : LEFT_SINGLE
+  const W = boxW > 0 ? Math.min(MAX_W, Math.max(MIN_W, Math.round(boxW - LEFT - RIGHT))) : 1000
 
   const data: TimelineData | null = useMemo(() => {
     if (api.data && !playing) {
@@ -139,7 +145,7 @@ export function Timeline() {
   const slider = Math.min(Math.max(tMs, startMs), endMs)
   const seek = (e: MouseEvent<SVGSVGElement>) => {
     const r = e.currentTarget.getBoundingClientRect()
-    const fx = ((e.clientX - r.left) / r.width) * (W + LEFT + 6) - LEFT
+    const fx = ((e.clientX - r.left) / r.width) * (W + LEFT + RIGHT) - LEFT
     if (fx >= 0 && fx <= W) setTime(startMs + (fx / W) * (endMs - startMs))
   }
   const speedLabel = SPEEDS.find((s) => s.id === speed)?.label ?? ''
@@ -205,7 +211,7 @@ export function Timeline() {
       </div>
 
       {comparing && (
-        <CompareStrips places={compared.filter((p) => p.win)} strip={strip} links={comparedLinks} startMs={startMs} endMs={endMs} durationH={durationH} tMs={tMs} ticks={ticks} x={x} onSeek={seek} />
+        <CompareStrips left={LEFT} places={compared.filter((p) => p.win)} strip={strip} links={comparedLinks} startMs={startMs} endMs={endMs} durationH={durationH} tMs={tMs} ticks={ticks} x={x} onSeek={seek} />
       )}
       {data && (
         <>
@@ -276,7 +282,7 @@ function PlaceStrip({ id, data, link, linkReady, showEarth, left, x, ticks, dura
     (link && linkReady ? ` Link ${((level2 ? link.budget!.link_window_fraction : link.contact_window_fraction) * 100).toFixed(1)}% of the window, longest gap ${(level2 ? link.budget!.longest_link_blackout_h : link.longest_blackout_h).toFixed(1)} h.` : '')
 
   return (
-    <svg className="strip" viewBox={`${-left} 0 ${W + left + 6} ${height}`} role="img" aria-label={summary} onClick={onSeek}>
+    <svg className="strip" viewBox={`${-left} 0 ${W + left + RIGHT} ${height}`} role="img" aria-label={summary} onClick={onSeek}>
       <defs>
         <pattern id={`${id}-hatch`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
           <rect width="6" height="6" className="hatch-bg" />
@@ -357,7 +363,7 @@ function MarginChart({ link, startMs, endMs, tMs, x, left, onSeek }: { link: Lin
 
   return (
     <div className="chart-tip-host" onMouseLeave={() => setTip(null)}>
-    <svg className="line-chart margin-chart" viewBox={`${-left} -6 ${W + left + 6} ${BH + 14}`} role="img" aria-label={label} onClick={onSeek} onMouseMove={move}>
+    <svg className="line-chart margin-chart" viewBox={`${-left} -6 ${W + left + RIGHT} ${BH + 14}`} role="img" aria-label={label} onClick={onSeek} onMouseMove={move}>
       <text x={-8} y={BH / 2 - 2} textAnchor="end" className="row-label">
         Margin
       </text>
@@ -400,6 +406,7 @@ const NAME_CHARS = 22
  * for the best; the current place is highlighted and a click on a label makes that place current.
  */
 function CompareStrips({
+  left,
   places,
   strip,
   links,
@@ -411,6 +418,8 @@ function CompareStrips({
   x,
   onSeek,
 }: {
+  /** Width of the label column (narrower on a phone). */
+  left: number
   places: ComparedPlace[]
   strip: Strip
   /** The link of each place, by its number; null while it is not available. */
@@ -434,12 +443,14 @@ function CompareStrips({
   const rowsH = places.length * (CROW + CGAP) - CGAP
   const h = rowsH + 24
   const what = strip === 'sun' ? 'sunlit' : 'in link with the Earth antennas'
-  const cut = (s: string) => (s.length > NAME_CHARS ? `${s.slice(0, NAME_CHARS - 1)}…` : s)
+  // as many characters as the label column holds (about 6.5 px each, after the number and before the share)
+  const chars = Math.min(NAME_CHARS, Math.floor((left - 23 - 52) / 6.5))
+  const cut = (s: string) => (s.length > chars ? `${s.slice(0, chars - 1)}…` : s)
 
   return (
     <svg
       className={`strip compare-strips is-${strip}`}
-      viewBox={`${-LEFT_COMPARE} 0 ${W + LEFT_COMPARE + 6} ${h}`}
+      viewBox={`${-left} 0 ${W + left + RIGHT} ${h}`}
       role="img"
       aria-label={`When each place is ${what}: ${places.map((p) => `${p.num} ${p.info.name} ${share(p) === null ? 'no link' : `${share(p)!.toFixed(0)} %`}`).join(', ')} of the window.`}
       onClick={onSeek}
@@ -459,11 +470,11 @@ function CompareStrips({
               }}
             >
               <title>{share(p) === null ? `${p.info.name}: no link to show` : `${p.info.name}: ${share(p)!.toFixed(1)} % ${what}`}</title>
-              <circle cx={-LEFT_COMPARE + 9} cy={y + (CROW - 2) / 2} r={8} className={`cs-num cs-c-${p.num}`} />
-              <text x={-LEFT_COMPARE + 9} y={y + (CROW - 2) / 2 + 4} textAnchor="middle" className="cs-num-text">
+              <circle cx={-left + 9} cy={y + (CROW - 2) / 2} r={8} className={`cs-num cs-c-${p.num}`} />
+              <text x={-left + 9} y={y + (CROW - 2) / 2 + 4} textAnchor="middle" className="cs-num-text">
                 {p.num}
               </text>
-              <text x={-LEFT_COMPARE + 23} y={y + CROW * 0.78} className="row-label">
+              <text x={-left + 23} y={y + CROW * 0.78} className="row-label">
                 {cut(p.info.name)}
               </text>
               <text x={-8} y={y + CROW * 0.78} textAnchor="end" className="row-label cs-share">
@@ -546,7 +557,7 @@ function BatteryChart({ r, startMs, endMs, tMs, x, left: LEFT, onSeek }: RowProp
   }. ${r.survives ? 'The load is served for the whole window.' : `The battery runs out${r.first_depletion_at ? ` on ${formatUtc(Date.parse(r.first_depletion_at))}` : ''}.`}`
 
   return (
-    <svg className="line-chart battery-chart" viewBox={`${-LEFT} -6 ${W + LEFT + 6} ${BH + 14}`} role="img" aria-label={label} onClick={onSeek}>
+    <svg className="line-chart battery-chart" viewBox={`${-LEFT} -6 ${W + LEFT + RIGHT} ${BH + 14}`} role="img" aria-label={label} onClick={onSeek}>
       <defs>
         <pattern id={`${id}-dep`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
           <line x1="0" y1="0" x2="0" y2="6" className="dep-line" />
@@ -612,7 +623,7 @@ function InsideChart({ r, startMs, endMs, tMs, x, left: LEFT, onSeek }: RowProps
   const below = (r.interior_below_min_ranges ?? []).map((q) => [Date.parse(q.start), Date.parse(q.end)] as const)
   const label = `Inside temperature from ${lo.toFixed(0)} to ${hi.toFixed(0)} °C.${below.length > 0 ? ' It drops below the minimum.' : ' It stays above the minimum.'}`
   return (
-    <svg className="line-chart inside-chart" viewBox={`${-LEFT} -6 ${W + LEFT + 6} ${BH + 14}`} role="img" aria-label={label} onClick={onSeek}>
+    <svg className="line-chart inside-chart" viewBox={`${-LEFT} -6 ${W + LEFT + RIGHT} ${BH + 14}`} role="img" aria-label={label} onClick={onSeek}>
       <defs>
         <pattern id={`${id}-cold`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
           <line x1="0" y1="0" x2="0" y2="6" className="dep-line" />
