@@ -76,7 +76,7 @@ Only RF-06 is an obligation; the rest are the judges' coverage list.
 | --- | --- | --- | --- |
 | RNF-04 | Public link, no login | **Open** | See section 1. |
 | RNF-05 | Everything in English | OK | See section 1. |
-| RNF-07 | Fallback without WebGL | **Missing** | The globe and the polar map mount a React Three Fiber `<Canvas>` with no error boundary. On a browser without WebGL (locked-down or virtual machines) the whole page can go blank, so a judge would see nothing. A small error boundary with a message and a link to the Data & methods page and the API docs would avoid it. |
+| RNF-07 | Fallback without WebGL | **Fixed in branch `feat/mech-webgl-fallback`** (was missing) | The globe and the polar map mount a React Three Fiber `<Canvas>` with no error boundary. On a browser without WebGL (locked-down or virtual machines) the whole page can go blank, so a judge would see nothing. A small error boundary with a message and a link to the Data & methods page and the API docs would avoid it. |
 | RNF-09 | No live dependency on external APIs | Mostly OK | The browser engine fills the Sun and Earth panels without the API; power, mission search, radiation and link need the deployed API. Moon Trek tiles are fetched live. |
 | RNF-11 | CI | Partly | GitHub Actions runs the web checks only; the API suite runs locally (not in CI). Not judged. |
 | — | Licence | Open | README says "MIT (to be confirmed)" and there is no `LICENSE` file. Not required, but a public repository should state it. |
@@ -91,5 +91,6 @@ Only RF-06 is an obligation; the rest are the judges' coverage list.
 2. **Demo video** ≤ 30 s, English or English subtitles, public link (blocking).
 3. **Form**: paste `docs/submission.md`, fill the three placeholders, write the SI paragraph in the team's words,
    press **Submit for Judging**, then re-test every link in a private window.
-4. If time remains: WebGL error boundary (RNF-07), one future CLPS target in the catalogue (RF-01), CSV export of
+4. Merge `feat/mech-webgl-fallback` (RNF-07: `ui/WebGLGuard.tsx` wraps the three canvases; checked in a browser with
+   WebGL forced off). If time remains: one future CLPS target in the catalogue (RF-01), CSV export of
    the compare table (RF-23), `LICENSE` file.
