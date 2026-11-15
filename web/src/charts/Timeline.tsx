@@ -294,6 +294,7 @@ function PlaceStrip({ id, data, link, linkReady, showEarth, left, x, ticks, dura
  * Link row above draws. A break in the line means no antenna is in contact then. The same numbers are in the panel.
  */
 function MarginChart({ link, startMs, endMs, tMs, x, left, onSeek }: { link: LinkResponse; startMs: number; endMs: number; tMs: number; x: (t: number) => number; left: number; onSeek: (e: MouseEvent<SVGSVGElement>) => void }) {
+  const [tip, setTip] = useState<{ x: number; y: number; w: number } | null>(null)
   const b = link.budget!
   const need = b.inputs.min_margin_db
   const values = b.best_margin_db
@@ -316,8 +317,14 @@ function MarginChart({ link, startMs, endMs, tMs, x, left, onSeek }: { link: Lin
   const closed = Math.min(...finite) >= need
   const label = `Link margin between ${Math.min(...finite).toFixed(1)} and ${Math.max(...finite).toFixed(1)} dB, against the ${need} dB the link needs. ${closed ? 'It stays above the need.' : 'It falls below the need at times.'}`
 
+  const move = (e: MouseEvent<SVGSVGElement>) => {
+    const r = e.currentTarget.parentElement!.getBoundingClientRect()
+    setTip({ x: e.clientX - r.left, y: e.clientY - r.top, w: r.width })
+  }
+
   return (
-    <svg className="line-chart margin-chart" viewBox={`${-left} -6 ${W + left + 6} ${BH + 14}`} role="img" aria-label={label} onClick={onSeek}>
+    <div className="chart-tip-host" onMouseLeave={() => setTip(null)}>
+    <svg className="line-chart margin-chart" viewBox={`${-left} -6 ${W + left + 6} ${BH + 14}`} role="img" aria-label={label} onClick={onSeek} onMouseMove={move}>
       <text x={-8} y={BH / 2 - 2} textAnchor="end" className="row-label">
         Margin
       </text>
@@ -331,9 +338,7 @@ function MarginChart({ link, startMs, endMs, tMs, x, left, onSeek }: { link: Lin
       <text x={W + 4} y={BH} className="axis-label">
         {lo.toFixed(0)}
       </text>
-      <line x1={0} x2={W} y1={y(need)} y2={y(need)} className="margin-need">
-        <title>Margin the link needs: {need} dB</title>
-      </line>
+      <line x1={0} x2={W} y1={y(need)} y2={y(need)} className="margin-need" />
       <text x={4} y={y(need) - 3} className="axis-label">
         needs {need} dB
       </text>
@@ -342,6 +347,12 @@ function MarginChart({ link, startMs, endMs, tMs, x, left, onSeek }: { link: Lin
       ))}
       {tMs >= startMs && tMs <= endMs && <line className="cursor" x1={x(tMs)} x2={x(tMs)} y1={-4} y2={BH + 2} />}
     </svg>
+    {tip && (
+      <div className="chart-tip" role="tooltip" style={{ left: tip.x > tip.w - 270 ? tip.x - 258 : tip.x + 14, top: tip.y - 8 }}>
+        <strong>Link margin</strong>: how much stronger the signal is than your radio needs, in dB. The link is closed where the line is above the dashed one.
+      </div>
+    )}
+    </div>
   )
 }
 
