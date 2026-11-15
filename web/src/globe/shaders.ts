@@ -213,9 +213,13 @@ float polarSunVisible(vec2 xy, vec3 up, vec3 east, vec3 north, float lat, float 
   float h0 = ovH(xy) + 15.0;
   float steepest = -1.0;
   float d = 400.0;
+  // Terrain this steep hides the whole solar disc: the answer below is 0 whatever lies farther, so the march stops
+  // there. The picture is the same; ground in shadow (most of a polar view) costs a few steps instead of all of them.
+  float hidden = tan(elev + 0.0046);
   for (int i = 0; i < SHADOW_STEPS; i++) {
     float h = ovH(xy + dir * d * k);
     steepest = max(steepest, (h - h0 - d * d / (2.0 * R)) / d);
+    if (steepest >= hidden) return 0.0;
     d *= 1.25;
   }
   return smoothstep(-0.0046, 0.0046, elev - atan(steepest));
