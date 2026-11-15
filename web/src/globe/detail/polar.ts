@@ -244,9 +244,6 @@ export class PolarDetail {
       uPolarOverview: { value: this.overview },
       // 1 once the overview heights (the shadows' terrain) are loaded
       uPolarShadow: { value: 0 },
-      // set by the globe from the camera's height (GlobeView, MORPH_FROM_KM)
-      uMorph: { value: 0 },
-      uMorphLight: { value: new THREE.Vector3(0, 0, 1) },
     }
   }
 

@@ -56,12 +56,6 @@ const ENTER_MAP_DIST = MOON_R_KM * 1.8
  * (orbit.ts), so the view tilts to 3D and the polar tiles sharpen on the way.
  */
 const POLE_VIEW_ALT_KM = 400
-/**
- * The morphologic look of the polar cap in photo mode (shaders.ts, MORPH_*) eases in as the camera comes down from
- * MORPH_FROM_KM to MORPH_FULL_KM above the surface; higher up, the whole Moon shows its real day and night.
- */
-const MORPH_FROM_KM = 2500
-const MORPH_FULL_KM = 1200
 /** Slope exaggeration of the shading where 118 m detail heights are loaded (the shipped 7.6 km grid uses 3). */
 const DETAIL_SHADE_EXAGGERATION = 1.5
 
@@ -481,17 +475,6 @@ function setPolarHole(v: THREE.Vector4, w: PolarPatchWindow | undefined) {
   v.set(x, y, half, 1)
 }
 
-/**
- * The morphologic look of the polar cap (shaders.ts, MORPH_*): its share at this camera height, and its light toward
- * the top left of the screen (the camera's up minus its right, scene axes turned to Mean-Earth axes: x, -z, y).
- */
-function setMorph(m: THREE.ShaderMaterial, cam: THREE.PerspectiveCamera, altKm: number) {
-  m.uniforms.uMorph.value = Math.min(1, Math.max(0, (MORPH_FROM_KM - altKm) / (MORPH_FROM_KM - MORPH_FULL_KM)))
-  cam.updateMatrixWorld()
-  const e = cam.matrixWorld.elements
-  ;(m.uniforms.uMorphLight.value as THREE.Vector3).set(e[4] - e[0], -(e[6] - e[2]), e[5] - e[1]).normalize()
-}
-
 function setExaggeration(m: THREE.ShaderMaterial, e: number) {
   m.uniforms.uExag.value = e
 }
@@ -668,7 +651,7 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
 
   // the surface shown picks which detail tiles the shader reads; work out the wanted tiles again at once
   useEffect(() => detail.setKind(material, surface === 'photo' ? 'photo' : 'dem'), [surface, material, detail])
-  /** Whether the polar photo tiles are asked for (set in the frame loop: not when the morphologic look covers them). */
+  /** Whether the polar photo tiles are asked for (set in the frame loop, in photo mode). */
   const polarPhoto = useRef<boolean | null>(null)
 
   useEffect(() => {
@@ -785,9 +768,8 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
       setSun(material, s[0] / len, s[1] / len, s[2] / len)
     }
 
-    setMorph(material, cam, n.dist - MOON_R_KM)
-    // close in, photo mode draws the polar cap in the morphologic look, which shows no photo: none is downloaded
-    const wantPolarPhoto = surface === 'photo' && material.uniforms.uMorph.value < 0.999
+    // photo mode drapes the photo over the whole Moon, polar cap included, at every height
+    const wantPolarPhoto = surface === 'photo'
     if (polarPhoto.current !== wantPolarPhoto) {
       polarPhoto.current = wantPolarPhoto
       polar.setPhoto(wantPolarPhoto)
@@ -885,9 +867,7 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
     const sun = u.uSun.value as THREE.Vector3
     put(sun.x); put(sun.y); put(sun.z)
     put(u.uExag.value as number); put(u.uMaxLevel.value as number); put(u.uPhotoMode.value as number)
-    put(u.uPolarMaxZ.value as number); put(u.uPolarShadow.value as number); put(u.uMorph.value as number)
-    const ml = u.uMorphLight.value as THREE.Vector3
-    put(ml.x); put(ml.y); put(ml.z)
+    put(u.uPolarMaxZ.value as number); put(u.uPolarShadow.value as number)
     // a detail tile that arrives is written into these textures, which raises their version
     for (const name of ['uDetail', 'uIndex', 'uPhoto', 'uPhotoIndex', 'uPolarH', 'uPolarHIndex', 'uPolarP', 'uPolarPIndex']) {
       const t = u[name].value as THREE.Texture
