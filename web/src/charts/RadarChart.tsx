@@ -29,7 +29,7 @@ const SIZE = 300
 const C = SIZE / 2
 const R = 96
 const RINGS = [0.25, 0.5, 0.75, 1]
-/** Side margin for the axis labels ("Steady contact", "Earth contact"). */
+/** Side margin for the axis labels ("Steady link", "Short nights"). */
 const PAD = 46
 
 const at = (i: number, n: number, v: number): [number, number] => {

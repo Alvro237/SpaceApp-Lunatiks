@@ -228,8 +228,8 @@ const ZONES: Zone[] = [
         does: 'Changes how fast time runs while playing.',
       },
       {
-        name: 'Sunlit and Earth strips',
-        does: 'When the place is sunlit and when it sees the Earth, across the whole window. With Multiselect: one strip per place, and a switch to show sunlight or Earth.',
+        name: 'Sunlit and Link strips',
+        does: 'When the place is sunlit and when it has a radio link with the Earth, across the whole window. With Multiselect: one strip per place, and a switch to show sunlight or link.',
         data: 'Each strip gives both forms of a time answer: the share of the window and the time ranges.',
       },
     ],

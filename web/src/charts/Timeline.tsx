@@ -16,24 +16,25 @@
  */
 import { type MouseEvent, useId, useMemo, useState } from 'react'
 import { useApiSeries } from '../api/hooks'
-import type { PowerResponse } from '../api/types'
+import type { LinkResponse, PowerResponse } from '../api/types'
 import { type ComparedPlace, useComparePlaces, useComparing } from '../compare/useComparePlaces'
 import { useCurrentPowerResult } from '../state/power'
 import { sameSelection, useApp } from '../state/store'
 import { SPEEDS, type SpeedId, formatUtc, isoMinute } from '../time/clock'
 import { MS_PER_DAY, MS_PER_HOUR } from '../time/engine'
 import { useParams, useThrottledTime } from '../time/hooks'
+import { type LinkSummary, toRanges } from '../panels/linkModel'
 import { useNow } from '../panels/useNow'
+import { useComparedLinks, useLinkResult } from '../state/link'
 import { IconAntenna, IconPause, IconPlay, IconSpeed, IconSun } from '../ui/icons'
 
 const W = 1000
 const ROW = 14
-const H = ROW * 2 + 24
 /** Width of the label column: the row names for one place, number + name + share when comparing. */
 const LEFT_SINGLE = 70
 const LEFT_COMPARE = 230
 
-type Strip = 'sun' | 'earth'
+type Strip = 'sun' | 'link'
 
 interface TimelineData {
   source: 'api' | 'browser'
@@ -77,7 +78,9 @@ export function Timeline() {
   const endMs = startMs + durationH * MS_PER_HOUR
   const comparing = useComparing()
   const compared = useComparePlaces()
+  const comparedLinks = useComparedLinks(comparing ? compared : [])
   const [strip, setStrip] = useState<Strip>('sun')
+  const link = useLinkResult()
   const LEFT = comparing ? LEFT_COMPARE : LEFT_SINGLE
 
   const data: TimelineData | null = useMemo(() => {
@@ -157,7 +160,7 @@ export function Timeline() {
             {(
               [
                 ['sun', 'Sunlit', <IconSun key="s" size={16} />],
-                ['earth', 'Earth', <IconAntenna key="e" size={16} />],
+                ['link', 'Link', <IconAntenna key="e" size={16} />],
               ] as const
             ).map(([v, label, icon]) => (
               <button
@@ -167,7 +170,7 @@ export function Timeline() {
                 aria-checked={strip === v}
                 className={`tl-seg-item${strip === v ? ' is-on' : ''}`}
                 onClick={() => setStrip(v)}
-                title={v === 'sun' ? 'When each place is sunlit' : 'When each place sees the Earth'}
+                title={v === 'sun' ? 'When each place is sunlit' : 'When each place has link with the Earth antennas'}
               >
                 {icon}
                 <span>{label}</span>
@@ -187,55 +190,169 @@ export function Timeline() {
       </div>
 
       {comparing && (
-        <CompareStrips places={compared.filter((p) => p.win)} strip={strip} startMs={startMs} endMs={endMs} durationH={durationH} tMs={tMs} ticks={ticks} x={x} onSeek={seek} />
+        <CompareStrips places={compared.filter((p) => p.win)} strip={strip} links={comparedLinks} startMs={startMs} endMs={endMs} durationH={durationH} tMs={tMs} ticks={ticks} x={x} onSeek={seek} />
       )}
       {data && (
         <>
-          {!comparing && (
-          <svg
-            className="strip"
-            viewBox={`${-LEFT} 0 ${W + LEFT + 6} ${H}`}
-            role="img"
-            aria-label={`Sunlit ${data.sunlightPct.toFixed(1)}% and Earth in view ${data.commsPct.toFixed(1)}% of the window, longest dark ${data.longestDarkH.toFixed(1)} h, longest without Earth ${data.longestBlackoutH.toFixed(1)} h.`}
-            onClick={seek}
-          >
-            <defs>
-              <pattern id={`${id}-hatch`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-                <rect width="6" height="6" className="hatch-bg" />
-                <line x1="0" y1="0" x2="0" y2="6" className="hatch-line" />
-              </pattern>
-            </defs>
-            <text x={-8} y={ROW * 0.78} textAnchor="end" className="row-label">
-              Sunlit
-            </text>
-            <text x={-8} y={ROW * 1.78 + 4} textAnchor="end" className="row-label">
-              Earth
-            </text>
-            <rect x={0} y={0} width={W} height={ROW - 2} className="row-bg" />
-            <rect x={0} y={ROW + 4} width={W} height={ROW - 2} className="row-bg" />
-            {data.sunlit.map(([a, b], i) => (
-              <rect key={`s${i}`} x={x(a)} y={0} width={Math.max(1, x(b) - x(a))} height={ROW - 2} className="range-sun" />
-            ))}
-            {data.comms.map(([a, b], i) => (
-              <rect key={`c${i}`} x={x(a)} y={ROW + 4} width={Math.max(1, x(b) - x(a))} height={ROW - 2} fill={`url(#${id}-hatch)`} className="range-earth" />
-            ))}
-            {ticks.map((t) => (
-              <g key={t} className="tick">
-                <line x1={x(t)} x2={x(t)} y1={ROW * 2 + 4} y2={ROW * 2 + 9} />
-                <text x={x(t)} y={ROW * 2 + 21} textAnchor="middle">
-                  {new Date(t).toISOString().slice(5, durationH <= 72 ? 13 : 10).replace('T', ' ')}
-                </text>
-              </g>
-            ))}
-            {tMs >= startMs && tMs <= endMs && <line className="cursor" x1={x(tMs)} x2={x(tMs)} y1={-2} y2={ROW * 2 + 6} />}
-          </svg>
-          )}
+          {!comparing && <PlaceStrip id={id} data={data} link={link.data ?? null} linkReady={!link.problem} showEarth={!link.data} left={LEFT} x={x} ticks={ticks} durationH={durationH} startMs={startMs} endMs={endMs} tMs={tMs} onSeek={seek} />}
+          {!comparing && link.data?.budget && !link.problem && <MarginChart link={link.data} startMs={startMs} endMs={endMs} tMs={tMs} x={x} left={LEFT} onSeek={seek} />}
           {battery && <BatteryChart r={battery} startMs={startMs} endMs={endMs} tMs={tMs} x={x} left={LEFT} onSeek={seek} />}
           {inside && <InsideChart r={inside} startMs={startMs} endMs={endMs} tMs={tMs} x={x} left={LEFT} onSeek={seek} />}
-          <TimelineText data={data} battery={battery} inside={inside} tMs={tMs} />
+          <TimelineText data={data} battery={battery} inside={inside} tMs={tMs} link={link.data && !link.problem ? link.data : null} />
         </>
       )}
     </section>
+  )
+}
+
+
+/**
+ * The strips of one place on the window's time axis: Sunlit, optionally Earth up (the place sees the Earth), and Link
+ * (the place sees the Earth AND an antenna of the chosen networks sees the Moon; with the link budget on, the solid bars
+ * are where the budget closes and the dotted ones where there is contact but too little margin). While the link answer
+ * is not there (no place data yet, API down) the Earth row stands in so the timeline never goes blank.
+ */
+interface PlaceStripProps {
+  id: string
+  data: TimelineData
+  link: LinkResponse | null
+  /** False while the budget is incomplete: the answer then is only the geometry and the Link row stays empty. */
+  linkReady: boolean
+  showEarth: boolean
+  left: number
+  x: (t: number) => number
+  ticks: number[]
+  durationH: number
+  startMs: number
+  endMs: number
+  tMs: number
+  onSeek: (e: MouseEvent<SVGSVGElement>) => void
+}
+
+function PlaceStrip({ id, data, link, linkReady, showEarth, left, x, ticks, durationH, startMs, endMs, tMs, onSeek }: PlaceStripProps) {
+  const level2 = !!link?.budget
+  // the Link row shows real link only: where the budget closes (or, at the geometry level, where there is contact)
+  const linkRanges = link && linkReady ? toRanges(level2 ? link.budget!.link_ranges : link.contact_ranges) : []
+  const rows: { key: 'sun' | 'earth' | 'link'; label: string }[] = [
+    { key: 'sun', label: 'Sunlit' },
+    ...(showEarth ? [{ key: 'earth' as const, label: link ? 'Earth up' : 'Earth' }] : []),
+    ...(link ? [{ key: 'link' as const, label: 'Link' }] : []),
+  ]
+  const pitch = ROW + 4
+  const tickY = (rows.length - 1) * pitch + ROW
+  const height = tickY + 20
+  const summary =
+    `Sunlit ${data.sunlightPct.toFixed(1)}% and Earth in view ${data.commsPct.toFixed(1)}% of the window, longest dark ${data.longestDarkH.toFixed(1)} h, longest without Earth ${data.longestBlackoutH.toFixed(1)} h.` +
+    (link && linkReady ? ` Link ${((level2 ? link.budget!.link_window_fraction : link.contact_window_fraction) * 100).toFixed(1)}% of the window, longest gap ${(level2 ? link.budget!.longest_link_blackout_h : link.longest_blackout_h).toFixed(1)} h.` : '')
+
+  return (
+    <svg className="strip" viewBox={`${-left} 0 ${W + left + 6} ${height}`} role="img" aria-label={summary} onClick={onSeek}>
+      <defs>
+        <pattern id={`${id}-hatch`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width="6" height="6" className="hatch-bg" />
+          <line x1="0" y1="0" x2="0" y2="6" className="hatch-line" />
+        </pattern>
+      </defs>
+      {rows.map((r, i) => {
+        const y = i * pitch
+        const bars: [number, number][] = r.key === 'sun' ? data.sunlit : r.key === 'earth' ? data.comms : linkRanges
+        return (
+          <g key={r.key}>
+            <text x={-8} y={y + ROW * 0.78} textAnchor="end" className="row-label">
+              {r.label}
+            </text>
+            <rect x={0} y={y} width={W} height={ROW - 2} className="row-bg" />
+            {bars.map(([a, b], k) => (
+              <rect
+                key={k}
+                x={x(a)}
+                y={y}
+                width={Math.max(1, x(b) - x(a))}
+                height={ROW - 2}
+                className={r.key === 'sun' ? 'range-sun' : r.key === 'link' ? 'range-link' : 'range-earth'}
+                fill={r.key === 'earth' ? `url(#${id}-hatch)` : undefined}
+              />
+            ))}
+          </g>
+        )
+      })}
+      {ticks.map((t) => (
+        <g key={t} className="tick">
+          <line x1={x(t)} x2={x(t)} y1={tickY} y2={tickY + 5} />
+          <text x={x(t)} y={tickY + 17} textAnchor="middle">
+            {new Date(t).toISOString().slice(5, durationH <= 72 ? 13 : 10).replace('T', ' ')}
+          </text>
+        </g>
+      ))}
+      {tMs >= startMs && tMs <= endMs && <line className="cursor" x1={x(tMs)} x2={x(tMs)} y1={-2} y2={tickY + 2} />}
+    </svg>
+  )
+}
+/**
+ * Link budget (level 2): the best Eb/N0 margin among the antennas in contact, at each sample, against the margin the
+ * user asks for (dashed). The link is closed only where the line is at or above the dashed one, which is what the
+ * Link row above draws. A break in the line means no antenna is in contact then. The same numbers are in the panel.
+ */
+function MarginChart({ link, startMs, endMs, tMs, x, left, onSeek }: { link: LinkResponse; startMs: number; endMs: number; tMs: number; x: (t: number) => number; left: number; onSeek: (e: MouseEvent<SVGSVGElement>) => void }) {
+  const [tip, setTip] = useState<{ x: number; y: number; w: number } | null>(null)
+  const b = link.budget!
+  const need = b.inputs.min_margin_db
+  const values = b.best_margin_db
+  const finite = values.filter((v): v is number => v !== null)
+  if (finite.length === 0) return null
+  const lo = Math.min(...finite, need) - 1
+  const hi = Math.max(...finite, need) + 1
+  const y = (v: number) => BH - ((v - lo) / (hi - lo)) * (BH - 8) - 4
+  const runs: string[] = []
+  let current: string[] = []
+  link.t.forEach((iso, i) => {
+    const t = Date.parse(iso)
+    const v = values[i]
+    if (v === null || v === undefined || t < startMs || t > endMs) {
+      if (current.length) runs.push(current.join(' L'))
+      current = []
+    } else current.push(`${x(t).toFixed(1)},${y(v).toFixed(1)}`)
+  })
+  if (current.length) runs.push(current.join(' L'))
+  const closed = Math.min(...finite) >= need
+  const label = `Link margin between ${Math.min(...finite).toFixed(1)} and ${Math.max(...finite).toFixed(1)} dB, against the ${need} dB the link needs. ${closed ? 'It stays above the need.' : 'It falls below the need at times.'}`
+
+  const move = (e: MouseEvent<SVGSVGElement>) => {
+    const r = e.currentTarget.parentElement!.getBoundingClientRect()
+    setTip({ x: e.clientX - r.left, y: e.clientY - r.top, w: r.width })
+  }
+
+  return (
+    <div className="chart-tip-host" onMouseLeave={() => setTip(null)}>
+    <svg className="line-chart margin-chart" viewBox={`${-left} -6 ${W + left + 6} ${BH + 14}`} role="img" aria-label={label} onClick={onSeek} onMouseMove={move}>
+      <text x={-8} y={BH / 2 - 2} textAnchor="end" className="row-label">
+        Margin
+      </text>
+      <text x={-8} y={BH / 2 + 11} textAnchor="end" className="axis-label">
+        dB
+      </text>
+      <rect x={0} y={0} width={W} height={BH} className="row-bg" />
+      <text x={W + 4} y={10} className="axis-label">
+        {hi.toFixed(0)}
+      </text>
+      <text x={W + 4} y={BH} className="axis-label">
+        {lo.toFixed(0)}
+      </text>
+      <line x1={0} x2={W} y1={y(need)} y2={y(need)} className="margin-need" />
+      <text x={4} y={y(need) - 3} className="axis-label">
+        needs {need} dB
+      </text>
+      {runs.map((d, i) => (
+        <path key={i} d={`M${d}`} className="margin-line" />
+      ))}
+      {tMs >= startMs && tMs <= endMs && <line className="cursor" x1={x(tMs)} x2={x(tMs)} y1={-4} y2={BH + 2} />}
+    </svg>
+    {tip && (
+      <div className="chart-tip" role="tooltip" style={{ left: tip.x > tip.w - 270 ? tip.x - 258 : tip.x + 14, top: tip.y - 8 }}>
+        <strong>Link margin</strong>: how much stronger the signal is than your radio needs, in dB. The link is closed where the line is above the dashed one.
+      </div>
+    )}
+    </div>
   )
 }
 
@@ -244,13 +361,15 @@ const CGAP = 6
 const NAME_CHARS = 22
 
 /**
- * Multiselect: one strip per compared place on the window's time axis, sunlit or Earth in view as the switch says.
+ * Multiselect: one strip per compared place on the window's time axis, sunlit or with link to the Earth antennas as the
+ * switch says (real link only: a place with no link, or while the link budget is incomplete, has an empty strip).
  * The label column carries the place's number (as on the map), its name and its share of the window, with a star
  * for the best; the current place is highlighted and a click on a label makes that place current.
  */
 function CompareStrips({
   places,
   strip,
+  links,
   startMs,
   endMs,
   durationH,
@@ -261,6 +380,8 @@ function CompareStrips({
 }: {
   places: ComparedPlace[]
   strip: Strip
+  /** The link of each place, by its number; null while it is not available. */
+  links: Record<number, LinkSummary | null>
   startMs: number
   endMs: number
   durationH: number
@@ -269,15 +390,16 @@ function CompareStrips({
   x: (t: number) => number
   onSeek: (e: MouseEvent<SVGSVGElement>) => void
 }) {
-  const id = useId()
   const selection = useApp((s) => s.selection)
   const select = useApp((s) => s.select)
   if (places.length === 0) return null
-  const share = (p: ComparedPlace) => (strip === 'sun' ? p.win!.metrics.sunlightPct : p.win!.metrics.commsPct)
-  const best = Math.max(...places.map(share))
+  // the share of the window, or null for a place whose link is not available (no answer yet, or the budget is incomplete)
+  const share = (p: ComparedPlace): number | null => (strip === 'sun' ? p.win!.metrics.sunlightPct : links[p.num] ? links[p.num]!.linkFraction * 100 : null)
+  const shown = (p: ComparedPlace) => (share(p) === null ? '–' : `${share(p)!.toFixed(0)}%`)
+  const best = Math.max(...places.map((p) => share(p) ?? -1))
   const rowsH = places.length * (CROW + CGAP) - CGAP
   const h = rowsH + 24
-  const what = strip === 'sun' ? 'sunlit' : 'in view of the Earth'
+  const what = strip === 'sun' ? 'sunlit' : 'in link with the Earth antennas'
   const cut = (s: string) => (s.length > NAME_CHARS ? `${s.slice(0, NAME_CHARS - 1)}…` : s)
 
   return (
@@ -285,20 +407,14 @@ function CompareStrips({
       className={`strip compare-strips is-${strip}`}
       viewBox={`${-LEFT_COMPARE} 0 ${W + LEFT_COMPARE + 6} ${h}`}
       role="img"
-      aria-label={`When each place is ${what}: ${places.map((p) => `${p.num} ${p.info.name} ${share(p).toFixed(0)} %`).join(', ')} of the window.`}
+      aria-label={`When each place is ${what}: ${places.map((p) => `${p.num} ${p.info.name} ${share(p) === null ? 'no link' : `${share(p)!.toFixed(0)} %`}`).join(', ')} of the window.`}
       onClick={onSeek}
     >
-      <defs>
-        <pattern id={`${id}-hatch`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-          <rect width="6" height="6" className="hatch-bg" />
-          <line x1="0" y1="0" x2="0" y2="6" className="hatch-line" />
-        </pattern>
-      </defs>
       {places.map((p, i) => {
         const y = i * (CROW + CGAP)
-        const ranges = strip === 'sun' ? p.win!.sunlit : p.win!.comms
+        const ranges = strip === 'sun' ? p.win!.sunlit : (links[p.num]?.linkRanges ?? [])
         const current = sameSelection(p.sel, selection)
-        const isBest = places.length > 1 && share(p) === best
+        const isBest = places.length > 1 && share(p) !== null && share(p) === best
         return (
           <g key={p.num} className={current ? 'is-current' : undefined}>
             <g
@@ -308,7 +424,7 @@ function CompareStrips({
                 select(p.sel)
               }}
             >
-              <title>{`${p.info.name}: ${share(p).toFixed(1)} % ${what}`}</title>
+              <title>{share(p) === null ? `${p.info.name}: no link to show` : `${p.info.name}: ${share(p)!.toFixed(1)} % ${what}`}</title>
               <circle cx={-LEFT_COMPARE + 9} cy={y + (CROW - 2) / 2} r={8} className={`cs-num cs-c-${p.num}`} />
               <text x={-LEFT_COMPARE + 9} y={y + (CROW - 2) / 2 + 4} textAnchor="middle" className="cs-num-text">
                 {p.num}
@@ -317,7 +433,7 @@ function CompareStrips({
                 {cut(p.info.name)}
               </text>
               <text x={-8} y={y + CROW * 0.78} textAnchor="end" className="row-label cs-share">
-                {`${isBest ? '★ ' : ''}${share(p).toFixed(0)}%`}
+                {`${isBest ? '★ ' : ''}${shown(p)}`}
               </text>
             </g>
             <rect x={0} y={y} width={W} height={CROW - 2} className="row-bg" />
@@ -328,8 +444,7 @@ function CompareStrips({
                 y={y}
                 width={Math.max(1, x(b) - x(a))}
                 height={CROW - 2}
-                className={strip === 'sun' ? 'range-sun' : 'range-earth'}
-                fill={strip === 'earth' ? `url(#${id}-hatch)` : undefined}
+                className={strip === 'sun' ? 'range-sun' : 'range-link'}
               />
             ))}
           </g>
@@ -497,7 +612,7 @@ function InsideChart({ r, startMs, endMs, tMs, x, left: LEFT, onSeek }: RowProps
  * Earth ranges, and the battery / inside-temperature series. They are plain tables, always open, so a screen
  * reader finds them in order; the same figures are in the Power and Earth link sections for everyone else.
  */
-function TimelineText({ data, battery, inside, tMs }: { data: TimelineData; battery: PowerResponse | null; inside: PowerResponse | null; tMs: number }) {
+function TimelineText({ data, battery, inside, tMs, link }: { data: TimelineData; battery: PowerResponse | null; inside: PowerResponse | null; tMs: number; link: LinkResponse | null }) {
   const hours = ([a, b]: [number, number]) => ((b - a) / MS_PER_HOUR).toFixed(1)
   const series = battery ?? inside
   const every = series ? Math.max(1, Math.ceil(series.t.length / 48)) : 1
@@ -533,6 +648,14 @@ function TimelineText({ data, battery, inside, tMs }: { data: TimelineData; batt
           {data.sunlit.map((q, i) => (
             <tr key={`s${i}`}>
               <th scope="row">Sunlit</th>
+              <td>{formatUtc(q[0])}</td>
+              <td>{formatUtc(q[1])}</td>
+              <td>{hours(q)}</td>
+            </tr>
+          ))}
+          {(link ? toRanges(link.budget ? link.budget.link_ranges : link.contact_ranges) : []).map((q, i) => (
+            <tr key={`l${i}`}>
+              <th scope="row">Link</th>
               <td>{formatUtc(q[0])}</td>
               <td>{formatUtc(q[1])}</td>
               <td>{hours(q)}</td>

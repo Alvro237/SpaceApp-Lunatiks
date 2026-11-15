@@ -41,16 +41,14 @@ export function Layout() {
         {onMap && (
           <div className="bar-tools">
             {!blocks && (
-              <>
-                <div className="mode-switch" role="radiogroup" aria-label="Mode">
-                  <button type="button" role="radio" aria-checked={mode === 'study'} onClick={() => set({ mode: 'study' })}>
-                    Site explorer
-                  </button>
-                  <button type="button" role="radio" aria-checked={mode === 'mission'} onClick={() => set({ mode: 'mission' })}>
-                    Mission planner
-                  </button>
-                </div>
-              </>
+              <div className="mode-switch" role="radiogroup" aria-label="Mode">
+                <button type="button" role="radio" aria-checked={mode === 'study'} onClick={() => set({ mode: 'study' })}>
+                  Site explorer
+                </button>
+                <button type="button" role="radio" aria-checked={mode === 'mission'} onClick={() => set({ mode: 'mission' })}>
+                  Mission planner
+                </button>
+              </div>
             )}
             <BlockToggle />
           </div>

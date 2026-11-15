@@ -9,8 +9,9 @@
  *      each with its options and remove buttons (the keyboard route to what a right click on the map does).
  *      Hovering a place brings its shape to the front and fades the others.
  *
- * When each place is sunlit or sees the Earth is in the timeline under the map: in Multiselect it shows one strip
- * per place on the window's time axis, with a Sunlit / Earth switch.
+ * When each place is sunlit or has link is in the timeline under the map: in Multiselect it shows one strip
+ * per place on the window's time axis, with a Sunlit / Link switch. The two link axes of the radar use the same
+ * answer (and the same settings, under "Link settings").
  *
  * Same instant and window for every place, computed with the browser engine (the same tables and masks as the
  * rest of the navigator). The numbers behind the radar are in a table.
@@ -19,6 +20,9 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { DataTable } from '../charts/DataTable'
 import { RadarChart } from '../charts/RadarChart'
+import { LinkSettings } from '../panels/LinkPanel'
+import type { LinkSummary } from '../panels/linkModel'
+import { useComparedLinks, useLinkProblem } from '../state/link'
 import { sameSelection, useApp } from '../state/store'
 import { formatUtc } from '../time/clock'
 import { SOLAR_CONSTANT_W_M2 } from '../time/engine'
@@ -32,16 +36,22 @@ import { type ComparedPlace, useComparePlaces } from './useComparePlaces'
 interface Axis {
   key: string
   label: string
-  /** 0..1, outward is better, on an absolute scale (not relative to the places shown). */
-  value: (w: WindowSeries) => number
+  /** 0..1, outward is better, on an absolute scale (not relative to the places shown). `l` is the place's radio link. */
+  value: (w: WindowSeries, l: LinkSummary | null) => number
   /** Full sentence for the table, the pop-up and the screen-reader summary. */
-  text: (w: WindowSeries) => string
+  text: (w: WindowSeries, l: LinkSummary | null) => string
 }
 
-/** What a planner wants more of, each on a fixed scale that the label states. */
+const NO_LINK = 'not available'
+
+/**
+ * What a planner wants more of, each on a fixed scale that the label states. The two link axes count real link, as in
+ * the Link strip and the panel: the Earth is in view AND an antenna of the chosen networks sees the Moon AND, at the
+ * Budget level, the margin reaches the one the user asks for. They stay empty (0) while the link is not available.
+ */
 const AXES: Axis[] = [
   { key: 'sun', label: 'Sunlight', value: (w) => w.metrics.sunlightPct / 100, text: (w) => `${w.metrics.sunlightPct.toFixed(0)} % of the window` },
-  { key: 'earth', label: 'Earth contact', value: (w) => w.metrics.commsPct / 100, text: (w) => `${w.metrics.commsPct.toFixed(0)} % of the window` },
+  { key: 'link', label: 'Link', value: (_, l) => l?.linkFraction ?? 0, text: (_, l) => (l ? `${(l.linkFraction * 100).toFixed(0)} % of the window` : NO_LINK) },
   {
     key: 'night',
     label: 'Short nights',
@@ -49,10 +59,10 @@ const AXES: Axis[] = [
     text: (w) => `longest night ${w.metrics.longestDarkH.toFixed(0)} h`,
   },
   {
-    key: 'blackout',
-    label: 'Steady contact',
-    value: (w) => 1 - Math.min(1, w.metrics.longestBlackoutH / Math.max(1, w.metrics.windowHours)),
-    text: (w) => `longest blackout ${w.metrics.longestBlackoutH.toFixed(0)} h`,
+    key: 'steady',
+    label: 'Steady link',
+    value: (w, l) => (l ? 1 - Math.min(1, l.gapHours / Math.max(1, w.metrics.windowHours)) : 0),
+    text: (_, l) => (l ? `longest gap ${l.gapHours.toFixed(0)} h · longest link ${l.longestLinkH.toFixed(0)} h` : NO_LINK),
   },
   {
     key: 'power',
@@ -62,31 +72,29 @@ const AXES: Axis[] = [
   },
 ]
 
-/**
- * What each axis means and which way is better, shown in a small pop-up when the pointer is over an axis name of
- * the radar (or it has keyboard focus). `comms` is the share of the Earth's disc that counts as contact (the
- * analysis setting).
- */
-const HELP: Record<string, { what: (comms: number) => string; better: string; worse: string }> = {
+/** What each axis means and which way is better, shown in a small pop-up when the pointer is over an axis name of the radar (or it has keyboard focus). */
+const HELP: Record<string, { what: () => string; better: string; worse: string }> = {
   sun: {
     what: () => 'Share of the window with any part of the Sun above the local horizon.',
     better: 'More sunlight: more solar power and warmth.',
     worse: 'Long stretches in shadow: batteries and heaters must carry the load.',
   },
-  earth: {
-    what: (c) => `Share of the window with at least ${Math.round(c * 100)} % of the Earth's disc above the horizon (direct radio link).`,
+  link: {
+    what: () =>
+      'Share of the window with a working radio link: the Earth is in view and an antenna of the chosen networks sees the Moon. With the link budget on, the margin must also reach the one you ask for.',
     better: 'More time talking to Earth directly.',
-    worse: 'Little direct contact: a relay satellite is needed.',
+    worse: 'Little link: a relay satellite is needed.',
   },
   night: {
     what: () => 'Longest continuous time without sunlight in the window. On the radar: 1 − longest night ÷ window length.',
     better: 'Short nights: a smaller battery survives them.',
     worse: 'Long nights: the battery and the thermal design must last through them.',
   },
-  blackout: {
-    what: () => 'Longest continuous time without the Earth in view. On the radar: 1 − longest blackout ÷ window length.',
+  steady: {
+    what: () =>
+      'Longest continuous time without link in the window (the gap the lander must bridge on its own). On the radar: 1 − longest gap ÷ window length. The longest unbroken link is listed beside it.',
     better: 'Short gaps: commands and data flow steadily.',
-    worse: 'Long blackouts: the lander must work on its own for that long.',
+    worse: 'Long gaps: the lander must work on its own for that long.',
   },
   power: {
     what: () => `Mean sunlight reaching the solar panel over the window, as a share of the solar constant (${SOLAR_CONSTANT_W_M2} W/m²).`,
@@ -118,6 +126,8 @@ export function ComparePanel({ titleId }: { titleId: string }) {
   const places = useComparePlaces()
   const ready = places.filter((p) => p.win)
   const [big, setBig] = useState(false)
+  const links = useComparedLinks(places)
+  const problem = useLinkProblem()
 
   return (
     <div className="multi">
@@ -133,13 +143,23 @@ export function ComparePanel({ titleId }: { titleId: string }) {
         </button>
       </div>
 
+      {problem && (
+        <p className="error link-hint" role="status">
+          {problem}
+        </p>
+      )}
       <RadarView places={places} actions />
+
+      <details className="link-more">
+        <summary>Link settings</summary>
+        <LinkSettings showProblem={false} />
+      </details>
 
       <DataTable
         summary="Table"
         caption={`Places compared over the window from ${formatUtc(startMs)} (${Math.round(durationH / 24)} days)`}
         head={['Place', ...AXES.map((a) => a.label)]}
-        rows={ready.map((p) => [`${p.num} ${p.info.name}`, ...AXES.map((a) => a.text(p.win!))])}
+        rows={ready.map((p) => [`${p.num} ${p.info.name}`, ...AXES.map((a) => a.text(p.win!, links[p.num] ?? null))])}
       />
 
       <ParamsPanel />
@@ -198,7 +218,7 @@ function BigRadar({ places, onClose }: { places: ComparedPlace[]; onClose: () =>
  * brings its shape to the front. `actions` adds each place's options and remove buttons to the legend.
  */
 function RadarView({ places, actions = false, big = false }: { places: ComparedPlace[]; actions?: boolean; big?: boolean }) {
-  const comms = useApp((s) => s.commsMinFraction)
+  const links = useComparedLinks(places)
   const ready = places.filter((p) => p.win)
   const [hl, setHl] = useState<number | null>(null)
   const [tip, setTip] = useState<Tip | null>(null)
@@ -218,7 +238,7 @@ function RadarView({ places, actions = false, big = false }: { places: ComparedP
 
   const summary =
     `Radar of ${places.length} places over ${AXES.map((a) => a.label.toLowerCase()).join(', ')}, outward is better. ` +
-    ready.map((p) => `${p.num} ${p.info.name}: ${AXES.map((a) => a.text(p.win!)).join(', ')}`).join('. ')
+    ready.map((p) => `${p.num} ${p.info.name}: ${AXES.map((a) => a.text(p.win!, links[p.num] ?? null)).join(', ')}`).join('. ')
   const tipAxis = tip ? AXES.find((a) => a.key === tip.key)! : null
 
   return (
@@ -227,7 +247,7 @@ function RadarView({ places, actions = false, big = false }: { places: ComparedP
         {ready.length >= 2 ? (
           <RadarChart
             axes={AXES}
-            series={ready.map((p) => ({ num: p.num, name: p.info.name, values: AXES.map((a) => a.value(p.win!)) }))}
+            series={ready.map((p) => ({ num: p.num, name: p.info.name, values: AXES.map((a) => a.value(p.win!, links[p.num] ?? null)) }))}
             summary={summary}
             highlight={hl}
             activeAxis={tip?.key ?? null}
@@ -243,7 +263,7 @@ function RadarView({ places, actions = false, big = false }: { places: ComparedP
         createPortal(
           <div id={tipId} role="tooltip" className={`cmp-tip${tip.above ? ' is-above' : ''}`} style={{ left: tip.left, top: tip.top }}>
             <strong className="cmp-tip-title">{tipAxis.label}</strong>
-            <p>{HELP[tip.key].what(comms)}</p>
+            <p>{HELP[tip.key].what()}</p>
             <p className="cmp-tip-good">
               <span aria-hidden="true">▲</span> <b>Better:</b> {HELP[tip.key].better}
             </p>
@@ -258,7 +278,7 @@ function RadarView({ places, actions = false, big = false }: { places: ComparedP
                       {p.num}
                     </span>
                     {/* just the figure: "124 h", "83 %", "719 W/m² mean" (the title says what it is) */}
-                    {tipAxis.text(p.win!).replace(' of the window', '').replace(/^[a-z ]+(?=\d)/, '')}
+                    {tipAxis.text(p.win!, links[p.num] ?? null).replace(' of the window', '').replace(/^[a-z ]+(?=\d)/, '')}
                   </li>
                 ))}
               </ul>

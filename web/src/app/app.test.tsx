@@ -365,10 +365,10 @@ describe('navigator', () => {
     // the timeline under the map shows one strip per place, switched between Sunlit and Earth
     const timeline = screen.getByRole('region', { name: 'Mission window and playback' })
     expect(within(timeline).getByRole('img', { name: /When each place is sunlit: 1 IM-2.*2 Mons Malapert.*3 Shackleton crater/ })).toBeInTheDocument()
-    await user.click(within(timeline).getByRole('radio', { name: /Earth/ }))
-    expect(screen.getByRole('img', { name: /When each place is in view of the Earth/ })).toBeInTheDocument()
+    await user.click(within(timeline).getByRole('radio', { name: /Link/ }))
+    expect(screen.getByRole('img', { name: /When each place is in link with the Earth antennas/ })).toBeInTheDocument()
     const table = screen.getByRole('table', { name: /Places compared over the window/ })
-    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent).join('|')).toMatch(/Place\|Sunlight\|Earth contact\|Short nights\|Steady contact\|Power/)
+    expect(within(table).getAllByRole('columnheader').map((h) => h.textContent).join('|')).toMatch(/Place\|Sunlight\|Link\|Short nights\|Steady link\|Power/)
     await noAxeViolations(container)
     // the place menu (right click on the map, or ⋯ here): rename and pointer colour
     await user.click(screen.getByRole('button', { name: 'Options for Mons Malapert' }))
