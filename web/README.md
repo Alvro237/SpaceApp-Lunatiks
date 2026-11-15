@@ -1,7 +1,9 @@
 # Web
 
 Frontend of the Lunar Landing Site Navigator. It opens on the whole Moon (global LOLA topography, lit by the Sun
-at the chosen instant): drag to turn it, wheel to come closer. A click on the south-polar cap (or zooming in over
+at the chosen instant): drag to turn it, wheel or double click to come closer, and anywhere on it the view tilts
+into 3D (the 3D button or T; shift-drag or right-drag turns and tilts it, Q and E turn it, R sets it straight), with
+the relief of the ground drawn by dense grids around the place in view (`src/globe/patch.ts`). A click on the south-polar cap (or zooming in over
 it) dives into the polar map: the lunar south pole (south of 60° S) seen from above, with more detail the
 closer you get, dragged to move, tilting into 3D LOLA relief, with shadows from the Sun at the chosen instant;
 zooming far out returns to the globe. Panels
@@ -46,7 +48,7 @@ the dev proxy elsewhere; in production set `VITE_API_URL` to the API's public UR
 | `src/state` | Zustand store (mode, view, instant, layers, place, comparison) and the shareable URL (`?s=`) |
 | `src/api` | Client generated from `/openapi.json` (`schema.gen.ts`), hand-typed pending endpoints, query hooks |
 | `src/map` | Places on the map and globe: which ones (search and screening filters), drawn in WebGL as pins, crater outlines (IAU diameter) or crosses |
-| `src/globe` | The whole Moon: orbit controller, globe shaders, entry into the polar map |
+| `src/globe` | The whole Moon: orbit controller with tilt and heading, globe shaders, relief grids around the place in view, entry into the polar map |
 | `src/terrain` | Engine: tileset, quadtree LOD, decode worker, GPU cache, shaders, shadow pass, camera, map |
 | `src/time` | Browser engine (ephemeris, horizon, disc fractions), playback clock, static data loaders |
 | `src/panels` | Where, when, the chosen place (Sun and Earth now, power, link), mission filters |

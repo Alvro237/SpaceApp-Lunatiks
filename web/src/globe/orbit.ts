@@ -81,6 +81,36 @@ export function zoomOrbitToward(o: Orbit, factor: number, lat: number, lon: numb
   return { dist: z.dist, lat: Math.max(-88, Math.min(88, o.lat + (lat - o.lat) * w)), lon: o.lon + dLon * w }
 }
 
+/** Steepest tilt of the camera away from straight down, degrees (at 90 it would look along the ground). */
+export const MAX_TILT = 75
+/** Tilt of the "3D" view, degrees (the polar map's own is 58). */
+export const TILT_3D = 58
+
+/**
+ * Where the camera is and what it looks at, in scene kilometres. The camera looks at the point of the sphere under
+ * the orbit's centre from `dist − R` away. With no tilt it is straight above it, north up: the view of the whole
+ * Moon. Tilted, it swings down around that point, away from the heading (degrees clockwise from north), so the
+ * ground stretches toward the horizon in that direction; `up` keeps the heading at the top of the screen.
+ */
+export function cameraPose(o: Orbit, tiltDeg = 0, headingDeg = 0): { position: Vec3; target: Vec3; up: Vec3 } {
+  const lat = o.lat * DEG
+  const lon = o.lon * DEG
+  const radial = latLonToScene(o.lat, o.lon, 1)
+  const north = meToScene(-Math.sin(lat) * Math.cos(lon), -Math.sin(lat) * Math.sin(lon), Math.cos(lat))
+  const east = meToScene(-Math.sin(lon), Math.cos(lon), 0)
+  const ch = Math.cos(headingDeg * DEG)
+  const sh = Math.sin(headingDeg * DEG)
+  const ahead: Vec3 = [north[0] * ch + east[0] * sh, north[1] * ch + east[1] * sh, north[2] * ch + east[2] * sh]
+  const h = o.dist - MOON_R_KM
+  const up = MOON_R_KM + h * Math.cos(tiltDeg * DEG)
+  const back = h * Math.sin(tiltDeg * DEG)
+  return {
+    position: [radial[0] * up - ahead[0] * back, radial[1] * up - ahead[1] * back, radial[2] * up - ahead[2] * back],
+    target: [radial[0] * MOON_R_KM, radial[1] * MOON_R_KM, radial[2] * MOON_R_KM],
+    up: ahead,
+  }
+}
+
 /** Idle time after which the Moon starts turning by itself, ms. */
 export const IDLE_BEFORE_SPIN_MS = 20_000
 /** Slow turn: about two minutes a revolution. */
@@ -93,6 +123,9 @@ export const SPIN_DEG_PER_S = 3
 export class OrbitRig {
   readonly now: Orbit
   readonly goal: Orbit
+  /** Tilt away from straight down and heading (clockwise from north), degrees: where they are and where they go. */
+  readonly view = { tilt: 0, heading: 0 }
+  readonly viewGoal = { tilt: 0, heading: 0 }
   /** When true the Moon never turns by itself. */
   private anchored = false
   private lastInputMs = 0
@@ -138,13 +171,38 @@ export class OrbitRig {
 
   /** True while the Moon is turning by itself. */
   isSpinning(nowMs = performance.now()): boolean {
-    return !this.anchored && !this.diving && nowMs - this.lastInputMs >= IDLE_BEFORE_SPIN_MS
+    // a tilted or turned view is someone looking at a place: it stays put
+    return !this.anchored && !this.diving && this.viewGoal.tilt < 1 && Math.abs(this.viewGoal.heading) < 1 && nowMs - this.lastInputMs >= IDLE_BEFORE_SPIN_MS
   }
 
   drag(dxPx: number, dyPx: number, viewHeightPx: number, fovDeg: number, immediate = false): void {
     this.touch()
-    Object.assign(this.goal, dragOrbit(this.goal, dxPx, dyPx, viewHeightPx, fovDeg))
+    // the pointer moves on the screen, whose top is the heading: turn the movement into east and north
+    const c = Math.cos(this.view.heading * DEG)
+    const s = Math.sin(this.view.heading * DEG)
+    Object.assign(this.goal, dragOrbit(this.goal, dxPx * c - dyPx * s, dxPx * s + dyPx * c, viewHeightPx, fovDeg))
     if (immediate) Object.assign(this.now, { lat: this.goal.lat, lon: this.goal.lon })
+  }
+
+  /** Tilt the view (0 = straight down, up to MAX_TILT). */
+  setTilt(tiltDeg: number): void {
+    this.touch()
+    this.viewGoal.tilt = Math.max(0, Math.min(MAX_TILT, tiltDeg))
+  }
+
+  /** Turn the view around the place under it and tilt it, by these degrees. */
+  rotate(dHeadingDeg: number, dTiltDeg = 0, immediate = false): void {
+    this.touch()
+    this.viewGoal.heading += dHeadingDeg
+    this.viewGoal.tilt = Math.max(0, Math.min(MAX_TILT, this.viewGoal.tilt + dTiltDeg))
+    if (immediate) Object.assign(this.view, this.viewGoal)
+  }
+
+  /** North up and straight down again (the nearest way round). */
+  resetView(): void {
+    this.touch()
+    this.viewGoal.tilt = 0
+    this.viewGoal.heading = Math.round(this.viewGoal.heading / 360) * 360
   }
 
   zoom(factor: number): void {
@@ -189,5 +247,12 @@ export class OrbitRig {
     n.lon += dLon * k
     n.lat += (g.lat - n.lat) * k
     n.dist += (g.dist - n.dist) * k
+    this.view.tilt += (this.viewGoal.tilt - this.view.tilt) * k
+    this.view.heading += (this.viewGoal.heading - this.view.heading) * k
+    // once it has arrived, keep the heading within a turn
+    if (Math.abs(this.viewGoal.heading - this.view.heading) < 1e-3 && Math.abs(this.viewGoal.heading) >= 360) {
+      this.viewGoal.heading %= 360
+      this.view.heading = this.viewGoal.heading
+    }
   }
 }

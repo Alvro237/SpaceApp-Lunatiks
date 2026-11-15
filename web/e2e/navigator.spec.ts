@@ -38,6 +38,37 @@ test('the globe turns with the mouse and zooming in over the polar cap opens the
   expect(errors).toEqual([])
 })
 
+test('the globe comes closer on a double click and tilts to 3D anywhere', async ({ page }) => {
+  const errors: string[] = []
+  page.on('console', (m) => m.type() === 'error' && /shader|WebGL|THREE/i.test(m.text()) && errors.push(m.text()))
+  await page.goto('./')
+  const globe = page.getByRole('application', { name: 'The Moon' })
+  await expect(globe).toBeVisible()
+  await page.waitForTimeout(3000)
+  const caption = page.locator('.globe-caption')
+  await expect(caption).toContainText('relief ×4')
+  // away from the polar cap: three double clicks bring the camera within 250 km, where the relief is true to scale
+  await page.mouse.dblclick(930, 400)
+  await page.waitForTimeout(1500)
+  await page.mouse.dblclick(720, 470)
+  await page.waitForTimeout(1500)
+  await page.mouse.dblclick(720, 470)
+  await expect(caption).toContainText('relief ×1', { timeout: 15_000 })
+  await expect(globe).toBeVisible() // still the globe: no hand-over to the polar map here
+  // a double click does not mark a point (a single click does)
+  await expect(page.getByRole('combobox', { name: 'Search sites and missions' })).toHaveAttribute('placeholder', /IM-2/)
+  await globe.focus()
+  const tilt = page.getByRole('button', { name: '3D tilt' })
+  await page.keyboard.press('t')
+  await expect(tilt).toHaveAttribute('aria-pressed', 'true')
+  await page.keyboard.press('q')
+  await page.waitForTimeout(2500)
+  await page.locator('.map-view').screenshot({ path: 'test-results/globe-3d.png' })
+  await page.keyboard.press('r')
+  await expect(tilt).toHaveAttribute('aria-pressed', 'false')
+  expect(errors).toEqual([])
+})
+
 test('the terrain renders with WebGL and the Sun and Earth timeline is filled', async ({ page }) => {
   const errors: string[] = []
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))

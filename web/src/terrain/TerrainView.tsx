@@ -8,7 +8,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ToolPortal } from '../ui/ToolSlot'
 import { useHorizonTransition } from '../state/horizon'
 import { useQuery } from '@tanstack/react-query'
-import { type KeyboardEvent, type PointerEvent, type WheelEvent, useCallback, useEffect, useRef, useState } from 'react'
+import { type KeyboardEvent, type MouseEvent, type PointerEvent, type WheelEvent, useCallback, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { type MarkerStyle, useApp } from '../state/store'
 import { type AreaRaster, useAreas } from '../state/areas'
@@ -50,6 +50,11 @@ const GRACE_S = 3
 /** With nothing changing, a frame is still drawn this often (s), in case a change went uncounted. */
 const IDLE_REDRAW_S = 0.5
 
+/** A second click within this time (ms) is a double click: the first one waits that long before it marks a point. */
+const DOUBLE_CLICK_MS = 260
+/** A double click comes this much closer (the distance to the ground is multiplied by it). */
+const DOUBLE_CLICK_ZOOM = 0.4
+
 const prefersReducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
 export function TerrainView() {
@@ -80,6 +85,9 @@ function MapView({ tileset }: { tileset: Tileset }) {
   const markerStyle = useApp((s) => s.markerStyle)
   const [rig] = useState(() => new CameraRig(tileset))
   const drag = useRef<{ x: number; y: number; moved: boolean; rotate: boolean } | null>(null)
+  /** A click on the terrain waiting to see whether a second one follows (a double click). */
+  const pendingClick = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => void (pendingClick.current && clearTimeout(pendingClick.current)), [])
   const [stats, setStats] = useState('')
   const [craterError, setCraterError] = useState<unknown>(null)
   const [exaggeration, setExaggeration] = useState<Exaggeration>(2)
@@ -162,17 +170,32 @@ function MapView({ tileset }: { tileset: Tileset }) {
     // a place drawn on the map wins; otherwise (study mode) the terrain point under the pointer
     const site = rig.markerAt(e.clientX - rect.left, e.clientY - rect.top) as MapSite | null
     // mission mode: a click places the centre of the area search (on a site or anywhere on the terrain)
-    if (mode === 'mission') {
-      const ll = site ? null : rig.pick((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height)
-      const c = site ? { lat: site.lat, lon: site.lon } : ll ? { lat: ll[0], lon: ll[1] } : null
-      if (c) useAreas.getState().set({ center: { lat: Math.round(c.lat * 1e4) / 1e4, lon: Math.round(c.lon * 1e4) / 1e4 } })
-      if (site) select(site.sel)
-      return
+    if (mode === 'mission' && site) {
+      useAreas.getState().set({ center: { lat: Math.round(site.lat * 1e4) / 1e4, lon: Math.round(site.lon * 1e4) / 1e4 } })
+      return select(site.sel)
     }
     if (site) return select(site.sel)
-    if (mode !== 'study') return
+    if (mode !== 'study' && mode !== 'mission') return
     const ll = rig.pick((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height)
-    if (ll) select({ kind: 'point', lat: Math.round(ll[0] * 1e4) / 1e4, lon: Math.round(ll[1] * 1e4) / 1e4 })
+    if (!ll) return
+    const lat = Math.round(ll[0] * 1e4) / 1e4
+    const lon = Math.round(ll[1] * 1e4) / 1e4
+    // a click on the terrain waits to see whether it is the first half of a double click (which only comes closer)
+    if (pendingClick.current) clearTimeout(pendingClick.current)
+    pendingClick.current = setTimeout(() => {
+      pendingClick.current = null
+      if (mode === 'mission') useAreas.getState().set({ center: { lat, lon } })
+      else select({ kind: 'point', lat, lon })
+    }, DOUBLE_CLICK_MS)
+  }
+  // a double click comes closer to the place under the pointer
+  const onDoubleClick = (e: MouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button, select, input, a')) return
+    if (pendingClick.current) clearTimeout(pendingClick.current)
+    pendingClick.current = null
+    const rect = e.currentTarget.getBoundingClientRect()
+    const ll = rig.pick((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height)
+    if (ll) rig.flyTo(ll[0], ll[1], rig.goal.dist * DOUBLE_CLICK_ZOOM)
   }
   const onWheel = (e: WheelEvent<HTMLDivElement>) => zoom(Math.exp(e.deltaY * 0.0012))
 
@@ -189,6 +212,7 @@ function MapView({ tileset }: { tileset: Tileset }) {
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onDoubleClick={onDoubleClick}
         onWheel={onWheel}
         onContextMenu={(e) => e.preventDefault()}
       >
@@ -208,7 +232,8 @@ function MapView({ tileset }: { tileset: Tileset }) {
           />
         </Canvas>
         <p id="map-help" className="sr-only">
-          Arrow keys move, plus and minus zoom, T tilts to 3D, Q and E rotate, R shows the whole pole, Space plays.
+          Arrow keys move, plus and minus zoom, T tilts to 3D, Q and E rotate, R shows the whole pole, Space plays. A
+          double click comes closer to the place under the pointer.
           {mode === 'study' && ' Activate a point on the terrain to analyse it.'}
           {mode === 'mission' && ' Activate a point on the terrain to centre the area search there; the areas found are listed in the Mission filters panel.'}{' '}
           Right click a place for its options: rename, pointer colour, remove. Sites are listed, with the same information, in the panels.
