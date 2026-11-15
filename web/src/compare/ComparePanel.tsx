@@ -28,6 +28,7 @@ import { formatUtc } from '../time/clock'
 import { SOLAR_CONSTANT_W_M2 } from '../time/engine'
 import type { WindowSeries } from '../time/hooks'
 import { IconClose, IconExpand, IconMore } from '../ui/icons'
+import { BackButton, CloseButton } from '../ui/PanelNav'
 import { openMenuFrom } from '../panels/PlaceMenu'
 import { ModelResults } from './ModelResults'
 import { ParamsPanel } from './ParamsPanel'
@@ -123,6 +124,8 @@ export function ComparePanel({ titleId }: { titleId: string }) {
   const startMs = useApp((s) => s.startMs)
   const durationH = useApp((s) => s.durationH)
   const { setCompareMode } = useApp.getState()
+  // opened from the mission planner's "Compare selected": Back returns to its candidate sites
+  const fromMission = useApp((s) => s.mode === 'mission')
   const places = useComparePlaces()
   const ready = places.filter((p) => p.win)
   const [big, setBig] = useState(false)
@@ -131,6 +134,13 @@ export function ComparePanel({ titleId }: { titleId: string }) {
 
   return (
     <div className="multi">
+      {fromMission && (
+        <div className="panel-nav">
+          <BackButton label="Back to candidate sites" onClick={() => setCompareMode(false)}>
+            Candidate sites
+          </BackButton>
+        </div>
+      )}
       <div className="multi-head">
         <h2 id={titleId} className="multi-title" tabIndex={-1}>
           Comparing {places.length} places
@@ -138,9 +148,7 @@ export function ComparePanel({ titleId }: { titleId: string }) {
         <button type="button" className="icon" onClick={() => setBig(true)} aria-label="Open the radar in a large window" title="Enlarge">
           <IconExpand size={18} />
         </button>
-        <button type="button" className="icon" onClick={() => setCompareMode(false)} aria-label="Close comparison and leave multiselect" title="Leave multiselect">
-          <IconClose size={18} />
-        </button>
+        <CloseButton label="Close comparison and leave multiselect" esc={false} onClick={() => setCompareMode(false)} />
       </div>
 
       {problem && (

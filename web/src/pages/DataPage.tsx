@@ -9,6 +9,7 @@ import { DataTable } from '../charts/DataTable'
 import type { Tileset } from '../terrain/tileset'
 import { DATA_BASE } from '../time/staticData'
 import { ApiStatus } from '../ui/ApiStatus'
+import { BackToNavigator } from '../ui/PanelNav'
 
 interface Validation {
   ephemerisVsHorizons: { comparisons: number; sites: number; maxElevationErrorDeg: number; maxAzimuthErrorDeg: number; toleranceDeg: number; dateRange: [string, string] }
@@ -31,6 +32,7 @@ export function DataPage() {
 
   return (
     <article className="page prose">
+      <BackToNavigator />
       <h1>Data & methods</h1>
       <p className="intro">Every number on screen has a source. This page lists the sources, the processing, the checks and the gaps.</p>
 

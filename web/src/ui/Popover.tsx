@@ -3,8 +3,10 @@
  * panel labelled by it, Escape or a click outside closes it and focus returns to the button. Used by the map's top
  * bars (dates, coordinates, layers, mission filters) so the map keeps the whole screen until a tool is needed.
  * `persistent` keeps it open on clicks outside (the mission panel, whose region is placed by clicking the map).
+ * The panel opens with a small header: its name and an ✕ that closes it (the visible route besides Escape).
  */
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
+import { CloseButton } from './PanelNav'
 import { useFitViewport } from './useFitViewport'
 
 export function Popover({
@@ -16,6 +18,7 @@ export function Popover({
   align = 'left',
   pressed,
   persistent = false,
+  title,
   children,
 }: {
   /** Accessible name of the button (and of the panel). */
@@ -31,6 +34,8 @@ export function Popover({
   pressed?: boolean
   /** Stay open on clicks outside (closed by its button or Escape). */
   persistent?: boolean
+  /** What the panel's header shows; the label when not given. */
+  title?: ReactNode
   children: ReactNode | ((close: () => void) => ReactNode)
 }) {
   const id = useId()
@@ -83,6 +88,12 @@ export function Popover({
       </button>
       {open && (
         <div ref={panel} id={`${id}-p`} className={`pop-panel pop-${align}`} role="group" aria-label={label}>
+          <div className="pop-head">
+            <span className="pop-head-title" aria-hidden="true">
+              {title ?? label}
+            </span>
+            <CloseButton label={`Close ${label.charAt(0).toLowerCase()}${label.slice(1)}`} onClick={close} size={16} />
+          </div>
           {typeof children === 'function' ? children(close) : children}
         </div>
       )}

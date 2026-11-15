@@ -30,6 +30,7 @@ import { PlaceTools, SectionDrawer } from '../panels/PlacePanel'
 import { CoordsButton, SiteSearch } from '../panels/SiteSearch'
 import { NowProvider } from '../panels/useNow'
 import { useInsets } from '../state/layout'
+import { useAreas } from '../state/areas'
 import { usePanels } from '../state/panels'
 import { useApp } from '../state/store'
 import { useUrlSync } from '../state/useUrlSync'
@@ -60,6 +61,12 @@ export function NavigatorPage() {
   const mode = useApp((s) => s.mode)
   const scale = useApp((s) => s.scale)
   const section = usePanels((s) => s.section)
+  const resultsOpen = usePanels((s) => s.resultsOpen)
+  // a new answer from the planner shows the "Candidate sites" panel again after it was closed
+  const areasResult = useAreas((s) => s.suit)
+  useEffect(() => {
+    if (areasResult) usePanels.getState().setResultsOpen(true)
+  }, [areasResult])
   const comparing = useApp((s) => s.compareMode && s.compare.length >= 2)
   const blocks = useApp((s) => s.blocks)
   // With no place chosen there is nothing for the bottom bar (the place's sunlight and Earth over the window) or
@@ -148,7 +155,7 @@ export function NavigatorPage() {
               {comparing ? (
                 <SidePanel wide>{(titleId) => <ComparePanel titleId={titleId} />}</SidePanel>
               ) : mission ? (
-                <SidePanel>{(titleId) => <ResultsPanel titleId={titleId} />}</SidePanel>
+                resultsOpen && <SidePanel>{(titleId) => <ResultsPanel titleId={titleId} />}</SidePanel>
               ) : (
                 section && hasPlace && <SidePanel wide={section === 'power'}>{(titleId) => <SectionDrawer titleId={titleId} />}</SidePanel>
               )}

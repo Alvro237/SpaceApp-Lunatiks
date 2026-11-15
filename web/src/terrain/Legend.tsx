@@ -6,6 +6,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import { IconLayers } from '../ui/icons'
 import { type LayerId, useApp } from '../state/store'
 import { ApiStatus } from '../ui/ApiStatus'
+import { CloseButton } from '../ui/PanelNav'
 import { useFitViewport } from '../ui/useFitViewport'
 import { type ColormapId, gradientCss } from './colormaps'
 import { CRATER_MIN_DIAM_KM } from './Craters'
@@ -74,6 +75,19 @@ export function LayersControl({ tileset, exaggeration, onExaggeration, craterErr
       </button>
       {open && (
         <div ref={menu} id={`${id}-menu`} className="layers-menu" role="group" aria-label="Map layers">
+          <div className="pop-head">
+            <span className="pop-head-title" aria-hidden="true">
+              Map layers
+            </span>
+            <CloseButton
+              label="Close map layers"
+              size={16}
+              onClick={() => {
+                setOpen(false)
+                ref.current?.querySelector<HTMLButtonElement>('button[aria-controls]')?.focus()
+              }}
+            />
+          </div>
           <fieldset>
             <legend>Colour</legend>
             {options.map((o) => (

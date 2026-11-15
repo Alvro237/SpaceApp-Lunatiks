@@ -1328,3 +1328,20 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
 .timeline.mini .range-link { fill: #7ee2a8; }
 .timeline.mini .margin-line { stroke: #7ee2a8; }
 .timeline.mini .margin-need { stroke: #c9ccd3; }
+
+/* ---------------------------------------------------------------- close and back buttons (ui/PanelNav.tsx) */
+.panel-close { flex: none; margin-left: auto; }
+.panel-back {
+  display: inline-flex; align-items: center; gap: 2px; min-height: 32px; padding: 2px 12px 2px 6px; border-radius: 999px;
+  background: var(--surface-2); color: var(--text); border: 1px solid var(--border); font-weight: 600; font-size: 0.85rem;
+  text-decoration: none; cursor: pointer;
+}
+.panel-back:hover { border-color: var(--accent); }
+.panel-nav { margin: 0 0 8px; }
+.page-back { margin: 0 0 12px; }
+/* every popover and the map layers menu open with a small title row and an ✕ */
+.pop-head { display: flex; align-items: center; gap: 8px; margin: -4px -4px 6px 0; }
+.pop-head-title { flex: 1; min-width: 0; font-weight: 700; font-size: 0.95rem; }
+.results-head { display: flex; align-items: flex-start; gap: 8px; }
+.results-head > h2 { flex: 1; min-width: 0; }
+.pm-head .panel-close { min-width: 28px; min-height: 28px; }
