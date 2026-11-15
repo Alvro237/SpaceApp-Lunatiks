@@ -27,7 +27,8 @@ import { starDirections } from './stars'
 import { cameraFor, compass16, wrap180 } from './project'
 import { MOON_R_KM } from '../globe/orbit'
 import { useEffectiveCamera } from './useEffectiveCamera'
-import { useRelief } from './relief/useRelief'
+import { type SceneLights, useRelief } from './relief/useRelief'
+import { earthPhaseAngle, earthshineRatio } from './relief/light'
 
 const state = (f: number) => (f >= 0.999 ? 'fully visible' : f > 0 ? `${Math.round(f * 100)} percent visible` : 'hidden by the horizon')
 
@@ -122,12 +123,25 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
     }
   }, [])
 
-  // the real ground around the place: LOLA rings lit by the Sun of the active instant (relief/)
+  // the real ground around the place: LOLA rings lit by the Sun of the active instant, and at night by the Earth (relief/)
   const sunAz = view?.sun.az
   const sunEl = view?.sun.el
   const sunR = view?.sun.radiusDeg
-  const sunDir = useMemo(() => (sunAz === undefined || sunEl === undefined || sunR === undefined ? null : { az: sunAz, el: sunEl, radiusDeg: sunR }), [sunAz, sunEl, sunR])
-  const relief = useRelief(info?.model.lat, info?.model.lon, info?.mastUsedM ?? 0, sunDir)
+  const sunUp = (view?.sun.fraction ?? 0) > 0
+  const earthAz = view?.earth.az
+  const earthEl = view?.earth.el
+  const earthR = view?.earth.radiusDeg
+  const earthKm = view?.earth.distKm
+  const lights = useMemo<SceneLights | null>(() => {
+    if (sunAz === undefined || sunEl === undefined || sunR === undefined) return null
+    const sun = { az: sunAz, el: sunEl, radiusDeg: sunR }
+    // the Earth lights the ground only while some of its disc is above the level (terrain may still hide it)
+    const earthUp = earthAz !== undefined && earthEl !== undefined && earthR !== undefined && earthKm !== undefined && earthEl > -earthR - 2
+    const earth = earthUp ? { az: earthAz, el: earthEl, radiusDeg: earthR } : null
+    const earthRatio = earth ? earthshineRatio(earthPhaseAngle(sun, earth), earthKm!) : 0
+    return { sun, sunVisible: sunUp, earth, earthRatio }
+  }, [sunAz, sunEl, sunR, sunUp, earthAz, earthEl, earthR, earthKm])
+  const relief = useRelief(info?.model.lat, info?.model.lon, info?.mastUsedM ?? 0, lights)
   // full resolution once the camera and the instant have been still for a moment, a lighter pass while they move
   const change = useMemo(() => ({ camera, tMs, arrival, scene: relief.scene }), [camera, tMs, arrival, relief.scene])
   const [still, setStill] = useState<typeof change | null>(null)
@@ -237,7 +251,7 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
         <canvas ref={canvas} aria-hidden="true" style={{ width: '100%', height: '100%' }} />
         <p className="horizon-notice" style={{ left: free.left + 14, bottom: Math.max(free.bottom + 44, noticeBottom), maxWidth: `calc(100% - ${free.left + 28}px)` }}>
           {relief.status === 'ready'
-            ? `Rendered from LOLA heights, not footage · Relief: LOLA ${relief.cellM?.toFixed(0)} m DEM to ${relief.reachKm?.toFixed(0)} km, lit by the Sun at this instant · Skyline: horizon mask`
+            ? `Rendered from LOLA heights, not footage · Relief: ${relief.sourceLabel ?? `LOLA ${relief.cellM?.toFixed(0)} m DEM`} to ${(relief.reachKm ?? 0) < 10 ? (relief.reachKm ?? 0).toFixed(1) : (relief.reachKm ?? 0).toFixed(0)} km, ${relief.night === 'earthshine' ? 'night, lit by earthshine (exposure raised)' : relief.night === 'dark' ? 'night, neither the Sun nor the Earth up' : 'lit by the Sun at this instant'} · Skyline: horizon mask`
             : 'Not real moon footage · Real moon horizon line'}
           {relief.status === 'loading' && ' · Loading the LOLA relief around this place…'}
           {relief.status !== 'ready' && groundReady && ' · Ground texture: LROC WAC mosaic, another place on the Moon'}

@@ -33,6 +33,7 @@ asks for this list; keep it current when something is added.
 | NASA Moon Trek (JPL) ArcGIS ImageServer: `LRO_WAC_Mosaic_SPole60_100m_v02` (LROC WAC south polar mosaic, 100 m, 8-bit, south polar stereographic on the 1737.4 km sphere, the map's own projection) | Optional photo layer of the polar map (`web/src/terrain/live/photo.ts`): 256 x 256 JPEG tiles cut with `exportImage` for each map tile down to 60 m cells, used as the ground's brightness under the LOLA relief and light. Measured on 2026-11-15: mean brightness 0.331 of the byte range over the map's square (median 0.329), median 0.016 within 60 km of the pole (shadows as photographed) | https://trek.nasa.gov/moon/trekarcgis/rest/services/LRO_WAC_Mosaic_SPole60_100m_v02/ImageServer |
 | Moon Trek, QuickMap | Context and cross-checks while designing | https://trek.nasa.gov/moon/ , https://quickmap.lroc.asu.edu/ |
 | VIPER lunar operations, Artemis III candidate regions | Lessons on what real missions plan for | https://science.nasa.gov/mission/viper/lunar-operations/ , https://www.nasa.gov/news-release/nasa-identifies-candidate-regions-for-landing-next-americans-on-moon/ |
+| NASA Moon Trek (JPL) ImageServer: high-resolution DTMs `LRO_NAC_DEM_*` (LROC NAC stereo DTMs, 1.5-2.8 m; Henriksen et al. 2017, Icarus 283, 122-137), `Apollo15_PanCam_DEM_*` (Apollo 15 Panoramic Camera, 3-5 m) and `NAC_DTM_APOLLO17` (5 m); and the LOLA global DEM `LRO_LOLA_DEM_Global_128ppd_v04` (237 m) | The Horizon view's ground (`web/src/horizon/relief`): where one of 44 DTMs covers the place (catalogue `fineDems.json`, built from the services' descriptions by `web/scripts/build_fine_dems.mjs` on 2026-11-15) the inner rings start at its cell and its heights are merged over LOLA, normalised by their mean offset and feathered over 12 samples at the edges of its data; the 128 px/deg DEM serves the rings of 960 m cells and coarser | https://trek.nasa.gov/moon/trekarcgis/rest/services/ |
 
 ## Other data
 
@@ -57,6 +58,10 @@ asks for this list; keep it current when something is added.
 
 ## Papers and documents consulted
 
+- Russell, H. N. (1916). On the albedo of the planets and their satellites. ApJ 43, 173-196 (Lambert-sphere phase
+  law, used for the earthshine that lights the Horizon view's ground at night)
+- Stephens, G. L., et al. (2015). The albedo of Earth. Reviews of Geophysics 53, 141-163. doi:10.1002/2014RG000449
+  (Earth's Bond albedo 0.29, for the earthshine)
 - Wertz, J. R., Everett, D. F., Puschell, J. J. (eds.), Space Mission Analysis and Design, 3rd ed. (Microcosm Press /
   Springer): the link equation behind `logic/link.py` (Eb/N0 = EIRP - L - L_other + G/T - 10 log10 k - 10 log10 R).
   Pratt, T., Bostian, C., Allnutt, J., Satellite Communications, 2nd ed. (Wiley): the same equation and free-space loss.
