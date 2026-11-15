@@ -19,7 +19,7 @@ import { colorAt, luminance, textOn } from '../terrain/colormaps'
 
 vi.mock('../terrain/TerrainView', () => ({ TerrainView: () => <div role="img" aria-label="Map (test stub)" /> }))
 vi.mock('../globe/GlobeView', () => ({ GlobeView: () => <div role="img" aria-label="Globe (test stub)" /> }))
-vi.mock('../blocks/BlockMode', () => ({ default: () => <div role="img" aria-label="Block Moon (test stub)" /> }))
+vi.mock('../blocks/BlockMode', () => ({ default: () => <div role="img" aria-label="Educational mode (test stub)" /> }))
 
 const ROOT = resolve(__dirname, '../../..')
 const sitesDoc = JSON.parse(readFileSync(resolve(ROOT, 'data/sites.json'), 'utf8')) as {
@@ -115,7 +115,7 @@ describe('navigator', () => {
     const search = await screen.findByRole('combobox', { name: 'Search sites and missions' })
     await waitFor(() => expect(search).toHaveAttribute('placeholder', expect.stringMatching(/IM-2/)))
     expect(screen.getByRole('button', { name: 'Coordinates' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Date and duration' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Date and duration/ })).toBeInTheDocument()
     // no side panel until a section is asked for: the timeline shows when the place is sunlit and sees the Earth
     expect(await screen.findByRole('img', { name: /Sunlit .*% and Earth in view/ }, { timeout: 5000 })).toBeInTheDocument()
     expect(document.querySelector('.side-panel')).toBeNull()
@@ -168,13 +168,13 @@ describe('navigator', () => {
     expect(document.querySelector('.side-panel')).toBeNull()
    }, 30_000)
 
-  it('Block Moon loads on demand; the planner sleeps under it and comes back without being rebuilt', async () => {
+  it('Educational mode loads on demand; the planner sleeps under it and comes back without being rebuilt', async () => {
     const user = userEvent.setup()
     renderAt('/')
     const globe = await screen.findByRole('img', { name: 'Globe (test stub)' })
-    const toggle = screen.getByRole('switch', { name: 'Block Moon' })
+    const toggle = screen.getByRole('switch', { name: 'Educational' })
     await user.click(toggle)
-    expect(await screen.findByRole('img', { name: 'Block Moon (test stub)' })).toBeInTheDocument()
+    expect(await screen.findByRole('img', { name: 'Educational mode (test stub)' })).toBeInTheDocument()
     // the planner is still mounted (same node), hidden from assistive technology and out of the tab order
     const layer = document.querySelector('.map-layer')!
     expect(layer).toHaveClass('is-dormant')
@@ -182,7 +182,7 @@ describe('navigator', () => {
     expect(layer.contains(globe)).toBe(true)
     expect(screen.queryByRole('region', { name: /Place/ })).not.toBeInTheDocument()
     await user.click(toggle)
-    expect(screen.queryByRole('img', { name: 'Block Moon (test stub)' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: 'Educational mode (test stub)' })).not.toBeInTheDocument()
     expect(screen.getByRole('img', { name: 'Globe (test stub)' })).toBe(globe)
     expect(layer).not.toHaveClass('is-dormant')
   })
@@ -240,7 +240,7 @@ describe('navigator', () => {
     expect(useApp.getState().playing).toBe(false)
     // the second icon cycles the playback speed
     const before = useApp.getState().speed
-    await user.click(screen.getByRole('button', { name: /^Speed:/ }))
+    await user.click(screen.getByRole('button', { name: /^Speed / }))
     expect(useApp.getState().speed).not.toBe(before)
   })
 

@@ -35,7 +35,13 @@ export type { ModelInfo } from './place'
 export function useSiteModel(sel: Selection, mastM: number): ModelInfo | null {
   const masks = useMasks().data
   const names = useSiteNames()
-  const ph = usePointHorizon(sel, mastM).data
+  // Trace over the LOLA grids via the API for a manual point, and for a catalogue site without a stored mask.
+  const coords = useMemo(() => {
+    if (sel.kind === 'point') return { lat: sel.lat, lon: sel.lon }
+    const site = masks?.site(sel.id)
+    return site && !site.terrain.available ? { lat: site.lat, lon: site.lon } : null
+  }, [sel, masks])
+  const ph = usePointHorizon(coords, mastM).data
   const traced = useMemo(
     () => (ph ? { kind: ph.horizon_kind, values: ph.elevation_deg, groundM: ph.ground_m, cellM: ph.near_cell_m } : null),
     [ph],

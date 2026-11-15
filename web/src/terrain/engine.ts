@@ -5,7 +5,7 @@
  */
 import * as THREE from 'three'
 import { LruCache } from './cache'
-import { type LiveConfig, type LiveSource, descendantRanges, liveConfigFromEnv, trekTileUrl, withLiveLevels } from './live/config'
+import { type LiveConfig, type LiveSource, cachedLiveLevels, descendantRanges, liveConfigFromEnv, trekTileUrl } from './live/config'
 import { LIVE_LAYERS, layerCellGeometry, liveLayerMaxZ, liveLayerSource } from './live/layers'
 import { lutBytes, type ColormapId } from './colormaps'
 import { TileLoader } from './loader'
@@ -25,6 +25,22 @@ export const SHADOW_SIZE = 2048
  * Sun is still the full-size texture is computed again, in strips (shadowSchedule.ts says when each pass runs).
  */
 export const SHADOW_FAST_SIZE = 1024
+
+/**
+ * Detail against speed. `splitPx` is the size a height cell may reach on screen, in CSS pixels, before its tile is
+ * replaced by its four children; a slow frame rate steps down (TerrainView). A sharper step for dense screens
+ * (1.5 px) was tried on 2026-11-14 and dropped: it asked the remote servers for up to twice the tiles while zooming
+ * (41 against 65-82 requests for the same moves), which is what the map waits for, for a gain not seen in the
+ * screenshots compared.
+ */
+export const QUALITY = {
+  standard: { splitPx: 2, mergePx: 1.5 },
+  reduced: { splitPx: 3, mergePx: 2.25 },
+} as const satisfies Record<string, LodOptions>
+export type Quality = keyof typeof QUALITY
+
+/** A tile that failed to load is asked for again after these pauses (s), then left alone for the session. */
+export const RETRY_AFTER_S = [10, 30, 90]
 
 export type LayerMode = { kind: 'none' } | { kind: 'elevation' } | { kind: 'data'; id: string; colormap: ColormapId; levels: number }
 
@@ -102,7 +118,22 @@ export class TerrainEngine {
    */
   private readonly estimatedFrom = new Map<string, number>()
   private readonly liveBase: string
-  lod: LodOptions = { splitPx: 2, mergePx: 1.5 }
+  lod: LodOptions = QUALITY.standard
+  /**
+   * Counts every change to what the map shows that the camera does not explain: a tile or layer texture arrived,
+   * the tiles drawn changed, the Sun moved, the shadow texture was renewed, a setting changed. The view draws a frame
+   * only when this number or the camera changed (TerrainView), so anything that changes the picture must count here.
+   */
+  version = 0
+  private disposed = false
+  private readonly retries = new Map<string, number>()
+  private readonly retryTimers = new Set<ReturnType<typeof setTimeout>>()
+  /** One material per shader variant, never drawn: they keep both compiled programs alive (prepare). */
+  private readonly keptPrograms: THREE.ShaderMaterial[] = []
+  // scratch objects of the per-frame tile selection
+  private readonly frustum = new THREE.Frustum()
+  private readonly viewProjection = new THREE.Matrix4()
+  private readonly box = new THREE.Box3()
 
   private readonly base: string
   private readonly loader = new TileLoader()
@@ -134,6 +165,7 @@ export class TerrainEngine {
   private readonly shadowCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)
   private readonly shadowMaterial: THREE.ShaderMaterial
   private lastSun = new THREE.Vector3()
+  private readonly sunScratch = new THREE.Vector3()
 
   /** Uniforms shared by every tile material (same objects, so one update reaches all tiles). */
   readonly shared = {
@@ -156,8 +188,9 @@ export class TerrainEngine {
   private areaTexture: THREE.DataTexture | null = null
 
   constructor(tileset: Tileset, baseUrl: string, floatLinear: boolean, live: LiveConfig | null = liveConfigFromEnv(import.meta.env)) {
-    // the live levels extend a copy of the tileset (the caller's object is shared with other views)
-    const withLive = withLiveLevels(tileset, live)
+    // the live levels extend a copy of the tileset (the caller's object is shared with other views); the table
+    // is built once per tileset, not on every entry into the map
+    const withLive = cachedLiveLevels(tileset, live)
     this.tileset = withLive.tileset
     this.live = withLive.live
     for (const k of this.live.keys()) this.estimatedFrom.set(k, -1)
@@ -254,14 +287,15 @@ export class TerrainEngine {
 
   // ------------------------------------------------------------------------------------------- settings
 
-  /** Adaptive quality (plan): a coarser screen-space error threshold when the frame rate drops below 45. */
-  reduceQuality(): void {
-    this.lod = { splitPx: 3, mergePx: 2.25 }
+  /** Adaptive quality (plan): the screen-space error threshold follows the frame rate (QUALITY). */
+  setQuality(q: Quality): void {
+    this.lod = QUALITY[q]
   }
 
   setExaggeration(x: number): void {
     if (x === this.exaggeration) return
     this.exaggeration = x
+    this.version++
     for (const k of this.tilesKeys()) this.tiles.get(k)!.mesh.material.uniforms.uBounds.value.w = x
   }
 
@@ -271,6 +305,7 @@ export class TerrainEngine {
 
   setLayer(layer: LayerMode): void {
     this.layer = layer
+    this.version++
     if (layer.kind === 'none') {
       this.shared.uLayerMode.value = 0
       return
@@ -283,19 +318,23 @@ export class TerrainEngine {
   }
 
   setLighting(sun: boolean): void {
-    this.shared.uLighting.value = sun ? 1 : 0
+    const v = sun ? 1 : 0
+    if (this.shared.uLighting.value === v) return
+    this.shared.uLighting.value = v
+    this.version++
   }
 
   /** Sun direction (unit, MOON_ME) and angular radius at the chosen instant. */
   setSun(unit: [number, number, number], radiusDeg: number, mastM: number): void {
-    const v = new THREE.Vector3(...unit)
-    if (v.angleTo(this.lastSun) > 2e-5 || this.shadowMaterial.uniforms.uMast.value !== mastM) {
-      this.shadowSchedule.changed(performance.now())
-    }
+    const v = this.sunScratch.set(unit[0], unit[1], unit[2])
+    const u = this.shadowMaterial.uniforms
+    if (v.equals(this.lastSun) && u.uMast.value === mastM && u.uSunR.value === radiusDeg) return
+    if (v.angleTo(this.lastSun) > 2e-5 || u.uMast.value !== mastM) this.shadowSchedule.changed(performance.now())
     this.lastSun.copy(v)
     this.shared.uSun.value.copy(v)
-    this.shadowMaterial.uniforms.uSunR.value = radiusDeg
-    this.shadowMaterial.uniforms.uMast.value = mastM
+    u.uSunR.value = radiusDeg
+    u.uMast.value = mastM
+    this.version++
   }
 
   /**
@@ -305,6 +344,7 @@ export class TerrainEngine {
   setAreas(a: { xLeftM: number; yTopM: number; cellM: number; nx: number; ny: number; codes: Uint8Array; score: Uint8Array } | null): void {
     this.areaTexture?.dispose()
     this.areaTexture = null
+    this.version++
     if (!a) {
       this.shared.uHasArea.value = 0
       this.shared.uArea.value = null
@@ -328,11 +368,17 @@ export class TerrainEngine {
 
   /** Ring of the search region (projected centre and radius, m); radius 0 hides it. */
   setRegion(x: number, y: number, radiusM: number): void {
-    this.shared.uRegion.value.set(x, y, radiusM)
+    const r = this.shared.uRegion.value
+    if (r.x === x && r.y === y && r.z === radiusM) return
+    r.set(x, y, radiusM)
+    this.version++
   }
 
   setHighlight(x: number, y: number, radiusM: number): void {
-    this.shared.uHighlight.value.set(x, y, radiusM)
+    const h = this.shared.uHighlight.value
+    if (h.x === x && h.y === y && h.z === radiusM) return
+    h.set(x, y, radiusM)
+    this.version++
   }
 
   /**
@@ -357,16 +403,15 @@ export class TerrainEngine {
     this.shared.uShadow.value = target.texture
     this.shared.uShadowReady.value = 1
     this.stats.shadowPasses++
+    this.version++
   }
 
   // ------------------------------------------------------------------------------------------- per frame
 
   private select(camera: THREE.PerspectiveCamera, viewportHeightPx: number, previouslySplit: ReadonlySet<string>) {
     camera.updateMatrixWorld()
-    const frustum = new THREE.Frustum().setFromProjectionMatrix(
-      new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse),
-    )
-    const box = new THREE.Box3()
+    const frustum = this.frustum.setFromProjectionMatrix(this.viewProjection.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse))
+    const box = this.box
     return selectTiles(
       this.tileset,
       {
@@ -378,7 +423,11 @@ export class TerrainEngine {
       {
         ...this.lod,
         previouslySplit,
-        visible: (min, max) => frustum.intersectsBox(box.set(new THREE.Vector3(...min), new THREE.Vector3(...max))),
+        visible: (min, max) => {
+          box.min.set(min[0], min[1], min[2])
+          box.max.set(max[0], max[1], max[2])
+          return frustum.intersectsBox(box)
+        },
       },
     )
   }
@@ -449,7 +498,12 @@ export class TerrainEngine {
 
     // show exactly the drawable tiles, nearest to the camera first (each tile has its own material, so without a
     // render order three.js would draw them in material order and shade terrain that nearer tiles then cover)
-    for (const child of [...this.group.children]) if (!drawKeys.has(child.userData.key)) this.group.remove(child)
+    for (let i = this.group.children.length - 1; i >= 0; i--) {
+      const child = this.group.children[i]
+      if (drawKeys.has(child.userData.key)) continue
+      this.group.remove(child)
+      this.version++
+    }
     const camKm = camera.position
     const nearFirst = draw
       .map((t) => {
@@ -465,13 +519,19 @@ export class TerrainEngine {
       const tile = this.tiles.get(k)!
       this.tiles.touch(k)
       tile.mesh.renderOrder = -10_000 + i
-      if (tile.mesh.parent !== this.group) this.group.add(tile.mesh)
+      if (tile.mesh.parent !== this.group) {
+        this.group.add(tile.mesh)
+        this.version++
+      }
       this.bindLayer(t, tile)
     }
     this.tiles.evict(drawKeys)
     this.stats.drawn = draw.length
-    this.stats.wanted = sel.tiles.map(keyOf)
-    this.stats.drawnKeys = [...drawKeys]
+    if (import.meta.env.DEV) {
+      // for the tests and debugging only
+      this.stats.wanted = sel.tiles.map(keyOf)
+      this.stats.drawnKeys = [...drawKeys]
+    }
     this.stats.cached = this.tiles.size
     this.stats.inFlight = this.loader.inFlight
   }
@@ -515,11 +575,31 @@ export class TerrainEngine {
         }
         this.refineDescendants(t, res.heights!, res.width)
         this.tiles.set(k, this.makeTile(t, tex))
+        this.retries.delete(k)
+        this.version++
       })
       .catch((e: Error) => {
         // cancelled or failed: the parent stays on screen
-        if (source && e.message !== 'cancelled') this.stats.live.failed++
+        if (e.message === 'cancelled') return
+        if (source) this.stats.live.failed++
+        this.retryLater(k)
       })
+  }
+
+  /**
+   * A failed request is not asked for again by itself (TileLoader), and one missing tile keeps its parent, a tile
+   * of half the detail, on screen for the whole quad. So let it be asked for again after a pause, a few times: the
+   * remote DEM servers answer most failed reads on a second try.
+   */
+  private retryLater(key: string): void {
+    const n = this.retries.get(key) ?? 0
+    if (n >= RETRY_AFTER_S.length || this.disposed) return
+    this.retries.set(key, n + 1)
+    const timer = setTimeout(() => {
+      this.retryTimers.delete(timer)
+      if (!this.disposed) this.loader.forget(key)
+    }, RETRY_AFTER_S[n] * 1000)
+    this.retryTimers.add(timer)
   }
 
   /** Tighten the estimated ranges of the live tiles below a loaded tile from its samples (descendantRanges). */
@@ -539,10 +619,19 @@ export class TerrainEngine {
     const cellM = this.tileset.levels[t.z].cellM
     // only tiles reaching past the map's disc need the discard (shaders.ts, DISC_EDGE)
     const reach = Math.max(...[xMin, xMin + size].flatMap((x) => [yMax, yMax - size].map((y) => Math.hypot(x, y))))
+    const material = this.tileMaterial(reach > this.shared.uDiscR.value, heights, new THREE.Vector4(xMin, yMax, size, this.exaggeration), cellM)
+    const mesh = new THREE.Mesh(this.geometry, material)
+    mesh.frustumCulled = false
+    mesh.userData.key = keyOf(t)
+    return { key: keyOf(t), heights, mesh }
+  }
+
+  /** A tile's material. The shader has two variants: with the disc-edge discard (tiles on the rim) and without. */
+  private tileMaterial(discEdge: boolean, heights: THREE.Texture, bounds: THREE.Vector4, cellM: number): THREE.ShaderMaterial {
     const defines: Record<string, string> = {}
     if (this.floatLinear) defines.FLOAT_LINEAR = ''
-    if (reach > this.shared.uDiscR.value) defines.DISC_EDGE = ''
-    const material = new THREE.ShaderMaterial({
+    if (discEdge) defines.DISC_EDGE = ''
+    return new THREE.ShaderMaterial({
       glslVersion: THREE.GLSL3,
       vertexShader: TERRAIN_VERT,
       fragmentShader: TERRAIN_FRAG,
@@ -551,7 +640,7 @@ export class TerrainEngine {
       uniforms: {
         ...this.shared,
         uHeight: { value: heights },
-        uBounds: { value: new THREE.Vector4(xMin, yMax, size, this.exaggeration) },
+        uBounds: { value: bounds },
         uCellM: { value: cellM },
         uSkirtKm: { value: Math.max(0.3, (cellM / 1000) * 3) },
         uLayer: { value: this.empty },
@@ -559,10 +648,23 @@ export class TerrainEngine {
         uHasLayer: { value: 0 },
       },
     })
-    const mesh = new THREE.Mesh(this.geometry, material)
-    mesh.frustumCulled = false
-    mesh.userData.key = keyOf(t)
-    return { key: keyOf(t), heights, mesh }
+  }
+
+  /**
+   * Compile both variants of the terrain shader now, off the drawing path, and keep them for the engine's life.
+   * Otherwise the variant without the disc edge is compiled when its first tile is drawn, in the middle of the
+   * first zoom, and the GPU stops for as long as that takes (a frame of 383 ms measured on an Apple M2); and a
+   * variant whose tiles had all left the cache would be thrown away and compiled again later.
+   */
+  prepare(renderer: THREE.WebGLRenderer, camera: THREE.Camera): void {
+    if (this.keptPrograms.length) return
+    const scene = new THREE.Scene()
+    for (const discEdge of [false, true]) {
+      const m = this.tileMaterial(discEdge, this.empty, new THREE.Vector4(0, 0, 1, 1), 1)
+      this.keptPrograms.push(m)
+      scene.add(new THREE.Mesh(this.geometry, m))
+    }
+    renderer.compileAsync(scene, camera).catch(() => {})
   }
 
   /**
@@ -630,13 +732,21 @@ export class TerrainEngine {
         tex.colorSpace = THREE.NoColorSpace
         tex.needsUpdate = true
         this.layerTextures.set(lk, tex)
+        this.retries.delete(lk)
+        this.version++
       })
-      .catch(() => {})
+      .catch((e: Error) => {
+        if (e.message !== 'cancelled') this.retryLater(lk)
+      })
       .finally(() => this.liveLayerKeys.delete(lk))
   }
 
   dispose(): void {
+    this.disposed = true
+    this.retryTimers.forEach((t) => clearTimeout(t))
+    this.retryTimers.clear()
     this.loader.dispose()
+    this.keptPrograms.forEach((m) => m.dispose())
     this.tiles.clear()
     this.layerTextures.clear()
     this.luts.forEach((t) => t.dispose())

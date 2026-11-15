@@ -203,6 +203,27 @@ export function withLiveLevels(ts: Tileset, cfg: LiveConfig | null): LiveTiles {
   return { tileset: { ...ts, levels, height: { ...ts.height, tiles } }, live }
 }
 
+const liveTables = new WeakMap<Tileset, Map<string, LiveTiles>>()
+
+/**
+ * `withLiveLevels`, built once per tileset and configuration. The table has about 100 000 entries and the map
+ * view is created again on every entry from the globe, so building it each time stalls the main thread. An engine
+ * replaces the ranges of its tileset as tiles load, so every caller gets its own range table: an empty object
+ * that inherits the shared one, which costs nothing to make. Look a tile up by key or with `in` and assign to it
+ * (all the engine and the LOD do); `Object.keys` would only list the caller's own replacements. The shared table
+ * and the `live` map are read-only.
+ */
+export function cachedLiveLevels(ts: Tileset, cfg: LiveConfig | null): LiveTiles {
+  let byConfig = liveTables.get(ts)
+  if (!byConfig) liveTables.set(ts, (byConfig = new Map()))
+  const key = JSON.stringify(cfg)
+  let built = byConfig.get(key)
+  if (!built) byConfig.set(key, (built = withLiveLevels(ts, cfg)))
+  if (built.tileset === ts) return built
+  const tiles = Object.create(built.tileset.height.tiles) as Tileset['height']['tiles']
+  return { live: built.live, tileset: { ...built.tileset, height: { ...built.tileset.height, tiles } } }
+}
+
 /**
  * Moon Trek exportImage URL for a tile: a float32 GeoTIFF whose pixel centres are the tile's vertices (the box is
  * the tile widened by half a cell on each side), deflate-compressed.

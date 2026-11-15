@@ -42,13 +42,20 @@ def test_a_higher_mast_never_sees_a_higher_skyline(site):
 
 
 @pytest.mark.parametrize("mast", [0, 2, 7.5, 20])
-def test_smooth_sphere_is_the_geometric_dip(mast):
+def test_sites_without_a_stored_mask_get_the_traced_skyline(mast):
+    """Apollo 11 has no pipeline mask: the whole-Moon grid ray-traces its skyline at the exact mast asked."""
     r = get("apollo-11", mast_m=mast, include_zone=True).json()
-    assert r["horizon_kind"] == "smooth_sphere" and r["mast_used_m"] == mast and r["zone"] is None
-    dip = -math.degrees(math.acos(1_737_400 / (1_737_400 + mast)))     # 2 m: -0.08694 deg, 20 m: -0.27494 deg
-    assert r["max_deg"] == pytest.approx(dip, abs=1e-12) and v.horizon_invariants(r) == []
-    if mast == 0:
-        assert math.copysign(1.0, r["elevation_deg"][0]) > 0           # 0.0, not "-0.0", on the wire
+    assert r["horizon_kind"] == "terrain" and r["mast_used_m"] == mast and r["zone"] is None
+    assert v.horizon_invariants(r) == []
+    # Mare Tranquillitatis: the traced skyline stays within a degree or so of flat (no 3.8 km-scale relief),
+    # far below any polar site's, and a mast can only lower it.
+    assert -2.0 < r["min_deg"] <= r["max_deg"] < 2.0
+
+
+def test_a_higher_mast_never_raises_the_traced_skyline():
+    a = get("apollo-11", mast_m=0).json()["elevation_deg"]
+    b = get("apollo-11", mast_m=20).json()["elevation_deg"]
+    assert all(hb <= ha + 1e-9 for ha, hb in zip(a, b))
 
 
 def test_zone_centre_and_rings():

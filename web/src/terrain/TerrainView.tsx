@@ -8,7 +8,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { ToolPortal } from '../ui/ToolSlot'
 import { useHorizonTransition } from '../state/horizon'
 import { useQuery } from '@tanstack/react-query'
-import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useRef, useState } from 'react'
+import { type KeyboardEvent, type MouseEvent, type PointerEvent, type WheelEvent, useCallback, useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { type MarkerStyle, useApp } from '../state/store'
 import { type AreaRaster, useAreas } from '../state/areas'
@@ -20,7 +20,7 @@ import { SUN_R_KM } from '../time/engine'
 import { useEphemeris, useMasks } from '../time/hooks'
 import { CameraRig, FOV_DEG, TILT_3D } from './cameraRig'
 import { Craters } from './Craters'
-import { type LayerMode, TerrainEngine } from './engine'
+import { type LayerMode, type Quality, TerrainEngine } from './engine'
 import { type Exaggeration, LayersControl, LegendChip } from './Legend'
 import { IconCube, IconFit, IconGlobe, IconMinus, IconPlus } from '../ui/icons'
 import { terrainRegistry } from './registry'
@@ -33,6 +33,27 @@ export async function loadTileset(): Promise<Tileset> {
   if (!res.ok) throw new Error(`tileset.json: HTTP ${res.status}`)
   return (await res.json()) as Tileset
 }
+
+/**
+ * Adaptive quality. The frame rate is judged over windows of WINDOW_S of continuous drawing: below SLOW_FPS the
+ * quality goes down a step (coarser tiles and a pixel ratio of at most 1.5). After
+ * GOOD_WINDOWS fast windows in a row it goes back up, once per visit to the map, so a slow start (shaders
+ * compiling, the first tiles decoding) does not leave a fast machine on a soft map, and a machine at its limit
+ * does not swing between the two. Nothing is judged in the first GRACE_S.
+ */
+const STEPS: Quality[] = ['reduced', 'standard']
+const WINDOW_S = 2
+const SLOW_FPS = 45
+const FAST_FPS = 55
+const GOOD_WINDOWS = 5
+const GRACE_S = 3
+/** With nothing changing, a frame is still drawn this often (s), in case a change went uncounted. */
+const IDLE_REDRAW_S = 0.5
+
+/** A second click within this time (ms) is a double click: the first one waits that long before it marks a point. */
+const DOUBLE_CLICK_MS = 260
+/** A double click comes this much closer (the distance to the ground is multiplied by it). */
+const DOUBLE_CLICK_ZOOM = 0.4
 
 const prefersReducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
@@ -64,6 +85,9 @@ function MapView({ tileset }: { tileset: Tileset }) {
   const markerStyle = useApp((s) => s.markerStyle)
   const [rig] = useState(() => new CameraRig(tileset))
   const drag = useRef<{ x: number; y: number; moved: boolean; rotate: boolean } | null>(null)
+  /** A click on the terrain waiting to see whether a second one follows (a double click). */
+  const pendingClick = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => () => void (pendingClick.current && clearTimeout(pendingClick.current)), [])
   const [stats, setStats] = useState('')
   const [craterError, setCraterError] = useState<unknown>(null)
   const [exaggeration, setExaggeration] = useState<Exaggeration>(2)
@@ -74,7 +98,7 @@ function MapView({ tileset }: { tileset: Tileset }) {
   const set = useApp((s) => s.set)
   const mode = useApp((s) => s.mode)
   // paused while the horizon view covers the map
-  // paused (no frames drawn) while the horizon view or Block Moon covers the map; it keeps its camera and tiles
+  // paused (no frames drawn) while the horizon view or Educational mode covers the map; it keeps its camera and tiles
   const underHorizon = useHorizonTransition((s) => s.phase === 'horizon')
   const underBlocks = useApp((s) => s.blocks)
   const covered = underHorizon || underBlocks
@@ -146,17 +170,32 @@ function MapView({ tileset }: { tileset: Tileset }) {
     // a place drawn on the map wins; otherwise (study mode) the terrain point under the pointer
     const site = rig.markerAt(e.clientX - rect.left, e.clientY - rect.top) as MapSite | null
     // mission mode: a click places the centre of the area search (on a site or anywhere on the terrain)
-    if (mode === 'mission') {
-      const ll = site ? null : rig.pick((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height)
-      const c = site ? { lat: site.lat, lon: site.lon } : ll ? { lat: ll[0], lon: ll[1] } : null
-      if (c) useAreas.getState().set({ center: { lat: Math.round(c.lat * 1e4) / 1e4, lon: Math.round(c.lon * 1e4) / 1e4 } })
-      if (site) select(site.sel)
-      return
+    if (mode === 'mission' && site) {
+      useAreas.getState().set({ center: { lat: Math.round(site.lat * 1e4) / 1e4, lon: Math.round(site.lon * 1e4) / 1e4 } })
+      return select(site.sel)
     }
     if (site) return select(site.sel)
-    if (mode !== 'study') return
+    if (mode !== 'study' && mode !== 'mission') return
     const ll = rig.pick((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height)
-    if (ll) select({ kind: 'point', lat: Math.round(ll[0] * 1e4) / 1e4, lon: Math.round(ll[1] * 1e4) / 1e4 })
+    if (!ll) return
+    const lat = Math.round(ll[0] * 1e4) / 1e4
+    const lon = Math.round(ll[1] * 1e4) / 1e4
+    // a click on the terrain waits to see whether it is the first half of a double click (which only comes closer)
+    if (pendingClick.current) clearTimeout(pendingClick.current)
+    pendingClick.current = setTimeout(() => {
+      pendingClick.current = null
+      if (mode === 'mission') useAreas.getState().set({ center: { lat, lon } })
+      else select({ kind: 'point', lat, lon })
+    }, DOUBLE_CLICK_MS)
+  }
+  // a double click comes closer to the place under the pointer
+  const onDoubleClick = (e: MouseEvent<HTMLDivElement>) => {
+    if ((e.target as HTMLElement).closest('button, select, input, a')) return
+    if (pendingClick.current) clearTimeout(pendingClick.current)
+    pendingClick.current = null
+    const rect = e.currentTarget.getBoundingClientRect()
+    const ll = rig.pick((e.clientX - rect.left) / rect.width, (e.clientY - rect.top) / rect.height)
+    if (ll) rig.flyTo(ll[0], ll[1], rig.goal.dist * DOUBLE_CLICK_ZOOM)
   }
   const onWheel = (e: WheelEvent<HTMLDivElement>) => zoom(Math.exp(e.deltaY * 0.0012))
 
@@ -173,10 +212,14 @@ function MapView({ tileset }: { tileset: Tileset }) {
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
+        onDoubleClick={onDoubleClick}
         onWheel={onWheel}
         onContextMenu={(e) => e.preventDefault()}
       >
-        <Canvas camera={{ fov: FOV_DEG, near: 1, far: 10_000, position: [0, 1500, 0] }} dpr={[1, 2]} flat linear gl={{ antialias: true }} aria-hidden="true" frameloop={covered ? 'never' : 'always'}>
+        {/* Multisampling only where a CSS pixel is one device pixel. On a denser screen the edges are already drawn
+            at twice the detail and it made no visible difference, while a frame of the tilted map took 7.2 ms of an
+            Apple M2 with it and 4.2 ms without (2880 x 1800, time playing; measured 2026-11-14). */}
+        <Canvas camera={{ fov: FOV_DEG, near: 1, far: 10_000, position: [0, 1500, 0] }} dpr={[1, 2]} flat linear gl={{ antialias: window.devicePixelRatio < 2 }} aria-hidden="true" frameloop={covered ? 'never' : 'always'}>
           <Driver
             tileset={tileset}
             rig={rig}
@@ -189,7 +232,8 @@ function MapView({ tileset }: { tileset: Tileset }) {
           />
         </Canvas>
         <p id="map-help" className="sr-only">
-          Arrow keys move, plus and minus zoom, T tilts to 3D, Q and E rotate, R shows the whole pole, Space plays.
+          Arrow keys move, plus and minus zoom, T tilts to 3D, Q and E rotate, R shows the whole pole, Space plays. A
+          double click comes closer to the place under the pointer.
           {mode === 'study' && ' Activate a point on the terrain to analyse it.'}
           {mode === 'mission' && ' Activate a point on the terrain to centre the area search there; the areas found are listed in the Mission filters panel.'}{' '}
           Right click a place for its options: rename, pointer colour, remove. Sites are listed, with the same information, in the panels.
@@ -236,11 +280,20 @@ interface DriverProps {
 
 /** Runs inside the Canvas: camera, Sun, shadows, tile selection and marker placement, once per frame. */
 function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, craters, onCraterStatus }: DriverProps) {
-  const { gl, camera, size, scene, setDpr } = useThree()
+  const { gl, camera, size, scene, setDpr, viewport } = useThree()
   const eph = useEphemeris().data
   const [engine] = useState(() => new TerrainEngine(tileset, TILES_BASE, gl.extensions.has('OES_texture_float_linear')))
   const [reduced] = useState(prefersReducedMotion)
-  const perf = useRef({ frames: 0, time: 0, degraded: false })
+  /** The pixel ratio the canvas started with (its `dpr` range applied to the screen's). */
+  const [fullDpr] = useState(() => viewport.dpr)
+  const perf = useRef({ frames: 0, time: 0, age: 0, step: 1, good: 0, recovered: false, statsAt: 0, fps: null as number | null })
+  /** What the last drawn frame showed: camera, canvas size and the change counters. A frame is drawn when it differs. */
+  const drawn = useRef({ sig: new Float64Array(28), at: Infinity, was: false })
+  /** Changes to the scene made outside the engine (places, crater outlines). */
+  const sceneVersion = useRef(0)
+  const touch = useCallback(() => {
+    sceneVersion.current++
+  }, [])
   const masks = useMasks().data
   const [markersSet] = useState(() => new MarkerSet())
   /** The camera where the current motion ends (the rig's goal): what the engine loads ahead for. */
@@ -249,6 +302,8 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
 
   useEffect(() => {
     scene.add(engine.group)
+    engine.setQuality(STEPS[perf.current.step])
+    engine.prepare(gl, camera)
     terrainRegistry.engine = engine
     if (import.meta.env.DEV) (window as unknown as { __terrain?: TerrainEngine }).__terrain = engine // e2e and debugging
     engine.loadOverview().then(() => setHeightsReady(true), () => {})
@@ -260,7 +315,7 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
       if (terrainRegistry.engine === engine) terrainRegistry.engine = null
       engine.dispose()
     }
-  }, [engine, scene, markersSet])
+  }, [engine, scene, markersSet, gl, camera])
 
   // Places drawn in the scene: rebuilt when the list, the style, the relief or the heights change.
   useEffect(() => {
@@ -290,14 +345,19 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
       },
     )
     rig.setMarkerPicker((px, py) => markersSet.pick(px, py, camera as THREE.PerspectiveCamera, size.width, size.height))
-  }, [markersSet, sites, markerStyle, exaggeration, heightsReady, engine, tileset, camera, size, rig])
+    touch()
+  }, [markersSet, sites, markerStyle, exaggeration, heightsReady, engine, tileset, camera, size, rig, touch])
 
   useEffect(() => engine.setExaggeration(exaggeration), [engine, exaggeration])
 
   // Layer and lighting follow the store.
   useEffect(() => {
+    let last: { layer: string; lighting: string } | null = null
     const apply = () => {
       const { layer, lighting } = useApp.getState()
+      // the store changes every frame during playback: only a new layer or lighting needs the engine
+      if (last && last.layer === layer && last.lighting === lighting) return
+      last = { layer, lighting }
       let mode: LayerMode = { kind: 'none' }
       if (layer === 'elevation') mode = { kind: 'elevation' }
       else if (layer !== 'none' && tileset.layers[layer]) {
@@ -441,28 +501,82 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
 
     markersSet.update(cam, size.width, size.height, true)
 
-    // Adaptive quality: below 45 fps raise the error threshold and cap the pixel ratio at 1.5.
-    // Not measured while the page is hidden or after a stall (the browser pauses animation frames then).
-    const p = perf.current
-    if (document.visibilityState !== 'visible' || dt > 0.25) {
-      p.frames = 0
-      p.time = 0
-      return
-    }
-    p.frames++
-    p.time += dt
-    if (p.time > 2) {
-      const fps = p.frames / p.time
-      if (fps < 45 && !p.degraded) {
-        p.degraded = true
-        engine.reduceQuality()
-        setDpr(Math.min(1.5, window.devicePixelRatio))
+    // Draw only when the picture changed: the camera, the canvas, or anything the engine or the scene counted.
+    // (This callback has a priority, so React Three Fiber leaves the drawing to it.) An idle map costs the GPU
+    // two frames a second instead of sixty.
+    const d = drawn.current
+    const sig = d.sig
+    let i = 0
+    let changed = false
+    const put = (v: number) => {
+      if (sig[i] !== v) {
+        sig[i] = v
+        changed = true
       }
-      onStats(`${engine.stats.drawn} tiles drawn · ${engine.stats.cached} in GPU memory · ${Math.round(fps)} fps${p.degraded ? ' · reduced quality' : ''}`)
+      i++
+    }
+    cam.updateMatrixWorld()
+    for (const v of cam.matrixWorld.elements) put(v)
+    // the projection has six free terms (field of view, aspect, depth range and the view offset of the panels)
+    const pm = cam.projectionMatrix.elements
+    put(pm[0]); put(pm[5]); put(pm[8]); put(pm[9]); put(pm[10]); put(pm[14])
+    put(size.width); put(size.height); put(gl.getPixelRatio())
+    put(engine.version); put(sceneVersion.current)
+    d.at += dt
+    const draw = changed || d.at >= IDLE_REDRAW_S
+    if (draw) {
+      gl.render(scene, cam)
+      d.at = 0
+    }
+
+    // Adaptive quality (see STEPS). Judged on frames drawn one after another only: a lone frame after a pause says
+    // nothing about speed, nor does a hidden page or a stall (the browser pauses animation frames then).
+    const p = perf.current
+    const streak = draw && d.was
+    d.was = draw
+    p.age += dt
+    p.statsAt += dt
+    if (document.visibilityState !== 'visible' || dt > 0.25 || !streak) {
       p.frames = 0
       p.time = 0
+    } else {
+      p.frames++
+      p.time += dt
+      if (p.time > WINDOW_S) {
+        const fps = p.frames / p.time
+        p.fps = fps
+        p.frames = 0
+        p.time = 0
+        if (p.age > GRACE_S) {
+          let step = p.step
+          if (fps < SLOW_FPS && step > 0) {
+            step--
+            p.good = 0
+          } else if (fps >= FAST_FPS && step < 1 && !p.recovered && ++p.good >= GOOD_WINDOWS) {
+            step++
+            p.recovered = true
+            p.good = 0
+          } else if (fps < FAST_FPS) p.good = 0
+          if (step !== p.step) {
+            p.step = step
+            engine.setQuality(STEPS[step])
+            const dpr = step === 0 ? Math.min(1.5, fullDpr) : fullDpr
+            if (dpr !== gl.getPixelRatio()) {
+              // resizing the canvas clears it: draw again at once, so no empty frame is shown
+              setDpr(dpr)
+              gl.render(scene, cam)
+            }
+          }
+        }
+      }
     }
-  })
+    // shown in development only (MapView); the tests wait for it
+    if (import.meta.env.DEV && p.statsAt > 2) {
+      p.statsAt = 0
+      onStats(`${engine.stats.drawn} tiles drawn · ${engine.stats.cached} in GPU memory · ${p.fps === null ? 'idle' : `${Math.round(p.fps)} fps`} · ${STEPS[p.step]} quality`)
+      p.fps = null
+    }
+  }, 1)
 
-  return craters ? <Craters rig={rig} engine={engine} exaggeration={exaggeration} onStatus={onCraterStatus} /> : null
+  return craters ? <Craters rig={rig} engine={engine} exaggeration={exaggeration} onStatus={onCraterStatus} onChange={touch} /> : null
 }

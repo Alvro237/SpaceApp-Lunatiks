@@ -167,6 +167,10 @@ details.section > summary { font-weight: 700; color: var(--text); padding: 4px 0
 @media (max-width: 760px) {
   .app.on-map .brand-name { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
   .app.on-map .topbar { flex-wrap: nowrap; overflow-x: auto; }
+  /* the bar scrolls sideways: its items keep their width instead of being squeezed and clipped */
+  .app.on-map .topbar > * { flex: none; }
+  .app.on-map .topbar nav ul { flex-wrap: nowrap; }
+  .app.on-map .topbar nav a, .app.on-map .topbar .block-toggle { white-space: nowrap; }
   .navigator { position: absolute; top: var(--inset-top); left: 0; right: 0; bottom: 0; overflow-y: auto; }
   .navigator .map-view { position: relative; inset: auto; height: 58vh; }
   .float, .float-left, .float-right, .float-bottom { position: static; width: auto; max-height: none; margin: 8px; }

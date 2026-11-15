@@ -44,9 +44,10 @@ class StateResponse(BaseModel):
     lon: float = Field(description="East-positive longitude, degrees, -180..180")
     ground_m: float = Field(description="Ground height above the 1737.4 km reference sphere, metres")
     ground_source: GroundSource = Field(description="Where ground_m comes from: 'lola_site' (pipeline value at a "
-                                                    "catalogue terrain site), 'lola_grid' (LOLA elevation grid south "
-                                                    "of 60 S, 960 m cells) or 'reference_sphere' (no height data "
-                                                    "there: 0 m assumed; it only shifts parallax, < 0.001 deg)")
+                                                    "catalogue terrain site), 'lola_grid' (finest LOLA elevation grid "
+                                                    "covering the point: 240-960 m cells south of 60 S, 3.8 km "
+                                                    "whole-Moon grid elsewhere) or 'reference_sphere' (no height "
+                                                    "data there: 0 m assumed; it only shifts parallax, < 0.001 deg)")
     t: str = Field(description="Requested instant, ISO 8601 UTC")
     mast_m: float = Field(description="Mast height requested, metres above the ground")
     mast_used_m: float = Field(description="Mast height of the horizon actually used, metres: the nearest "
@@ -114,9 +115,10 @@ class SeriesResponse(BaseModel):
     lon: float = Field(description="East-positive longitude, degrees, -180..180")
     ground_m: float = Field(description="Ground height above the 1737.4 km reference sphere, metres")
     ground_source: GroundSource = Field(description="Where ground_m comes from: 'lola_site' (pipeline value at a "
-                                                    "catalogue terrain site), 'lola_grid' (LOLA elevation grid south "
-                                                    "of 60 S, 960 m cells) or 'reference_sphere' (no height data "
-                                                    "there: 0 m assumed; it only shifts parallax, < 0.001 deg)")
+                                                    "catalogue terrain site), 'lola_grid' (finest LOLA elevation grid "
+                                                    "covering the point: 240-960 m cells south of 60 S, 3.8 km "
+                                                    "whole-Moon grid elsewhere) or 'reference_sphere' (no height "
+                                                    "data there: 0 m assumed; it only shifts parallax, < 0.001 deg)")
     start: str = Field(description="Window start, ISO 8601 UTC")
     end: str = Field(description="Last sample, ISO 8601 UTC")
     duration_h: float = Field(description="Requested window length, hours")

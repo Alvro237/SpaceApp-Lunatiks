@@ -28,11 +28,11 @@ def test_happy_path_matches_the_contract():
     assert v.state_invariants(r.json()) == []
 
 
-def test_smooth_sphere_site_says_so():
+def test_site_without_a_stored_mask_uses_the_traced_skyline():
     r = get("apollo-11", mast_m=3.0).json()
-    assert r["horizon_kind"] == "smooth_sphere"
+    assert r["horizon_kind"] == "terrain"
     assert r["mast_used_m"] == 3.0          # no stored masks: the requested mast is used as is
-    assert r["sun"]["horizon_el"] < 0       # geometric dip of the smooth sphere
+    assert -2.0 < r["sun"]["horizon_el"] < 2.0   # Mare Tranquillitatis: no 3.8 km-scale relief
 
 
 @pytest.mark.parametrize("params", [{}, {"mast_m": ""}, {"mast_m": "null"}, {"mast_m": "NULL"}, {"mast_m": "none"}])

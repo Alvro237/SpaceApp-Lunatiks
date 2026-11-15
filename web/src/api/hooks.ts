@@ -24,12 +24,13 @@ export function useApiState(sel: Selection, p: StateParams, enabled: boolean) {
   })
 }
 
-/** Ray-traced skyline of manual coordinates (one call per point and mast; kept for the session). */
-export function usePointHorizon(sel: Selection, mastM: number) {
+/** Ray-traced skyline at coordinates — a manual point, or a catalogue site without a stored mask (pass null
+ * when the place needs no trace). One call per place and mast; kept for the session. */
+export function usePointHorizon(coords: { lat: number; lon: number } | null, mastM: number) {
   return useQuery({
-    queryKey: ['point-horizon', sel.kind === 'point' ? sel.lat : null, sel.kind === 'point' ? sel.lon : null, mastM],
-    queryFn: ({ signal }) => (sel.kind === 'point' ? api.pointHorizon(sel.lat, sel.lon, mastM, signal) : Promise.reject(new Error('not a point'))),
-    enabled: sel.kind === 'point',
+    queryKey: ['point-horizon', coords?.lat ?? null, coords?.lon ?? null, mastM],
+    queryFn: ({ signal }) => (coords ? api.pointHorizon(coords.lat, coords.lon, mastM, signal) : Promise.reject(new Error('no coordinates to trace'))),
+    enabled: coords !== null,
     retry,
     staleTime: Infinity,
   })
