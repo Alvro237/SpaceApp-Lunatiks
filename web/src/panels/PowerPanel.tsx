@@ -290,6 +290,7 @@ function Model() {
           </h3>
         </div>
 
+        <p className="step-label">1 · Choose what to compute</p>
         <div className="opt-top">
           <div className="ios-list setting">
             <div className="ios-row stack">
@@ -319,6 +320,7 @@ function Model() {
         </div>
 
         <form onSubmit={submit} noValidate className="opt-form" aria-label={`${active.title} inputs`}>
+          <p className="step-label">2 · Fill the inputs</p>
           <div className="opt-panels">
             {groups.map((g, i) => {
               const filled = g.fields.filter((s) => (f[s.key] ?? '').trim()).length
