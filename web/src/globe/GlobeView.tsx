@@ -634,6 +634,19 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
       return mesh
     }),
   )
+  // The grids stay hidden until the camera comes close, and a program is compiled when it is first drawn: the first
+  // zoom towards the ground, and the first one near the pole, each froze the picture for about 0.8 s (measured
+  // 2026-11-15, Apple M-series, 2880 x 1800). Their two programs are compiled here instead, in the background, while
+  // the whole Moon is on screen. Stand-in meshes are used because compile() skips what is not visible.
+  useEffect(() => {
+    const warm = new THREE.Scene()
+    for (const m of [patches[0], polarPatches[0]]) {
+      const mesh = new THREE.Mesh(m.geometry, m.material)
+      mesh.frustumCulled = false
+      warm.add(mesh)
+    }
+    gl.compileAsync(warm, camera, scene).catch(() => {}) // a failed warm-up only means compiling at first use, as before
+  }, [gl, camera, scene, patches, polarPatches])
   useEffect(() => {
     if (tileset) polar.setTileset(tileset, TILES_BASE, material, gl.extensions.has('OES_texture_float_linear'))
   }, [tileset, polar, material, gl])
