@@ -15,6 +15,8 @@ import {
   groundAngle,
   levelFor,
   rows,
+  SHARP_TILES,
+  sharpTiles,
   tileAt,
   tileBox,
   tilesAround,
@@ -43,6 +45,23 @@ const T = { z: 4, x: 36, y: 15 }
 const P = { z: 4, x: 36, y: 28 }
 
 describe('detail grid', () => {
+  it('asks for the finest tiles around the centre of a close-up view, the tile under the centre first', () => {
+    // 450 km up over the far side, a 1200-pixel-high view: its own level is coarser than the finest
+    const v = { lat: 20, lon: 150, distKm: MOON_R_KM + 450, fovDeg: 35, widthPx: 1600, heightPx: 1200 }
+    const level = wantedTiles(v, MIN_HEIGHT_LEVEL).level
+    expect(level).toBeLessThan(MAX_LEVEL)
+    const fine = sharpTiles(v, level)
+    expect(fine).toHaveLength(SHARP_TILES)
+    expect(fine.every((t) => t.z === MAX_LEVEL)).toBe(true)
+    expect(fine[0]).toEqual(tileAt(MAX_LEVEL, 20, 150))
+    // none twice, all within two tiles of the centre each way
+    expect(new Set(fine.map((t) => `${t.x}/${t.y}`)).size).toBe(SHARP_TILES)
+    const c = tileAt(MAX_LEVEL, 20, 150)
+    for (const t of fine) expect(Math.max(Math.abs(t.x - c.x), Math.abs(t.y - c.y))).toBeLessThanOrEqual(2)
+    // nothing extra once the view's own level is the finest
+    expect(sharpTiles(v, MAX_LEVEL)).toEqual([])
+  })
+
   it('builds the exact Moon Trek request the fixtures were fetched with', () => {
     expect(tileBox(T)).toEqual({ lon0: 22.5, lat0: 0, size: 5.625 })
     expect(trekTileUrl('dem', T)).toBe(
