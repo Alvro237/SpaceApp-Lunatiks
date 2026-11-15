@@ -100,6 +100,11 @@ h2 { font-size: clamp(1.9rem, 3.6vw, 2.9rem); margin-bottom: 18px; }
 .eyebrow { display: inline-block; margin: 0 0 22px; padding: 6px 14px; border: 1px solid var(--card-border); border-radius: 999px; background: rgba(5, 5, 7, 0.5); color: var(--muted); font-size: 0.85rem; backdrop-filter: blur(6px); }
 .hero h1 { font-size: clamp(2.5rem, 6.4vw, 5.4rem); margin-bottom: 26px; text-wrap: balance; }
 .hero h1 em { font-style: normal; color: var(--sun); }
+/* "and the Earth stays" does not break: at 2.5rem it is about 340 px wide, more than a phone leaves between the gutters
+   (it was cut at 375 px and made narrower screens scroll sideways). Below 420 px the title follows the width. */
+@media (max-width: 420px) {
+  .hero h1 { font-size: clamp(1.6rem, 9.8vw, 2.5rem); }
+}
 .hero .lead { margin-bottom: 34px; color: #cfccc4; text-shadow: 0 1px 18px rgba(0, 0, 0, 0.8); }
 .actions { display: flex; flex-wrap: wrap; gap: 12px; }
 .actions-center { justify-content: center; }

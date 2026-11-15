@@ -93,8 +93,9 @@ Yes. Claude (Anthropic) was used as a coding, testing and documentation assistan
 for: researching data sources and comparable tools, writing and testing the Python data pipeline, the FastAPI backend
 and the web interface, and drafting documentation. [Team: describe here, in your own words, which ideas and decisions
 were yours, because the rules ask that SI is not used to come up with the idea of the solution.] AI-assisted code and
-documentation are acknowledged in the README, in the app's "Data & methods" page and in `docs/`. No AI-generated
-images, audio or video are used, so no watermark is needed.
+documentation are acknowledged in the README, in the app's "Data & methods" page and in `docs/`. The app uses no
+AI-generated images, audio or video. The 30-second demo video contains AI-generated footage, which carries the visible
+"Contains AI-generated footage" mark. [Team: say which shots are AI-generated, with which tool, and whether the audio is.]
 
 ## NASA Data
 

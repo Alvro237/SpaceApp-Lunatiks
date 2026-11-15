@@ -64,7 +64,8 @@ included; temperature comes from a model, not from Diviner. The ephemeris tables
 ## Use of AI
 
 Claude (Anthropic) assisted with research, code, tests, data processing scripts and documentation under the
-team's direction. No AI-generated images, video or audio are used.
+team's direction. The app uses no AI-generated images, video or audio. The 30-second demo video contains AI-generated
+footage, marked as such on screen.
 
 ## Licence
 
