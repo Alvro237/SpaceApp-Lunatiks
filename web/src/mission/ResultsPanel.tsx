@@ -1,17 +1,18 @@
 /**
- * "Candidate areas" (mission-planner-ui-spec.md section 3.7, Stage A content): the floating right panel shown in
- * mission mode as soon as an answer exists. The areas list and the funnel table are the same as the old
- * `panels/MissionPanel.tsx` `Results`, moved out here now that the left panel is the planner inputs, not a popover.
+ * "Candidate sites" (mission-planner-ui-spec.md section 3.7, Stage B content; mission-design-spec.md section 9.7):
+ * the floating right panel shown in mission mode as soon as a suitability answer exists. On top the cell counts in
+ * words and numbers, then the map legend, the score weights, the proposed landing sites (rank, score, nearest named
+ * feature, pros and cons in words, criteria without data, Show and Study), the funnel and the assumptions.
  */
 import { useId } from 'react'
 import './planner.css'
-import type { AreaSearchResponse } from '../api/types'
-import { AreaLegend } from '../panels/MissionPanel'
-import { FUNNEL_LABEL } from '../panels/missionFilters'
+import type { SuitabilityResponse, TopSite } from '../api/types'
 import { useAreas } from '../state/areas'
 import { MAX_COMPARE, useApp } from '../state/store'
+import { CATEGORY_TITLE, CRITERION_LABEL } from './plannerInputs'
+import { coord, siteTitle } from './sites'
 
-/** Score ramp of the viable cells (4.3): the ramp's own 0, 0.33, 0.67, 1 ticks, in words. */
+/** Score ramp of the viable cells (design spec 9.6 modes 1 and 4): the ramp's own 0, 0.33, 0.67, 1 ticks, in words. */
 function ScoreLegend() {
   const a = useAreas()
   const id = useId()
@@ -35,60 +36,175 @@ function ScoreLegend() {
   )
 }
 
+/** Map legend of the suitability search: every code with its pattern in words (never colour alone). */
+export function SuitabilityLegend() {
+  return (
+    <ul className="area-legend" aria-label="Map legend of the suitability search">
+      <li>
+        <span className="sw sw-viable" aria-hidden="true" /> Viable, outlined, coloured by score
+      </li>
+      <li>
+        <span className="sw sw-window" aria-hidden="true" /> Fails a mission-window input (hatched)
+      </li>
+      <li>
+        <span className="sw sw-bound" aria-hidden="true" /> Ruled out by the ephemeris bound (cross-hatched)
+      </li>
+      <li>
+        <span className="sw sw-static" aria-hidden="true" /> Fails a map input or the landing radius (dimmed)
+      </li>
+      <li>
+        <span className="sw sw-unknown" aria-hidden="true" /> No data (dotted)
+      </li>
+      <li>
+        <span className="sw sw-region" aria-hidden="true" /> Search region (ring)
+      </li>
+    </ul>
+  )
+}
+
 const fmtKm2 = (v: number) => (v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1) : v.toFixed(2))
-const coord = (lat: number, lon: number) => `${Math.abs(lat).toFixed(3)}° ${lat < 0 ? 'S' : 'N'}, ${Math.abs(lon).toFixed(3)}° ${lon < 0 ? 'W' : 'E'}`
+const pct = (v: number) => `${Math.round(v * 100)} %`
+
+/** Category ids, highest weight first. */
+const byWeight = (cats: string[], w: Record<string, number>) => [...cats].sort((x, y) => (w[y] ?? 0) - (w[x] ?? 0)).join(',')
 
 export function ResultsPanel({ titleId }: { titleId: string }) {
   const a = useAreas()
-  if (!a.result) {
+  if (!a.suit) {
     return (
       <div className="results-empty">
-        <h2 id={titleId}>Candidate areas</h2>
-        <p className="muted pad">No search yet: set a region and switch on at least one input in the planner panel.</p>
+        <h2 id={titleId}>Candidate sites</h2>
+        <p className="muted pad">No search yet: set a region and switch on at least one category in the planner panel.</p>
       </div>
     )
   }
-  return <Results r={a.result} titleId={titleId} />
+  return <Results r={a.suit} titleId={titleId} />
 }
 
-function Results({ r, titleId }: { r: AreaSearchResponse; titleId: string }) {
+function SiteItem({ s, landing }: { s: TopSite; landing: boolean }) {
+  const a = useAreas()
+  const selected = a.compareSelected.includes(s.rank)
+  const atLimit = a.compareSelected.length >= MAX_COMPARE
+  const catLabel = (c: string) => s.categories.find((x) => x.category === c)?.label ?? CATEGORY_TITLE[c] ?? c
+  const critLabel = (id: string) => s.criteria.find((x) => x.id === id)?.label ?? CRITERION_LABEL[id] ?? id
+  return (
+    <li className={a.focus === s.rank ? 'is-focus' : ''}>
+      <div className="area-main">
+        <strong>
+          #{s.rank} · {siteTitle(s)}
+        </strong>
+        <span className="muted">
+          score {pct(s.score)}
+          {landing ? ` · worst in the landing ellipse ${pct(s.area_score)}` : ''}
+          {s.coverage < 0.995 ? ` · data for ${pct(s.coverage)} of the weight` : ''}
+        </span>
+        {s.categories.length > 0 && (
+          <ul className="site-cats">
+            {s.categories.map((c) => (
+              <li key={c.category}>
+                <span className="site-cat-label">{c.label}</span>
+                <span className="site-bar" aria-hidden="true">
+                  <span style={{ width: `${Math.round((c.utility ?? 0) * 100)}%` }} />
+                </span>
+                <span className="site-cat-value">{c.utility == null ? 'no data' : pct(c.utility)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {s.pros.length > 0 && (
+          <span>
+            <span aria-hidden="true">✓ </span>Strong: {s.pros.map(catLabel).join(', ')}
+          </span>
+        )}
+        {s.cons.length > 0 && (
+          <span>
+            <span aria-hidden="true">✗ </span>Weak: {s.cons.map(catLabel).join(', ')}
+          </span>
+        )}
+        {s.unknown.length > 0 && (
+          <span className="muted">
+            <span aria-hidden="true">? </span>No data: {s.unknown.map(critLabel).join(', ')}
+          </span>
+        )}
+        <span className="muted small-note">
+          {coord(s.lat, s.lon)}
+          {s.window_exact === true ? ' · window checked at the spot with its own LOLA horizon' : s.window_exact === false ? ' · window values from the nearest sample' : ''}
+          {s.rank <= 10 ? ` · red flag ${s.rank} on the map` : ''}
+        </span>
+      </div>
+      <div className="area-actions">
+        <button
+          type="button"
+          className="small"
+          aria-label={`Show site ${s.rank} on the map`}
+          onClick={() => {
+            a.set({ focus: s.rank })
+            a.look(s.lat, s.lon, 12)
+          }}
+        >
+          Show
+        </button>
+        <button
+          type="button"
+          className="small"
+          aria-pressed={selected}
+          aria-label={`${selected ? 'Deselect' : 'Select'} site ${s.rank} for comparison`}
+          title={selected ? 'Selected for comparison' : 'Select for comparison'}
+          disabled={!selected && atLimit}
+          onClick={() => a.toggleCompareSelected(s.rank)}
+        >
+          Study
+        </button>
+      </div>
+    </li>
+  )
+}
+
+function Results({ r, titleId }: { r: SuitabilityResponse; titleId: string }) {
   const a = useAreas()
   const id = useId()
   const cellKm2 = (r.grid.cell_m / 1000) ** 2
-  const viableKm2 = r.counts.viable * cellKm2
+  const n = (k: keyof SuitabilityResponse['counts']) => r.counts[k] ?? 0
   const compareCount = a.compareSelected.length
-  const atCompareLimit = compareCount >= MAX_COMPARE
-  // Reuses Study + Multiselect's own comparison (ComparePanel): points at the ticked areas' best spots, the same
-  // "compare" and "compareMode" the map's Multiselect switch sets, so the same radar and strips render here.
+  const landing = a.suitRequest?.landing_radius_km != null
+  // the map follows the priorities at once; the sites were ranked with the order of the request
+  const cats = r.layers.map((l) => l.category)
+  const stale = cats.length > 1 && byWeight(cats, r.weights) !== byWeight(cats, a.weights)
+  // Reuses Study + Multiselect's own comparison (ComparePanel), as the Stage A areas did.
   const compareSelected = () => {
-    const picks = r.areas
-      .filter((ar) => a.compareSelected.includes(ar.id))
-      .map((ar) => ({ kind: 'point' as const, lat: Math.round(ar.best_lat * 1e4) / 1e4, lon: Math.round(ar.best_lon * 1e4) / 1e4 }))
-    // compareMode/compare sit outside the generic `set` action's Scene&Prefs type (useApp's own setCompareMode
-    // takes no list): setState is zustand's own API, so this is still the same store, not a new code path.
+    const picks = r.sites
+      .filter((s) => a.compareSelected.includes(s.rank))
+      .map((s) => ({ kind: 'point' as const, lat: Math.round(s.lat * 1e4) / 1e4, lon: Math.round(s.lon * 1e4) / 1e4 }))
     useApp.setState({ compare: picks.slice(0, MAX_COMPARE), compareMode: true })
   }
+  const counts: [string, number, string][] = [
+    ['Viable', n('viable'), `≈ ${fmtKm2(n('viable') * cellKm2)} km²`],
+    ['Fail a map input or the landing radius', n('failed_static'), ''],
+    ['Fail a mission-window input (sampled)', n('failed_window'), ''],
+    ['Ruled out by the ephemeris bound', n('failed_bound'), ''],
+    ['No data', n('unknown'), ''],
+  ]
   return (
     <div className="results" aria-live="polite">
       <h2 id={titleId} className="ios-header">
-        Candidate areas
+        Candidate sites
         <span className="muted small-note">
           {r.seconds.toFixed(1)} s{r.window ? ` · ${r.window.samples} horizons` : ''}
         </span>
       </h2>
-      <p className="result-chips">
-        <span className="chip-stat pass">
-          <span aria-hidden="true">✓</span> ≈ {fmtKm2(viableKm2)} km² viable
-        </span>
-        <span className="chip-stat fail">
-          <span aria-hidden="true">✗</span> {(r.counts.failed_static + r.counts.failed_window).toLocaleString('en')} cells out
-        </span>
-        {r.counts.unknown > 0 && (
-          <span className="chip-stat unknown">
-            <span aria-hidden="true">?</span> {r.counts.unknown.toLocaleString('en')} no data
-          </span>
-        )}
-      </p>
+      <table className="cell-counts">
+        <caption className="sr-only">Cells of the search region by outcome</caption>
+        <tbody>
+          {counts.map(([label, v, extra]) => (
+            <tr key={label}>
+              <th scope="row">{label}</th>
+              <td>
+                {v.toLocaleString('en')} cells{extra ? ` (${extra})` : ''}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
       <div className="ios-list">
         <div className="ios-row">
           <span id={`${id}-show`} className="ios-label">
@@ -100,68 +216,59 @@ function Results({ r, titleId }: { r: AreaSearchResponse; titleId: string }) {
         </div>
       </div>
       <ScoreLegend />
-      <AreaLegend />
+      <SuitabilityLegend />
+
+      <h3 className="ios-header">Score</h3>
+      {r.layers.length === 0 ? (
+        <p className="fine">No category with a score is on: every viable cell scores 1. Switch on Power or Earth contact, or set a limit that scores.</p>
+      ) : (
+        <ul className="fine score-weights">
+          {r.layers.map((l) => (
+            <li key={l.category}>
+              <strong>
+                {l.label} {pct(a.weights[l.category] ?? l.weight)}
+              </strong>
+              : {l.measure}
+            </li>
+          ))}
+        </ul>
+      )}
+      {stale && (
+        <p className="fine" role="status">
+          The map follows the new priorities; the sites below are still ranked with the previous ones.{' '}
+          <button type="button" className="small" onClick={() => a.set({ rerankSeq: a.rerankSeq + 1 })}>
+            Re-rank the sites
+          </button>
+        </p>
+      )}
 
       <h3 className="ios-header">
-        Areas found
+        Proposed landing sites
         <button
           type="button"
           className="small header-link"
           disabled={compareCount < 2}
           onClick={compareSelected}
-          title={compareCount < 2 ? 'Select at least two areas first (their own Study button)' : undefined}
+          title={compareCount < 2 ? 'Select at least two sites first (their own Study button)' : undefined}
         >
           Compare selected{compareCount > 0 ? ` (${compareCount})` : ''}
         </button>
       </h3>
-      {r.areas.length === 0 ? (
-        <p className="muted pad">No connected area passes every input. The funnel below shows which input removed the most.</p>
+      {r.sites.length === 0 ? (
+        <p className="muted pad">No cell passes every input. The funnel below shows which input removed the most.</p>
       ) : (
         <ol className="area-list">
-          {r.areas.map((ar, k) => (
-            <li key={ar.id} className={a.focus === ar.id ? 'is-focus' : ''}>
-              <div className="area-main">
-                <strong>
-                  #{k + 1} · {fmtKm2(ar.area_km2)} km²
-                </strong>
-                <span className="muted">
-                  score {Math.round(ar.mean_score * 100)} % (best {Math.round(ar.best_score * 100)} %)
-                </span>
-                {ar.sites.length > 0 && <span className="muted">{ar.sites.join(', ')}</span>}
-                <span className="muted small-note">
-                  best spot {coord(ar.best_lat, ar.best_lon)}
-                  {k < 10 ? ` · red flag ${k + 1} on the map` : ''}
-                </span>
-              </div>
-              <div className="area-actions">
-                <button
-                  type="button"
-                  className="small"
-                  aria-label={`Show area ${k + 1} on the map`}
-                  onClick={() => {
-                    a.set({ focus: ar.id })
-                    a.look(ar.centroid_lat, ar.centroid_lon, Math.max(8, Math.sqrt(ar.area_km2) * 4))
-                  }}
-                >
-                  Show
-                </button>
-                <button
-                  type="button"
-                  className="small"
-                  aria-pressed={a.compareSelected.includes(ar.id)}
-                  aria-label={`${a.compareSelected.includes(ar.id) ? 'Deselect' : 'Select'} area ${k + 1} for comparison`}
-                  title={a.compareSelected.includes(ar.id) ? 'Selected for comparison' : 'Select for comparison'}
-                  disabled={!a.compareSelected.includes(ar.id) && atCompareLimit}
-                  onClick={() => a.toggleCompareSelected(ar.id)}
-                >
-                  Study
-                </button>
-              </div>
-            </li>
+          {r.sites.map((s) => (
+            <SiteItem key={s.rank} s={s} landing={landing} />
           ))}
         </ol>
       )}
-      <p className="fine">Score: share of the window with sunlight and with Earth contact, equal weights (the long-term maps when no window input is on).</p>
+      {r.sites_dropped > 0 && (
+        <p className="fine">
+          {r.sites_dropped} more candidate{r.sites_dropped > 1 ? 's' : ''} failed a mission-window input when checked at the spot with its own horizon, and{' '}
+          {r.sites_dropped > 1 ? 'were' : 'was'} dropped.
+        </p>
+      )}
 
       <h3 className="ios-header">Funnel</h3>
       <div className="table-scroll" tabIndex={0} role="region" aria-label="Cells removed by each input">
@@ -177,10 +284,10 @@ function Results({ r, titleId }: { r: AreaSearchResponse; titleId: string }) {
           </thead>
           <tbody>
             {r.funnel.map((f) => (
-              <tr key={f.id}>
+              <tr key={`${f.stage}-${f.id}`}>
                 <th scope="row">
-                  {FUNNEL_LABEL[f.id] ?? f.id}
-                  {f.stage === 'window' && <span className="win-tag"> window</span>}
+                  {CRITERION_LABEL[f.id] ?? f.id}
+                  {(f.stage === 'window' || f.stage === 'bound') && <span className="win-tag"> {f.stage}</span>}
                 </th>
                 <td>{f.cells_in.toLocaleString('en')}</td>
                 <td>{f.cells_out.toLocaleString('en')}</td>

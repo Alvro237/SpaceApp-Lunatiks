@@ -391,17 +391,22 @@ function Driver({ tileset, rig, sites, markerStyle, exaggeration, onStats, crate
     }
   }, [landingMarkers, landings, engine, exaggeration, heightsReady, tileset, touch])
 
-  // The best places of the mission planner's answer: a red flag, numbered as in the results list, on the best
-  // cell of each of the first ten areas (the API ranks them). Only while the answer is painted.
+  // The best places of the mission planner's answer: a red flag, numbered as in the results list, on each of the
+  // first ten proposed sites (the API ranks them). Only while the answer is painted.
   useEffect(() => {
     const lift = (x: number, y: number) => (((engine.heightAt(x, y) ?? 0) + 40) / 1000) * exaggeration
     let shownFor: unknown = undefined
     const apply = () => {
       const a = useAreas.getState()
-      const on = useApp.getState().mode === 'mission' && a.show ? a.result : null
+      const on = useApp.getState().mode === 'mission' && a.show ? (a.suit ?? a.result) : null
       if (on === shownFor) return
       shownFor = on
-      const best = (on?.areas ?? []).slice(0, 10).map((ar, i) => ({ rank: i + 1, lat: ar.best_lat, lon: ar.best_lon }))
+      // the suitability answer's proposed sites (Stage B), or the best cell of each area of the older area search
+      const best = !on
+        ? []
+        : 'sites' in on
+          ? on.sites.slice(0, 10).map((s) => ({ rank: s.rank, lat: s.lat, lon: s.lon }))
+          : on.areas.slice(0, 10).map((ar, i) => ({ rank: i + 1, lat: ar.best_lat, lon: ar.best_lon }))
       flagMarkers.set(best.filter((b) => inExtent(tileset, b.lat, b.lon)), (b) => {
         const [x, y] = polarXY(b.lat, b.lon)
         return new THREE.Vector3(x / 1000, lift(x, y), -y / 1000)
