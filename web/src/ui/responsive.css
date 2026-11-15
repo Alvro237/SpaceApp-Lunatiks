@@ -169,3 +169,9 @@ button, a, summary { -webkit-tap-highlight-color: transparent; }
   .top-left .where-when, .top-left .toolstrip { margin-top: 6px; }
   .float, .float-left, .float-right, .float-bottom, .quest-card { margin: 6px 8px 0; }
 }
+
+/* A phone on its side: the header is one row, so the Educational switch gives up its word (it keeps its name). */
+@media (max-height: 480px) {
+  .app.on-map .block-toggle { padding-right: 4px; }
+  .app.on-map .block-toggle-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
