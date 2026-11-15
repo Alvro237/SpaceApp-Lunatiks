@@ -197,3 +197,17 @@ class CriteriaCatalogue(BaseModel):
     fixed_inputs: list[FixedInput]
     request_parameters: list[FixedInput] = Field(description="Inputs sent as request fields, not criteria (landing_radius_km, robust_delay_h, comms_min_fraction)")
     criteria: list[CriterionInfo]
+
+
+# ---- GET /api/v1/suitability/features?q=&limit=
+
+class FeatureMatch(BaseModel):
+    name: str = Field(description="IAU name, as accepted by target_distance_km's feature parameter")
+    lat: float = Field(description="Centre latitude, degrees")
+    lon: float = Field(description="Centre longitude, degrees east -180..180")
+    diameter_km: float | None
+    type: str = Field(description="Feature type (crater, mons, ...)")
+
+
+class FeatureList(BaseModel):
+    features: list[FeatureMatch] = Field(description="Named features south of 55 S whose name contains the query, largest first")
