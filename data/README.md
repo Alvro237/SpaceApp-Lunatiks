@@ -21,6 +21,7 @@ longitude, planetocentric latitude, degrees. The API reads these files only thro
 | `craters/robbins_2018.npz` | 1 296 796 craters: `lat`, `lon`, `diam_km`, sorted by latitude | NumPy npz, float32 | `lunarnav.craters` |
 | `craters/craters.json` | Source, citation, counts, completeness | JSON | `lunarnav.craters` |
 | `globe/lola_global_4ppd.png`, `globe/globe.json` | Global LOLA topography for the web globe: 1440 x 720, 4 px/deg, simple cylindrical (row 0 = 90 N, column 0 = longitude 0, east-positive), metres above the 1737.4 km sphere | 16-bit value in the red and green bytes of a PNG; height = min + v / 65535 x (max - min) (min, max in the sidecar) | `lunarnav.globe` |
+| `sky/starmap_8k.jpg`, `sky/starmap_4k.jpg`, `sky/sky.json` | NASA SVS Deep Star Maps 2020 for the sky behind the web globe: 8192 x 4096 and 4096 x 2048, equirectangular in J2000 right ascension and declination (centre column 0 h, right ascension grows to the left, row 0 = declination +90); the sidecar holds the source and the alignment check against the 25 brightest Bright Star Catalogue stars | JPEG (quality 75 and 85), sRGB transfer curve of the linear EXR values | `lunarnav.sky` |
 | `radiation/crater_dosimeter_daily.json` | LRO CRaTER dosimeter daily dose rate 2009-06-19 to 2013-04-30 (1405 days): as measured in orbit and corrected for lunar shielding (free-space GCR equivalent, N/A on solar-particle-event days), partial-day flag; `meta` holds source URL, SHA-256 and caveats | JSON, arrays `date`, `measured_mgy_si_per_day`, `corrected_mgy_si_per_day` (null = missing), `partial_day`; mGy in silicon per day | `lunarnav.crater_dose` |
 | `ground_stations.json` | Radio-link catalogue: 18 deep-space antennas in three networks (`dsn` 12, `estrack` 3, `jaxa` 3). Per antenna: WGS84 geodetic position, dish, bands when a source states them, elevation limits and their source (`cited` or `owner_estimate`). The index of the Moon table and the SHA-256 of every kernel and mask file are in the same document | JSON, snake_case; limits in degrees, a number (all azimuths) or an array at azimuths 0, step, ... (clockwise from north) | `lunarnav.ground_stations` |
 | `moon_itrf_2025_2035.f32` | Geocentric Moon vector in the Earth-fixed frame ITRF93, hourly on the same grid as `ephemeris_2025_2035.f32`; light time and stellar aberration corrected | float32 little-endian `[sample][x,y,z]`, km | `lunarnav.ground_stations` |
@@ -91,6 +92,7 @@ uv run python -m lunarnav.polar_grids     # screening grids
 uv run python -m lunarnav.craters         # crater catalogue
 uv run python -m lunarnav.globe           # global LOLA topography for the web globe (downloads LDEM_16, 33 MB)
 uv run python -m lunarnav.global_grid     # whole-Moon elevation grid for the ray-traced horizon (same LDEM_16)
+uv run --with openexr python -m lunarnav.sky   # star map behind the web globe (downloads the SVS 8k EXR, 125 MB)
 ```
 
 The four product 69 GeoTIFFs are fetched by hand into `data/raw/illumination/` from
