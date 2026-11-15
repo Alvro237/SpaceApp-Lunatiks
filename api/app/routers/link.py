@@ -11,7 +11,10 @@ from ..db.stations import StationRepository
 from ..db.store import DataStore, get_store
 from ..logic.ephemeris import OutOfCoverage
 from ..logic.engine import AnalysisParams
-from ..logic.link import LinkBudgetParams, combine_contact, free_space_loss_db, margin_db, max_data_rate_bps
+from dataclasses import replace
+
+from ..logic.link import (LinkBudgetParams, band_frequency_ghz, band_of_frequency, combine_contact, free_space_loss_db,
+                          margin_db, max_data_rate_bps)
 from ..logic.sun import longest_run_h
 from ..schemas.link import (LinkBudgetResult, LinkNow, LinkRequest, LinkResponse, SkippedStation, StationBudget,
                             StationCatalogue, StationInfo, StationResult)
@@ -32,7 +35,9 @@ ASSUMPTIONS = [
 BUDGET_ASSUMPTIONS = [
     "Link budget: Eb/N0 = EIRP - free-space loss - other losses + G/T + 228.6 - 10 log10(data rate), compared with the "
     "required Eb/N0 plus the minimum margin. The free-space loss uses the real distance from each antenna to the Moon.",
-    "EIRP, G/T, data rate and required Eb/N0 are the values you supplied: no source publishes them for these antennas. "
+    "Downlink G/T per antenna: DSN values from 810-005 (gain minus system noise temperature at zenith, clear "
+    "weather), the JAXA Misasa design specification, and estimates scaled by dish diameter where nothing is "
+    "published. G/T is lower at low elevation. The lunar terminal's EIRP and the data rate are yours.",
     "Atmosphere, rain, pointing, polarisation, Doppler and solar noise are not modelled except through other_losses_db.",
 ]
 
@@ -92,12 +97,32 @@ def link(req: LinkRequest, store: DataStore = Depends(get_store)) -> LinkRespons
     c = combine_contact(series.comms(engine_params), {k: v.sees_moon for k, v in views.items()})
     step_h = series.step_ms / 3_600_000.0
 
-    params = None if req.budget is None else LinkBudgetParams(**req.budget.model_dump())
+    params = None
+    band = freq = None
+    gts: dict[str, tuple[float | None, str]] = {}
+    per_station: dict[str, LinkBudgetParams] = {}
+    if req.budget is not None:
+        b = req.budget
+        way = "downlink" if req.direction == "downlink" else "uplink"
+        freq = b.frequency_ghz if b.frequency_ghz is not None else band_frequency_ghz(b.band, way)
+        band = band_of_frequency(freq, way) if b.frequency_ghz is not None else b.band
+        if way == "downlink" and b.receive_gt_db_per_k is None:
+            gts = services.link_receive_gt(store, ls, band, req.custom_stations)
+        else:                        # a downlink override, or the lunar terminal's G/T for an uplink
+            gts = {sp.id: (float(b.receive_gt_db_per_k), "user") for sp in specs}
+        params = LinkBudgetParams(frequency_ghz=freq, transmit_eirp_dbw=b.transmit_eirp_dbw, receive_gt_db_per_k=0.0,
+                                  data_rate_bps=b.data_rate_bps, required_ebn0_db=b.required_ebn0_db,
+                                  other_losses_db=b.other_losses_db, min_margin_db=b.min_margin_db)
     link_by: dict[str, np.ndarray] = {}
     margins: dict[str, np.ndarray] = {}
     if params is not None:
         for sp in specs:
-            margins[sp.id] = margin_db(views[sp.id].range_km, params)
+            g = gts[sp.id][0]
+            if g is None:                # no receiver in this band, or nothing to estimate from: never closes
+                margins[sp.id] = np.full(t.shape, -np.inf)
+            else:
+                per_station[sp.id] = replace(params, receive_gt_db_per_k=g)
+                margins[sp.id] = margin_db(views[sp.id].range_km, per_station[sp.id])
             link_by[sp.id] = c.contact_by_station[sp.id] & (margins[sp.id] >= params.min_margin_db)
 
     results = []
@@ -109,15 +134,17 @@ def link(req: LinkRequest, store: DataStore = Depends(get_store)) -> LinkRespons
         budget = None
         if params is not None:
             mg, rng = margins[sp.id][in_contact], v.range_km[in_contact]
-            seen = bool(in_contact.any())
+            seen = bool(in_contact.any()) and sp.id in per_station
             fsl = free_space_loss_db(rng, params.frequency_ghz) if seen else None
+            g, basis = gts[sp.id]
             budget = StationBudget(
                 margin_db_min=float(mg.min()) if seen else None, margin_db_mean=float(mg.mean()) if seen else None,
                 margin_db_max=float(mg.max()) if seen else None,
                 free_space_loss_db_min=float(fsl.min()) if seen else None,
-                free_space_loss_db_max=float(fsl.max()) if seen else None,
+                free_space_loss_db_max=float(fsl.max()) if seen else None, gt_db_per_k=g, gt_basis=basis,
                 link_fraction=float(link_by[sp.id].mean()), link_hours=float(link_by[sp.id].sum()) * step_h,
-                max_data_rate_bps_median=float(np.median(max_data_rate_bps(rng, params))) if seen else None)
+                max_data_rate_bps_median=(float(np.median(max_data_rate_bps(rng, per_station[sp.id])))
+                                          if seen else None))
         results.append(StationResult(
             id=sp.id, name=m["name"], network=m["network"], lat_deg=lat, lon_deg=lon, height_m=h,
             limit_source=m["source"], limit_min_deg=lo, limit_max_deg=hi,
@@ -131,7 +158,8 @@ def link(req: LinkRequest, store: DataStore = Depends(get_store)) -> LinkRespons
         link = np.logical_or.reduce(list(link_by.values()))
         best = np.max(np.stack([np.where(c.contact_by_station[sid], margins[sid], -np.inf) for sid in margins]), axis=0)
         budget_result = LinkBudgetResult(
-            inputs=req.budget, link=link.tolist(), link_window_fraction=float(link.mean()),
+            inputs=req.budget, band_used=band, frequency_ghz_used=float(freq),
+            link=link.tolist(), link_window_fraction=float(link.mean()),
             link_hours=float(link.sum()) * step_h, link_ranges=ranges(t, link),
             longest_link_h=longest_run_h(link, t, True), longest_link_blackout_h=longest_run_h(link, t, False),
             best_margin_db=[None if not np.isfinite(x) else float(x) for x in best])
@@ -141,6 +169,10 @@ def link(req: LinkRequest, store: DataStore = Depends(get_store)) -> LinkRespons
     if estimated:
         assumptions.append("The result depends on an estimated elevation limit (not an operator figure) for: "
                            + ", ".join(estimated) + ".")
+    gt_estimated = sorted(sid for sid, (_g, basis) in gts.items() if basis == "estimated")
+    if gt_estimated:
+        assumptions.append("G/T estimated from the dish diameter (scaled from the DSN 34 m antennas) for: "
+                           + ", ".join(gt_estimated) + ".")
     now_in = [sid for sid in spec_by_id if bool(c.contact_by_station[sid][0])]
     return LinkResponse(
         **window_fields(req, model, store, start_ms, t, assumptions), level=req.level, direction=req.direction,

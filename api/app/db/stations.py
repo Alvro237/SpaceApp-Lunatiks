@@ -30,6 +30,16 @@ class Station:
     bands: dict | None            # {"transmit": [...], "receive": [...]} when a source states them, else None
     elevation_limits: dict        # source, source_note, azimuth_step_deg, receive_deg / transmit_*_deg
     position_source: str
+    receive_gt: dict = None       # band ("S", "X", "Ka") -> {gt_db_per_k, basis, source, ...}; absent band = no receiver
+
+    def gt(self, band: str) -> tuple[float | None, str]:
+        """(G/T in dB/K, basis) for a downlink band. basis: "cited" (operator tables), "spec" (operator design
+        specification), "unpublished" (the antenna receives in the band but no figure is published: value None) or
+        "no_receiver" (no receiver in this band: value None)."""
+        entry = (self.receive_gt or {}).get(band)
+        if entry is None:
+            return None, "no_receiver"
+        return entry.get("gt_db_per_k"), entry.get("basis", "unpublished")
 
     @property
     def limits_are_estimated(self) -> bool:
@@ -54,7 +64,7 @@ class StationRepository:
             id=s["id"], name=s["name"], network=s["network"], agency=s["agency"], site=s["site"], country=s["country"],
             lat_deg=s["lat_deg"], lon_deg=s["lon_deg"], height_m=s["height_m"], diameter_m=s["diameter_m"],
             dish=s["dish"], bands=s.get("bands"), elevation_limits=s["elevation_limits"],
-            position_source=s["position_source"]) for s in doc["stations"]]
+            position_source=s["position_source"], receive_gt=s.get("receive_gt", {})) for s in doc["stations"]]
         self._by_id = {s.id: s for s in self._stations}
         mt = doc["moon_table"]
         raw = np.fromfile(data_dir / mt["file"], dtype="<f4")

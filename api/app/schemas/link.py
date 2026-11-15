@@ -26,24 +26,38 @@ class CustomStation(BaseModel):
     min_elevation_deg: float = Field(ge=0.0, lt=90.0, description=(
         "Lowest elevation at which the antenna can track the Moon, degrees; used for every azimuth and every "
         "direction. Required: no default is assumed."))
+    diameter_m: float | None = Field(None, gt=0.0, le=120.0, description=(
+        "Dish diameter, metres. Level 2 only: used to estimate the G/T when gt_db_per_k is not given"))
+    gt_db_per_k: float | None = Field(None, description="Downlink G/T of this antenna, dB/K (level 2, optional)")
+
+
+Band = Literal["S", "X", "Ka"]
 
 
 class LinkBudgetInput(BaseModel):
-    """Level 2 inputs. No value is defaulted except the two that mean 'ignore': no source publishes EIRP or G/T for
-    these antennas, so the user states them."""
-    frequency_ghz: float = Field(gt=0.0, le=100.0, description="Carrier frequency, GHz (for example 2.2 S, 8.4 X, 26 Ka)")
+    """Level 2 inputs. Only the lunar terminal's EIRP and the data rate are required: the band picks the frequency,
+    the antennas' G/T comes from the catalogue (published, or estimated from the dish diameter), and the rest have
+    stated defaults."""
+    band: Band = Field("X", description=(
+        "Lunar band: S (2200-2290 MHz down, 2025-2110 MHz up), X (8450-8500 MHz down), Ka (25.5-27.0 GHz down). "
+        "The centre of the band is used unless frequency_ghz is given"))
+    frequency_ghz: float | None = Field(None, gt=0.0, le=100.0, description=(
+        "Exact carrier frequency, GHz, to type a mission's channel instead of the band centre. The G/T is taken from "
+        "the band that contains it (or the nearest band)"))
     transmit_eirp_dbw: float = Field(description=(
-        "EIRP of the transmitting end for the chosen direction, dBW: the lunar terminal for a downlink, the antenna "
-        "for an uplink"))
-    receive_gt_db_per_k: float = Field(description=(
-        "G/T of the receiving end, dB/K: the antenna for a downlink, the lunar terminal for an uplink"))
+        "EIRP of the transmitting end, dBW: the lunar terminal for a downlink, the ground antenna for an uplink"))
     data_rate_bps: float = Field(gt=0.0, description="Information data rate, bits per second")
-    required_ebn0_db: float = Field(description="Eb/N0 the modulation and coding need to close the link, dB")
+    receive_gt_db_per_k: float | None = Field(None, description=(
+        "G/T of the receiving end, dB/K. Downlink: optional, overrides every antenna's catalogue value. Uplink: "
+        "required, it is the lunar terminal's G/T"))
+    required_ebn0_db: float = Field(9.6, description=(
+        "Eb/N0 the modulation and coding need, dB. Default 9.6 dB = uncoded BPSK/QPSK at a bit error rate of 1e-5 "
+        "(conservative: coded links need less)"))
     other_losses_db: float = Field(0.0, ge=0.0, description=(
-        "Losses not modelled here (pointing, polarisation, atmosphere, implementation), dB. 0 means they are ignored."))
-    min_margin_db: float = Field(0.0, ge=0.0, description=(
-        "Margin required above required_ebn0_db for the link to count as closed, dB. 0 = the link closes as soon as "
-        "Eb/N0 reaches the requirement."))
+        "Losses not modelled (pointing, polarisation, atmosphere, implementation), dB. 0 = ignored"))
+    min_margin_db: float = Field(3.0, ge=0.0, description=(
+        "Margin required above required_ebn0_db for the link to count as closed, dB. Default 3 dB, a usual design "
+        "margin"))
 
 
 class LinkRequest(WindowRequest):
@@ -70,7 +84,9 @@ class LinkRequest(WindowRequest):
         if len(set(ids)) != len(ids):
             raise ValueError("custom station ids must be unique")
         if self.level == 2 and self.budget is None:
-            raise ValueError("level 2 needs `budget` (frequency, EIRP, G/T, data rate and required Eb/N0)")
+            raise ValueError("level 2 needs `budget` (at least transmit_eirp_dbw and data_rate_bps)")
+        if self.budget is not None and self.direction != "downlink" and self.budget.receive_gt_db_per_k is None:
+            raise ValueError("an uplink budget needs receive_gt_db_per_k: the G/T of the lunar terminal")
         if self.level == 1 and self.budget is not None:
             raise ValueError("`budget` is only used at level 2")
         return self
@@ -130,6 +146,11 @@ class StationBudget(BaseModel):
     margin_db_max: float | None
     free_space_loss_db_min: float | None = Field(description="Smallest free-space loss while in contact, dB")
     free_space_loss_db_max: float | None
+    gt_db_per_k: float | None = Field(description="Receive G/T used for this antenna, dB/K; null when it has none")
+    gt_basis: Literal["cited", "spec", "estimated", "user", "no_receiver", "unknown"] = Field(description=(
+        "cited = operator tables; spec = operator design specification; estimated = from the dish diameter (scaled "
+        "from the DSN 34 m antennas); user = given in the request; no_receiver = no receiver in this band; unknown = "
+        "a custom antenna without G/T or diameter"))
     link_fraction: float = Field(description="Share of samples with geometric contact AND margin >= min_margin_db, 0..1")
     link_hours: float
     max_data_rate_bps_median: float | None = Field(description=(
@@ -151,6 +172,8 @@ class LinkNow(BaseModel):
 class LinkBudgetResult(BaseModel):
     """Level 2: the link budget on top of the geometric contact."""
     inputs: LinkBudgetInput = Field(description="The budget inputs used, echoed")
+    band_used: str = Field(description="Band whose G/T values were used")
+    frequency_ghz_used: float = Field(description="Carrier frequency used for the free-space loss, GHz")
     link: list[bool] = Field(description=(
         "At each sample: geometric contact with some antenna AND that antenna's Eb/N0 margin >= min_margin_db"))
     link_window_fraction: float = Field(description="Share of samples with the link closed, 0..1")

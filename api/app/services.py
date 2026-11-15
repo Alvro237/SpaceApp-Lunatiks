@@ -355,3 +355,47 @@ def link_contact(store: DataStore, series: Series, params: AnalysisParams, stati
     """Level-1 contact: the lunar site sees the Earth AND some antenna sees the Moon (see app/logic/link.py)."""
     views = link_views(store, series, stations)
     return combine_contact(series.comms(params), {k: v.sees_moon for k, v in views.items()})
+
+
+#: Reference receiver class for G/T estimates: the DSN 34 m beam-waveguide antennas, the most numerous deep-space dish
+#: with published values in every lunar band.
+GT_REFERENCE_DISH = "34 m BWG"
+GT_REFERENCE_DIAMETER_M = 34.0
+
+
+def gt_reference(store: DataStore, band: str) -> float | None:
+    """Mean published G/T of the DSN 34 m BWG antennas in a band, dB/K (None when none is published)."""
+    vals = [s.gt(band)[0] for s in store.stations.all()
+            if s.network == "dsn" and s.dish == GT_REFERENCE_DISH and s.gt(band)[1] == "cited"]
+    return float(np.mean(vals)) if vals else None
+
+
+def link_receive_gt(store: DataStore, stations: LinkStations, band: str, custom=()) -> dict[str, tuple[float | None, str]]:
+    """Downlink G/T per antenna for a band: antenna id -> (dB/K or None, basis).
+
+    basis: "cited" or "spec" (published), "estimated" (the antenna receives in the band but publishes no G/T, or a
+    custom antenna gave only its diameter: scaled from the DSN 34 m BWG mean by 20 log10(D / 34 m)), "user" (given in
+    the request), "no_receiver" (the antenna has no receiver in this band) or "unknown" (a custom antenna with
+    neither a G/T nor a diameter)."""
+    from .logic.link import scale_gt_db_per_k
+
+    ref = gt_reference(store, band)
+    by_custom = {c.id: c for c in custom}
+    out: dict[str, tuple[float | None, str]] = {}
+    for sp in stations.specs:
+        c = by_custom.get(sp.id)
+        if c is not None:
+            if getattr(c, "gt_db_per_k", None) is not None:
+                out[sp.id] = (float(c.gt_db_per_k), "user")
+            elif getattr(c, "diameter_m", None) and ref is not None:
+                out[sp.id] = (round(scale_gt_db_per_k(ref, GT_REFERENCE_DIAMETER_M, c.diameter_m), 2), "estimated")
+            else:
+                out[sp.id] = (None, "unknown")
+            continue
+        s = store.stations.get(sp.id)
+        value, basis = s.gt(band)
+        if basis == "unpublished":
+            value = None if ref is None else round(scale_gt_db_per_k(ref, GT_REFERENCE_DIAMETER_M, s.diameter_m), 2)
+            basis = "estimated" if value is not None else "unknown"
+        out[sp.id] = (value, basis)
+    return out

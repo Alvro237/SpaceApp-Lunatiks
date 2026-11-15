@@ -121,3 +121,41 @@ def max_data_rate_bps(range_km, p: LinkBudgetParams):
     when min_margin_db = 0)."""
     spare_db = margin_db(range_km, p) - p.min_margin_db          # dB of rate headroom at the requested rate
     return p.data_rate_bps * 10.0 ** (np.asarray(spare_db) / 10.0)
+
+
+# ---------------------------------------------------------------------------- bands and G/T estimates
+
+#: Lunar (near-Earth, category A) bands. Space-to-Earth edges: S 2200-2290 MHz, X 8450-8500 MHz, Ka 25.5-27.0 GHz
+#: (SFCG / ITU allocations for missions within 2 million km; the DSN's 8400-8450 MHz and 31.8-32.3 GHz are deep-space
+#: bands). Earth-to-space: S 2025-2110 MHz; X 7190-7235 MHz and Ka 22.55-23.15 GHz are listed as to be confirmed.
+#: The representative frequency is the centre of each range: within a band the free-space loss changes by less
+#: than 0.1 dB, so a mission's exact channel does not change the answer.
+LUNAR_BANDS: dict[str, dict] = {
+    "S": {"downlink_ghz": (2.200, 2.290), "uplink_ghz": (2.025, 2.110)},
+    "X": {"downlink_ghz": (8.450, 8.500), "uplink_ghz": (7.190, 7.235)},
+    "Ka": {"downlink_ghz": (25.5, 27.0), "uplink_ghz": (22.55, 23.15)},
+}
+
+
+def band_frequency_ghz(band: str, direction: str = "downlink") -> float:
+    """Centre of the band for that direction, GHz."""
+    lo, hi = LUNAR_BANDS[band]["downlink_ghz" if direction == "downlink" else "uplink_ghz"]
+    return (lo + hi) / 2.0
+
+
+def band_of_frequency(frequency_ghz: float, direction: str = "downlink") -> str:
+    """The band whose range contains the frequency, or the nearest one by its centre (a typed frequency outside every
+    range still gets the G/T of the closest band)."""
+    key = "downlink_ghz" if direction == "downlink" else "uplink_ghz"
+    for band, spec in LUNAR_BANDS.items():
+        lo, hi = spec[key]
+        if lo <= frequency_ghz <= hi:
+            return band
+    return min(LUNAR_BANDS, key=lambda b: abs(np.log(frequency_ghz / band_frequency_ghz(b, direction))))
+
+
+def scale_gt_db_per_k(reference_gt_db_per_k: float, reference_diameter_m: float, diameter_m: float) -> float:
+    """G/T of a dish of another diameter in the same band and receiver class: G grows with the aperture area (D^2)
+    and the system noise temperature of a cryogenic deep-space receiver is about the same, so
+    G/T = G/T_ref + 20 log10(D / D_ref). An estimate, flagged as such wherever it is used."""
+    return reference_gt_db_per_k + 20.0 * np.log10(diameter_m / reference_diameter_m)
