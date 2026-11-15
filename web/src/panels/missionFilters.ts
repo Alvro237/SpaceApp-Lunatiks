@@ -377,3 +377,23 @@ export const FUNNEL_LABEL: Record<string, string> = {
   min_both_fraction: 'Sun and Earth together',
   robust_delay_h: 'Robust to a delay',
 }
+
+/**
+ * An example mission for trying the search in one click: a crewed-style stay of a week near Shackleton crater's
+ * rim, with typical-looking limits. These are example values to show how the search works, not requirements from a
+ * mission or a cited source (CLAUDE.md), and the panel says so when they are loaded.
+ */
+export const EXAMPLE_MISSION = {
+  name: 'Example: one-week stay near Shackleton',
+  center: { lat: -89.45, lon: 137.3 },
+  radiusKm: 20,
+  cellKm: 0.48,
+  landingRadiusKm: '0.1',
+  durationH: 7 * 24,
+  filters: {
+    max_slope_deg: { max_slope_deg: '10' },
+    min_sunlit_fraction: { min_sunlit_fraction: '0.6' },
+    max_dark_h: { max_dark_h: '48' },
+    min_comms_fraction: { min_comms_fraction: '0.5' },
+  } as Record<string, Record<string, string>>,
+}

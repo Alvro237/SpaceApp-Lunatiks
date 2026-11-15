@@ -1169,3 +1169,7 @@ legend .tip-btn, .sub-head .tip-btn, .kv dt .tip-btn { vertical-align: middle; m
 @media (forced-colors: active) {
   .pm-swatch { forced-color-adjust: none; border: 1px solid CanvasText; }
 }
+
+/* mission: example mission button */
+.example-row { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
+.example-row button { display: inline-flex; align-items: center; gap: 6px; }

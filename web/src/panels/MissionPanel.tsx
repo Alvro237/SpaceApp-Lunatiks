@@ -34,7 +34,7 @@ import {
   IconThermo,
 } from '../ui/icons'
 import { Tip } from '../ui/Tip'
-import { FUNNEL_LABEL, MISSION_GROUPS, type MissionField, type MissionFilter, type MissionIcon, buildFilters } from './missionFilters'
+import { EXAMPLE_MISSION, FUNNEL_LABEL, MISSION_GROUPS, type MissionField, type MissionFilter, type MissionIcon, buildFilters } from './missionFilters'
 import { useCatalogue } from './useCatalogue'
 
 const ICONS: Record<MissionIcon, ReactNode> = {
@@ -83,6 +83,25 @@ export function MissionPanel() {
   const { sites } = useCatalogue()
   const search = useAreaSearch()
   const [error, setError] = useState<string | null>(null)
+  const [example, setExample] = useState(false)
+
+  /** Fill the region, the window length and four filters with the example mission (replacing what was typed). */
+  const loadExample = () => {
+    const ex = EXAMPLE_MISSION
+    a.set({
+      center: ex.center,
+      radiusKm: ex.radiusKm,
+      cellKm: ex.cellKm,
+      landingRadiusKm: ex.landingRadiusKm,
+      enabled: Object.fromEntries(Object.keys(ex.filters).map((k) => [k, true])),
+      values: ex.filters,
+    })
+    a.setResult(null)
+    a.look(ex.center.lat, ex.center.lon, ex.radiusKm * 2.5)
+    setApp({ durationH: ex.durationH })
+    setError(null)
+    setExample(true)
+  }
 
   const picked =
     selection.kind === 'point'
@@ -184,6 +203,20 @@ export function MissionPanel() {
   return (
     <div className="panel-section mission">
       <form onSubmit={submit} noValidate className="mission-form">
+        <div className="example-row">
+          <button type="button" className="small" onClick={loadExample}>
+            <IconSliders size={15} /> Load example mission
+          </button>
+          <Tip label="the example mission">
+            {EXAMPLE_MISSION.name}: a 20 km region near the connecting ridge, a 7-day window, slope at most 10°, lit at least 60 % of the window,
+            darkness at most 48 h and Earth contact at least 50 %. Example values to try the search, not mission requirements.
+          </Tip>
+        </div>
+        {example && (
+          <p className="note" role="status">
+            Example mission loaded. The values are for trying the search, not requirements: change any of them, then search.
+          </p>
+        )}
         <h3 className="ios-header">
           Region
           <Tip label="the region">
