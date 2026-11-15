@@ -7,6 +7,8 @@
  *   no request is spent on levels the camera only passes through;
  * - the few coarse tiles (COARSE_STEP levels up) come first, then the view's level from the centre outward, then
  *   (photo) the 32 base tiles;
+ * - the heights are always loaded (they shape and light the ground); photo mode loads the photo tiles as well, its
+ *   requests taking turns with the height requests so that colour and relief sharpen together;
  * - DEM tiles from QUAD_MIN_LEVEL on come four per request (grid.ts, Quad);
  * - a tile that failed is asked for again after RETRY_BASE_S, doubling, up to MAX_RETRIES times.
  */
@@ -64,18 +66,20 @@ export class GlobeDetail {
     return {
       uDetail: { value: this.slots.dem.texture },
       uIndex: { value: this.slots.dem.index },
+      uPhoto: { value: this.slots.photo.texture },
+      uPhotoIndex: { value: this.slots.photo.index },
       uMaxLevel: { value: -1 },
       uPhotoMode: { value: 0 },
     }
   }
 
-  /** Relief (LOLA heights) or photo (LROC WAC); the wanted tiles are worked out again at the next update. */
+  /**
+   * Relief (LOLA heights alone) or photo (LROC WAC draped over the LOLA heights); the wanted tiles are worked out
+   * again at the next update.
+   */
   setKind(material: THREE.ShaderMaterial, kind: DetailKind): void {
     this.kind = kind
-    const u = material.uniforms
-    u.uDetail.value = this.slots[kind].texture
-    u.uIndex.value = this.slots[kind].index
-    u.uPhotoMode.value = kind === 'photo' ? 1 : 0
+    material.uniforms.uPhotoMode.value = kind === 'photo' ? 1 : 0
     this.since = Infinity
   }
 
@@ -89,15 +93,19 @@ export class GlobeDetail {
     this.since += dt
     if (this.since < INTERVAL_S) return
     this.since = 0
-    const kind = this.kind
-    const slots = this.slots[kind]
+    const photo = this.kind === 'photo'
     const drawn = wantedTiles(now, MIN_HEIGHT_LEVEL)
     const w = wantedTiles(goal, MIN_HEIGHT_LEVEL)
     const level = Math.max(drawn.level, w.level)
-    material.uniforms.uMaxLevel.value = kind === 'photo' ? Math.max(level, PHOTO_BASE_LEVEL) : level
-    const tiles = [...w.coarse, ...w.tiles, ...(kind === 'photo' ? allTiles(PHOTO_BASE_LEVEL) : [])]
-    slots.setWanted(tiles)
-    const jobs = this.jobsFor(kind, tiles)
+    material.uniforms.uMaxLevel.value = photo ? Math.max(level, PHOTO_BASE_LEVEL) : level
+    const demTiles = [...w.coarse, ...w.tiles]
+    this.slots.dem.setWanted(demTiles)
+    let jobs = this.jobsFor('dem', demTiles)
+    if (photo) {
+      const photoTiles = [...demTiles, ...allTiles(PHOTO_BASE_LEVEL)]
+      this.slots.photo.setWanted(photoTiles)
+      jobs = interleave(jobs, this.jobsFor('photo', photoTiles))
+    }
     const rank = new Map(jobs.map((j, i) => [j.key, i]))
     this.loader.prioritise((k) => rank.get(k) ?? null)
     for (const job of jobs) {
@@ -107,6 +115,8 @@ export class GlobeDetail {
         this.loader.forget(job.key)
       }
       if (this.loader.known(job.key)) continue
+      const kind = job.req.globe!.kind
+      const slots = this.slots[kind]
       this.loader
         .request(job.key, job.req)
         .then((r) => {
@@ -165,7 +175,8 @@ export class GlobeDetail {
 
   /** Tiles loaded and requests in flight, for the status line. */
   get status(): { loaded: number; loading: number } {
-    return { loaded: this.slots[this.kind].count, loading: this.loader.inFlight }
+    const loaded = this.slots.dem.count + (this.kind === 'photo' ? this.slots.photo.count : 0)
+    return { loaded, loading: this.loader.inFlight }
   }
 
   dispose(): void {
@@ -173,4 +184,14 @@ export class GlobeDetail {
     this.slots.dem.dispose()
     this.slots.photo.dispose()
   }
+}
+
+/** a[0], b[0], a[1], b[1] …, then the rest of the longer list. */
+function interleave<T>(a: T[], b: T[]): T[] {
+  const out: T[] = []
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    if (i < a.length) out.push(a[i])
+    if (i < b.length) out.push(b[i])
+  }
+  return out
 }

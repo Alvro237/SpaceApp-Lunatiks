@@ -41,7 +41,10 @@ const ENTER_MAP_DIST = MOON_R_KM * 1.8
 /** Slope exaggeration of the shading where 118 m detail heights are loaded (the shipped 7.6 km grid uses 3). */
 const DETAIL_SHADE_EXAGGERATION = 1.5
 
-/** What the globe's surface shows: LOLA heights lit by the Sun at the chosen time, or the LROC WAC photo mosaic. */
+/**
+ * What the globe's surface shows: LOLA heights lit by the Sun at the chosen time, or the same lit relief with the
+ * LROC WAC photo mosaic as its colour.
+ */
 export type GlobeSurface = 'relief' | 'photo'
 
 export interface GlobeMeta {
@@ -336,7 +339,7 @@ export function GlobeView() {
           type="button"
           aria-pressed={surface === 'photo'}
           onClick={() => setSurface(surface === 'photo' ? 'relief' : 'photo')}
-          title="Show the LROC WAC photo mosaic instead of the relief lit by the Sun"
+          title="Drape the LROC WAC photo mosaic over the 3D relief lit by the Sun"
         >
           Photo
         </button>
@@ -344,7 +347,7 @@ export function GlobeView() {
       </ToolPortal>
       <p className="globe-caption">
         {surface === 'photo'
-          ? `LROC WAC photo mosaic, 100 m, from NASA Moon Trek (lighting as photographed; night side from the chosen time) · LOLA relief ×${exag}`
+          ? `LROC WAC photo mosaic, 100 m, from NASA Moon Trek, over global LOLA topography (relief ×${exag}; 118 m detail as you zoom) · lit by the Sun at the chosen time`
           : `Global LOLA topography (relief ×${exag}; 118 m detail from NASA Moon Trek as you zoom) · lit by the Sun at the chosen time`}
       </p>
     </>
@@ -414,7 +417,7 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
   const { camera, size, scene, gl, setDpr, viewport } = useThree()
   const [markersSet] = useState(() => new MarkerSet())
   /** What the last drawn frame showed (camera, canvas, Sun, relief, detail tiles): a frame is drawn when it differs. */
-  const drawn = useRef({ sig: new Float64Array(36), at: Infinity, was: false })
+  const drawn = useRef({ sig: new Float64Array(40), at: Infinity, was: false })
   const sceneVersion = useRef(0)
   /** Frame rate over continuous drawing, to lower the pixel ratio on a slow GPU (the pixel ratio the canvas started with first). */
   const perf = useRef({ frames: 0, time: 0, age: 0, dpr: viewport.dpr })
@@ -639,9 +642,10 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
     put(sun.x); put(sun.y); put(sun.z)
     put(u.uExag.value as number); put(u.uMaxLevel.value as number); put(u.uPhotoMode.value as number)
     // a detail tile that arrives is written into these textures, which raises their version
-    const tiles = u.uDetail.value as THREE.Texture
-    const index = u.uIndex.value as THREE.Texture
-    put(tiles.id); put(tiles.version); put(index.id); put(index.version)
+    for (const name of ['uDetail', 'uIndex', 'uPhoto', 'uPhotoIndex']) {
+      const t = u[name].value as THREE.Texture
+      put(t.id); put(t.version)
+    }
     put(sceneVersion.current)
     d.at += dt
     const draw = changed || d.at >= IDLE_REDRAW_S
