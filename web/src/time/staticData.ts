@@ -57,18 +57,50 @@ async function fetchOk(url: string): Promise<Response> {
   return res
 }
 
-let ephemerisPromise: Promise<{ table: EphemerisTable; index: EphemerisIndex }> | null = null
+/**
+ * Start of the present-day tables (2025-2035). Segments that end before it (the Apollo tables, 1969-1972, 0.8 MB) are
+ * only fetched when the chosen date is before it, so the navigator's first load does not wait for them.
+ */
+export const PRESENT_TABLES_MS = Date.UTC(2025, 0, 1)
 
-export function loadEphemeris(): Promise<{ table: EphemerisTable; index: EphemerisIndex }> {
-  ephemerisPromise ??= (async () => {
-    const index = (await (await fetchOk(`${DATA_BASE}ephemeris.json`)).json()) as EphemerisIndex
-    const buffers = await Promise.all(index.segments.map(async (s) => (await fetchOk(DATA_BASE + s.file)).arrayBuffer()))
-    return { table: new EphemerisTable(parseSegments(index, buffers)), index }
-  })()
-  ephemerisPromise.catch(() => {
-    ephemerisPromise = null
+/** Which segments a table holds: the present-day ones, or every segment in ephemeris.json. */
+export type EphemerisScope = 'present' | 'all'
+
+let indexPromise: Promise<EphemerisIndex> | null = null
+const bufferPromises = new Map<string, Promise<ArrayBuffer>>()
+const tablePromises = new Map<string, Promise<{ table: EphemerisTable; index: EphemerisIndex }>>()
+
+/** Each file is fetched once, whichever table asks for it first; a failed fetch is tried again next time. */
+function cached<T>(cache: Map<string, Promise<T>>, key: string, load: () => Promise<T>): Promise<T> {
+  let p = cache.get(key)
+  if (!p) {
+    p = load()
+    cache.set(key, p)
+    p.catch(() => cache.delete(key))
+  }
+  return p
+}
+
+function loadIndex(): Promise<EphemerisIndex> {
+  indexPromise ??= fetchOk(`${DATA_BASE}ephemeris.json`).then((r) => r.json() as Promise<EphemerisIndex>)
+  indexPromise.catch(() => {
+    indexPromise = null
   })
-  return ephemerisPromise
+  return indexPromise
+}
+
+/**
+ * The Sun and Earth table. `index` always lists every segment (the date picker names the full coverage); `table`
+ * holds the segments of the scope, so `table.covers()` is false for an Apollo date in a 'present' table.
+ */
+export function loadEphemeris(scope: EphemerisScope = 'all'): Promise<{ table: EphemerisTable; index: EphemerisIndex }> {
+  return cached(tablePromises, scope, async () => {
+    const full = await loadIndex()
+    const end = (s: EphemerisIndex['segments'][number]) => s.startUnixMs + (s.count - 1) * s.stepSeconds * 1000
+    const segments = scope === 'all' ? full.segments : full.segments.filter((s) => end(s) >= PRESENT_TABLES_MS)
+    const buffers = await Promise.all(segments.map((s) => cached(bufferPromises, s.file, async () => (await fetchOk(DATA_BASE + s.file)).arrayBuffer())))
+    return { table: new EphemerisTable(parseSegments({ ...full, segments }, buffers)), index: full }
+  })
 }
 
 export class HorizonMasks {

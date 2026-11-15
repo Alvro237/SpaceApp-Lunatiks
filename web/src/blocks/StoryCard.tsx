@@ -20,10 +20,10 @@ import { IconBack, IconPause, IconPlay } from '../ui/icons'
 import { MissionIcon } from './MissionIcon'
 import { CHAPTERS, GROUPS, type Chapter, type Step, type StepAction, type StoryCtx, chapterDone, eclipseSpan, firstDay, questionReady, rankOf, stepsOf } from './story'
 import { nextMission, useHud, useStory } from './useStory'
+import { PRESENT_TABLES_MS } from '../time/staticData'
 
 const H = 3_600_000
 /** Chapters without a date of their own run in the present tables (2025–2035), not in an Apollo year. */
-const PRESENT_TABLES_MS = Date.UTC(2025, 0, 1)
 
 function useStoryCtx(): StoryCtx {
   const selection = useApp((s) => s.selection)
