@@ -149,9 +149,9 @@ export function LegendChip({ tileset, globe = false }: { tileset: Tileset; globe
   if (layer === 'photo' && low) return null
   if (layer === 'photo') {
     return (
-      <figure className="legend-chip">
+      <figure className="legend-chip" title="LROC WAC south polar mosaic, 100 m, NASA Moon Trek: brightness and shadows as photographed, on LOLA relief lit by the chosen light">
         <figcaption>
-          <strong>Photo</strong> <span className="muted">· LROC WAC south polar mosaic, 100 m, NASA Moon Trek (brightness and shadows as photographed) · on LOLA relief lit by the chosen light</span>
+          <strong>Photo</strong> <span className="muted">· LROC WAC, 100 m, NASA Moon Trek</span>
         </figcaption>
       </figure>
     )

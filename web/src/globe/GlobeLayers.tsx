@@ -18,6 +18,9 @@ interface Props {
   tileset?: Tileset
 }
 
+/** A layer name without its bracketed detail ("Mean sunlight (18.6-year average)" → "Mean sunlight"): the menu stays one line per layer. */
+const shortName = (n: string) => n.replace(/\s*\(.*\)\s*$/, '')
+
 export function GlobeLayers({ surface, onSurface, tileset }: Props) {
   const id = useId()
   const [open, setOpen] = useState(false)
@@ -50,7 +53,7 @@ export function GlobeLayers({ surface, onSurface, tileset }: Props) {
         <IconLayers />
       </button>
       {open && (
-        <div ref={menu} id={`${id}-menu`} className="layers-menu" role="group" aria-label="Map layers">
+        <div ref={menu} id={`${id}-menu`} className="layers-menu is-list" role="group" aria-label="Map layers">
           <div className="pop-head">
             <span className="pop-head-title" aria-hidden="true">
               Map layers
@@ -67,7 +70,7 @@ export function GlobeLayers({ surface, onSurface, tileset }: Props) {
           <fieldset>
             <legend>Surface</legend>
             <label>
-              <input type="radio" name={`${id}-surface`} checked={surface === 'photo'} onChange={() => onSurface('photo')} /> Photo (LROC WAC) on the relief
+              <input type="radio" name={`${id}-surface`} checked={surface === 'photo'} onChange={() => onSurface('photo')} /> Photo on the relief
             </label>
             <label>
               <input type="radio" name={`${id}-surface`} checked={surface === 'relief'} onChange={() => onSurface('relief')} /> Relief only (LOLA)
@@ -78,7 +81,7 @@ export function GlobeLayers({ surface, onSurface, tileset }: Props) {
             {(
               [
                 ['pin', 'Pins'],
-                ['crater', 'Crater outlines (real diameter)'],
+                ['crater', 'Crater outlines'],
                 ['cross', 'Crosses'],
               ] as const
             ).map(([k, label]) => (
@@ -94,14 +97,15 @@ export function GlobeLayers({ surface, onSurface, tileset }: Props) {
                 <input type="radio" name={`${id}-colour`} checked={colour === 'surface'} onChange={() => set({ layer: 'photo' })} /> None
               </label>
               <label>
-                <input type="radio" name={`${id}-colour`} checked={colour === 'elevation'} onChange={() => set({ layer: 'elevation' })} /> Elevation (whole Moon)
+                <input type="radio" name={`${id}-colour`} checked={colour === 'elevation'} onChange={() => set({ layer: 'elevation' })} /> Elevation
               </label>
               <label>
-                <input type="radio" name={`${id}-colour`} checked={colour === 'slope'} onChange={() => set({ layer: 'slope' })} /> Slope (whole Moon)
+                <input type="radio" name={`${id}-colour`} checked={colour === 'slope'} onChange={() => set({ layer: 'slope' })} /> Slope
               </label>
               {polarOnly.map(([k, m]) => (
-                <label key={k}>
-                  <input type="radio" name={`${id}-colour`} checked={colour === k} onChange={() => set({ layer: k as LayerId })} /> {m.name} (south of 60° S only)
+                <label key={k} title={`${m.name}: drawn south of 60° S only`}>
+                  <input type="radio" name={`${id}-colour`} checked={colour === k} onChange={() => set({ layer: k as LayerId })} /> {shortName(m.name)}
+                  <span className="muted"> · S pole</span>
                 </label>
               ))}
             </fieldset>
