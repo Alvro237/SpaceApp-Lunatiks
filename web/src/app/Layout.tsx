@@ -34,7 +34,7 @@ export function Layout() {
           </span>
           <span>
             <span className="brand-name">Lunar Landing Site Navigator</span>
-            <span className="tagline">{onMap && blocks ? 'Learn · explore with simple answers' : 'Sun and Earth over the real lunar horizon'}</span>
+            <span className="tagline">{onMap && blocks ? 'Educational · missions and simple answers' : 'Sun and Earth over the real lunar horizon'}</span>
           </span>
         </div>
         {onMap && (

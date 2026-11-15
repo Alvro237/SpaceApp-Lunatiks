@@ -89,8 +89,8 @@ asks for this list; keep it current when something is added.
 - U.S. Standard Atmosphere, 1976 (NOAA/NASA/USAF): molar mass of dry air 28.9644 g/mol. CODATA 2018: gas constant
   R = 8.314462618 J/mol K and Stefan-Boltzmann constant.
 
-Mission facts told in Learn mode's mission log (`web/src/blocks/story.ts`); every number in its answers comes from
-the engine, these only support the short historical texts:
+Mission facts told in Educational mode's missions (`web/src/blocks/story.ts`); every number in its answers comes
+from the engine, these only support the short historical texts:
 
 - NASA SP-4214, *Where No Man Has Gone Before*, ch. 6 "Mission and science planning": sun elevation at landing as
   the main driver of Apollo launch times, landings near the sunrise terminator.
@@ -106,6 +106,26 @@ the engine, these only support the short historical texts:
   https://science.nasa.gov/mission/lcross/ ; Colaprete, A., et al. (2010). Detection of water in the LCROSS ejecta
   plume. Science 330, 463-468. doi:10.1126/science.1186986
 - NASA Scientific Visualization Studio, Moon Phase and Libration 2026 (south up). https://svs.gsfc.nasa.gov/5588
+- NASA, Apollo 17 Mission Details (landing on 11 December 1972 in Taurus-Littrow, 75 hours on the surface, Lunar
+  Roving Vehicle). https://www.nasa.gov/missions/apollo/apollo-17-mission-details/
+- JAXA press release (25 January 2024), SLIM landing results: touchdown on 20 January 2024 at 0:20 JST, not at the
+  planned attitude, solar cells facing west and not generating.
+  https://global.jaxa.jp/press/2024/01/20240125-1_e.html ; power back on 28 January 2024 (NBC News:
+  https://www.nbcnews.com/news/world/japans-slim-probe-regains-power-week-moon-landing-rcna136119)
+- NASA, "NASA Collects First Surface Science in Decades via Commercial Moon Mission" (IM-1 Odysseus, landing on
+  22 February 2024, data returned for seven days).
+  https://www.nasa.gov/missions/artemis/clps/nasa-collects-first-surface-science-in-decades-via-commercial-moon-mission/
+  ; landing place near Malapert A: https://www.nasa.gov/missions/lro/nasas-lro-images-intuitive-machines-odysseus-lander/
+- Firefly Aerospace, Blue Ghost Mission 1 live updates (landing on 2 March 2025 in Mare Crisium; total solar
+  eclipse seen from the Moon on 14 March 2025, about 2 h 16 min of totality; end of mission on 16 March after
+  lunar sunset). https://fireflyspace.com/news/blue-ghost-mission-1-live-updates/ ; NASA summary:
+  https://www.nasa.gov/news-release/nasa-science-continues-after-fireflys-first-moon-mission-concludes/
+  The app's own eclipse times (total from 06:20 to 08:35 UTC at the catalogue point) come from the engine.
+- NASA (28 October 2024), "NASA Provides Update on Artemis III Moon Landing Regions" (nine candidate regions near
+  the south pole, among them Malapert Massif, Mons Mouton, Nobile Rim and Haworth).
+  https://www.nasa.gov/news-release/nasa-provides-update-on-artemis-iii-moon-landing-regions/
+- NASA (28 October 2020), "Lunar Living: NASA's Artemis Base Camp Concept" (a long-term camp near the south pole).
+  https://www.nasa.gov/blogs/artemis/2020/10/28/lunar-living-nasas-artemis-base-camp-concept/
 
 ## Software (all open source)
 

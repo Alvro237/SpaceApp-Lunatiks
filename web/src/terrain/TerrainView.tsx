@@ -98,7 +98,7 @@ function MapView({ tileset }: { tileset: Tileset }) {
   const set = useApp((s) => s.set)
   const mode = useApp((s) => s.mode)
   // paused while the horizon view covers the map
-  // paused (no frames drawn) while the horizon view or Learn mode covers the map; it keeps its camera and tiles
+  // paused (no frames drawn) while the horizon view or Educational mode covers the map; it keeps its camera and tiles
   const underHorizon = useHorizonTransition((s) => s.phase === 'horizon')
   const underBlocks = useApp((s) => s.blocks)
   const covered = underHorizon || underBlocks

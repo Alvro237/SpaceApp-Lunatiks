@@ -1,5 +1,5 @@
 /**
- * Learn mode: the navigator's place and time drawn as a world of cubes, for learners.
+ * Educational mode: the navigator's place and time drawn as a world of cubes, for learners.
  *
  * Two views. "Whole Moon": the global LOLA heights as a sphere of cubes, lit by the Sun at the chosen time.
  * "Ground": the LOLA polar DEM around the chosen place as columns of cubes, with the Sun and the Earth as cubes
@@ -400,7 +400,7 @@ function inFreeArea(obj: THREE.Object3D | null, camera: THREE.Camera, w: number,
   return !card || !(x > card.left && x < card.right && y > card.top && y < card.bottom)
 }
 
-function GroundScene({ blocks, sun, earth, cam }: { blocks: GroundBlocks; sun: BodyView | null; earth: BodyView | null; cam: BlockCam }) {
+function GroundScene({ blocks, sun, earth, eclipse, cam }: { blocks: GroundBlocks; sun: BodyView | null; earth: BodyView | null; eclipse: number; cam: BlockCam }) {
   const { camera, size } = useThree()
   const cubes = useCubes(blocks)
   useBuildIn(cubes, blocks, [0, 30, 0])
@@ -454,7 +454,9 @@ function GroundScene({ blocks, sun, earth, cam }: { blocks: GroundBlocks; sun: B
       light.current.target.updateMatrixWorld()
       // fades out as the Sun sinks below the horizontal (stretched angles)
       const elS = Math.asin(d[1]) * (180 / Math.PI)
-      light.current.intensity = 3.2 * Math.max(0, Math.min(1, (elS + 4) / 4))
+      // and when the Earth covers it (engine: 1 part of the disc, 2 all of it)
+      const shade = eclipse === 2 ? 0.03 : eclipse === 1 ? 0.5 : 1
+      light.current.intensity = 3.2 * shade * Math.max(0, Math.min(1, (elS + 4) / 4))
       sunBall.current.position.set(d[0] * SKY_DIST, top + d[1] * SKY_DIST, d[2] * SKY_DIST)
       sunBall.current.visible = elS > -6
     }
@@ -462,7 +464,8 @@ function GroundScene({ blocks, sun, earth, cam }: { blocks: GroundBlocks; sun: B
       const d = skyVector(earth.az, earth.el)
       earthBall.current.position.set(d[0] * SKY_DIST, top + d[1] * SKY_DIST, d[2] * SKY_DIST)
       if (earthLight.current) {
-        earthLight.current.intensity = earth.fraction > 0 ? 0.8 : 0
+        // an Earth that covers the Sun shows the Moon its night side
+        earthLight.current.intensity = earth.fraction > 0 ? (eclipse === 2 ? 0.1 : 0.8) : 0
         // from the Earth's side, but never from below the ground (a low Earth still grazes the slopes facing it)
         earthLight.current.position.set(d[0] * 300, top + Math.max(d[1], 0.25) * 300, d[2] * 300)
         earthLight.current.target.position.set(0, top, 0)
@@ -723,7 +726,7 @@ export function BlockWorld() {
         ) : (
           <Canvas key={showGround ? `g${groundKey}` : 'moon'} shadows camera={{ fov: FOV, position: [0, 40, 120] }} dpr={[1, 2]} flat gl={{ antialias: true }} aria-hidden="true">
             {showGround && ground.blocks ? (
-              <GroundScene blocks={ground.blocks} sun={now?.sun ?? null} earth={now?.earth ?? null} cam={groundCam} />
+              <GroundScene blocks={ground.blocks} sun={now?.sun ?? null} earth={now?.earth ?? null} eclipse={now?.eclipse ?? 0} cam={groundCam} />
             ) : moon ? (
               <MoonScene blocks={moon} cam={moonCam} site={ll} pickRef={pickRef} />
             ) : null}

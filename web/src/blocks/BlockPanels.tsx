@@ -1,6 +1,6 @@
 /**
- * Learn mode's panels, laid out like the navigator's: the place search and the date sit in the shared top bars
- * (NavigatorPage), the sky now on the right, the days along the bottom, and the mission log over the map on the
+ * Educational mode's panels, laid out like the navigator's: the place search and the date sit in the shared top bars
+ * (NavigatorPage), the sky now on the right, the days along the bottom, and the missions over the map on the
  * left. Every answer comes from the same engine and data as the planner's panels; "Why? And the real numbers"
  * opens them.
  */
@@ -92,6 +92,11 @@ function Sky() {
                 )}
               </div>
             </div>
+            {view.eclipse > 0 && (
+              <p className="blk-eclipse" role="status">
+                {view.eclipse === 2 ? 'Eclipse! The Earth is hiding the whole Sun.' : 'Eclipse! The Earth is hiding part of the Sun.'}
+              </p>
+            )}
             {!terrain && (
               <p className="blk-note">Nobody has measured the skyline here, so these answers treat the Moon as smooth. Real hills could change them.</p>
             )}

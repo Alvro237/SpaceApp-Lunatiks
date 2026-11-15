@@ -1,6 +1,7 @@
 /**
- * Learn mode's small shared state: what the 3D view can see (published by the scene, read by the story), and the
- * learner's place in the mission log. Progress is kept in this browser only (a convenience; nothing depends on it).
+ * Educational mode's small shared state: what the 3D view can see (published by the scene, read by the story), and
+ * the explorer's place in the missions. The stars (missions done) are kept in this browser only (a convenience;
+ * nothing depends on them).
  */
 import { create } from 'zustand'
 import { CHAPTERS, EMPTY_MEMORY, type StoryMemory } from './story'
@@ -22,9 +23,9 @@ export const useHud = create<{ sunOnScreen: boolean; earthOnScreen: boolean; loo
 const KEY = 'lunatiks-block-missions'
 
 interface Saved {
+  /** The mission open now, or the last one opened. */
   chapter: number
   done: string[]
-  started: boolean
 }
 
 function load(): Saved {
@@ -32,23 +33,23 @@ function load(): Saved {
     const raw = localStorage.getItem(KEY)
     if (raw) {
       const s = JSON.parse(raw) as Partial<Saved>
+      const ids = new Set(CHAPTERS.map((c) => c.id))
       return {
         chapter: Math.min(CHAPTERS.length - 1, Math.max(0, Number(s.chapter) || 0)),
-        done: Array.isArray(s.done) ? s.done.filter((d) => typeof d === 'string') : [],
-        started: !!s.started,
+        done: Array.isArray(s.done) ? s.done.filter((d) => typeof d === 'string' && ids.has(d)) : [],
       }
     }
   } catch {
     // storage blocked or corrupt: start fresh
   }
-  return { chapter: 0, done: [], started: false }
+  return { chapter: 0, done: [] }
 }
 
 function save(s: Saved) {
   try {
     localStorage.setItem(KEY, JSON.stringify(s))
   } catch {
-    // not saved; the story still works for this visit
+    // not saved; the missions still work for this visit
   }
 }
 
@@ -59,41 +60,50 @@ function save(s: Saved) {
 export type SetupStage = 'apply' | 'settle' | null
 
 export interface StoryState extends Saved {
+  /** The mission map (every mission, the stars), or one mission. Every visit starts on the map. */
+  screen: 'map' | 'mission'
+  /** Inside a mission: first its story, then the things to do. One thing at a time. */
+  phase: 'story' | 'play'
   memory: StoryMemory
   stage: SetupStage
   open: boolean
-  /** Start the story, at the saved chapter or at the one picked on the start screen. */
-  begin: (chapter?: number) => void
-  goTo: (chapter: number) => void
+  /** Open a mission: its scene is set while the child reads its story. */
+  begin: (chapter: number) => void
+  /** From the story to the things to do. */
+  start: () => void
+  /** Back to the mission map. */
+  home: () => void
   markDone: (id: string) => void
   remember: (patch: Partial<StoryMemory>) => void
   setStage: (stage: SetupStage) => void
   setOpen: (open: boolean) => void
-  restart: () => void
+  /** Give the stars back and start again. */
+  reset: () => void
 }
 
-const fresh = (): StoryMemory => ({ ...EMPTY_MEMORY, visited: {}, latched: [] })
+const fresh = (): StoryMemory => ({ ...EMPTY_MEMORY, visited: {}, wrong: [], latched: [] })
+
+/** The mission to offer next: the first one not done yet, or the first one once all are done. */
+export const nextMission = (done: string[]) => Math.max(0, CHAPTERS.findIndex((c) => !done.includes(c.id)))
 
 export const useStory = create<StoryState>()((set, get) => {
   const persist = () => {
-    const { chapter, done, started } = get()
-    save({ chapter, done, started })
+    const { chapter, done } = get()
+    save({ chapter, done })
   }
-  const saved = load()
   return {
-    ...saved,
+    ...load(),
+    screen: 'map',
+    phase: 'story',
     memory: fresh(),
-    // a story resumed from an earlier visit sets its chapter's scene again
-    stage: saved.started ? 'apply' : null,
+    stage: null,
     open: true,
     begin: (chapter) => {
-      set({ ...(chapter === undefined ? {} : { chapter }), started: true, open: true, memory: fresh(), stage: 'apply' })
+      set({ chapter, screen: 'mission', phase: 'story', open: true, memory: fresh(), stage: 'apply' })
       persist()
     },
-    goTo: (chapter) => {
-      set({ chapter, memory: fresh(), stage: 'apply', open: true })
-      persist()
-    },
+    start: () => set({ phase: 'play' }),
+    home: () => set({ screen: 'map', phase: 'story', open: true, memory: fresh(), stage: null }),
     markDone: (id) => {
       if (get().done.includes(id)) return
       set({ done: [...get().done, id] })
@@ -102,8 +112,8 @@ export const useStory = create<StoryState>()((set, get) => {
     remember: (patch) => set({ memory: { ...get().memory, ...patch } }),
     setStage: (stage) => set({ stage }),
     setOpen: (open) => set({ open }),
-    restart: () => {
-      set({ chapter: 0, done: [], started: true, memory: fresh(), stage: 'apply', open: true })
+    reset: () => {
+      set({ chapter: 0, done: [], screen: 'map', phase: 'story', memory: fresh(), stage: null, open: true })
       persist()
     },
   }
