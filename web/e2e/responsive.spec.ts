@@ -38,6 +38,14 @@ for (const size of SIZES) {
     expect(await noSidewaysScroll(page)).toBe(true)
     expect(await outside(page, parts)).toEqual([])
 
+    // the app opens with no place chosen; the sections appear once one is picked
+    const search = page.getByRole('combobox', { name: 'Search sites and missions' })
+    await search.fill('Shackleton')
+    await search.press('Enter')
+    await expect(page.getByRole('button', { name: 'Power' })).toBeVisible()
+    expect(await noSidewaysScroll(page)).toBe(true)
+    expect(await outside(page, parts)).toEqual([])
+
     // a section opens beside the map (or under it on a phone) without pushing anything out
     await page.getByRole('button', { name: 'Power' }).click()
     await expect(page.locator('.side-panel')).toBeVisible()
@@ -46,8 +54,8 @@ for (const size of SIZES) {
 
     // the widest menu of the tool bar stays inside the window, in both directions
     await page.getByRole('radio', { name: 'Mission planner' }).click()
-    await page.getByRole('button', { name: 'Mission filters' }).click()
-    const panel = page.locator('.mission-pop .pop-panel')
+    await page.getByRole('button', { name: /^Date and duration/ }).click()
+    const panel = page.locator('.pop-panel')
     await expect(panel).toBeVisible()
     const box = (await panel.boundingBox())!
     expect(box.x).toBeGreaterThanOrEqual(0)
