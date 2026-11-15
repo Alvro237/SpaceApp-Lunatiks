@@ -22,11 +22,18 @@ import {
   timeGrid,
   visibilityRanges,
 } from './engine'
-import { loadEphemeris, loadHorizonMasks } from './staticData'
+import { type EphemerisScope, PRESENT_TABLES_MS, loadEphemeris, loadHorizonMasks } from './staticData'
 
 const forever = { staleTime: Infinity, gcTime: Infinity, retry: 1 }
 
-export const useEphemeris = () => useQuery({ queryKey: ['static', 'ephemeris'], queryFn: loadEphemeris, ...forever })
+/**
+ * The Sun and Earth table for the chosen date. The Apollo segment (1969-1972) is fetched only once a date before 2025
+ * is chosen; until then the table holds the present-day segment alone, which is all the first screen needs.
+ */
+export const useEphemeris = () => {
+  const scope: EphemerisScope = useApp((s) => (s.startMs < PRESENT_TABLES_MS || s.tMs < PRESENT_TABLES_MS ? 'all' : 'present'))
+  return useQuery({ queryKey: ['static', 'ephemeris', scope], queryFn: () => loadEphemeris(scope), ...forever })
+}
 export const useMasks = () => useQuery({ queryKey: ['static', 'masks'], queryFn: loadHorizonMasks, ...forever })
 
 export type { ModelInfo } from './place'
