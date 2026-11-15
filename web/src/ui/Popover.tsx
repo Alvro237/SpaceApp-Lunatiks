@@ -8,6 +8,7 @@ import { type ReactNode, useEffect, useId, useRef, useState } from 'react'
 
 export function Popover({
   label,
+  buttonLabel,
   button,
   className = '',
   buttonClass = '',
@@ -18,6 +19,8 @@ export function Popover({
 }: {
   /** Accessible name of the button (and of the panel). */
   label: string
+  /** Accessible name of the button alone, when it shows text: it must contain that text (WCAG 2.5.3). */
+  buttonLabel?: string
   /** What the button shows: an icon, or an icon and a short value. */
   button: ReactNode
   className?: string
@@ -68,7 +71,7 @@ export function Popover({
         className={`pop-btn ${buttonClass}${pressed ? ' is-set' : ''}`}
         aria-expanded={open}
         aria-controls={open ? `${id}-p` : undefined}
-        aria-label={label}
+        aria-label={buttonLabel ?? label}
         title={label}
         onClick={() => setOpen(!open)}
       >

@@ -115,7 +115,7 @@ describe('navigator', () => {
     const search = await screen.findByRole('combobox', { name: 'Search sites and missions' })
     await waitFor(() => expect(search).toHaveAttribute('placeholder', expect.stringMatching(/IM-2/)))
     expect(screen.getByRole('button', { name: 'Coordinates' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Date and duration' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Date and duration/ })).toBeInTheDocument()
     // no side panel until a section is asked for: the timeline shows when the place is sunlit and sees the Earth
     expect(await screen.findByRole('img', { name: /Sunlit .*% and Earth in view/ }, { timeout: 5000 })).toBeInTheDocument()
     expect(document.querySelector('.side-panel')).toBeNull()
@@ -240,7 +240,7 @@ describe('navigator', () => {
     expect(useApp.getState().playing).toBe(false)
     // the second icon cycles the playback speed
     const before = useApp.getState().speed
-    await user.click(screen.getByRole('button', { name: /^Speed:/ }))
+    await user.click(screen.getByRole('button', { name: /^Speed / }))
     expect(useApp.getState().speed).not.toBe(before)
   })
 
