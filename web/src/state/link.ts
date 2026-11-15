@@ -7,10 +7,13 @@
  * previous answer stays on screen, marked busy, until the new one arrives. At the budget level, while the budget is
  * incomplete, the geometry is asked instead, so the timeline keeps its Link row and the panel says what is missing.
  */
+import { keepPreviousData, useQueries } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { create } from 'zustand'
+import { api, isMissing } from '../api/client'
 import { useLink } from '../api/hooks'
-import { DEFAULT_FORM, type LinkForm, buildLinkRequestWithFallback } from '../panels/linkModel'
+import type { ComparedPlace } from '../compare/useComparePlaces'
+import { DEFAULT_FORM, type LinkForm, type LinkSummary, buildLinkRequestWithFallback, summarize } from '../panels/linkModel'
 import { isoMinute } from '../time/clock'
 import { useApp } from './store'
 
@@ -36,8 +39,8 @@ function useDebounced<T>(value: T, ms: number): T {
   return shown
 }
 
-export function useLinkRequest() {
-  const selection = useApp((s) => s.selection)
+/** The form once it has settled, and the window it applies to: what every request of the link is built from. */
+function useSettledLink() {
   const startMs = useApp((s) => s.startMs)
   const durationH = useApp((s) => s.durationH)
   const commsMinFraction = useApp((s) => s.commsMinFraction)
@@ -47,12 +50,16 @@ export function useLinkRequest() {
     [networks, level, direction, band, freq, eirp, rateKbps, ebn0, margin, losses, gt, custom],
   )
   const settled = useDebounced(form, 350)
-  const request = useMemo(
-    () => buildLinkRequestWithFallback(selection, { startIso: isoMinute(startMs), durationH, commsMinFraction }, settled),
-    [selection, startMs, durationH, commsMinFraction, settled],
-  )
+  const win = useMemo(() => ({ startIso: isoMinute(startMs), durationH, commsMinFraction }), [startMs, durationH, commsMinFraction])
   // the form being typed is ahead of the request being asked
-  return { ...request, typing: settled !== form }
+  return { settled, win, typing: settled !== form }
+}
+
+export function useLinkRequest() {
+  const selection = useApp((s) => s.selection)
+  const { settled, win, typing } = useSettledLink()
+  const request = useMemo(() => buildLinkRequestWithFallback(selection, win, settled), [selection, win, settled])
+  return { ...request, typing }
 }
 
 /** The radio link for the chosen place and window; `problem` says what the form still needs. */
@@ -60,4 +67,37 @@ export function useLinkResult() {
   const { body, problem, typing } = useLinkRequest()
   const query = useLink(body)
   return { ...query, body, problem, updating: typing || query.isFetching }
+}
+
+/** What the form still needs, whatever the place (null when it is complete). For the settings shown in the comparison. */
+export function useLinkProblem(): string | null {
+  const { settled, win } = useSettledLink()
+  return useMemo(() => buildLinkRequestWithFallback({ kind: 'site', id: 'any' }, win, settled).problem, [win, settled])
+}
+
+/**
+ * The radio link of every compared place, asked with the same form and window (the answers are cached under the same
+ * key as the single-place one). A place is `null` until its answer is there, and also while the budget is incomplete:
+ * the comparison shows only real link.
+ */
+export function useComparedLinks(places: ComparedPlace[]): Record<number, LinkSummary | null> {
+  const { settled, win } = useSettledLink()
+  const requests = useMemo(() => places.map((p) => ({ num: p.num, ...buildLinkRequestWithFallback(p.sel, win, settled) })), [places, win, settled])
+  const results = useQueries({
+    queries: requests.map((r) => ({
+      queryKey: ['link', r.body],
+      queryFn: ({ signal }: { signal: AbortSignal }) => api.link(r.body!, signal),
+      enabled: !!r.body,
+      retry: (count: number, e: unknown) => !isMissing(e) && count < 1,
+      staleTime: 60_000,
+      placeholderData: keepPreviousData,
+    })),
+  })
+  // a few small summaries per render: cheaper than keeping a variable-length dependency list in step
+  const out: Record<number, LinkSummary | null> = {}
+  requests.forEach((r, i) => {
+    const data = results[i]?.data
+    out[r.num] = data && !r.problem ? summarize(data) : null
+  })
+  return out
 }

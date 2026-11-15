@@ -23,9 +23,9 @@ import { sameSelection, useApp } from '../state/store'
 import { SPEEDS, type SpeedId, formatUtc, isoMinute } from '../time/clock'
 import { MS_PER_DAY, MS_PER_HOUR } from '../time/engine'
 import { useParams, useThrottledTime } from '../time/hooks'
-import { toRanges } from '../panels/linkModel'
+import { type LinkSummary, toRanges } from '../panels/linkModel'
 import { useNow } from '../panels/useNow'
-import { useLinkResult, useLinkStore } from '../state/link'
+import { useComparedLinks, useLinkResult, useLinkStore } from '../state/link'
 import { IconAntenna, IconPause, IconPlay, IconSpeed, IconSun } from '../ui/icons'
 
 const W = 1000
@@ -34,7 +34,7 @@ const ROW = 14
 const LEFT_SINGLE = 70
 const LEFT_COMPARE = 230
 
-type Strip = 'sun' | 'earth'
+type Strip = 'sun' | 'link'
 
 interface TimelineData {
   source: 'api' | 'browser'
@@ -78,6 +78,7 @@ export function Timeline() {
   const endMs = startMs + durationH * MS_PER_HOUR
   const comparing = useComparing()
   const compared = useComparePlaces()
+  const comparedLinks = useComparedLinks(comparing ? compared : [])
   const [strip, setStrip] = useState<Strip>('sun')
   const link = useLinkResult()
   const showEarthRow = useLinkStore((s) => s.showEarthRow)
@@ -160,7 +161,7 @@ export function Timeline() {
             {(
               [
                 ['sun', 'Sunlit', <IconSun key="s" size={16} />],
-                ['earth', 'Earth', <IconAntenna key="e" size={16} />],
+                ['link', 'Link', <IconAntenna key="e" size={16} />],
               ] as const
             ).map(([v, label, icon]) => (
               <button
@@ -170,7 +171,7 @@ export function Timeline() {
                 aria-checked={strip === v}
                 className={`tl-seg-item${strip === v ? ' is-on' : ''}`}
                 onClick={() => setStrip(v)}
-                title={v === 'sun' ? 'When each place is sunlit' : 'When each place sees the Earth'}
+                title={v === 'sun' ? 'When each place is sunlit' : 'When each place has link with the Earth antennas'}
               >
                 {icon}
                 <span>{label}</span>
@@ -190,7 +191,7 @@ export function Timeline() {
       </div>
 
       {comparing && (
-        <CompareStrips places={compared.filter((p) => p.win)} strip={strip} startMs={startMs} endMs={endMs} durationH={durationH} tMs={tMs} ticks={ticks} x={x} onSeek={seek} />
+        <CompareStrips places={compared.filter((p) => p.win)} strip={strip} links={comparedLinks} startMs={startMs} endMs={endMs} durationH={durationH} tMs={tMs} ticks={ticks} x={x} onSeek={seek} />
       )}
       {data && (
         <>
@@ -361,13 +362,15 @@ const CGAP = 6
 const NAME_CHARS = 22
 
 /**
- * Multiselect: one strip per compared place on the window's time axis, sunlit or Earth in view as the switch says.
+ * Multiselect: one strip per compared place on the window's time axis, sunlit or with link to the Earth antennas as the
+ * switch says (real link only: a place with no link, or while the link budget is incomplete, has an empty strip).
  * The label column carries the place's number (as on the map), its name and its share of the window, with a star
  * for the best; the current place is highlighted and a click on a label makes that place current.
  */
 function CompareStrips({
   places,
   strip,
+  links,
   startMs,
   endMs,
   durationH,
@@ -378,6 +381,8 @@ function CompareStrips({
 }: {
   places: ComparedPlace[]
   strip: Strip
+  /** The link of each place, by its number; null while it is not available. */
+  links: Record<number, LinkSummary | null>
   startMs: number
   endMs: number
   durationH: number
@@ -386,15 +391,16 @@ function CompareStrips({
   x: (t: number) => number
   onSeek: (e: MouseEvent<SVGSVGElement>) => void
 }) {
-  const id = useId()
   const selection = useApp((s) => s.selection)
   const select = useApp((s) => s.select)
   if (places.length === 0) return null
-  const share = (p: ComparedPlace) => (strip === 'sun' ? p.win!.metrics.sunlightPct : p.win!.metrics.commsPct)
-  const best = Math.max(...places.map(share))
+  // the share of the window, or null for a place whose link is not available (no answer yet, or the budget is incomplete)
+  const share = (p: ComparedPlace): number | null => (strip === 'sun' ? p.win!.metrics.sunlightPct : links[p.num] ? links[p.num]!.linkFraction * 100 : null)
+  const shown = (p: ComparedPlace) => (share(p) === null ? '–' : `${share(p)!.toFixed(0)}%`)
+  const best = Math.max(...places.map((p) => share(p) ?? -1))
   const rowsH = places.length * (CROW + CGAP) - CGAP
   const h = rowsH + 24
-  const what = strip === 'sun' ? 'sunlit' : 'in view of the Earth'
+  const what = strip === 'sun' ? 'sunlit' : 'in link with the Earth antennas'
   const cut = (s: string) => (s.length > NAME_CHARS ? `${s.slice(0, NAME_CHARS - 1)}…` : s)
 
   return (
@@ -402,20 +408,14 @@ function CompareStrips({
       className={`strip compare-strips is-${strip}`}
       viewBox={`${-LEFT_COMPARE} 0 ${W + LEFT_COMPARE + 6} ${h}`}
       role="img"
-      aria-label={`When each place is ${what}: ${places.map((p) => `${p.num} ${p.info.name} ${share(p).toFixed(0)} %`).join(', ')} of the window.`}
+      aria-label={`When each place is ${what}: ${places.map((p) => `${p.num} ${p.info.name} ${share(p) === null ? 'no link' : `${share(p)!.toFixed(0)} %`}`).join(', ')} of the window.`}
       onClick={onSeek}
     >
-      <defs>
-        <pattern id={`${id}-hatch`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-          <rect width="6" height="6" className="hatch-bg" />
-          <line x1="0" y1="0" x2="0" y2="6" className="hatch-line" />
-        </pattern>
-      </defs>
       {places.map((p, i) => {
         const y = i * (CROW + CGAP)
-        const ranges = strip === 'sun' ? p.win!.sunlit : p.win!.comms
+        const ranges = strip === 'sun' ? p.win!.sunlit : (links[p.num]?.linkRanges ?? [])
         const current = sameSelection(p.sel, selection)
-        const isBest = places.length > 1 && share(p) === best
+        const isBest = places.length > 1 && share(p) !== null && share(p) === best
         return (
           <g key={p.num} className={current ? 'is-current' : undefined}>
             <g
@@ -425,7 +425,7 @@ function CompareStrips({
                 select(p.sel)
               }}
             >
-              <title>{`${p.info.name}: ${share(p).toFixed(1)} % ${what}`}</title>
+              <title>{share(p) === null ? `${p.info.name}: no link to show` : `${p.info.name}: ${share(p)!.toFixed(1)} % ${what}`}</title>
               <circle cx={-LEFT_COMPARE + 9} cy={y + (CROW - 2) / 2} r={8} className={`cs-num cs-c-${p.num}`} />
               <text x={-LEFT_COMPARE + 9} y={y + (CROW - 2) / 2 + 4} textAnchor="middle" className="cs-num-text">
                 {p.num}
@@ -434,7 +434,7 @@ function CompareStrips({
                 {cut(p.info.name)}
               </text>
               <text x={-8} y={y + CROW * 0.78} textAnchor="end" className="row-label cs-share">
-                {`${isBest ? '★ ' : ''}${share(p).toFixed(0)}%`}
+                {`${isBest ? '★ ' : ''}${shown(p)}`}
               </text>
             </g>
             <rect x={0} y={y} width={W} height={CROW - 2} className="row-bg" />
@@ -445,8 +445,7 @@ function CompareStrips({
                 y={y}
                 width={Math.max(1, x(b) - x(a))}
                 height={CROW - 2}
-                className={strip === 'sun' ? 'range-sun' : 'range-earth'}
-                fill={strip === 'earth' ? `url(#${id}-hatch)` : undefined}
+                className={strip === 'sun' ? 'range-sun' : 'range-link'}
               />
             ))}
           </g>

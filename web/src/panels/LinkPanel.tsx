@@ -15,7 +15,7 @@ import { ApiError, isMissing } from '../api/client'
 import { useLinkStations } from '../api/hooks'
 import type { LinkResponse } from '../api/types'
 import { type CustomForm, DIRECTIONS, BANDS, NETWORK_IDS, NETWORK_LABEL, formatRate, nextChange, noLinkReason, rankStations, summarize } from './linkModel'
-import { useLinkStore, useLinkResult } from '../state/link'
+import { useLinkProblem, useLinkResult, useLinkStore } from '../state/link'
 import { useApp } from '../state/store'
 import { formatDuration } from '../time/clock'
 import { useThrottledTime } from '../time/hooks'
@@ -48,6 +48,28 @@ export function LinkPanel() {
       )}      <Networks />
       {level === 2 && <Budget />}
       {result.data && <Antennas r={result.data} />}
+      <Advanced />
+    </div>
+  )
+}
+
+/**
+ * The same settings without a place or a result, for the comparison (several places share one form): level, networks,
+ * the budget when it is on, direction and own antennas, and what the form still needs.
+ */
+export function LinkSettings() {
+  const level = useLinkStore((s) => s.level)
+  const problem = useLinkProblem()
+  return (
+    <div className="link-body link-settings">
+      <LevelSwitch />
+      {problem && (
+        <p className="error link-hint" role="status">
+          {problem}
+        </p>
+      )}
+      <Networks />
+      {level === 2 && <Budget />}
       <Advanced />
     </div>
   )
