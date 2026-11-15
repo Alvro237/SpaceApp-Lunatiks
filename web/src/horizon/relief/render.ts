@@ -62,8 +62,10 @@ export interface ReliefScene {
   exposure?: number
   /** Albedo per ring (rings.ts ringAlbedo), aligned with stack.rings; null or missing: plain regolith. */
   albedo?: (Float32Array | null | undefined)[]
-  /** Albedo from the 100 m detail tiles at a point (east, north metres from the observer), or NaN where none is loaded. */
+  /** Albedo from the finer photo tiles at a point (east, north metres from the observer), or NaN where none is loaded. */
   detailAt?: (e: number, n: number) => number
+  /** Pixel of that finer photo, metres (where the grain stops adding detail). */
+  detailPixelM?: number
   /** Regolith grain under the DEM's cell, near the feet only (groundTexture.ts), as before; null: none. */
   grain?: GroundTexture | null
 }
@@ -99,14 +101,23 @@ const FIRST_STEP_M = 0.3
  */
 export const DETAIL_STEP_M = 20
 const DETAIL_STEP_REL = 0.004
-/** Grain: metres per level-0 texel, and how strongly it modulates the albedo. */
+/**
+ * Grain: the regolith texture of the LROC WAC patch (groundTexture.ts), the same at the feet as on a hill 10 km
+ * away. Its world scale steps up in octaves of GRAIN_M x 2^L with the pixel's footprint on the ground (fixed to the
+ * ground, so it does not swim as the view turns), and it is laid only below the resolution of the photo there: full
+ * where a pixel covers under a quarter of a photo pixel, none where it covers a whole one (the photo's own detail
+ * takes over). GRAIN_GAIN: how strongly it modulates the albedo.
+ */
 const GRAIN_M = 0.04
 const GRAIN_GAIN = 0.55
-/** Grain fades out linearly to nothing at this distance, metres; eye height used for its footprint, metres. */
-const GRAIN_REACH_M = 60
-const GRAIN_EYE_M = 1.7
 const LOG_GRAIN = Math.log2(GRAIN_M)
+/** Pixel of the photo read for each ring when no finer tile covers the ground, metres (WAC 100 m at best). */
+const RING_PHOTO_MIN_M = 100
 
+
+/** Limb-darkening weight L = max(0, 1 - g / 150°) tabulated over cos g in [-1, 1] (LAMBERT_STEPS + 1 entries). */
+const LAMBERT_STEPS = 4096
+const LAMBERT_LUT = Float32Array.from({ length: LAMBERT_STEPS + 1 }, (_, i) => Math.max(0, 1 - Math.acos(-1 + (2 * i) / LAMBERT_STEPS) / (150 * D)))
 
 /** Display level (0..1) of a radiance. */
 export const tone = (r: number) => AMBIENT + (1 - AMBIENT) * (1 - Math.exp(-EXPOSURE * Math.max(0, r)))
@@ -132,18 +143,6 @@ function grainLevel(tex: GroundTexture, lv: number, u: number, v: number): numbe
   const ya = mirror(y0, s) * s
   const yb = mirror(y0 + 1, s) * s
   return (L[ya + xa] * (1 - fx) + L[ya + xb] * fx) * (1 - fy) + (L[yb + xa] * (1 - fx) + L[yb + xb] * fx) * fy
-}
-
-/** Trilinear: the two mip levels around the pixel's footprint, each bilinear, blended; 1 (no grain) past the last. */
-function grainAt(tex: GroundTexture, logFoot: number, u: number, v: number): number {
-  const top = tex.levels.length - 1
-  const l = Math.max(0, logFoot)
-  if (l >= top) return 1
-  const l0 = Math.floor(l)
-  const f = l - l0
-  const a = grainLevel(tex, l0, u, v)
-  const b = l0 + 1 >= top ? 1 : grainLevel(tex, l0 + 1, u, v)
-  return a + (b - a) * f
 }
 
 /**
@@ -172,12 +171,17 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
   const earthRatio = s.earthRatio ?? 0
   const exposure = s.exposure ?? 1
   const detailAt = s.detailAt
+  const detailPx = s.detailPixelM ?? 20
   const grain = s.grain ?? null
   const dTheta = scale * c.degPerPx * D
+  // set by radiance() for the step it shades: emission cosine, and the pixel of the photo used there (metres)
+  let lastMu = 1
+  let lastPhotoM = RING_PHOTO_MIN_M
+  let lastFine = false
   /** Lunar-Lambert radiance for one light: direct factor mu0, light direction L, unit vector towards the eye. */
   const lunarLambert = (mu0: number, mu: number, Lx: number, Ly: number, Lz: number, vx: number, vy: number, vz: number): number => {
     const cosG = Lx * vx + Ly * vy + Lz * vz
-    const L = Math.max(0, 1 - Math.acos(Math.max(-1, Math.min(1, cosG))) / (150 * D))
+    const L = LAMBERT_LUT[Math.round((Math.max(-1, Math.min(1, cosG)) + 1) * (LAMBERT_STEPS / 2))]
     return (1 - L) * mu0 + (2 * L * mu0) / (mu0 + mu + 1e-6)
   }
   /**
@@ -212,6 +216,7 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
   }
   const radiance = (k: number, u: number, v: number, t: number, up: number, sa: number, ca: number): number => {
     const hasEarth = s.earthlight && earthRatio > 0
+    lastFine = false
     if (!s.sunlight && !hasEarth) return 0
     normalAt(k, u, v)
     // towards the eye
@@ -220,6 +225,7 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
     const vy = -t * ca * il
     const vz = -up * il
     const mu = Math.max(0, nrm[0] * vx + nrm[1] * vy + nrm[2] * vz)
+    lastMu = mu
     let R = 0
     if (s.sunlight) {
       const cosI = nrm[0] * S[0] + nrm[1] * S[1] + nrm[2] * S[2]
@@ -236,7 +242,12 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
       }
     }
     const fine = detailAt ? detailAt(t * sa, t * ca) : NaN
-    if (fine === fine) return R * exposure * fine
+    if (fine === fine) {
+      lastFine = true
+      lastPhotoM = detailPx
+      return R * exposure * fine
+    }
+    lastPhotoM = Math.max(RING_PHOTO_MIN_M, ringCell[k])
     const A = s.albedo?.[k]
     return R * exposure * (A ? bilinear(A, u, v) : 1)
   }
@@ -283,7 +294,9 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
       const y = rows(Math.atan2(up, t) / D)
       steps++
       let R = NaN
+      let seen = false
       if (y < top || pY !== pY) {
+        seen = true
         R = radiance(k, u, v, t, up, sa, ca)
         if (pY !== pY) {
           // the first step also stands for the ground between it and the feet
@@ -296,11 +309,11 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
         for (let r = Math.min(top, h) - 1; r >= r0; r--) {
           const a = span > 1e-9 ? Math.min(1, Math.max(0, (r - y) / span)) : 0 // 0 at this step, 1 at the previous
           const ta = t + (pT - t) * a
-          writePixel(px, 4 * (r * w + i), R + (pR - R) * a, ta, ta * sa, ta * ca, dTheta, grain, 255)
+          writePixel(px, 4 * (r * w + i), R + (pR - R) * a, ta, ta * sa, ta * ca, dTheta, lastMu, lastPhotoM, grain, 255)
         }
         // antialiased top edge: the row the ground only partly covers
         const edge = r0 - 1
-        if (edge >= 0 && edge < top && y < r0) writePixel(px, 4 * (edge * w + i), R, t, e, n, dTheta, grain, Math.round(255 * Math.min(1, r0 - y)))
+        if (edge >= 0 && edge < top && y < r0) writePixel(px, 4 * (edge * w + i), R, t, e, n, dTheta, lastMu, lastPhotoM, grain, Math.round(255 * Math.min(1, r0 - y)))
         if (r0 < top) top = r0
       }
       pY = y
@@ -311,10 +324,8 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
       pUp = up
       pR = R
       let stepM = Math.min(STEP_CELLS * ringCell[k], NEAR_GROWTH * t)
-      if (stepM > DETAIL_STEP_M && detailAt) {
-        const d = detailAt(t * sa, t * ca)
-        if (d === d) stepM = Math.max(DETAIL_STEP_M, DETAIL_STEP_REL * t)
-      }
+      // finer steps only while the ray sees ground with a finer photo (ground hidden behind a ridge needs none)
+      if (seen && lastFine && stepM > DETAIL_STEP_M) stepM = Math.max(DETAIL_STEP_M, DETAIL_STEP_REL * t)
       t += Math.max(0.02, stepM)
       // nothing farther can show: even the highest ground in the rings would stay below the rows filled so far
       if ((steps & 7) === 0 && rows(Math.atan2(headroom - (t * t) / twoR, t) / D) >= top) {
@@ -325,7 +336,7 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
     // beyond the rings (or beyond what can show), up to the mask: the shade of the ground where the ray stopped
     if (top > maskTop && pY === pY) {
       const R = pR !== pR ? radiance(pK, pU, pV, pT, pUp, sa, ca) : pR
-      for (let r = Math.min(top, h) - 1; r >= maskTop; r--) writePixel(px, 4 * (r * w + i), R, pT, 0, 0, dTheta, null, 255)
+      for (let r = Math.min(top, h) - 1; r >= maskTop; r--) writePixel(px, 4 * (r * w + i), R, pT, 0, 0, dTheta, 1, RING_PHOTO_MIN_M, null, 255)
     }
   }
   return steps
@@ -344,18 +355,30 @@ function writePixel(
   e: number,
   n: number,
   dTheta: number,
+  mu: number,
+  photoM: number,
   grain: GroundTexture | null,
   alpha: number,
 ): void {
   // partial edge pixels keep the higher alpha already written
   if (alpha < 255 && px[o + 3] >= alpha) return
   let b = TONE_LUT[R > 0 ? (R < TONE_MAX ? (R * TONE_STEPS) | 0 : TONE_MAX * TONE_STEPS) : 0]
-  if (grain !== null && t < GRAIN_REACH_M) {
-    // footprint of the pixel on the ground: t dTheta across the ray, about t^2 dTheta / h along it at grazing
-    // incidence (h: eye height); their geometric mean picks the mip level, so far grain blurs out instead of aliasing
-    const foot = t * dTheta * Math.sqrt(Math.max(1, t / GRAIN_EYE_M))
-    const g = grainAt(grain, Math.log2(Math.max(1e-6, foot)) - LOG_GRAIN, e / GRAIN_M + 311, n / GRAIN_M + 517)
-    b *= 1 + (g - 1) * GRAIN_GAIN * (1 - t / GRAIN_REACH_M)
+  if (grain !== null) {
+    // footprint of the pixel on the ground: t dTheta across the ray, t dTheta / mu along it (mu: emission cosine;
+    // long on level ground seen at grazing, short on a slope facing the eye); their geometric mean
+    const foot = t * dTheta * Math.sqrt(1 / Math.max(0.02, mu))
+    const ratio = foot / photoM
+    if (ratio < 1) {
+      const weight = ratio <= 0.25 ? 1 : Math.log2(1 / ratio) / 2
+      // two octaves of the patch around the footprint, blended: fixed to the ground, constant detail on screen
+      const lf = Math.max(0, Math.log2(Math.max(1e-6, foot)) - LOG_GRAIN)
+      const l0 = Math.floor(lf)
+      const f = lf - l0
+      const s0 = GRAIN_M * 2 ** l0
+      const g0 = grainLevel(grain, 0, e / s0 + 311, n / s0 + 517)
+      const g1 = grainLevel(grain, 0, e / (2 * s0) + 311, n / (2 * s0) + 517)
+      b *= 1 + (g0 + (g1 - g0) * f - 1) * GRAIN_GAIN * weight
+    }
   }
   // Uint8ClampedArray rounds and clamps
   px[o] = TINT_R * b

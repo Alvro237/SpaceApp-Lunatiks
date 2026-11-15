@@ -129,20 +129,74 @@ export function kaguyaMean(tiles: Map<string, Uint8Array>): number | null {
   return n > 0 ? sum / n : null
 }
 
+/** Spacing and half-width of the precomputed projection grid, metres (bilinear between nodes: under 0.1 m off). */
+const GRID_M = 1000
+const GRID_HALF_M = VIS_MAX_M
+const GRID_N = (2 * GRID_HALF_M) / GRID_M + 1
+
+/**
+ * Global pixel position (column, row at level KZ) of every node of a GRID_M grid over the place's plane, so a lookup
+ * costs a bilinear interpolation instead of the inverse projection's trigonometry. Longitude is unwrapped along each
+ * row so the interpolation never straddles the date line.
+ */
+export function pixelGrid(lat0: number, lon0: number): Float64Array {
+  const g = new Float64Array(2 * GRID_N * GRID_N)
+  const ll = new Float64Array(2)
+  const W = 2 ** (KZ + 1) * KTILE_PX
+  for (let j = 0; j < GRID_N; j++) {
+    const y = GRID_HALF_M - j * GRID_M
+    let prev = NaN
+    for (let i = 0; i < GRID_N; i++) {
+      planeToLatLon(lat0, lon0, -GRID_HALF_M + i * GRID_M, y, ll)
+      let x = gx(ll[1])
+      if (prev === prev) x += Math.round((prev - x) / W) * W
+      prev = x
+      const o = 2 * (j * GRID_N + i)
+      g[o] = x
+      g[o + 1] = gy(ll[0])
+    }
+  }
+  return g
+}
+
 /**
  * Albedo at a plane point (east, north metres) from the loaded tiles: bilinear byte / mean, clamped as the rings'
- * photo; NaN where no tile is loaded or the tile has no data there.
+ * photo; NaN where no tile is loaded or the tile has no data there. The tile of the last lookup is kept: a ray walks
+ * across one tile for many steps.
  */
-export function kaguyaSampler(tiles: Map<string, Uint8Array>, mean: number, lat0: number, lon0: number): (e: number, n: number) => number {
+export function kaguyaSampler(tiles: Map<string, Uint8Array>, mean: number, lat0: number, lon0: number, grid = pixelGrid(lat0, lon0)): (e: number, n: number) => number {
   const inv = 1 / mean
-  const ll = new Float64Array(2)
+  const W = 2 ** (KZ + 1) * KTILE_PX
+  const byNum = new Map<number, Uint8Array>()
+  for (const [k, g] of tiles) {
+    const [c, r] = k.split(',').map(Number)
+    byNum.set(c * 4096 + r, g)
+  }
+  let lastKey = -1
+  let lastTile: Uint8Array | undefined
   return (e, n) => {
-    planeToLatLon(lat0, lon0, e, n, ll)
-    const fx = gx(ll[1]) - 0.5
-    const fy = gy(ll[0]) - 0.5
-    const col = Math.floor((fx + 0.5) / KTILE_PX)
-    const row = Math.floor((fy + 0.5) / KTILE_PX)
-    const g = tiles.get(kKey(col, row))
+    const fi = (e + GRID_HALF_M) / GRID_M
+    const fj = (GRID_HALF_M - n) / GRID_M
+    if (!(fi >= 0 && fj >= 0 && fi < GRID_N - 1 && fj < GRID_N - 1)) return NaN
+    const i0 = Math.floor(fi)
+    const j0 = Math.floor(fj)
+    const a = fi - i0
+    const b = fj - j0
+    const o = 2 * (j0 * GRID_N + i0)
+    const o2 = o + 2 * GRID_N
+    let X = (grid[o] * (1 - a) + grid[o + 2] * a) * (1 - b) + (grid[o2] * (1 - a) + grid[o2 + 2] * a) * b
+    const Y = (grid[o + 1] * (1 - a) + grid[o + 3] * a) * (1 - b) + (grid[o2 + 1] * (1 - a) + grid[o2 + 3] * a) * b
+    X = ((X % W) + W) % W
+    const fx = X - 0.5
+    const fy = Y - 0.5
+    const col = Math.floor(X / KTILE_PX)
+    const row = Math.floor(Y / KTILE_PX)
+    const key = col * 4096 + row
+    if (key !== lastKey) {
+      lastKey = key
+      lastTile = byNum.get(key)
+    }
+    const g = lastTile
     if (!g) return NaN
     const px = Math.min(KTILE_PX - 1.001, Math.max(0, fx - col * KTILE_PX))
     const py = Math.min(KTILE_PX - 1.001, Math.max(0, fy - row * KTILE_PX))
@@ -150,9 +204,9 @@ export function kaguyaSampler(tiles: Map<string, Uint8Array>, mean: number, lat0
     const j = Math.floor(py)
     const u = px - i
     const v = py - j
-    const o = j * KTILE_PX + i
-    const b = (g[o] * (1 - u) + g[o + 1] * u) * (1 - v) + (g[o + KTILE_PX] * (1 - u) + g[o + KTILE_PX + 1] * u) * v
-    if (b < SHADOW_BYTE) return NaN
-    return Math.min(ALBEDO_MAX, Math.max(ALBEDO_MIN, b * inv))
+    const q = j * KTILE_PX + i
+    const v0 = (g[q] * (1 - u) + g[q + 1] * u) * (1 - v) + (g[q + KTILE_PX] * (1 - u) + g[q + KTILE_PX + 1] * u) * v
+    if (v0 < SHADOW_BYTE) return NaN
+    return Math.min(ALBEDO_MAX, Math.max(ALBEDO_MIN, v0 * inv))
   }
 }

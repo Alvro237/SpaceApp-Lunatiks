@@ -9,7 +9,8 @@ import { GroundStack, type SunDir } from './light'
 import type { LightRequest, LightResponse } from './light.worker'
 import { type Ring, loadRing, photoAlbedo, placePhotoMean, planeFrame, ringSpecs } from './rings'
 import { detailSampler, detailTileUrl, loadDetailTile, tileKey, visibleFarTiles } from './detailPhoto'
-import { MAX_LAT, kKey, kaguyaMean, kaguyaSampler, kaguyaTileUrl, loadKaguyaTile, visibleKaguyaTiles } from './kaguya'
+import { KPIXEL_M, MAX_LAT, kKey, kaguyaMean, kaguyaSampler, kaguyaTileUrl, loadKaguyaTile, pixelGrid, visibleKaguyaTiles } from './kaguya'
+import { TILE_CELL_M } from './detailPhoto'
 import { groundTexture } from '../groundTexture'
 import type { ReliefScene } from './render'
 
@@ -158,14 +159,16 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
       if (timer) clearTimeout(timer)
     }
   }, [complete, stack, key, lat, lon, mastM, kaguya])
+  // the projection from the place's plane to the Kaguya grid, worked out once per place
+  const kGrid = useMemo(() => (kaguya && lat !== undefined && lon !== undefined ? pixelGrid(lat, lon) : null), [kaguya, lat, lon])
   const detailAt = useMemo(() => {
     if (detail.key !== key || detail.tiles.size === 0 || lat === undefined || lon === undefined) return undefined
     if (detail.source === 'kaguya') {
       const m = kaguyaMean(detail.tiles)
-      return m ? kaguyaSampler(detail.tiles, m, lat, lon) : undefined
+      return m && kGrid ? kaguyaSampler(detail.tiles, m, lat, lon, kGrid) : undefined
     }
     return photoMean ? detailSampler(detail.tiles, photoMean) : undefined
-  }, [detail, key, photoMean, lat, lon])
+  }, [detail, key, photoMean, lat, lon, kGrid])
 
   // what is on screen: a stack with its normals and its sunlight, swapped only once a larger stack is fully lit
   const [shown, setShown] = useState<{
@@ -311,6 +314,7 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
         exposure: night === 'earthshine' && lit ? NIGHT_EXPOSURE / lit.earthRatio : 1,
         albedo: live.stack === stack && ringAlbedo ? ringAlbedo : undefined,
         detailAt: live.stack === stack ? detailAt : undefined,
+        detailPixelM: detail.source === 'kaguya' ? KPIXEL_M : TILE_CELL_M,
         grain: groundTexture(),
       },
       night,
