@@ -14,7 +14,7 @@ export type Mode = 'study' | 'mission'
 export type ViewMode = '2d' | '3d'
 /** The whole Moon as a globe, or the polar DEM map. */
 export type Scale = 'globe' | 'map'
-export type LayerId = 'none' | 'elevation' | 'slope' | 'sun_illumination' | 'earth_visibility' | 'permanent_shadow'
+export type LayerId = 'none' | 'photo' | 'elevation' | 'slope' | 'sun_illumination' | 'earth_visibility' | 'permanent_shadow'
 export type Lighting = 'sun' | 'relief'
 
 export const MASTS_M = [0, 2, 5, 10] as const

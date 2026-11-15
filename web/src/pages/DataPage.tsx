@@ -74,7 +74,7 @@ export function DataPage() {
                 <a href="https://trek.nasa.gov/moon/">NASA Moon Trek</a> LOLA DEMs (global 256 px/deg between 45° S and 45° N, 100 m polar DEMs beyond;
                 down to 83 m cells) and LROC WAC global mosaic (303 px/deg, 100 m), read on demand and kept in this browser's storage
               </td>
-              <td>Sharper relief shading on the globe; the optional photo view (the WAC mosaic keeps the lighting it was photographed with)</td>
+              <td>Sharper relief shading on the globe; the optional photo view, the WAC mosaic as the ground's brightness on the lit LOLA relief (it keeps the shadows it was photographed with)</td>
             </tr>
             <tr>
               <th scope="row">Relief tiles and elevation</th>
@@ -93,6 +93,13 @@ export function DataPage() {
                 {import.meta.env.DEV || import.meta.env.VITE_PGDA_PROXY ? '' : ' (the PGDA ones are not enabled in this build)'}
               </td>
               <td>2D and 3D terrain when you zoom in</td>
+            </tr>
+            <tr>
+              <th scope="row">Photo layer of the map</th>
+              <td>
+                <a href="https://trek.nasa.gov/moon/">NASA Moon Trek</a> LROC WAC south polar mosaic (100 m, covering the whole map), cut tile by tile in the map's own projection, down to 60 m cells
+              </td>
+              <td>The optional photo layer: the WAC mosaic as the ground's brightness on the 3D LOLA relief, lit by the chosen light (it keeps the shadows it was photographed with)</td>
             </tr>
             <tr>
               <th scope="row">Slope</th>

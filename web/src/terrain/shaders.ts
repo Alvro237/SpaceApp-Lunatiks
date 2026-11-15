@@ -70,7 +70,7 @@ uniform vec4 uExtent;        // x0, yTop, size of the shadow texture (m)
 uniform float uShadowReady;
 uniform vec3 uSun;           // unit vector to the Sun, MOON_ME
 uniform float uLighting;     // 1: the Sun at the chosen instant; 0: neutral relief
-uniform int uLayerMode;      // 0 none, 1 data layer, 2 elevation
+uniform int uLayerMode;      // 0 none, 1 data layer, 2 elevation, 3 photo (LROC WAC brightness in r)
 uniform sampler2D uLayer;    // value (r) + alpha (g), 256 x 256 cells
 uniform vec4 uLayerXf;       // uv offset (xy) and scale (zw) when an ancestor's layer tile is used
 uniform float uHasLayer;
@@ -87,6 +87,11 @@ in vec2 vMap;
 in float vHeight;
 in vec3 vSunScene;
 layout(location = 0) out highp vec4 fragColor;
+// The WAC polar mosaic's mean brightness over the map's square is 0.331 of the byte range (median 0.329; one
+// 256 x 256 exportImage of the whole square, measured 2026-11-15): x2 brings it to the plain relief's grey (0.66),
+// so the photo and the relief-only map read alike. Near the pole the mosaic keeps the shadows it was photographed
+// with (median 0.016 within 60 km of the pole, same measurement), which no gain brings back.
+const float PHOTO_GAIN = 2.0;
 
 int areaCode(ivec2 c, ivec2 n) {
   if (c.x < 0 || c.y < 0 || c.x >= n.x || c.y >= n.y) return 0;
@@ -162,7 +167,10 @@ void main() {
 
   vec3 base = vec3(0.66, 0.66, 0.64);
   bool coloured = false;
-  if (uLayerMode == 2) {
+  if (uLayerMode == 3) {
+    // the photograph as the ground's brightness; the relief and the Sun light it as they light the plain grey
+    if (uHasLayer > 0.5) base = vec3(min(1.0, texture(uLayer, uLayerXf.xy + vUv * uLayerXf.zw).r * PHOTO_GAIN));
+  } else if (uLayerMode == 2) {
     base = texture(uLut, vec2(clamp((vHeight - uElevRange.x) / (uElevRange.y - uElevRange.x), 0.0, 1.0), 0.5)).rgb;
     coloured = true;
   } else if (uLayerMode == 1 && uHasLayer > 0.5) {
