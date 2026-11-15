@@ -1,6 +1,25 @@
 import { describe, expect, it } from 'vitest'
 import { R_M } from '../../terrain/tileset'
-import { GroundStack, HORIZON_CLAMP_DEG, discFractionAbove, earthPhaseAngle, earthshineRatio, lightFromHorizon, ringLightHorizon, ringNormals, sampleEnu } from './light'
+import {
+  GroundStack,
+  HORIZON_CLAMP_DEG,
+  PATCH_N,
+  PATCH_PAD,
+  PATCH_TILE,
+  PATCH_TILES,
+  type PatchGrid,
+  discFractionAbove,
+  earthPhaseAngle,
+  earthshineRatio,
+  lightFromHorizon,
+  patchOrigin,
+  ringLightHorizon,
+  ringNormals,
+  sampleEnu,
+  stackNormals,
+  tileOf,
+} from './light'
+import { MIN_WEIGHT, patchBox, patchSource, visibleFarPatches } from './patches'
 import { renderRelief, tone } from './render'
 import { FINE_FEATHER, RING_COUNT, RING_N, RING_RATIO, enuToPlane, fineDemAt, mergeFine, planeFrame, planeToEnu, ringSpecs } from './rings'
 
@@ -131,8 +150,8 @@ describe('rendering', () => {
     const H = 400
     const c = { yaw: 0, pitch: 0, cx: W / 2, cy: H / 2, degPerPx: 0.02 }
     const img = { width: W, height: H, data: new Uint8ClampedArray(W * H * 4), colorSpace: 'srgb' } as ImageData
-    // sunlit up to the crest, in shadow beyond (horizon 10° over the Sun): the slope is bright, the plateau and the
-    // band filled above it are not. Sun 20° up behind the eye, in the south: the slope faces it
+    // sunlit up to the crest, in shadow beyond (horizon 10° over the Sun): the slope is bright, the plateau is not.
+    // Sun 20° up behind the eye, in the south: the slope faces it
     const sunlight = rings.map((r) => {
       const a = new Float32Array(RING_N * RING_N)
       for (let j = 0; j < RING_N; j++)
@@ -154,9 +173,51 @@ describe('rendering', () => {
     const el = Math.atan2(50 - 1.7 - (d * d) / (2 * R_M), d) / D
     // one 5 m cell of this slope spans about 6 rows at 1 km and the light ramps over the last cell: 3 rows (0.06°)
     expect(Math.abs(top - (H / 2 - el / 0.02 - 0.5))).toBeLessThan(3)
-    // above it, up to the mask (10°), the band beyond what can show, filled to the mask in the shade where the ray stopped
+    // above it the mask says 10°, but these rings are the whole relief (they reach past FULL_REACH_M) and put no
+    // ground there: the band is left as sky, not painted
+    expect(img.data[4 * (W / 2) + 3]).toBe(0)
+    // while the relief is still incomplete (fillToMask) the band is painted, in the shade where the ray stopped
+    renderRelief(img, 1, c, () => 10, { stack, normals, sunlight, eyeM: 1.7, sun: sunDir, fillToMask: true })
     expect(img.data[4 * (W / 2) + 3]).toBe(255)
     expect(img.data[4 * (W / 2) + 1]).toBeLessThan(bright)
+  })
+
+  it('paints only a hair of a gap between the drawn ground and the mask once the relief is whole', () => {
+    // flat ground seen from 1.7 m: its horizon dips acos(R / (R + 1.7)) = 0.08° under the level
+    const { stack, normals } = synthetic(-89.5, 0, 5, () => 0)
+    const W = 8
+    const H = 200
+    const c = { yaw: 0, pitch: 0, cx: W / 2, cy: H / 2, degPerPx: 0.01 }
+    const topRow = (maskDeg: number) => {
+      const img = { width: W, height: H, data: new Uint8ClampedArray(W * H * 4), colorSpace: 'srgb' } as ImageData
+      renderRelief(img, 1, c, () => maskDeg, { stack, normals, sunlight: null, eyeM: 1.7, sun: [0, 1, 0] })
+      for (let j = 0; j < H; j++) if (img.data[4 * (j * W + W / 2) + 3] === 255) return j
+      return H
+    }
+    const dip = Math.acos(R_M / (R_M + 1.7)) / D
+    const ground = H / 2 + dip / 0.01
+    // a mask 0.05° above the ground's own horizon (under MASK_GAP_DEG = 0.08°): painted up to it
+    expect(Math.abs(topRow(-dip + 0.05) - (ground - 5))).toBeLessThan(1.5)
+    // a mask 0.5° above it: the ground stops at its own horizon
+    expect(Math.abs(topRow(-dip + 0.5) - ground)).toBeLessThan(1.5)
+  })
+
+  it('draws the ground below an eye that is above every height in the rings, out to its own horizon', () => {
+    const { stack, normals } = synthetic(-89.5, 0, 5, () => 0)
+    const W = 8
+    const H = 200
+    const c = { yaw: 0, pitch: -3, cx: W / 2, cy: H / 2, degPerPx: 0.05 }
+    const img = { width: W, height: H, data: new Uint8ClampedArray(W * H * 4), colorSpace: 'srgb' } as ImageData
+    // 2 km up: the horizon of the smooth Moon dips acos(R / (R + 2000)) = 2.75°
+    renderRelief(img, 1, c, () => 0, { stack, normals, sunlight: null, eyeM: 2000, sun: [0, 1, 0] })
+    let top = H
+    for (let j = 0; j < H; j++)
+      if (img.data[4 * (j * W + W / 2) + 3] === 255) {
+        top = j
+        break
+      }
+    const dip = Math.acos(R_M / (R_M + 2000)) / D
+    expect(Math.abs(top - (H / 2 - (-dip + 3) / 0.05))).toBeLessThan(2)
   })
 
   it('draws a wall that rises above the mask up to its own silhouette', () => {
@@ -326,5 +387,169 @@ describe('Kaguya TC tiles', () => {
     const at = kaguyaSampler(new Map([[kKey(col, row), g]]), 40, lat0, lon0)
     expect(at(0, 0)).toBeCloseTo(1.5, 5)
     expect(at(0, 50_000)).toBeNaN()
+  })
+})
+
+describe('far relief patches', () => {
+  /** The patch of tile (tc, tr) of the ring of `parentCellM` cells, heights from a function of (east, north). */
+  function patch(lat: number, lon: number, parentCellM: number, tc: number, tr: number, height: (e: number, n: number) => number): PatchGrid {
+    const f = planeFrame(lat, lon)
+    const cellM = parentCellM / RING_RATIO
+    const heights = new Float32Array(PATCH_N * PATCH_N)
+    for (let j = 0; j < PATCH_N; j++)
+      for (let i = 0; i < PATCH_N; i++) {
+        const [e, n] = sampleEnu(f, cellM, i, j, patchOrigin(tc), patchOrigin(tr))
+        heights[j * PATCH_N + i] = height(e, n)
+      }
+    return { cellM, heights, parentCellM, tc, tr }
+  }
+
+  it('cuts a ring into 8 x 8 tiles of 64 cells; the four middle ones belong to the next finer ring', () => {
+    expect(PATCH_TILES).toBe(8)
+    expect(PATCH_N).toBe(PATCH_TILE * RING_RATIO + 2 * PATCH_PAD)
+    // ring sample (0, 0) is the north-west corner: tile column 0, row 0; sample (511, 0) the north-east one
+    expect(tileOf(0, 0)).toBe(0)
+    expect(tileOf(511, 0)).toBe(7)
+    expect(tileOf(100, 500)).toBe(7 * 8 + 1)
+    // the centre and everything the inner ring holds (C ± C / 4 = 191.6 to 319.4)
+    expect(tileOf(C, C)).toBe(-1)
+    expect(tileOf(192, 319)).toBe(-1)
+    // the sliver between the inner ring's last sample and the middle tiles' edge (191.5) goes to the tile outside
+    // (the centre, 255.5, is the first half cell of column and row 4)
+    expect(tileOf(191.55, C)).toBe(4 * 8 + 2)
+    expect(tileOf(C, 319.45)).toBe(5 * 8 + 4)
+  })
+
+  it('lays a patch on the lattice of the next finer ring: tile 6, 2 of a 240 m ring starts 30 720 m east and north', () => {
+    // ring half-width 256 x 240 = 61 440 m; tile 64 x 240 = 15 360 m; the apron is 2 cells of 60 m on every side
+    expect(patchBox(240, 6, 2)).toEqual([30_720 - 120, 15_360 - 120, 46_080 + 120, 30_720 + 120])
+    const f = planeFrame(10, 20)
+    // its first sample inside the tile (index PATCH_PAD) sits half a 60 m cell inside the tile's north-west corner
+    expect(sampleEnu(f, 60, PATCH_PAD, PATCH_PAD, patchOrigin(6), patchOrigin(2))).toEqual([30_750, 30_690])
+    // and patches side by side share their lattice: sample 256 + i of one is sample i of the next
+    const a = sampleEnu(f, 60, 256 + 1, 5, patchOrigin(5), patchOrigin(2))
+    const b = sampleEnu(f, 60, 1, 5, patchOrigin(6), patchOrigin(2))
+    expect(a).toEqual(b)
+  })
+
+  it('reads the patch where one covers the point and the ring elsewhere', () => {
+    // the rings say 0 everywhere; the patch over tile 6, 2 of the 240 m ring says 100 + e / 100
+    const { f, rings } = synthetic(10, 20, 60, () => 0)
+    const p = patch(10, 20, 240, 6, 2, (e) => 100 + e / 100)
+    const stack = new GroundStack(rings, f, [p])
+    const tmp = new Float64Array(3)
+    const drop = (e: number, n: number) => (e * e + n * n) / (2 * R_M)
+    // inside the tile (east 30 720 to 46 080, north 15 360 to 30 720): the patch, exact for a plane
+    expect(stack.level(40_000, 20_000, tmp)).toBeCloseTo(100 + 400 - drop(40_000, 20_000), 3)
+    expect(stack.locateFine(40_000, 20_000, tmp)).toBe(rings.length)
+    expect(tmp[2]).toBe(1)
+    // right at its edges, still the patch (its apron holds the samples around them)
+    expect(stack.level(30_721, 15_361, tmp)).toBeCloseTo(100 + 307.21 - drop(30_721, 15_361), 3)
+    expect(stack.level(46_079, 30_719, tmp)).toBeCloseTo(100 + 460.79 - drop(46_079, 30_719), 3)
+    // one tile west, and beyond the ring: the rings
+    expect(stack.level(20_000, 20_000, tmp)).toBeCloseTo(-drop(20_000, 20_000), 6)
+    expect(stack.level(40_000, 100_000, tmp)).toBeCloseTo(-drop(40_000, 100_000), 6)
+    expect(stack.maxU).toBeCloseTo(100 + 462, 0)
+  })
+
+  it('draws a far ridge at its true height from a patch, where the ring alone flattens it', () => {
+    // a ridge 1000 m high and 1 km wide at its base, its crest 40 080 m north: half-way between two samples of the
+    // 240 m ring (39 960 and 40 200 m), which therefore holds 1000 (1 - 120 / 500) = 760 m at most there. The 60 m
+    // patch has samples 30 m each side of the crest (40 050 and 40 110 m): 940 m, and every 60 m step of the ray
+    // lands between them
+    const crest = 40_080
+    const ridge = (_e: number, n: number) => Math.max(0, 1000 * (1 - Math.abs(n - crest) / 500))
+    const { f, rings, normals } = synthetic(10, 20, 60, ridge)
+    // tile 4, 1 of the 240 m ring: east 0 to 15 360 m, north 30 720 to 46 080 m
+    const withPatch = new GroundStack(rings, f, [patch(10, 20, 240, 4, 1, ridge)])
+    const W = 8
+    const H = 400
+    // looking 6° east of north, through the tile: the crest is met 40 080 / cos 6° away
+    const t = crest / Math.cos(6 * D)
+    const elOf = (h: number) => Math.atan2(h - 1.7 - (t * t) / (2 * R_M), t) / D
+    const c = { yaw: 6, pitch: elOf(1000), cx: W / 2, cy: H / 2, degPerPx: 0.004 }
+    const topEl = (stack: GroundStack, n: Float32Array[]) => {
+      const img = { width: W, height: H, data: new Uint8ClampedArray(W * H * 4), colorSpace: 'srgb' } as ImageData
+      renderRelief(img, 1, c, () => -90, { stack, normals: n, sunlight: null, eyeM: 1.7, sun: [0, 1, 0] })
+      for (let j = 0; j < H; j++) if (img.data[4 * (j * W + W / 2) + 3] === 255) return c.pitch + (H / 2 - j - 0.5) * 0.004
+      return NaN
+    }
+    // with the patch: the 940 m its samples hold, 0.085° under the true crest
+    expect(elOf(1000) - elOf(940)).toBeCloseTo(0.085, 3)
+    expect(Math.abs(topEl(withPatch, stackNormals(withPatch)) - elOf(940))).toBeLessThan(0.01)
+    // the ring alone: 760 m at best (0.34° under the crest), less where its 240 m steps fall beside the samples
+    expect(topEl(new GroundStack(rings, f), normals)).toBeLessThan(elOf(760) + 0.01)
+  })
+
+  it('lights the patch itself and casts its shadow on the ring samples behind it', () => {
+    // a wall 600 m high from north 36 km on, inside the patch of tile 4, 1 of the 240 m ring; the Sun 2° up in the north
+    const wall = (_e: number, n: number) => (n > 36_000 ? 600 : 0)
+    const { f, rings } = synthetic(10, 20, 60, () => 0)
+    const p = patch(10, 20, 240, 4, 1, wall)
+    const stack = new GroundStack(rings, f, [p])
+    const light = ringLightHorizon(stack, stackNormals(stack), { az: 0, el: 2, radiusDeg: 0.2666 })
+    expect(light).toHaveLength(rings.length + 1)
+    expect(light[rings.length]).toHaveLength(PATCH_N * PATCH_N)
+    const tmp = new Float64Array(3)
+    const at = (e: number, n: number) => {
+      const g = stack.locateFine(e, n, tmp)
+      return lightFromHorizon(light[g][Math.round(tmp[1]) * stack.size[g] + Math.round(tmp[0])], 0.2666)
+    }
+    // 1 km south of the wall, in the patch: the wall stands atan(600 / 1000) = 31° up, over the Sun
+    expect(at(7000, 35_000)).toBe(0)
+    // on the wall's top: nothing north of it
+    expect(at(7000, 40_000)).toBe(1)
+    // 6 km south of the wall, on the 240 m ring outside the patch (north 30 000 m). There the vertical leans
+    // 30 000 / R = 0.99° towards the Sun, which stands 2.99° over that ground, its upper edge at 3.26°; the wall's
+    // top, 6000^2 / 2R = 10 m lower by the curvature, stands atan(590 / 6000) = 5.6° up: full shadow
+    expect(at(7000, 30_000)).toBe(0)
+    // 20 km south of it (north 16 000 m, same ring): atan((600 - 115) / 20 000) = 1.4°, under the Sun's lower edge
+    expect(at(7000, 16_000)).toBe(1)
+    // the ring samples well inside the patch's tile are left to the patch (not computed)
+    expect(light[1][Math.round(C - 36_000 / 240) * RING_N + Math.round(C + 7000 / 240)]).toBe(0)
+  })
+
+  it('picks the tiles of a far hill in view and asks for them four times finer, where LOLA has finer data', () => {
+    // a hill 1500 m high, 6 km across, 40 km north of Apollo 11 (global DEM: rings of 60, 240, 960 and 3840 m)
+    const specs = ringSpecs(0.674, 23.473)!
+    const hill = (e: number, n: number) => Math.max(0, 1500 * (1 - Math.hypot(e, n - 40_000) / 3000))
+    const f = planeFrame(0.674, 23.473)
+    const rings = specs.map((s) => {
+      const heights = new Float32Array(RING_N * RING_N)
+      for (let j = 0; j < RING_N; j++)
+        for (let i = 0; i < RING_N; i++) {
+          const [e, n] = sampleEnu(f, s.cellM, i, j)
+          heights[j * RING_N + i] = hill(e, n)
+        }
+      return { cellM: s.cellM, heights }
+    })
+    const want = visibleFarPatches(new GroundStack(rings, f), 1.7, specs, 0.674, 23.473)
+    // the hill straddles east = 0 between north 37 and 43 km: tiles 3 and 4 of row 1 of the 240 m ring
+    expect(want.length).toBeGreaterThanOrEqual(2)
+    expect(want.slice(0, 2).map((w) => [w.parentCellM, w.tc, w.tr]).sort()).toEqual([
+      [240, 3, 1],
+      [240, 4, 1],
+    ])
+    expect(want.every((w) => w.weight >= MIN_WEIGHT)).toBe(true)
+    const first = want.find((w) => w.tc === 4)!
+    expect(first.cellM).toBe(60)
+    expect(first.source.file).toBe('LRO_LOLA_DEM_Global_256ppd_v06')
+    const url = decodeURIComponent(first.url)
+    // east 0 to 15 360 m, north 30 720 to 46 080 m, 120 m of apron, one extra row of 60 m below
+    expect(url).toContain('bbox=-120,30540,15480,46200')
+    expect(url).toContain(`size=${PATCH_N},${PATCH_N + 1}`)
+  })
+
+  it('asks for no patch where no DEM is finer than the ring', () => {
+    // Apollo 15: the rings start at the NAC DTM's 1.6 m; the 102 m ring is already at the global DEM's 118 m
+    const specs = ringSpecs(26.13, 3.63)!
+    const ring102 = specs.find((s) => Math.abs(s.cellM - 102) < 2)!
+    expect(patchSource(26.13, 3.63, ring102, 6, 2)).toBeNull()
+    // the 410 m ring is not: its patches read the 118 m DEM at 102 m
+    const ring410 = specs.find((s) => Math.abs(s.cellM - 410) < 6)!
+    expect(patchSource(26.13, 3.63, ring410, 6, 2)?.file).toBe('LRO_LOLA_DEM_Global_256ppd_v06')
+    // near the south pole a 320 m ring is refined to 80 m from the 30 m polar DEM
+    const polar = ringSpecs(-89.5, 0)!
+    expect(patchSource(-89.5, 0, polar[3], 6, 2)?.file).toBe('LRO_LOLA_DEM_SPole75_30mp_v04')
   })
 })

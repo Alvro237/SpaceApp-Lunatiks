@@ -181,7 +181,10 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
       showLabels: arrival >= 1,
       stars,
       // during the descent the eye comes down over the same ground
-      relief: relief.scene ? { scene: arrival < 1 ? { ...relief.scene, eyeM: relief.scene.eyeM + from.km * 1000 * (1 - k) } : relief.scene, fine: fine && arrival >= 1 } : null,
+      // (from up there the rings end before the horizon: the band up to it is painted)
+      relief: relief.scene
+        ? { scene: arrival < 1 ? { ...relief.scene, eyeM: relief.scene.eyeM + from.km * 1000 * (1 - k), fillToMask: true } : relief.scene, fine: fine && arrival >= 1 }
+        : null,
     })
   }, [camera, view, info, size, tracks, free, arrival, stars, grainReady, relief.scene, fine, from.km])
 
@@ -250,7 +253,7 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
         <canvas ref={canvas} aria-hidden="true" style={{ width: '100%', height: '100%' }} />
         <p className="horizon-notice" style={{ left: free.left + 14, bottom: Math.max(free.bottom + 44, noticeBottom), maxWidth: `calc(100% - ${free.left + 28}px)` }}>
           {relief.status === 'ready'
-            ? `Rendered from LOLA heights and this place's LROC WAC mosaic, not footage · Relief: ${relief.sourceLabel ?? `LOLA ${relief.cellM?.toFixed(0)} m DEM`} to ${(relief.reachKm ?? 0) < 10 ? (relief.reachKm ?? 0).toFixed(1) : (relief.reachKm ?? 0).toFixed(0)} km, ${relief.night === 'earthshine' ? 'night, lit by earthshine (exposure raised)' : relief.night === 'dark' ? 'night, neither the Sun nor the Earth up' : 'lit by the Sun at this instant'}${relief.detailTiles && relief.detailTiles.wanted > 0 ? ` · Ground in view: ${relief.detailTiles.source === 'kaguya' ? 'Kaguya TC (JAXA) 21 m' : 'LROC WAC 100 m'}, ${relief.detailTiles.loaded} of ${relief.detailTiles.wanted} tiles` : ''} · Line: horizon mask used by the figures`
+            ? `Rendered from LOLA heights and this place's LROC WAC mosaic, not footage · Relief: ${relief.sourceLabel ?? `LOLA ${relief.cellM?.toFixed(0)} m DEM`} to ${(relief.reachKm ?? 0) < 10 ? (relief.reachKm ?? 0).toFixed(1) : (relief.reachKm ?? 0).toFixed(0)} km, ${relief.night === 'earthshine' ? 'night, lit by earthshine (exposure raised)' : relief.night === 'dark' ? 'night, neither the Sun nor the Earth up' : 'lit by the Sun at this instant'}${relief.detailTiles && relief.detailTiles.wanted > 0 ? ` · Ground in view: ${relief.detailTiles.source === 'kaguya' ? 'Kaguya TC (JAXA) 21 m' : 'LROC WAC 100 m'}, ${relief.detailTiles.loaded} of ${relief.detailTiles.wanted} tiles` : ''}${relief.farPatches ? ` · Far hills: ${farPatchText(relief.farPatches)}` : ''} · Line: horizon mask used by the figures`
             : 'Not real moon footage · Real moon horizon line'}
           {relief.status === 'loading' && ' · Loading the LOLA relief around this place…'}
         </p>
@@ -276,6 +279,13 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
       </ToolPortal>
     </>
   )
+}
+
+/** The far relief patches in words: how many are on screen and the LOLA cell they are read at. */
+function farPatchText(p: { shown: number; wanted: number; minCellM: number; maxCellM: number; reading: boolean }): string {
+  const cells = p.minCellM === p.maxCellM ? `${p.minCellM.toFixed(0)} m` : `${p.minCellM.toFixed(0)}-${p.maxCellM.toFixed(0)} m`
+  if (p.shown > 0) return `${p.shown} finer LOLA patches at ${cells}${p.reading ? ', more on their way…' : ''}`
+  return p.reading ? `reading ${p.wanted} finer LOLA patches…` : 'finer LOLA patches could not be read, drawn from the rings'
 }
 
 function describe(az: number, cam: { yaw: number; fov: number }): string {
