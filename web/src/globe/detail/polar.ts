@@ -47,6 +47,21 @@ const RELIEF_KM = 25
 const INTERVAL_S = 0.15
 const RETRY_BASE_S = 8
 const MAX_RETRIES = 3
+/**
+ * The overview heights (about 8 MB) only feed the shadows the polar terrain casts, so they wait until the first
+ * view has had the network: this many seconds of drawn frames, or sooner once the camera comes within this distance
+ * of the south pole.
+ */
+export const OVERVIEW_DELAY_S = 6
+export const OVERVIEW_NEAR_KM = MOON_R_KM
+const SOUTH_POLE = latLonToScene(-90, 0, MOON_R_KM)
+
+/** Whether the overview heights are due: after OVERVIEW_DELAY_S of frames, or with the camera near the south pole. */
+export function overviewDue(clockS: number, cam: Pick<PolarCamera, 'position'>): boolean {
+  if (clockS >= OVERVIEW_DELAY_S) return true
+  const [x, y, z] = cam.position
+  return Math.hypot(x - SOUTH_POLE[0], y - SOUTH_POLE[1], z - SOUTH_POLE[2]) <= OVERVIEW_NEAR_KM
+}
 
 /** The live levels the globe uses: Moon Trek's DEMs only (no proxy), to POLAR_MAX_Z. */
 const GLOBE_LIVE = {
@@ -224,6 +239,8 @@ export class PolarDetail {
   /** The overview heights for the shadows; a 1 × 1 placeholder until they load. */
   private overview: THREE.DataTexture = new THREE.DataTexture(new Float32Array(1), 1, 1, THREE.RedFormat, THREE.FloatType)
   private ts: Tileset | null = null
+  /** Starts the overview download once it is due (overviewDue); null when started or before the tileset. */
+  private startOverview: (() => void) | null = null
   private live = new Map<string, LiveSource>()
   private base = ''
   private photo = true
@@ -250,7 +267,7 @@ export class PolarDetail {
   /** The polar map's tileset (tiles/tileset.json) and the base URL of its files; detail starts once it is known. */
   setTileset(ts: Tileset, base: string, material: THREE.ShaderMaterial, floatLinear: boolean): void {
     if (this.ts) return
-    this.loadOverview(ts, base, material, floatLinear)
+    this.startOverview = () => this.loadOverview(ts, base, material, floatLinear)
     const live = cachedLiveLevels(ts, GLOBE_LIVE)
     this.ts = live.tileset
     this.live = live.live
@@ -294,6 +311,10 @@ export class PolarDetail {
   update(dt: number, cam: PolarCamera): void {
     this.clockS += dt
     this.since += dt
+    if (this.startOverview && overviewDue(this.clockS, cam)) {
+      this.startOverview()
+      this.startOverview = null
+    }
     const ts = this.ts
     if (!ts || this.since < INTERVAL_S) return
     this.since = 0
@@ -318,7 +339,8 @@ export class PolarDetail {
       jobs.sort((a, b) => a.tile.z - b.tile.z)
     }
     const rank = new Map(jobs.map((j, i) => [j.key, i]))
-    this.loader.prioritise((k) => rank.get(k) ?? null)
+    // the overview is not a wanted tile: keep it (first) rather than cancel it as unwanted
+    this.loader.prioritise((k) => (k === 'overview' ? -1 : (rank.get(k) ?? null)))
     for (const job of jobs) {
       const f = this.failures.get(job.key)
       if (f) {
