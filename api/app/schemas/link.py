@@ -1,7 +1,8 @@
 """Request and response models of POST /api/v1/link (AERO-2). snake_case JSON, units in descriptions.
 
 Level 1 (geometric contact): there is contact at an instant when the lunar site sees the Earth AND at least one of
-the selected antennas sees the Moon above its elevation limit. Level 2 (link budget) is not available yet.
+the selected antennas sees the Moon above its elevation limit. Level 2 adds the link budget: the link is closed when the
+Eb/N0 margin reaches the minimum the user asks for.
 """
 from __future__ import annotations
 
@@ -25,10 +26,44 @@ class CustomStation(BaseModel):
     min_elevation_deg: float = Field(ge=0.0, lt=90.0, description=(
         "Lowest elevation at which the antenna can track the Moon, degrees; used for every azimuth and every "
         "direction. Required: no default is assumed."))
+    diameter_m: float | None = Field(None, gt=0.0, le=120.0, description=(
+        "Dish diameter, metres. Level 2 only: used to estimate the G/T when gt_db_per_k is not given"))
+    gt_db_per_k: float | None = Field(None, description="Downlink G/T of this antenna, dB/K (level 2, optional)")
+
+
+Band = Literal["S", "X", "Ka"]
+
+
+class LinkBudgetInput(BaseModel):
+    """Level 2 inputs. Only the lunar terminal's EIRP and the data rate are required: the band picks the frequency,
+    the antennas' G/T comes from the catalogue (published, or estimated from the dish diameter), and the rest have
+    stated defaults."""
+    band: Band = Field("X", description=(
+        "Lunar band: S (2200-2290 MHz down, 2025-2110 MHz up), X (8450-8500 MHz down), Ka (25.5-27.0 GHz down). "
+        "The centre of the band is used unless frequency_ghz is given"))
+    frequency_ghz: float | None = Field(None, gt=0.0, le=100.0, description=(
+        "Exact carrier frequency, GHz, to type a mission's channel instead of the band centre. The G/T is taken from "
+        "the band that contains it (or the nearest band)"))
+    transmit_eirp_dbw: float = Field(description=(
+        "EIRP of the transmitting end, dBW: the lunar terminal for a downlink, the ground antenna for an uplink"))
+    data_rate_bps: float = Field(gt=0.0, description="Information data rate, bits per second")
+    receive_gt_db_per_k: float | None = Field(None, description=(
+        "G/T of the receiving end, dB/K. Downlink: optional, overrides every antenna's catalogue value. Uplink: "
+        "required, it is the lunar terminal's G/T"))
+    required_ebn0_db: float = Field(9.6, description=(
+        "Eb/N0 the modulation and coding need, dB. Default 9.6 dB = uncoded BPSK/QPSK at a bit error rate of 1e-5 "
+        "(conservative: coded links need less)"))
+    other_losses_db: float = Field(0.0, ge=0.0, description=(
+        "Losses not modelled (pointing, polarisation, atmosphere, implementation), dB. 0 = ignored"))
+    min_margin_db: float = Field(3.0, ge=0.0, description=(
+        "Margin required above required_ebn0_db for the link to count as closed, dB. Default 3 dB, a usual design "
+        "margin"))
 
 
 class LinkRequest(WindowRequest):
-    level: Literal[1] = Field(1, description="1 = geometric contact (the only level available now)")
+    level: Literal[1, 2] = Field(1, description=(
+        "1 = geometric contact; 2 = level 1 plus the link budget (needs `budget`)"))
+    budget: LinkBudgetInput | None = Field(None, description="Required at level 2, not allowed at level 1")
     networks: list[str] = Field(default_factory=lambda: ["dsn", "estrack", "jaxa"], description=(
         "Antenna networks to use (GET /api/v1/link/stations lists them): dsn, estrack, jaxa. An empty list is "
         "allowed when custom_stations is given."))
@@ -48,6 +83,12 @@ class LinkRequest(WindowRequest):
         ids = [c.id for c in self.custom_stations]
         if len(set(ids)) != len(ids):
             raise ValueError("custom station ids must be unique")
+        if self.level == 2 and self.budget is None:
+            raise ValueError("level 2 needs `budget` (at least transmit_eirp_dbw and data_rate_bps)")
+        if self.budget is not None and self.direction != "downlink" and self.budget.receive_gt_db_per_k is None:
+            raise ValueError("an uplink budget needs receive_gt_db_per_k: the G/T of the lunar terminal")
+        if self.level == 1 and self.budget is not None:
+            raise ValueError("`budget` is only used at level 2")
         return self
 
 
@@ -95,6 +136,25 @@ class StationResult(BaseModel):
     now_moon_azimuth_deg: float = Field(description="Azimuth of the Moon from the antenna at start, degrees from north")
     now_moon_elevation_deg: float = Field(description="Elevation of the Moon from the antenna at start, degrees")
     now_limit_deg: float = Field(description="The antenna's elevation limit in that direction at start, degrees")
+    budget: StationBudget | None = Field(None, description="Level 2 only")
+
+
+class StationBudget(BaseModel):
+    """Level 2 numbers for one antenna, over the samples where it is in geometric contact."""
+    margin_db_min: float | None = Field(description="Lowest Eb/N0 margin while in contact, dB; null when never in contact")
+    margin_db_mean: float | None
+    margin_db_max: float | None
+    free_space_loss_db_min: float | None = Field(description="Smallest free-space loss while in contact, dB")
+    free_space_loss_db_max: float | None
+    gt_db_per_k: float | None = Field(description="Receive G/T used for this antenna, dB/K; null when it has none")
+    gt_basis: Literal["cited", "spec", "estimated", "user", "no_receiver", "unknown"] = Field(description=(
+        "cited = operator tables; spec = operator design specification; estimated = from the dish diameter (scaled "
+        "from the DSN 34 m antennas); user = given in the request; no_receiver = no receiver in this band; unknown = "
+        "a custom antenna without G/T or diameter"))
+    link_fraction: float = Field(description="Share of samples with geometric contact AND margin >= min_margin_db, 0..1")
+    link_hours: float
+    max_data_rate_bps_median: float | None = Field(description=(
+        "Median over the samples in contact of the highest data rate that keeps min_margin_db of margin, bit/s"))
 
 
 class SkippedStation(BaseModel):
@@ -107,6 +167,22 @@ class LinkNow(BaseModel):
     any_station_sees_moon: bool
     contact: bool = Field(description="Both of the above at start")
     stations_in_contact: list[str] = Field(description="Ids of the antennas in contact at start")
+
+
+class LinkBudgetResult(BaseModel):
+    """Level 2: the link budget on top of the geometric contact."""
+    inputs: LinkBudgetInput = Field(description="The budget inputs used, echoed")
+    band_used: str = Field(description="Band whose G/T values were used")
+    frequency_ghz_used: float = Field(description="Carrier frequency used for the free-space loss, GHz")
+    link: list[bool] = Field(description=(
+        "At each sample: geometric contact with some antenna AND that antenna's Eb/N0 margin >= min_margin_db"))
+    link_window_fraction: float = Field(description="Share of samples with the link closed, 0..1")
+    link_hours: float
+    link_ranges: list[TimeRange]
+    longest_link_h: float
+    longest_link_blackout_h: float = Field(description="Longest stretch without a closed link, hours")
+    best_margin_db: list[float | None] = Field(description=(
+        "At each sample, the best Eb/N0 margin among the antennas in geometric contact, dB; null with no antenna in contact"))
 
 
 class LinkResponse(WindowResponse):
@@ -129,3 +205,4 @@ class LinkResponse(WindowResponse):
     skipped_stations: list[SkippedStation]
     estimated_limits: list[str] = Field(description=(
         "Ids of the antennas whose elevation limit is an owner estimate: the result depends on an unconfirmed value"))
+    budget: LinkBudgetResult | None = Field(None, description="Level 2 only")

@@ -50,10 +50,17 @@ asks for this list; keep it current when something is added.
 | NASA, LunaNet Interoperability Specification v5 | Frequency plan for direct-with-Earth links (to confirm band by band) | https://www.nasa.gov/wp-content/uploads/2025/02/lunanet-interoperability-specification-v5-baseline.pdf |
 | NASA/JPL DSN Telecommunications Link Design Handbook, 810-005, module 301 Rev. N (Coverage and Geometry), sections 2.2 to 2.2.4: mechanical elevation limit about 6 deg for az-el antennas; generic limits 6.0 deg receive, 10.0 low-power and 13.5 deg high-power transmit | Minimum elevation of the DSN antennas | https://deepspace.jpl.nasa.gov/dsndocs/810-005/301/301N.pdf |
 | NASA/JPL DSN 810-005 module 301 Horizon Mask Spreadsheet (V2, for 301-O, effective 2024-05-01, S. Slobin): per-azimuth receive, low-power and high-power transmit elevation limits for DSS-14, 24, 25, 26, 34, 35, 36, 43, 54, 55, 63, 65 and planned antennas | Per-antenna horizon masks for the DSN stations of the radio-link dataset (the separate "Coverage and Visibility" spreadsheet uses generic limits and is not used for masks) | https://deepspace.jpl.nasa.gov/dsndocs/810-005/301/Horizon-Masks-Download-V2-301O.xlsx , https://deepspace.jpl.nasa.gov/dsndocs/810-005/downloads/ |
+| NASA/JPL DSN 810-005 modules 101 Rev. G (70 m), 103 Rev. D (34 m HEF) and 104 Rev. O (34 m BWG): antenna gains and zenith system noise temperatures (Top, 25% CD clear weather) per band | Downlink G/T of every DSN antenna in `data/ground_stations.json` (G/T = gain - 10 log10 Top) | https://deepspace.jpl.nasa.gov/dsndocs/810-005/101/101G.pdf , https://deepspace.jpl.nasa.gov/dsndocs/810-005/103/103D.pdf , https://deepspace.jpl.nasa.gov/dsndocs/810-005/104/104O.pdf |
+| JAXA GREAT2 project page (Misasa 54 m): X-band G/T at least 53.35 dB/K at 15-80 deg elevation, propagation loss included (design specification) | Downlink G/T of the Misasa antenna | https://global.jaxa.jp/projects/sas/great |
+| SFCG overview (ITU-R science services seminar): S-band 2025-2110 / 2200-2290 MHz coordination (REC SFCG 21-2R5); lunar frequency plan REC SFCG 32-2R5 | Band presets of `/link` level 2 (X and Ka lunar ranges to be confirmed against REC SFCG 32-2R5) | https://itu.int/en/ITU-R/study-groups/rsg7/Documents/Presentations/SFCG%20Overview%20ITU%20Science%20Services%20Seminar.pdf |
 | IGS site logs of the ESA stations CEBR (Cebreros), MGUE (Malargüe), NNOR (New Norcia) | Public coordinates of the ESA deep-space sites (km-level accuracy is enough to decide Moon visibility) | https://files.igs.org/pub/station/log/ , https://files.igs.org/pub/station/oldlog/cebr_20201019.log , https://files.igs.org/pub/station/log/nnor00aus_20251107.log |
 
 ## Papers and documents consulted
 
+- Wertz, J. R., Everett, D. F., Puschell, J. J. (eds.), Space Mission Analysis and Design, 3rd ed. (Microcosm Press /
+  Springer): the link equation behind `logic/link.py` (Eb/N0 = EIRP - L - L_other + G/T - 10 log10 k - 10 log10 R).
+  Pratt, T., Bostian, C., Allnutt, J., Satellite Communications, 2nd ed. (Wiley): the same equation and free-space loss.
+  Textbook formulas, no dataset; the Boltzmann constant is the SI exact value 1.380649e-23 J/K.
 - McEwen, A. S. (1991). Photometric functions for photoclinometry and other applications. Icarus 92, 298-311.
   doi:10.1016/0019-1035(91)90053-V (lunar-Lambert function used to shade the Horizon view's LOLA ground; the
   limb-darkening weight is approximated as falling linearly with phase angle)
