@@ -214,13 +214,15 @@ function useMeasureInsets(root: { current: HTMLDivElement | null }) {
       const stacked = getComputedStyle(el.querySelector('.float') ?? el).position === 'static'
       for (const f of stacked ? [] : el.querySelectorAll<HTMLElement>('.float')) {
         const r = f.getBoundingClientRect()
+        // the bottom bar always counts as bottom, however narrow the side panels leave it and however short it
+        // is: the panels and the captions above it are sized and placed from this inset
+        const bottomBar = f.classList.contains('float-bottom')
         // a folded panel is only its title bar: it does not hide the map
-        if (r.width === 0 || r.height < 80) continue
-        // the bottom bar always counts as bottom, however narrow the side panels leave it
-        const side = !f.classList.contains('float-bottom') && r.width < W * 0.85
+        if (r.width === 0 || (!bottomBar && r.height < 80)) continue
+        const side = !bottomBar && r.width < W * 0.85
         if (side && r.left < 40) ins.left = Math.max(ins.left, r.right)
         else if (side && r.right > W - 40) ins.right = Math.max(ins.right, W - r.left)
-        else if (r.top > H / 2) ins.bottom = Math.max(ins.bottom, H - r.top)
+        else if (bottomBar || r.top > H / 2) ins.bottom = Math.max(ins.bottom, H - r.top)
       }
       const prev = useInsets.getState()
       if (prev.left === ins.left && prev.right === ins.right && prev.top === ins.top && prev.bottom === ins.bottom) return

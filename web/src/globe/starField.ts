@@ -4,7 +4,7 @@
  * the stars' inertial directions are turned into the Moon's frame with the IAU orientation of that instant (the same
  * rotation the horizon view uses) and then into scene axes (orbit.ts: x = x_ME, y = z_ME, z = −y_ME).
  *
- * Drawn before everything else, without depth: the Moon covers the stars behind it. Size and opacity follow the
+ * Drawn at the far plane with the depth test on: the Moon (lit or dark) covers the stars behind it. Size and opacity follow the
  * magnitude, the tint the colour index. They show at every hour (presentation: the globe is not an exposure).
  */
 import * as THREE from 'three'
@@ -65,8 +65,10 @@ export class StarField {
       vertexShader: VERT,
       fragmentShader: FRAG,
       uniforms: { uRot: { value: new THREE.Matrix3() }, uPixelRatio: { value: pixelRatio } },
+      // transparent objects are drawn after the opaque Moon (renderOrder only sorts within a pass), so the depth
+      // test is what hides the stars behind the Moon, its night side included: their depth sits at the far plane
       transparent: true,
-      depthTest: false,
+      depthTest: true,
       depthWrite: false,
     })
     this.points = new THREE.Points(geometry, this.material)

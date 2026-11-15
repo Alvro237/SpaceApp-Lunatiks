@@ -1,8 +1,8 @@
 /**
  * Educational mode's panels, laid out like the navigator's: the place search and the date sit in the shared top bars
  * (NavigatorPage), the sky now on the right, the days along the bottom, and the missions over the map on the
- * left. Every answer comes from the same engine and data as the planner's panels; "Why? And the real numbers"
- * opens them.
+ * left. Every answer comes from the same engine and data as the planner's panels, which show the exact numbers;
+ * here the answers stay plain words for children.
  */
 import { useId, useState } from 'react'
 import { useNow } from '../panels/useNow'
@@ -15,26 +15,12 @@ import { StoryCard } from './StoryCard'
 import { dayBlocks, simpleDuration } from './voxels'
 import './blocks.css'
 
-function sunWhy(el: number, fraction: number, terrain: boolean): string {
-  if (fraction >= 1) return terrain ? 'The whole Sun is above the hills.' : 'The whole Sun is above the horizon.'
-  if (fraction > 0) return terrain ? 'Only part of the Sun peeks over the hills.' : 'Only part of the Sun is above the horizon.'
-  if (el > 0 && terrain) return 'The Sun is a little above flat ground, but the hills around are taller, so they hide it.'
-  return 'The Sun is below the horizon.'
-}
-
-function earthWhy(el: number, contact: boolean, terrain: boolean): string {
-  if (contact) return 'Earth is in the sky, so a lander here could radio home directly.'
-  if (el > 0 && terrain) return 'Earth is up there, but behind the hills. Radio goes in straight lines, so a lander has to wait.'
-  return 'Earth is below the horizon: no direct radio call until it comes back.'
-}
-
 /** The sky now, on the right: two plain answers (is the Sun up, can we see Earth) and when they change. */
 function Sky() {
   const { view, info, outOfRange } = useNow()
   const params = useParams()
   const [open, setOpen] = useState(true)
   const id = useId()
-  const deg = (v: number) => `${v.toFixed(2)}°`
   const terrain = view?.horizonKind === 'terrain'
   const sunUp = view ? (view.sun.fraction >= 1 ? 'Yes' : view.sun.fraction > 0 ? 'Partly' : 'No') : '–'
   const earthUp = view ? (view.earth.fraction >= params.commsMinFraction ? 'Yes' : 'No') : '–'
@@ -100,26 +86,6 @@ function Sky() {
             {!terrain && (
               <p className="blk-note">Nobody has measured the skyline here, so these answers treat the Moon as smooth. Real hills could change them.</p>
             )}
-            <details className="blk-real">
-              <summary>Why? And the real numbers</summary>
-              <p className="blk-why">{sunWhy(view.sun.el, view.sun.fraction, terrain)}</p>
-              <p className="blk-why">{earthWhy(view.earth.el, view.earth.fraction >= params.commsMinFraction, terrain)}</p>
-              <dl>
-                <dt>Sun</dt>
-                <dd>
-                  elevation {deg(view.sun.el)}, azimuth {view.sun.az.toFixed(1)}°, {Math.round(view.sun.fraction * 100)} % of the disc visible
-                </dd>
-                <dt>Earth</dt>
-                <dd>
-                  elevation {deg(view.earth.el)}, azimuth {view.earth.az.toFixed(1)}°, {Math.round(view.earth.fraction * 100)} % of the disc visible
-                </dd>
-                <dt>Horizon</dt>
-                <dd>
-                  {terrain ? `LOLA terrain horizon, ${view.mastUsedM} m mast` : `smooth sphere (no terrain mask here), ${view.mastUsedM} m mast`} ·{' '}
-                  {view.source === 'api' ? 'API' : 'browser engine'}
-                </dd>
-              </dl>
-            </details>
           </>
         )}
       </div>

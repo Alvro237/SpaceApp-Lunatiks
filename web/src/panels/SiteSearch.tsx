@@ -15,6 +15,7 @@ import { pointName } from '../time/place'
 import { ApiStatus } from '../ui/ApiStatus'
 import { IconCrosshair, IconSearch } from '../ui/icons'
 import { Popover } from '../ui/Popover'
+import { useFitViewport } from '../ui/useFitViewport'
 import { fmtLat, fmtLon, parseCoordinates } from './format'
 import { useCatalogue } from './useCatalogue'
 
@@ -29,6 +30,7 @@ export function SiteSearch() {
   const [active, setActive] = useState(0)
   const input = useRef<HTMLInputElement>(null)
   const list = useRef<HTMLDivElement>(null)
+  useFitViewport(list, open)
 
   const q = query.trim().toLowerCase()
   const shown = useMemo(() => sites.filter((s) => !q || `${s.name} ${s.region ?? ''} ${s.group}`.toLowerCase().includes(q)), [sites, q])

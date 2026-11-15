@@ -27,6 +27,7 @@ import { starDirections } from './stars'
 import { cameraFor, compass16, wrap180 } from './project'
 import { MOON_R_KM } from '../globe/orbit'
 import { useEffectiveCamera } from './useEffectiveCamera'
+import { useRelief } from './relief/useRelief'
 
 const state = (f: number) => (f >= 0.999 ? 'fully visible' : f > 0 ? `${Math.round(f * 100)} percent visible` : 'hidden by the horizon')
 
@@ -121,6 +122,21 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
     }
   }, [])
 
+  // the real ground around the place: LOLA rings lit by the Sun of the active instant (relief/)
+  const sunAz = view?.sun.az
+  const sunEl = view?.sun.el
+  const sunR = view?.sun.radiusDeg
+  const sunDir = useMemo(() => (sunAz === undefined || sunEl === undefined || sunR === undefined ? null : { az: sunAz, el: sunEl, radiusDeg: sunR }), [sunAz, sunEl, sunR])
+  const relief = useRelief(info?.model.lat, info?.model.lon, info?.mastUsedM ?? 0, sunDir)
+  // full resolution once the camera and the instant have been still for a moment, a lighter pass while they move
+  const change = useMemo(() => ({ camera, tMs, arrival, scene: relief.scene }), [camera, tMs, arrival, relief.scene])
+  const [still, setStill] = useState<typeof change | null>(null)
+  useEffect(() => {
+    const id = setTimeout(() => setStill(change), 160)
+    return () => clearTimeout(id)
+  }, [change])
+  const fine = still === change
+
   const tracks = useMemo(() => {
     const samples = series?.samples ?? []
     return {
@@ -151,8 +167,10 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
       free,
       showLabels: arrival >= 1,
       stars,
+      // during the descent the eye comes down over the same ground
+      relief: relief.scene ? { scene: arrival < 1 ? { ...relief.scene, eyeM: relief.scene.eyeM + from.km * 1000 * (1 - k) } : relief.scene, fine: fine && arrival >= 1 } : null,
     })
-  }, [camera, view, info, size, tracks, free, arrival, stars, groundReady])
+  }, [camera, view, info, size, tracks, free, arrival, stars, groundReady, relief.scene, fine, from.km])
 
   const turn = (dYaw: number, dPitch: number) => look(cam.yaw + dYaw, cam.pitch + dPitch)
 
@@ -218,8 +236,11 @@ export function HorizonView({ animate = false }: { animate?: boolean }) {
       >
         <canvas ref={canvas} aria-hidden="true" style={{ width: '100%', height: '100%' }} />
         <p className="horizon-notice" style={{ left: free.left + 14, bottom: Math.max(free.bottom + 44, noticeBottom), maxWidth: `calc(100% - ${free.left + 28}px)` }}>
-          Not real moon footage · Real moon horizon line
-          {groundReady && ' · Ground texture: LROC WAC mosaic, another place on the Moon'}
+          {relief.status === 'ready'
+            ? `Rendered from LOLA heights, not footage · Relief: LOLA ${relief.cellM?.toFixed(0)} m DEM to ${relief.reachKm?.toFixed(0)} km, lit by the Sun at this instant · Skyline: horizon mask`
+            : 'Not real moon footage · Real moon horizon line'}
+          {relief.status === 'loading' && ' · Loading the LOLA relief around this place…'}
+          {relief.status !== 'ready' && groundReady && ' · Ground texture: LROC WAC mosaic, another place on the Moon'}
         </p>
         <p id="horizon-help" className="sr-only">
           Drag or use the arrow keys to look around, plus and minus to zoom, S to follow the Sun, E to follow the Earth, F for free look, Escape to go back to
