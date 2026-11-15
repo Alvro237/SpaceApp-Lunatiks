@@ -2,7 +2,8 @@
  * Input fields of the MECH /power model (docs/api-guide-mech.md): label, unit and the one-line explanation that
  * sits behind the ⓘ button. Labels follow the guide's interface rules: 1-3 plain words plus the unit, never the
  * API field name. Temperatures are typed in °C and sent in kelvin. No value has a cited default, so none is
- * pre-filled; the example sets are the guide's / test suite's values and are labelled as such.
+ * pre-filled; the example sets are the guide's / test suite's values and are labelled as such. The ground (regolith)
+ * is not asked: the API uses lunar values from Hayne et al. 2017 (api/app/logic/thermal.py, LUNAR_REGOLITH).
  */
 import type { PowerKey } from '../state/power'
 
@@ -17,7 +18,7 @@ export interface FieldSpec {
 export const ARRAY: FieldSpec[] = [
   { key: 'panel_area_m2', label: 'Panel area', unit: 'm²', hint: 'Total area of solar cells.' },
   { key: 'cell_efficiency', label: 'Cell efficiency', unit: '0–1', hint: 'Share of sunlight turned into electricity, e.g. 0.3.' },
-  { key: 'derating', label: 'Other losses factor', unit: '0–1', hint: '1 means no wiring, dust or temperature losses.' },
+  { key: 'derating', label: 'Degradation', unit: '0–1', hint: 'Share of power kept after wiring, dust, heat and ageing losses. 1 means no degradation.' },
 ]
 export const BATTERY: FieldSpec[] = [
   { key: 'battery_capacity_wh', label: 'Capacity', unit: 'Wh', hint: 'Energy the battery holds when full.' },
@@ -45,25 +46,16 @@ export const HABITAT: FieldSpec[] = [
   { key: 't_set_c', label: 'Inside target', unit: '°C', hint: 'Temperature the heater holds.' },
   { key: 't_min_c', label: 'Inside minimum', unit: '°C', hint: 'Lowest safe temperature. Must be below the target.' },
   { key: 'ua_w_k', label: 'Insulation leak', unit: 'W/K', hint: 'Heat lost per kelvin between the inside and the outer skin.' },
-  { key: 'hab_area_m2', label: 'Outer area', unit: 'm²', hint: 'Radiating surface of the habitat.' },
-  { key: 'skin_absorptivity', label: 'Skin absorbs', unit: '0–1', hint: 'Share of sunlight the outer skin absorbs.' },
-  { key: 'skin_emissivity', label: 'Skin radiates', unit: '0–1', hint: 'How well the outer skin gives off heat (emissivity).' },
+  { key: 'hab_area_m2', label: 'Exposed surface area', unit: 'm²', hint: 'Outer surface of the habitat that faces the sky and the ground.' },
+  { key: 'skin_absorptivity', label: 'Absorptivity of the habitat', unit: '0–1', hint: 'Share of sunlight the outer surface absorbs.' },
+  { key: 'skin_emissivity', label: 'Emissivity of the habitat', unit: '0–1', hint: 'How well the outer surface gives off heat.' },
   { key: 'structure_mass_kg', label: 'Structure mass', unit: 'kg', hint: 'Structure and contents kept at the inside temperature.' },
   { key: 'structure_specific_heat_j_kgk', label: 'Structure heat', unit: 'J/kg·K', hint: 'Mean specific heat of that mass.' },
   { key: 'air_volume_m3', label: 'Cabin volume', unit: 'm³', hint: 'Pressurised volume.' },
   { key: 'air_pressure_pa', label: 'Cabin pressure', unit: 'Pa', hint: 'Earth-like air is assumed.' },
   { key: 'metabolic_w_per_crew', label: 'Heat per person', unit: 'W', hint: 'Leave empty for 140.6 W (mean of NASA BVAD Table 3-21).', optional: true },
 ]
-export const REGOLITH: FieldSpec[] = [
-  { key: 'reg_albedo', label: 'Albedo', unit: '0–1', hint: 'Share of sunlight the ground reflects.' },
-  { key: 'reg_emissivity', label: 'Emissivity', unit: '0–1', hint: 'How well the ground gives off heat.' },
-  { key: 'reg_conductivity_w_mk', label: 'Conductivity', unit: 'W/m·K', hint: 'Heat conduction of the regolith (constant).' },
-  { key: 'reg_density_kg_m3', label: 'Density', unit: 'kg/m³', hint: 'Bulk density of the regolith.' },
-  { key: 'reg_heat_capacity_j_kgk', label: 'Heat capacity', unit: 'J/kg·K', hint: 'Specific heat of the regolith.' },
-  { key: 'reg_geothermal_flux_w_m2', label: 'Heat from inside', unit: 'W/m²', hint: 'Heat flowing up from the Moon’s interior.' },
-]
-
-export const ALL_FIELDS: FieldSpec[] = [...ARRAY, ...BATTERY, ...LOAD, ...COLONY_LOADS, ...HABITAT, ...REGOLITH]
+export const ALL_FIELDS: FieldSpec[] = [...ARRAY, ...BATTERY, ...LOAD, ...COLONY_LOADS, ...HABITAT]
 
 /** docs/api-guide-mech.md test values: for trying the model, not recommended limits. */
 export const EXAMPLE: Partial<Record<PowerKey, string>> = {
@@ -105,12 +97,6 @@ export const EXAMPLE_COLONY: Partial<Record<PowerKey, string>> = {
   structure_specific_heat_j_kgk: '900',
   air_volume_m3: '150',
   air_pressure_pa: '101325',
-  reg_albedo: '0.12',
-  reg_emissivity: '0.95',
-  reg_conductivity_w_mk: '0.002',
-  reg_density_kg_m3: '1500',
-  reg_heat_capacity_j_kgk: '600',
-  reg_geothermal_flux_w_m2: '0.018',
 }
 
 /** One synodic month: the shortest window the colony analysis accepts (hours). */

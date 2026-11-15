@@ -3,21 +3,21 @@ from __future__ import annotations
 
 from ..eclipse import obscuration
 from ..engine import visibility_ranges
-from ..thermal import Equipment, Regolith, absorbed_flux, check_max, direct_sun, simulate
+from ..thermal import LUNAR_REGOLITH, Equipment, Regolith, absorbed_flux, check_max, direct_sun, simulate
 from .base import ConstraintContext, ConstraintResult, register
 
 
 @register("max_temperature")
 def max_temperature(ctx: ConstraintContext, threshold: dict) -> ConstraintResult:
     """threshold: {"max_k": float, "mode": "discrete" | "continuous", "max_hours_above": float (continuous),
-    "regolith": {albedo, emissivity, conductivity_w_mk, density_kg_m3, heat_capacity_j_kgk, geothermal_flux_w_m2},
+    "regolith": {albedo, ...} optional (lunar default, Hayne et al. 2017),
     "equipment": {...} optional}.
 
     Temperature from app/logic/thermal.py over the mission window: the equipment node when given, otherwise the
     regolith surface. ``fraction`` and ``ranges`` describe the time ABOVE the limit.
     """
     limit, mode = float(threshold["max_k"]), threshold.get("mode", "discrete")
-    reg = Regolith(**threshold["regolith"])
+    reg = Regolith(**threshold["regolith"]) if threshold.get("regolith") else LUNAR_REGOLITH
     eq = Equipment(**threshold["equipment"]) if threshold.get("equipment") else None
     s = ctx.series
     occ = obscuration(s)

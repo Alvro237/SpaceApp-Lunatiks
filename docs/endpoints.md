@@ -261,7 +261,7 @@ Level 4, colony analysis (team decision 2026-11-14; an extension beyond the API 
   Earth is visible; `comms_critical` false by default), `shed_soc` (deferrable loads off below it),
   `max_charge_w`, `max_discharge_w`, `habitat` (two-node model: `crew_count`, `t_set_k`, `t_min_k`, `ua_w_k`,
   `area_m2`, `skin_absorptivity`, `skin_emissivity`, `structure_mass_kg`, `structure_specific_heat_j_kgk`,
-  `air_volume_m3`, `air_pressure_pa`, optional `metabolic_w_per_crew`) and `regolith` (as `/thermal`).
+  `air_volume_m3`, `air_pressure_pa`, optional `metabolic_w_per_crew`); `regolith` optional (lunar default, Hayne et al. 2017).
   `duration_h` at least one synodic month (708.7 h); a year is recommended at the poles.
 - Heating: interior held at `t_set_k`; skin solved each step against sunlight on 0.5 x area, ground view factor
   0.5 (both team decisions), ground infrared from the regolith model; heater = leak - crew heat - electrical load
@@ -318,8 +318,10 @@ GCR dose per stay (CRaTER climatology). Every window equals the single-window en
 - `POST /api/v1/thermal`: regolith surface temperature from 1-D conduction (constant properties, geometric grid
   from the diurnal skin depth, explicit sub-steps) forced by the absorbed solar flux on flat ground (horizon and
   eclipses included); optional lumped equipment node; optional `limits` (`max_k`, `min_k`, discrete or
-  continuous) with fraction, longest run and ranges beyond each limit. Every property is an input (no cited
-  default yet). With test inputs (albedo 0.12, eps 0.95, k 0.002, rho 1500, c 600) the equator gives 386 K at
+  continuous) with fraction, longest run and ranges beyond each limit. Regolith defaults to lunar values
+  (`logic/thermal.py` `LUNAR_REGOLITH`, team decision 2026-11-14): albedo 0.12, emissivity 0.95 and heat flow
+  0.018 W/m2 from Hayne et al. 2017 Table A1, and k, rho, c as the one-layer equivalent of their global thermal
+  inertia (55 at 273 K): c = c_p(273 K) = 719.7, rho = 1478, k = 2.84e-3. Equipment values stay inputs. With test inputs (albedo 0.12, eps 0.95, k 0.002, rho 1500, c 600) the equator gives 386 K at
   noon and 96 K at night. Not modelled: terrain infrared (shadowed floors come out too cold: Shackleton 24 K),
   temperature-dependent properties, slope, spin-up before the window.
 - `max_temperature`: threshold `{ "max_k": float, "mode": "discrete" | "continuous", "max_hours_above": float,

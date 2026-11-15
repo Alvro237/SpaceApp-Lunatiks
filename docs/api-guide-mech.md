@@ -122,7 +122,7 @@ An extension beyond the team's API rules, for the advanced view. Send the level-
 | `shed_soc` | SoC below which the deferrable loads are off (>= `battery_min_soc`) |
 | `max_charge_w`, `max_discharge_w` | Battery power limits, W |
 | `habitat` | `crew_count`, `t_set_k`, `t_min_k`, `ua_w_k`, `area_m2`, `skin_absorptivity`, `skin_emissivity`, `structure_mass_kg`, `structure_specific_heat_j_kgk`, `air_volume_m3`, `air_pressure_pa`, optional `metabolic_w_per_crew` (default 140.6 W, NASA BVAD) |
-| `regolith` | As in `/thermal` |
+| `regolith` | Optional: lunar values by default (Hayne et al. 2017). Do not ask the user for it |
 | `include_sizing` | Default true: also returns `min_battery_capacity_wh` and `min_panel_area_m2` (adds about 1 s) |
 
 The window must be at least one synodic month (708.7 h); use a year at the poles. A year at one-hour steps
@@ -158,8 +158,9 @@ there is none within 45 days. `/sun` `eclipses[]`: `{start, end, duration_h, kin
 
 ## POST /api/v1/thermal
 
-Window + `regolith` (all required, no cited defaults yet: `albedo`, `emissivity`, `conductivity_w_mk`,
-`density_kg_m3`, `heat_capacity_j_kgk`, `geothermal_flux_w_m2`). Optional `equipment` (lumped box:
+Window, and optionally `regolith` (`albedo`, `emissivity`, `conductivity_w_mk`, `density_kg_m3`,
+`heat_capacity_j_kgk`, `geothermal_flux_w_m2`; default lunar values from Hayne et al. 2017, so the interface
+does not ask for them). Optional `equipment` (lumped box:
 `absorptivity`, `emissivity`, `sun_area_m2`, `radiator_area_m2`, `ground_view_factor`, `heat_capacity_j_k`,
 `internal_power_w`) and `limits` (`max_k`, `min_k`, `mode` discrete | continuous, `max_hours_beyond`). With
 equipment, the limits apply to it (`limits_apply_to`). Known limit: no infrared from the surrounding terrain, so
@@ -185,7 +186,7 @@ prototype values, not yet decided with a source: show them as adjustable.
 | `max_slope` | `{"max_deg": 10}` |
 | `continuous_light` | `{"min_fraction": 0.7, "max_dark_h": null}` |
 | `max_dose` | `{"max_mgy_si": 10}` |
-| `max_temperature` | `{"max_k": 400, "mode": "discrete", "max_hours_above": 0, "regolith": {...}, "equipment": {...}}` |
+| `max_temperature` | `{"max_k": 400, "mode": "discrete", "max_hours_above": 0}` (`regolith`, `equipment` optional) |
 | `battery_survives` | the level-3 flat fields of `/power` |
 
 The numbers above are examples, not recommended limits. Full list: `GET /api/v1/meta/constraints`.

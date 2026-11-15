@@ -6,6 +6,7 @@
  * Catalogue sites are buttons over the globe; the panels hold the same information as text.
  */
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { StarField } from './starField'
 import { ToolPortal } from '../ui/ToolSlot'
 import { usePlaceStyles } from '../state/placeStyle'
 import { IconCube, IconMinus, IconPin, IconPlus, IconPole } from '../ui/icons'
@@ -482,6 +483,16 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
     }
   }, [scene, markersSet, patches])
 
+  // the real stars behind the Moon (starField.ts)
+  const [stars] = useState(() => new StarField(gl.getPixelRatio()))
+  useEffect(() => {
+    scene.add(stars.points)
+    return () => {
+      scene.remove(stars.points)
+      stars.dispose()
+    }
+  }, [scene, stars])
+
   // Places on the globe, just above the (exaggerated) relief; crater outlines as small circles on the sphere. `exag`
   // is the mesh's exaggeration to half a unit (the mesh's own is within ±0.25 of it, and the places are rebuilt only
   // when the half unit changes), so places above the sphere use the most the mesh can have and places below it the
@@ -544,6 +555,7 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
 
     // the Sun at the active instant
     const { tMs } = useApp.getState()
+    stars.update(tMs, gl.getPixelRatio())
     if (eph?.table.covers(tMs)) {
       const s = eph.table.positions(tMs)
       const len = Math.hypot(s[0], s[1], s[2])
