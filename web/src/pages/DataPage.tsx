@@ -116,6 +116,29 @@ export function DataPage() {
               <td>Crater density filter</td>
             </tr>
             <tr>
+              <th scope="row">Open sky (solid angle of visible sky)</th>
+              <td>
+                <a href="https://pgda.gsfc.nasa.gov/products/69">PGDA product 69</a>, SKYV_65S_240M (960 m cells, south of 65° S)
+              </td>
+              <td>Terrain shielding in the radiation dose and in the mission filters</td>
+            </tr>
+            <tr>
+              <th scope="row">Cosmic-ray dose rate, daily 2009–2013</th>
+              <td>
+                <a href="https://crater-products.sr.unh.edu/data/inst/dosim/table_dosimdrate.php">LRO CRaTER dosimeter</a>, CRaTER Legacy Data Products
+                (University of New Hampshire)
+              </td>
+              <td>Radiation dose in the Power panel and the radiation filter</td>
+            </tr>
+            <tr>
+              <th scope="row">Hydrogen abundance</th>
+              <td>
+                <a href="https://pds-geosciences.wustl.edu/missions/lunarp/reduced_special.html">Lunar Prospector neutron spectrometer</a>, half-degree
+                map (Feldman et al. 2001; a PDS Geosciences special product, about 45 km footprint)
+              </td>
+              <td>Hydrogen filter in the mission search</td>
+            </tr>
+            <tr>
               <th scope="row">Site coordinates</th>
               <td>NASA NSSDCA, LROC, USGS/IAU Gazetteer</td>
               <td>Catalogue of 21 sites, each with its citation</td>
@@ -186,8 +209,10 @@ export function DataPage() {
           <strong>Parallax.</strong> The site position is always subtracted before computing angles: from the lunar surface the Earth shifts by up to 0.26°.
         </li>
         <li>
-          <strong>Horizon.</strong> Catalogue sites with terrain use LOLA horizon masks ray-marched to 175 km with exact lunar curvature. Anywhere else the
-          horizon is a smooth sphere, which can only overstate light and contact; the panels say which horizon was used.
+          <strong>Horizon.</strong> Catalogue sites with terrain use LOLA horizon masks ray-marched to 175 km with exact lunar curvature. Custom coordinates
+          south of about 60° S get a skyline traced over the LOLA elevation grids when the API is reachable. Anywhere else the horizon is a smooth sphere at
+          the observer's height: an estimate, not a bound in either direction, because real terrain shortens light and contact in craters and on slopes and
+          lengthens them on peaks and ridges. The panels say which horizon was used.
         </li>
         <li>
           <strong>Shadows on the map.</strong> For each terrain cell the GPU marches toward the Sun's azimuth over the LOLA heights, including the curvature
@@ -197,16 +222,24 @@ export function DataPage() {
           seeing patterns; the numbers in the panels come from the masks.
         </li>
         <li>
-          <strong>Level of detail.</strong> A tile is refined when its cells would look larger than 2 screen pixels and merged back below 1.5 px; at most 6 tiles
-          load at once, and the parent tile stays until its children arrive.
+          <strong>Level of detail.</strong> A tile is refined when its cells would look larger than 2 screen pixels and merged
+          back below 1.5 px; a slow frame rate relaxes this. At most 6 tiles load at once from each server, the parent tile stays until its
+          children arrive, and a tile that fails to load is asked for again up to three times.
         </li>
       </ul>
 
       <h2>Known gaps</h2>
       <ul>
         <li>No boulder dataset: rocks are reported as unknown. The crater catalogue stops at about 1–2 km.</li>
-        <li>No measured temperature (Diviner) or radiation-dose dataset is loaded.</li>
-        <li>Terrain horizons exist for 13 catalogue sites; other points use a smooth sphere.</li>
+        <li>No measured temperature dataset (Diviner) is loaded.</li>
+        <li>
+          Radiation is the galactic-cosmic-ray dose measured in orbit by LRO CRaTER (2009–2013), scaled by the open sky at the place. It is a climatology:
+          there is no forecast of solar particle events.
+        </li>
+        <li>
+          Precomputed terrain horizons exist for 13 catalogue sites. Custom coordinates south of about 60° S are traced over coarser LOLA grids; everywhere
+          else the horizon is a smooth sphere, which is an estimate and not a bound.
+        </li>
         <li>Screening layers are 960 m means: they screen areas, they do not certify a landing ellipse.</li>
         <li>Sun and Earth tables cover 2025–2035 and 1969–1972.</li>
       </ul>

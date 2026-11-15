@@ -9,7 +9,7 @@ async function mapStats(page: import('@playwright/test').Page) {
   return page.locator('.map-stats').textContent()
 }
 
-test('the globe turns with the mouse and a click on the polar cap opens the map there', async ({ page }) => {
+test('the globe turns with the mouse and zooming in over the polar cap opens the map there', async ({ page }) => {
   const errors: string[] = []
   page.on('console', (m) => m.type() === 'error' && /shader|WebGL|THREE/i.test(m.text()) && errors.push(m.text()))
   await page.goto('./')
@@ -27,17 +27,24 @@ test('the globe turns with the mouse and a click on the polar cap opens the map 
   await page.mouse.move(box.x + 700, box.y + 450, { steps: 5 })
   await page.mouse.up()
   await page.waitForTimeout(800)
-  await page.mouse.click(720, 580) // inside the 60° S outline in the first view
-  await expect(page.getByRole('application', { name: 'South polar terrain map' })).toBeVisible({ timeout: 15_000 })
+  // a click on the surface marks that point; zooming in over the polar cap flies down into the map
+  await page.mouse.move(720, 580) // inside the 60° S outline in the first view
+  const map = page.getByRole('application', { name: 'South polar terrain map' })
+  for (let i = 0; i < 20 && !(await map.isVisible()); i++) {
+    await page.mouse.wheel(0, -400)
+    await page.waitForTimeout(500)
+  }
+  await expect(map).toBeVisible({ timeout: 15_000 })
   expect(errors).toEqual([])
 })
 
-test('the terrain renders with WebGL and the Sun and Earth panel is filled', async ({ page }) => {
+test('the terrain renders with WebGL and the Sun and Earth timeline is filled', async ({ page }) => {
   const errors: string[] = []
   page.on('console', (m) => m.type() === 'error' && errors.push(m.text()))
   await page.goto('./')
   await mapStats(page)
-  await expect(page.getByRole('article', { name: 'Sun' })).toBeVisible()
+  // the place panel opens on demand; the timeline always says when the place is sunlit and sees the Earth
+  await expect(page.getByRole('region', { name: 'Mission window and playback' })).toContainText(/Sunlit [\d.]+ %, Earth in view [\d.]+ %/)
   await page.locator('.map-view').screenshot({ path: 'test-results/map-2d.png' })
   // the map is not blank: count bright pixels in a screenshot (a WebGL canvas cannot be read back directly)
   const png = (await page.locator('.map-view canvas').screenshot()).toString('base64')
@@ -77,11 +84,11 @@ test('keyboard: the map zooms, tilts to 3D and Space plays', async ({ page }) =>
   await expect(page.getByRole('button', { name: '3D' })).toHaveAttribute('aria-pressed', 'true')
   await page.waitForTimeout(1500)
   await page.locator('.map-view').screenshot({ path: 'test-results/map-3d.png' })
-  const before = await page.locator('.clock').textContent()
+  const before = await page.locator('.tl-clock').textContent()
   await page.locator('body').press('Space')
   await page.waitForTimeout(1200)
   await page.locator('body').press('Space')
-  expect(await page.locator('.clock').textContent()).not.toEqual(before)
+  expect(await page.locator('.tl-clock').textContent()).not.toEqual(before)
 })
 
 test('colour layers show their legend with values', async ({ page }) => {

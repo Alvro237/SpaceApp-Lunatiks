@@ -11,6 +11,7 @@ import {
   LIVE_LEVELS,
   LIVE_RANGE_PAD_M,
   type LiveSource,
+  cachedLiveLevels,
   TREK_100M,
   TREK_30M,
   TREK_5M,
@@ -112,6 +113,29 @@ describe('live levels: which tiles exist', () => {
     expect(tileset.height.tiles['8/90/90']).toEqual([-LIVE_RANGE_PAD_M, 100 + LIVE_RANGE_PAD_M])
     // the input is not modified
     expect(ts.levels).toHaveLength(8)
+  }, 30_000)
+
+  it('builds the table once per tileset and gives each caller its own ranges', () => {
+    const ts = staticTileset()
+    const cfg = { proxyBase: '/pgda/', levels: LIVE_LEVELS }
+    const fresh = withLiveLevels(ts, cfg)
+    const a = cachedLiveLevels(ts, cfg)
+    const b = cachedLiveLevels(ts, { ...cfg })
+    expect(a.tileset.levels).toEqual(fresh.tileset.levels)
+    expect([...a.live.keys()]).toEqual([...fresh.live.keys()])
+    // every tile, static or live, is found by key and by `in`, with the same range
+    const keys = Object.keys(fresh.tileset.height.tiles)
+    expect(keys.filter((k) => !(k in a.tileset.height.tiles))).toEqual([])
+    expect(keys.filter((k) => a.tileset.height.tiles[k] !== undefined && a.tileset.height.tiles[k].join() !== fresh.tileset.height.tiles[k].join())).toEqual([])
+    expect('99/0/0' in a.tileset.height.tiles).toBe(false)
+    expect(b.live).toBe(a.live) // same configuration: not built again
+    // an engine replaces ranges as tiles load: that must not reach the next engine
+    a.tileset.height.tiles['8/90/90'] = [1, 2]
+    expect(b.tileset.height.tiles['8/90/90']).toEqual(fresh.tileset.height.tiles['8/90/90'])
+    expect(cachedLiveLevels(ts, cfg).tileset.height.tiles['8/90/90']).toEqual(fresh.tileset.height.tiles['8/90/90'])
+    // another configuration is its own table, and no live levels returns the tileset itself
+    expect(cachedLiveLevels(ts, liveConfigFromEnv({ DEV: false })).live).not.toBe(a.live)
+    expect(cachedLiveLevels(ts, null).tileset).toBe(ts)
   }, 30_000)
 
   it('keeps Moon Trek without a proxy and drops the PGDA sources', () => {

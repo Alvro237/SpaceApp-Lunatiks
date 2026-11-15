@@ -28,7 +28,20 @@ function bbox(xKm: number, zKm: number, halfKm: number): [number, number, number
   return span > 180 || Math.hypot(xKm, zKm) < halfKm * 1.5 ? [minLat, -180, maxLat, 180] : [minLat, Math.min(...lons), maxLat, Math.max(...lons)]
 }
 
-export function Craters({ rig, engine, exaggeration, onStatus }: { rig: CameraRig; engine: TerrainEngine; exaggeration: number; onStatus: (e: unknown) => void }) {
+export function Craters({
+  rig,
+  engine,
+  exaggeration,
+  onStatus,
+  onChange,
+}: {
+  rig: CameraRig
+  engine: TerrainEngine
+  exaggeration: number
+  onStatus: (e: unknown) => void
+  /** The outlines changed: the map draws a frame (it draws only when something changed). */
+  onChange: () => void
+}) {
   const [area, setArea] = useState<[number, number, number, number] | null>(null)
   const query = useCraters(area, CRATER_MIN_DIAM_KM)
 
@@ -68,7 +81,13 @@ export function Craters({ rig, engine, exaggeration, onStatus }: { rig: CameraRi
     return g
   }, [query.data, engine, exaggeration])
 
-  useEffect(() => () => lines?.dispose(), [lines])
+  useEffect(() => {
+    onChange()
+    return () => {
+      lines?.dispose()
+      onChange()
+    }
+  }, [lines, onChange])
   if (!lines) return null
   return (
     <lineSegments geometry={lines} renderOrder={2}>

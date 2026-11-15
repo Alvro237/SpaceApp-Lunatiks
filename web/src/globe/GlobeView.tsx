@@ -11,7 +11,7 @@ import { usePlaceStyles } from '../state/placeStyle'
 import { IconMinus, IconPin, IconPlus, IconPole } from '../ui/icons'
 import { useGlobe } from '../state/globe'
 import { useHorizonTransition } from '../state/horizon'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type KeyboardEvent, type PointerEvent, type WheelEvent, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { useInsets } from '../state/layout'
@@ -19,6 +19,7 @@ import { type MarkerStyle, useApp } from '../state/store'
 import { MarkerSet } from '../map/markerSet'
 import { type MapSite, useMapSites } from '../map/useMapSites'
 import { TileLoader } from '../terrain/loader'
+import { prefetchMap } from '../terrain/prefetch'
 import { useEphemeris, useMasks } from '../time/hooks'
 import { DATA_BASE } from '../time/staticData'
 import { GlobeDetail } from './detail/globeDetail'
@@ -59,12 +60,26 @@ export async function loadGlobe(): Promise<{ meta: GlobeMeta; heights: Float32Ar
   }
 }
 
+/** With nothing changing, a frame is still drawn this often (s). */
+const IDLE_REDRAW_S = 0.5
+const WINDOW_S = 2
+const SLOW_FPS = 45
+const GRACE_S = 3
+
 /** A first view of the whole Moon, turned so the south pole faces the viewer. */
 const START: Orbit = { lat: -48, lon: 10, dist: MOON_R_KM * 3.4 }
 
 export function GlobeView() {
   const globe = useQuery({ queryKey: ['static', 'globe'], queryFn: loadGlobe, staleTime: Infinity, gcTime: Infinity, retry: 1 })
   const masks = useMasks().data
+  const queryClient = useQueryClient()
+  // once the globe has its own data, bring in what the polar map opens with (terrain/prefetch.ts)
+  const globeReady = !!globe.data
+  useEffect(() => {
+    if (!globeReady) return
+    const t = setTimeout(() => prefetchMap(queryClient), 1500)
+    return () => clearTimeout(t)
+  }, [globeReady, queryClient])
   const sites = useMapSites()
   const markerStyle = useApp((s) => s.markerStyle)
   const select = useApp((s) => s.select)
@@ -325,8 +340,13 @@ function globeHeight(data: SceneProps['data'], lat: number, lon: number): number
 }
 
 function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, onExag, onEnter }: SceneProps) {
-  const { camera, size, scene, gl } = useThree()
+  const { camera, size, scene, gl, setDpr, viewport } = useThree()
   const [markersSet] = useState(() => new MarkerSet())
+  /** What the last drawn frame showed (camera, canvas, Sun, relief, detail tiles): a frame is drawn when it differs. */
+  const drawn = useRef({ sig: new Float64Array(36), at: Infinity, was: false })
+  const sceneVersion = useRef(0)
+  /** Frame rate over continuous drawing, to lower the pixel ratio on a slow GPU (the pixel ratio the canvas started with first). */
+  const perf = useRef({ frames: 0, time: 0, age: 0, dpr: viewport.dpr })
   const eph = useEphemeris().data
   const [reduced] = useState(() => !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
   const [detail] = useState(() => new GlobeDetail())
@@ -404,6 +424,7 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
       },
     })
     orbit.setMarkerPicker((px, py) => markersSet.pick(px, py, camera as THREE.PerspectiveCamera, size.width, size.height))
+    sceneVersion.current++
   }, [markersSet, sites, markerStyle, data, camera, size, orbit, exag])
 
   useEffect(() => {
@@ -467,7 +488,67 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
       toPoint.copy(camDir).sub(p)
       return p.dot(toPoint) > 0
     })
-  })
+
+    // Draw only when the picture changed (this callback has a priority, so React Three Fiber leaves the drawing to
+    // it): the camera, the canvas, the Sun, the relief, the detail tiles or the places. A pinned or just-touched
+    // Moon costs the GPU two frames a second instead of sixty; a frame is still drawn every IDLE_REDRAW_S in case a
+    // change went uncounted.
+    const d = drawn.current
+    const sig = d.sig
+    let i = 0
+    let changed = false
+    const put = (v: number) => {
+      if (sig[i] !== v) {
+        sig[i] = v
+        changed = true
+      }
+      i++
+    }
+    cam.updateMatrixWorld()
+    for (const v of cam.matrixWorld.elements) put(v)
+    const pm = cam.projectionMatrix.elements
+    put(pm[0]); put(pm[5]); put(pm[8]); put(pm[9]); put(pm[10]); put(pm[14])
+    put(size.width); put(size.height); put(gl.getPixelRatio())
+    const u = material.uniforms
+    const sun = u.uSun.value as THREE.Vector3
+    put(sun.x); put(sun.y); put(sun.z)
+    put(u.uExag.value as number); put(u.uMaxLevel.value as number); put(u.uPhotoMode.value as number)
+    // a detail tile that arrives is written into these textures, which raises their version
+    const tiles = u.uDetail.value as THREE.Texture
+    const index = u.uIndex.value as THREE.Texture
+    put(tiles.id); put(tiles.version); put(index.id); put(index.version)
+    put(sceneVersion.current)
+    d.at += dt
+    const draw = changed || d.at >= IDLE_REDRAW_S
+    if (draw) {
+      gl.render(scene, cam)
+      d.at = 0
+    }
+
+    // A slow GPU gets fewer pixels: below SLOW_FPS over WINDOW_S of continuous drawing the pixel ratio goes down a
+    // step (to 1.5, then 1). Not judged in the first GRACE_S, on a hidden page or after a stall.
+    const p = perf.current
+    const streak = draw && d.was
+    d.was = draw
+    p.age += dt
+    if (document.visibilityState !== 'visible' || dt > 0.25 || !streak) {
+      p.frames = 0
+      p.time = 0
+      return
+    }
+    p.frames++
+    p.time += dt
+    if (p.time < WINDOW_S) return
+    const fps = p.frames / p.time
+    p.frames = 0
+    p.time = 0
+    if (p.age > GRACE_S && fps < SLOW_FPS && p.dpr > 1) {
+      p.dpr = p.dpr > 1.5 ? 1.5 : 1
+      // resizing the canvas clears it: draw again at once, so no empty frame is shown
+      setDpr(p.dpr)
+      gl.render(scene, cam)
+    }
+  }, 1)
 
   return <mesh geometry={geometry} material={material} />
 }

@@ -143,7 +143,7 @@ export function Timeline() {
           <button type="button" className="tl-btn" aria-pressed={playing} aria-label={playing ? 'Pause' : 'Play'} title={playing ? 'Pause (Space)' : 'Play (Space)'} onClick={() => setPlaying(!playing)}>
             {playing ? <IconPause size={20} /> : <IconPlay size={20} />}
           </button>
-          <button type="button" className="tl-btn tl-speed" aria-label={`Speed: ${speedLabel}. Change`} title={`Speed: ${speedLabel}`} onClick={nextSpeed}>
+          <button type="button" className="tl-btn tl-speed" aria-label={`Speed ${speed}: ${speedLabel}. Change`} title={`Speed: ${speedLabel}`} onClick={nextSpeed}>
             <IconSpeed size={20} />
             <span aria-hidden="true">{speed}</span>
           </button>

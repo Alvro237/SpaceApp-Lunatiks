@@ -110,14 +110,44 @@ float hBil(vec2 uv) {
 }
 #endif
 
+// Visible share of the solar disc from the shadow texture. One shadow texel is about a kilometre: zoomed in it covers
+// many pixels, and plain bilinear reading draws a shadow's edge as a staircase of texel-sized steps. There the texture
+// is read with a cubic B-spline (four bilinear reads; Sigg and Hadwiger, GPU Gems 2, ch. 20), which gives a smooth
+// edge and never leaves the 0..1 range. Where a texel is about a pixel or less the single read is kept.
+float shadowAt(vec2 uv) {
+  vec2 size = vec2(textureSize(uShadow, 0));
+  vec2 st = uv * size - 0.5;
+  if (max(fwidth(st.x), fwidth(st.y)) > 0.75) return textureLod(uShadow, uv, 0.0).r;
+  vec2 i = floor(st);
+  vec2 f = st - i;
+  vec2 f2 = f * f;
+  vec2 f3 = f2 * f;
+  vec2 w0 = (1.0 - 3.0 * f + 3.0 * f2 - f3) / 6.0;
+  vec2 w1 = (4.0 - 6.0 * f2 + 3.0 * f3) / 6.0;
+  vec2 w3 = f3 / 6.0;
+  vec2 w2 = 1.0 - w0 - w1 - w3;
+  vec2 g0 = w0 + w1;
+  vec2 g1 = w2 + w3;
+  vec2 p0 = (i - 0.5 + w1 / g0) / size;   // between texels i - 1 and i
+  vec2 p1 = (i + 1.5 + w3 / g1) / size;   // between texels i + 1 and i + 2
+  return g0.y * (g0.x * textureLod(uShadow, p0, 0.0).r + g1.x * textureLod(uShadow, vec2(p1.x, p0.y), 0.0).r)
+       + g1.y * (g0.x * textureLod(uShadow, vec2(p0.x, p1.y), 0.0).r + g1.x * textureLod(uShadow, p1, 0.0).r);
+}
+
 void main() {
   float rMap = length(vMap);
 #ifdef DISC_EDGE
   if (rMap > uDiscR) discard;
 #endif
+  // The two reads are one sample apart on either side, except within a sample of the tile's edge, where the far
+  // one stops at the edge: divide by the distance actually spanned. (Dividing by two cells there halved the slope
+  // along every tile edge, which showed as a thin line of flatter shading around each tile.)
   float du = 1.0 / 256.0;
-  float hx = (hBil(vUv + vec2(du, 0.0)) - hBil(vUv - vec2(du, 0.0))) / (2.0 * uCellM);
-  float hy = (hBil(vUv - vec2(0.0, du)) - hBil(vUv + vec2(0.0, du))) / (2.0 * uCellM);
+  vec2 lo = max(vUv - du, 0.0);
+  vec2 hi = min(vUv + du, 1.0);
+  vec2 span = (hi - lo) * 256.0 * uCellM;
+  float hx = (hBil(vec2(hi.x, vUv.y)) - hBil(vec2(lo.x, vUv.y))) / span.x;
+  float hy = (hBil(vec2(vUv.x, lo.y)) - hBil(vec2(vUv.x, hi.y))) / span.y;
   vec3 nrm = normalize(vec3(-hx, 1.0, hy));   // scene axes: X = x, Y = up, Z = -y
 
   float lambert = max(0.0, dot(nrm, normalize(vSunScene)));
@@ -125,7 +155,7 @@ void main() {
   float visible = 1.0;
   if (uShadowReady > 0.5) {
     vec2 suv = vec2((vMap.x - uExtent.x) / uExtent.z, (uExtent.y - vMap.y) / uExtent.z);
-    visible = texture(uShadow, suv).r;
+    visible = shadowAt(suv);
   }
   float sunLight = visible * lambert;
   float relief = 0.30 + 0.70 * max(0.0, dot(nrm, normalize(vec3(-0.55, 0.75, -0.40))));
