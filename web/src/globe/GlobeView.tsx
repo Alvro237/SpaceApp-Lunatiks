@@ -16,6 +16,7 @@ import { StarField } from './starField'
 import { ToolPortal } from '../ui/ToolSlot'
 import { usePlaceStyles } from '../state/placeStyle'
 import { IconCube, IconMinus, IconPin, IconPlus, IconPole } from '../ui/icons'
+import { useCinematic } from '../state/cinematic'
 import { useGlobe } from '../state/globe'
 import { useHorizonTransition } from '../state/horizon'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -753,6 +754,8 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
     // no idle rotation in mission mode (P4): forced anchored, without touching the user's own pin, restored on leaving
     orbit.setAnchored(useGlobe.getState().anchored || useApp.getState().mode === 'mission')
     orbit.fit(size.width, size.height, useInsets.getState(), FOV)
+    // cinematic mode: the whole Moon, turning by itself whatever the pin (app/Cinematic.tsx)
+    orbit.setCinematic(useCinematic.getState().on, window.innerWidth, window.innerHeight, FOV)
     orbit.step(dt, reduced)
     const n = orbit.now
 

@@ -260,6 +260,24 @@ export function flightAt(from: Orbit, to: Orbit, t: number): { orbit: Orbit; til
 export const IDLE_BEFORE_SPIN_MS = 20_000
 /** Slow turn: about two minutes a revolution. */
 export const SPIN_DEG_PER_S = 3
+/** Cinematic mode's turn: about a minute a revolution (the slow one when the system asks for reduced motion). */
+export const CINEMA_DEG_PER_S = 6
+/** In cinematic mode the turn picks up again this soon after a drag or a zoom, ms. */
+export const CINEMA_IDLE_MS = 1500
+/** Cinematic mode frames the whole Moon from a little south of the equator, so the south pole shows. */
+export const CINEMA_LAT = -15
+/** Share of the window's smaller side the Moon fills in cinematic mode. */
+const CINEMA_FILL = 0.8
+
+/**
+ * Distance from the Moon's centre at which the whole Moon fills `fill` of the free area between the panels
+ * (perspective: sin(angular radius) = R / distance; the field of view is vertical).
+ */
+export function wholeMoonDist(viewW: number, viewH: number, free: { left: number; right: number; top: number; bottom: number }, fovDeg: number, fill: number): number {
+  const freePx = Math.max(160, Math.min(viewW - free.left - free.right, viewH - free.top - free.bottom)) * fill
+  const angular = Math.atan((freePx / Math.max(1, viewH)) * Math.tan(((fovDeg / 2) * Math.PI) / 180))
+  return Math.min(MAX_DIST, MOON_R_KM / Math.sin(angular))
+}
 
 /**
  * Camera controller of the globe: input moves a goal, the camera eases toward it every frame. When nobody has
@@ -279,6 +297,8 @@ export class OrbitRig {
   /** A dive toward a point of the polar cap (mission mode); when it arrives, the map opens there. */
   private diving: [number, number] | null = null
   private fitted = false
+  /** Cinematic mode: the whole Moon, turning by itself whatever the anchor (setCinematic). */
+  private cinematic = false
 
   /**
    * First frame: the distance at which the whole Moon fills `fill` of the free area between the panels
@@ -287,11 +307,27 @@ export class OrbitRig {
   fit(viewW: number, viewH: number, free: { left: number; right: number; top: number; bottom: number }, fovDeg: number, fill = 0.86): void {
     if (this.fitted || viewH <= 0) return
     this.fitted = true
-    const freePx = Math.max(160, Math.min(viewW - free.left - free.right, viewH - free.top - free.bottom)) * fill
-    const angular = Math.atan((freePx / viewH) * Math.tan(((fovDeg / 2) * Math.PI) / 180))
-    const dist = Math.min(MAX_DIST, MOON_R_KM / Math.sin(angular))
+    const dist = wholeMoonDist(viewW, viewH, free, fovDeg, fill)
     this.now.dist = dist
     this.goal.dist = dist
+  }
+
+  /**
+   * Cinematic mode on: back to the whole Moon, straight down and north up, then it turns by itself (a drag or a zoom
+   * pauses the turn for CINEMA_IDLE_MS). Off: the Moon stays where it is and the usual idle rules apply again.
+   */
+  setCinematic(on: boolean, viewW: number, viewH: number, fovDeg: number): void {
+    if (on === this.cinematic) return
+    this.cinematic = on
+    if (!on) return this.touch()
+    this.diving = null
+    this.resetView()
+    // the mode has the whole window to itself (on a phone the map was only part of it until now)
+    this.flyTo(CINEMA_LAT, this.goal.lon, wholeMoonDist(viewW, viewH, { left: 0, right: 0, top: 0, bottom: 0 }, fovDeg, CINEMA_FILL))
+  }
+
+  get isCinematic(): boolean {
+    return this.cinematic
   }
 
   /** Set by the scene: CSS pixel → the place drawn there, or null. */
@@ -328,6 +364,7 @@ export class OrbitRig {
 
   /** True while the Moon is turning by itself. */
   isSpinning(nowMs = performance.now()): boolean {
+    if (this.cinematic) return !this.flight && !this.diving && nowMs - this.lastInputMs >= CINEMA_IDLE_MS
     // a tilted or turned view is someone looking at a place: it stays put
     return !this.anchored && !this.flight && !this.diving && this.viewGoal.tilt < 1 && Math.abs(this.viewGoal.heading) < 1 && nowMs - this.lastInputMs >= IDLE_BEFORE_SPIN_MS
   }
@@ -410,7 +447,8 @@ export class OrbitRig {
   }
 
   step(dt: number, reducedMotion: boolean, nowMs = performance.now()): void {
-    if (!reducedMotion && this.isSpinning(nowMs)) this.goal.lon += SPIN_DEG_PER_S * dt
+    // cinematic mode was asked for, so it turns even with reduced motion, but only at the slow idle speed
+    if (this.isSpinning(nowMs) && (this.cinematic || !reducedMotion)) this.goal.lon += (this.cinematic && !reducedMotion ? CINEMA_DEG_PER_S : SPIN_DEG_PER_S) * dt
     const n = this.now
     const g = this.goal
     const f = this.flight

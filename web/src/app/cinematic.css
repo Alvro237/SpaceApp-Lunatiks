@@ -1,0 +1,34 @@
+/* ---------------------------------------------------------------- cinematic mode (app/Cinematic.tsx) */
+.cinema-btn {
+  display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 3px 12px; border-radius: 999px;
+}
+@media (max-width: 360px) {
+  .cinema-btn-text { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+}
+
+/* only the turning Moon is left: the top bar, the panels, the bars, the captions and the toasts step aside */
+.app.is-cinematic .topbar,
+.app.is-cinematic .skip { display: none; }
+.navigator.is-cinematic > :not(.map-layer):not(.cinema-exit):not(h1),
+.navigator.is-cinematic .map-layer > :not(.map-view),
+.navigator.is-cinematic .globe-caption,
+.navigator.is-cinematic .legend-chip,
+.navigator.is-cinematic .toast { display: none !important; }
+/* on a phone the map is one block of a column: it takes the whole window instead */
+.navigator.is-cinematic { padding: 0; }
+.navigator.is-cinematic .map-view { position: absolute; inset: 0; height: 100%; flex: none; }
+.navigator.is-cinematic:has(.cinema-exit.is-asleep),
+.navigator.is-cinematic:has(.cinema-exit.is-asleep) * { cursor: none; }
+
+.cinema-exit {
+  position: absolute; z-index: 60; top: 14px; right: 14px;
+  display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 4px 14px 4px 10px; border-radius: 999px;
+  background: rgba(10, 11, 14, 0.62); color: #eceae4; border: 1px solid rgba(236, 234, 228, 0.28);
+  backdrop-filter: blur(8px); font-weight: 600; transition: opacity 0.6s ease;
+}
+.cinema-exit:hover { border-color: var(--accent); }
+/* asleep: invisible to the pointer until it moves, but always shown while it has the keyboard focus */
+.cinema-exit.is-asleep:not(:focus-visible) { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .cinema-exit { transition: none; }
+}
