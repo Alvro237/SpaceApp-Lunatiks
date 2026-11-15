@@ -29,6 +29,7 @@ import { type PhotoBase, loadPhotoBase } from './detail/photoBase'
 import { MIN_DIST, MOON_R_KM, type Orbit, OrbitRig, RELIEF_MAX, TILT_3D, cameraPose, isNearView, latLonToScene, nearPlaneKm, raySphere, reliefExaggeration, sceneToLatLon } from './orbit'
 import { PATCH_LEVELS, holeOf, patchGeometry, patchWindows } from './patch'
 import { GLOBE_FRAG, GLOBE_VERT, PATCH_VERT } from './shaders'
+import { WebGLGuard } from '../ui/WebGLGuard'
 
 const FOV = 35
 /** The polar map covers the disc south of this latitude (the LOLA polar grids). */
@@ -297,6 +298,7 @@ export function GlobeView() {
         onWheel={onWheel}
       >
         {globe.data ? (
+          <WebGLGuard what="3D globe">
           <Canvas camera={{ fov: FOV, near: 10, far: 50_000, position: [0, 0, 6000] }} dpr={[1, 2]} flat linear gl={{ antialias: true }} aria-hidden="true" frameloop={covered ? 'never' : 'always'}>
             <GlobeScene
               data={globe.data}
@@ -310,6 +312,7 @@ export function GlobeView() {
               onEnter={(lat, lon) => enterMap(lat, lon)}
             />
           </Canvas>
+          </WebGLGuard>
         ) : (
           <p className="map-loading" role="status">
             {globe.isError ? 'Global LOLA topography not available.' : 'Loading the Moon…'}

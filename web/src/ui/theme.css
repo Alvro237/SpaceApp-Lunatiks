@@ -197,6 +197,13 @@ details.section > summary { font-weight: 700; color: var(--text); padding: 4px 0
 .map-view:active { cursor: grabbing; }
 .map-view canvas { display: block; }
 .map-empty, .map-loading { color: #e8ecf3; padding: 80px 24px; margin: 0; text-align: center; }
+/* No WebGL: the message replaces the drawing only (ui/WebGLGuard.tsx); it sits on the map's black background. */
+.no-webgl {
+  position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: center;
+  cursor: auto;
+}
+.no-webgl p { max-width: 36rem; margin: 0 0 12px; line-height: 1.5; }
+.no-webgl a { color: #e8ecf3; text-decoration: underline; }
 .markers { position: absolute; inset: 0; pointer-events: none; }
 .site-marker {
   position: absolute; left: 0; top: 0; pointer-events: auto; display: flex; align-items: center; gap: 6px;
