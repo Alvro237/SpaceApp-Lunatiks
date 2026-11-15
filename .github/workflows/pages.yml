@@ -1,0 +1,56 @@
+name: pages
+
+# Publishes the web app to GitHub Pages: https://<owner>.github.io/SpaceApp-Lunatiks/
+#
+# Run by hand (Actions, "pages", Run workflow), so a merge never publishes on its own. Before the first run the
+# repository owner turns Pages on: Settings, Pages, Source "GitHub Actions".
+#
+# The site is static. With no API it still shows the globe, the polar map, the Sun and Earth panels, the timeline,
+# the horizon view and the Educational mode (the browser engine computes them from the same tables); power, mission
+# search, radiation and the radio link need the API. When the API has a public host, set the repository variable
+# API_URL (Settings, Secrets and variables, Actions, Variables) to it and run this again.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: web/.nvmrc
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      # uv runs the pipeline's Python to build the terrain tiles, as in web.yml
+      - uses: astral-sh/setup-uv@v6
+      - run: npm ci
+      - run: npm run tiles
+      - run: npm run build
+        env:
+          VITE_API_URL: ${{ vars.API_URL }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
