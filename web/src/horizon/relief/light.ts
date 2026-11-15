@@ -155,6 +155,9 @@ export interface SunDir {
 export const STEP_GROWTH = 1.09
 /** Longest shadow-ray step, in cells of the ring it crosses. */
 export const STEP_CELLS = 3
+/** The same for the quick first pass. */
+export const QUICK_STEP_GROWTH = 1.25
+export const QUICK_STEP_CELLS = 8
 
 /** Range kept of the horizon's height over the light, degrees: beyond it the disc is wholly up or wholly hidden. */
 export const HORIZON_CLAMP_DEG = 10
@@ -169,7 +172,17 @@ export const HORIZON_CLAMP_DEG = 10
  * `rowOffset` and `rowStride` share the work between workers: only rows j with j % rowStride === rowOffset are
  * computed (the others stay 0), so several workers each take every rowStride-th row and the results are merged.
  */
-export function ringLightHorizon(stack: GroundStack, normals: Float32Array[], sun: SunDir, rowOffset = 0, rowStride = 1): Float32Array[] {
+export function ringLightHorizon(
+  stack: GroundStack,
+  normals: Float32Array[],
+  sun: SunDir,
+  rowOffset = 0,
+  rowStride = 1,
+  quick = false,
+): Float32Array[] {
+  // the quick pass (shown first, while the full one runs) takes longer steps: about four times faster
+  const growth = quick ? QUICK_STEP_GROWTH : STEP_GROWTH
+  const capCells = quick ? QUICK_STEP_CELLS : STEP_CELLS
   const f = stack.frame
   const D = Math.PI / 180
   const ce = Math.cos(sun.el * D)
@@ -179,7 +192,7 @@ export function ringLightHorizon(stack: GroundStack, normals: Float32Array[], su
   const r = sun.radiusDeg
   const n = RING_N
   // longest step in each ring: a few of its cells, so a ridge between steps is not missed by much
-  const cap = stack.rings.map((g) => (STEP_CELLS * g.cellM) / f.k0)
+  const cap = stack.rings.map((g) => (capCells * g.cellM) / f.k0)
   const idx = stack.idx
   const hs = stack.rings.map((g) => g.heights)
   const nR = stack.rings.length
@@ -245,7 +258,7 @@ export function ringLightHorizon(stack: GroundStack, normals: Float32Array[], su
             maxTan = t
             if (t >= tanTop) break
           }
-          ds = Math.min(ds * STEP_GROWTH, cap[k2])
+          ds = Math.min(ds * growth, cap[k2])
           s += ds
         }
         const a = maxTan === -Infinity ? -90 : Math.atan(maxTan) / D

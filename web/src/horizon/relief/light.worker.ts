@@ -10,7 +10,7 @@ import type { PlaneFrame } from './rings'
 
 export type LightRequest =
   | { type: 'rings'; frame: PlaneFrame; rings: RingGrid[] }
-  | { type: 'sun'; id: number; sun: SunDir; earth: SunDir | null; rowOffset: number; rowStride: number }
+  | { type: 'sun'; id: number; sun: SunDir; earth: SunDir | null; rowOffset: number; rowStride: number; quick: boolean }
 
 export type LightResponse =
   | { type: 'normals'; normals: Float32Array[] }
@@ -31,8 +31,8 @@ ctx.onmessage = (e: MessageEvent<LightRequest>) => {
   }
   if (!stack) return
   const t0 = performance.now()
-  const sunlight = ringLightHorizon(stack, normals, m.sun, m.rowOffset, m.rowStride)
-  const earthlight = m.earth ? ringLightHorizon(stack, normals, m.earth, m.rowOffset, m.rowStride) : null
+  const sunlight = ringLightHorizon(stack, normals, m.sun, m.rowOffset, m.rowStride, m.quick)
+  const earthlight = m.earth ? ringLightHorizon(stack, normals, m.earth, m.rowOffset, m.rowStride, m.quick) : null
   const buffers = [...sunlight, ...(earthlight ?? [])].map((s) => s.buffer)
   ctx.postMessage({ type: 'sunlight', id: m.id, sunlight, earthlight, ms: performance.now() - t0 } satisfies LightResponse, buffers)
 }

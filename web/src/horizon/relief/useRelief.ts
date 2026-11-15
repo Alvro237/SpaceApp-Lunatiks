@@ -15,7 +15,7 @@ export const EYE_MIN_M = 1.7
 /** Sun motion that triggers a new lighting pass, degrees (elevation, azimuth). */
 const SUN_EPS = { el: 0.02, az: 0.15 }
 /** Rings arriving within this many ms are lit as one set. */
-const BATCH_MS = 250
+const BATCH_MS = 700
 /** Most workers that share a lighting pass. */
 const MAX_WORKERS = 4
 
@@ -94,12 +94,13 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
     }
   }, [specs, key])
 
-  // rings arriving within BATCH_MS of each other are lit together (each new set is lit once before it is shown)
+  // the first ring to arrive is lit at once; later ones arriving within BATCH_MS of each other are lit together
   const [batch, setBatch] = useState(loaded)
   useEffect(() => {
-    const id = setTimeout(() => setBatch(loaded), BATCH_MS)
+    const first = loaded.key === key && batch.key !== key && loaded.rings.some(Boolean)
+    const id = setTimeout(() => setBatch(loaded), first ? 0 : BATCH_MS)
     return () => clearTimeout(id)
-  }, [loaded])
+  }, [loaded, batch.key, key])
   const frame = useMemo(() => (lat === undefined || lon === undefined ? null : planeFrame(lat, lon)), [lat, lon])
   const stack = useMemo(() => {
     if (batch.key !== key || !frame) return null
@@ -120,14 +121,20 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
     lights: SceneLights | null
   } | null>(null)
   const kick = useRef<(() => void) | null>(null)
-  const job = useRef<{ busy: boolean; sent: SceneLights | null; want: SceneLights | null; id: number }>({ busy: false, sent: null, want: null, id: 0 })
+  const job = useRef<{ busy: boolean; sent: SceneLights | null; want: SceneLights | null; id: number; quick: boolean }>({
+    busy: false,
+    sent: null,
+    want: null,
+    id: 0,
+    quick: true,
+  })
 
   useEffect(() => {
     if (!stack || typeof Worker === 'undefined') return
     // a small pool: each worker lights every n-th row (light.ts ringLightHorizon), the parts are summed
     const count = Math.max(1, Math.min(MAX_WORKERS, (navigator.hardwareConcurrency || 2) - 1))
     const pool = Array.from({ length: count }, () => new Worker(new URL('./light.worker.ts', import.meta.url), { type: 'module' }))
-    job.current = { busy: false, sent: null, want: job.current.want, id: 0 }
+    job.current = { busy: false, sent: null, want: job.current.want, id: 0, quick: true }
     let normals: Float32Array[] | null = null
     let pending: { sunlight: Float32Array[]; earthlight: Float32Array[] | null; ms: number; lights: SceneLights | null } | null = null
     let earthParts: (Float32Array[] | null)[] = []
@@ -138,10 +145,12 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
       if (!normals || !pending) return
       setShown({ key, stack, normals, ...pending })
     }
-    const send = () => {
+    // every new stack or light position is lit twice: a quick pass shown at once, then the full one
+    const send = (quick: boolean) => {
       const j = job.current
       if (j.busy || !j.want) return
       j.busy = true
+      j.quick = quick
       j.sent = j.want
       j.id++
       parts = []
@@ -151,7 +160,7 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
       earthParts = []
       // earthshine only matters while the Sun is hidden from the observer
       const earth = !want.sunVisible && want.earth ? want.earth : null
-      pool.forEach((w, i) => w.postMessage({ type: 'sun', id: j.id, sun: want.sun, earth, rowOffset: i, rowStride: count } satisfies LightRequest))
+      pool.forEach((w, i) => w.postMessage({ type: 'sun', id: j.id, sun: want.sun, earth, rowOffset: i, rowStride: count, quick } satisfies LightRequest))
     }
     pool.forEach((w, wi) => {
       w.onmessage = (e: MessageEvent<LightResponse>) => {
@@ -190,14 +199,15 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
         pending = { sunlight, earthlight, ms: worst, lights: job.current.sent }
         publish()
         job.current.busy = false
-        if (moved(job.current.sent, job.current.want)) send()
+        if (moved(job.current.sent, job.current.want)) send(true)
+        else if (job.current.quick) send(false)
       }
       // each worker gets its own copy of the heights; the renderer keeps these
       const copies = stack.rings.map((r) => ({ cellM: r.cellM, heights: r.heights.slice() }))
       w.postMessage({ type: 'rings', frame: stack.frame, rings: copies } satisfies LightRequest, copies.map((r) => r.heights.buffer))
     })
-    kick.current = send
-    send()
+    kick.current = () => send(true)
+    send(true)
     return () => {
       pool.forEach((w) => w.terminate())
       kick.current = null
