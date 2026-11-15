@@ -1,5 +1,5 @@
 /**
- * Block Moon's small shared state: what the 3D view can see (published by the scene, read by the story), and the
+ * Learn mode's small shared state: what the 3D view can see (published by the scene, read by the story), and the
  * learner's place in the mission log. Progress is kept in this browser only (a convenience; nothing depends on it).
  */
 import { create } from 'zustand'
@@ -7,13 +7,16 @@ import { CHAPTERS, EMPTY_MEMORY, type StoryMemory } from './story'
 
 /**
  * Between the story and the 3D view: whether the Sun and Earth balls are on screen in the ground view (written by
- * the scene when it changes), and a request to turn the ground camera to look from an azimuth (bumped `lookSeq`).
+ * the scene when it changes), and a request to the ground camera (bumped `lookSeq`): look from an azimuth
+ * (`lookFromAz`, null to leave it), and tip up so a body at elevation `lookEl` (degrees, real) fits in the picture
+ * (null for the level view).
  */
-export const useHud = create<{ sunOnScreen: boolean; earthOnScreen: boolean; lookSeq: number; lookFromAz: number }>()(() => ({
+export const useHud = create<{ sunOnScreen: boolean; earthOnScreen: boolean; lookSeq: number; lookFromAz: number | null; lookEl: number | null }>()(() => ({
   sunOnScreen: false,
   earthOnScreen: false,
   lookSeq: 0,
-  lookFromAz: 0,
+  lookFromAz: null,
+  lookEl: null,
 }))
 
 const KEY = 'lunatiks-block-missions'
@@ -59,7 +62,8 @@ export interface StoryState extends Saved {
   memory: StoryMemory
   stage: SetupStage
   open: boolean
-  begin: () => void
+  /** Start the story, at the saved chapter or at the one picked on the start screen. */
+  begin: (chapter?: number) => void
   goTo: (chapter: number) => void
   markDone: (id: string) => void
   remember: (patch: Partial<StoryMemory>) => void
@@ -82,8 +86,8 @@ export const useStory = create<StoryState>()((set, get) => {
     // a story resumed from an earlier visit sets its chapter's scene again
     stage: saved.started ? 'apply' : null,
     open: true,
-    begin: () => {
-      set({ started: true, open: true, memory: fresh(), stage: 'apply' })
+    begin: (chapter) => {
+      set({ ...(chapter === undefined ? {} : { chapter }), started: true, open: true, memory: fresh(), stage: 'apply' })
       persist()
     },
     goTo: (chapter) => {

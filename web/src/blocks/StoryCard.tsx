@@ -4,11 +4,12 @@
  * engine's numbers. The checklist reads the same state as everything else (place, view, time, the engine's
  * answers), so nothing is typed by hand.
  */
-import { useEffect, useId, useLayoutEffect, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { useNow } from '../panels/useNow'
 import { useApp } from '../state/store'
 import { evaluateWindow, useEphemeris, useMasks, useParams, useSiteNames } from '../time/hooks'
 import { isSunlit } from '../time/engine'
+import { MissionIcon } from './MissionIcon'
 import { CHAPTERS, type StoryCtx, chapterDone, firstDay, questionReady, stepsOf } from './story'
 import { useHud, useStory } from './useStory'
 
@@ -96,8 +97,15 @@ function useStoryEffects(ctx: StoryCtx) {
         targetMs = around.t[day.set]
       }
     }
-    // look from the Sun's side, so the Sun is behind the camera and has to be found
-    if (scene.lookAway) useHud.setState((h) => ({ lookSeq: h.lookSeq + 1, lookFromAz: now.sun.az, sunOnScreen: false, earthOnScreen: false }))
+    // look from the Sun's side, so the Sun is behind the camera and has to be found; and tip the camera up far enough
+    // that the body to find comes into the picture by turning alone
+    const find = scene.find ?? (scene.lookAway ? 'sun' : null)
+    useHud.setState((h) => ({
+      lookSeq: h.lookSeq + 1,
+      lookFromAz: scene.lookAway ? now.sun.az : null,
+      lookEl: find ? now[find].el : null,
+      ...(scene.lookAway ? { sunOnScreen: false, earthOnScreen: false } : {}),
+    }))
     remember({ startTMs, startSunUp, startSunEl, startSel: app.selection, targetMs })
     setStage(null)
   }, [started, stage, now, series, info, masks, eph, params, ch, remember, setStage])
@@ -166,17 +174,54 @@ function useBelowTopBars(): number | undefined {
   return top
 }
 
-/** A small lander drawn in blocks: the mission log's badge. */
-function LanderBadge() {
+/** The mission's own picture in the card's corner. */
+function Badge({ id }: { id: string }) {
   return (
     <span className="blk-badge" aria-hidden="true">
-      <svg width="24" height="24" viewBox="0 0 8 8" shapeRendering="crispEdges">
-        <path d="M2 2h4v3H2z" fill="#ffb547" />
-        <path d="M3 3h2v1H3z" fill="#6cb2ff" />
-        <path d="M1 5h1v2H1zM6 5h1v2H6z" fill="#cfccc4" />
-        <path d="M3.5 0h1v2h-1z" fill="#cfccc4" />
-      </svg>
+      <MissionIcon id={id} />
     </span>
+  )
+}
+
+/**
+ * The missions as buttons a child can tell apart: each one's picture and short name, a tick once it is done, the
+ * current one highlighted. `large` is the start screen's version, two columns with the year or programme.
+ */
+function MissionPicker({ current, done, onPick, large = false }: { current: number | null; done: string[]; onPick: (i: number) => void; large?: boolean }) {
+  return (
+    <nav aria-label="Missions">
+      <ul className={`blk-missions${large ? ' is-large' : ''}`}>
+        {CHAPTERS.map((c, i) => {
+          const isDone = done.includes(c.id)
+          return (
+            <li key={c.id}>
+              <button
+                type="button"
+                className={`blk-mission${isDone ? ' is-done' : ''}`}
+                aria-current={i === current ? 'step' : undefined}
+                // the visible name first (WCAG 2.5.3), without saying it twice when the title already starts with it
+                aria-label={`${c.title.startsWith(c.short) ? c.title : `${c.short}: ${c.title}`}${isDone ? ', done' : ''}`}
+                title={`${c.tag}: ${c.title}`}
+                onClick={() => onPick(i)}
+              >
+                <span className="blk-mission-icon">
+                  <MissionIcon id={c.id} size={large ? 28 : 22} />
+                  {isDone && (
+                    <span className="blk-mission-tick" aria-hidden="true">
+                      ✓
+                    </span>
+                  )}
+                </span>
+                <span className="blk-mission-text">
+                  <span className="blk-mission-name">{c.short}</span>
+                  {large && <span className="blk-mission-tag">{c.tag}</span>}
+                </span>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    </nav>
   )
 }
 
@@ -194,6 +239,15 @@ export function StoryCard() {
   const total = steps.length + (ch.question ? 1 : 0)
   const asking = ready && questionReady(ch, ctx) && ctx.memory.answer === null
   const right = ch.question && ctx.memory.answer !== null ? ctx.memory.answer === ch.question.answer(ctx) : null
+  const found = complete ? ch.found(ctx) : null
+  // the question, then the answer and the "Next" button, appear at the foot of a card that may be taller than the
+  // window: bring them into view rather than leave them below the fold
+  const foot = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!asking && !complete) return
+    const reduce = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+    foot.current?.scrollIntoView?.({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' })
+  }, [asking, complete])
   const open1 = (i: number) => {
     setHint(false)
     goTo(i)
@@ -203,28 +257,20 @@ export function StoryCard() {
     return (
       <section className="blk-story" style={place} aria-labelledby={headingId}>
         <div className="blk-story-top">
-          <LanderBadge />
+          <Badge id="apollo-11" />
           <div className="blk-story-head">
-            <p className="blk-kicker">Mission log · {CHAPTERS.length} chapters</p>
+            <p className="blk-kicker">{CHAPTERS.length} Moon missions</p>
             <h2 id={headingId} className="blk-title">
-              Why the Sun and the Earth decide
+              Be a Moon explorer!
             </h2>
           </div>
         </div>
-        <p className="blk-intro">
-          Stand where real missions landed and find out, with NASA data, how the Sun and the Earth shaped what happened to them. Then plan a landing of
-          your own.
-        </p>
-        <ol className="blk-intro-list">
-          {CHAPTERS.map((c) => (
-            <li key={c.id}>
-              {c.tag}: {c.title}
-            </li>
-          ))}
-        </ol>
+        <p className="blk-intro">Go where real spacecraft landed. Find out how the Sun and the Earth helped them, or got them in trouble.</p>
+        <p className="blk-pick-h">Pick a mission, or start from the first one</p>
+        <MissionPicker current={null} done={done} onPick={(i) => begin(i)} large />
         <div className="blk-story-actions">
-          <button type="button" className="blk-big" onClick={begin}>
-            Start the first mission
+          <button type="button" className="blk-big" onClick={() => begin()}>
+            Let’s go!
           </button>
         </div>
       </section>
@@ -235,7 +281,7 @@ export function StoryCard() {
     return (
       <section className="blk-story is-closed" style={place} aria-labelledby={headingId}>
         <div className="blk-story-top">
-          <LanderBadge />
+          <Badge id={ch.id} />
           <h2 id={headingId} className="blk-story-mini">
             {ch.title}
             <span className="blk-kicker">{complete ? 'done' : `${doneCount} of ${total}`}</span>
@@ -251,10 +297,10 @@ export function StoryCard() {
   return (
     <section className="blk-story" style={place} aria-labelledby={headingId}>
       <div className="blk-story-top">
-        <LanderBadge />
+        <Badge id={ch.id} />
         <div className="blk-story-head">
           <p className="blk-kicker">
-            {chapter + 1} of {CHAPTERS.length} · {ch.tag}
+            Mission {chapter + 1} of {CHAPTERS.length} · {ch.tag}
           </p>
           <h2 id={headingId} className="blk-title">
             {ch.title}
@@ -264,36 +310,35 @@ export function StoryCard() {
           −
         </button>
       </div>
-      <nav className="blk-chapters" aria-label="Chapters">
-        {CHAPTERS.map((c, i) => (
-          <button
-            key={c.id}
-            type="button"
-            className={`blk-chapter${done.includes(c.id) ? ' is-done' : ''}`}
-            aria-current={i === chapter ? 'step' : undefined}
-            aria-label={`Chapter ${i + 1}: ${c.title}${done.includes(c.id) ? ' (done)' : ''}`}
-            title={`${c.tag}: ${c.title}`}
-            onClick={() => open1(i)}
-          >
-            {done.includes(c.id) ? '✓' : i + 1}
-          </button>
-        ))}
-      </nav>
+      <MissionPicker current={chapter} done={done} onPick={open1} />
 
-      <p className="blk-fact">
-        {ch.fact(ctx)}{' '}
-        <a className="blk-source" href={ch.source.url} target="_blank" rel="noreferrer">
-          Source: {ch.source.label}
-        </a>
-      </p>
+      <dl className="blk-chips">
+        <div>
+          <dt>Where</dt>
+          <dd>{ch.where}</dd>
+        </div>
+        <div>
+          <dt>When</dt>
+          <dd>{ch.when}</dd>
+        </div>
+      </dl>
+      <ul className="blk-lines">
+        {ch.story.map((line) => (
+          <li key={line}>{line}</li>
+        ))}
+      </ul>
+      {ch.note && <p className="blk-note">{ch.note}</p>}
+      <a className="blk-source" href={ch.source.url} target="_blank" rel="noreferrer">
+        Source: {ch.source.label}
+      </a>
 
       {!ready ? (
         <p className="blk-meta" role="status">
-          Moving to the place and date…
+          Flying there…
         </p>
       ) : (
         <>
-          <h3 className="blk-task-h">Your task</h3>
+          <h3 className="blk-task-h">What to do</h3>
           <ol className="blk-tasks">
             {steps.map((s, i) => (
               <li key={i} className={s.done ? 'is-done' : ''}>
@@ -322,7 +367,7 @@ export function StoryCard() {
           {!complete && (
             <>
               <button type="button" className="blk-link" aria-expanded={hint} onClick={() => setHint(!hint)}>
-                {hint ? 'Hide the hint' : 'Need a hint?'}
+                {hint ? 'Hide the help' : 'Need help?'}
               </button>
               {hint && <p className="blk-hint-text">{ch.hint}</p>}
             </>
@@ -333,8 +378,18 @@ export function StoryCard() {
       <div role="status" aria-live="polite">
         {complete && (
           <div className="blk-found">
-            <p className="blk-found-h">{right === null ? 'What the data says' : right ? 'Right! What the data says' : 'Not quite. What the data says'}</p>
-            <p>{ch.found(ctx)}</p>
+            <p className="blk-found-h">{right === null ? 'What NASA data says' : right ? 'Yes, well done!' : 'Not quite! Here is what NASA data says'}</p>
+            {found && found.stats.length > 0 && (
+              <ul className="blk-stats">
+                {found.stats.map((s) => (
+                  <li key={s.label}>
+                    <span className="blk-stat-v">{s.value}</span>
+                    <span className="blk-stat-l">{s.label}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {found && <p>{found.note}</p>}
           </div>
         )}
       </div>
@@ -347,7 +402,7 @@ export function StoryCard() {
 
       {complete && last && (
         <div className="blk-found">
-          <p className="blk-found-h">Mission log complete. You found out that:</p>
+          <p className="blk-found-h">All missions done! You found out that:</p>
           <ul>
             {CHAPTERS.map((c) => (
               <li key={c.id}>{c.lesson}</li>
@@ -356,7 +411,7 @@ export function StoryCard() {
         </div>
       )}
 
-      <div className="blk-story-actions">
+      <div className="blk-story-actions" ref={foot}>
         {complete && !last && (
           <button type="button" className="blk-big" onClick={() => open1(chapter + 1)}>
             Next: {CHAPTERS[chapter + 1].title}
@@ -364,7 +419,7 @@ export function StoryCard() {
         )}
         {complete && last && (
           <button type="button" className="blk-big" onClick={restart}>
-            Start again
+            Play again
           </button>
         )}
       </div>

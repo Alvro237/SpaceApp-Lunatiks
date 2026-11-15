@@ -12,11 +12,11 @@
  * colour, or remove it (a toast offers to undo the removal).
  * The panels report the space they cover so the map centres the Moon in the free area.
  *
- * Two systems share these top bars: the planner (the map, the place panel, the timeline) and Block Moon, the
+ * Two systems share these top bars: the planner (the map, the place panel, the timeline) and Learn mode, the
  * educational world of cubes (blocks/, SW-2). Loading and caching:
- *   - The planner stays mounted once loaded. While Block Moon is on it is paused (its canvas draws no frames),
+ *   - The planner stays mounted once loaded. While Learn mode is on it is paused (its canvas draws no frames),
  *     hidden and out of the tab order, so coming back is instant: same camera, tiles still in memory, no new WebGL.
- *   - Block Moon's code is a lazy chunk, fetched the first time (and prefetched when the pointer or the focus
+ *   - Learn mode's code is a lazy chunk, fetched the first time (and prefetched when the pointer or the focus
  *     reaches its switch). It unmounts when switched off and frees its GPU memory; the heights it builds from
  *     (globe, tileset, overview) stay in the shared React Query cache, so turning it on again downloads nothing.
  */
@@ -52,7 +52,7 @@ import { ToolSlotContext } from '../ui/toolSlotContext'
  */
 const reducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
-/** Block Moon, loaded the first time it is switched on (the same promise as the switch's prefetch). */
+/** Learn mode, loaded the first time it is switched on (the same promise as the switch's prefetch). */
 const BlockMode = lazy(loadBlockMode)
 
 export function NavigatorPage() {
@@ -63,7 +63,7 @@ export function NavigatorPage() {
   const section = usePanels((s) => s.section)
   const comparing = useApp((s) => s.compareMode && s.compare.length >= 2)
   const blocks = useApp((s) => s.blocks)
-  // the horizon view belongs to the planner: it waits (section kept) while Block Moon is on
+  // the horizon view belongs to the planner: it waits (section kept) while Learn mode is on
   const horizonOn = section === 'horizon' && !blocks
   const root = useRef<HTMLDivElement>(null)
   // Transition between the map and the horizon view, derived from the section while rendering (no effect needed
@@ -93,7 +93,7 @@ export function NavigatorPage() {
           ref={root}
         >
           <h1 className="sr-only">Lunar Landing Site Navigator</h1>
-          {/* The map stays mounted (and keeps its camera and tiles) under the horizon view and under Block Moon:
+          {/* The map stays mounted (and keeps its camera and tiles) under the horizon view and under Learn mode:
               paused, hidden and out of the tab order. */}
           <div
             className={`map-layer${blocks ? ' is-dormant' : ''}`}
@@ -107,7 +107,7 @@ export function NavigatorPage() {
             <Suspense
               fallback={
                 <p className="map-loading" role="status">
-                  Loading Block Moon…
+                  Loading Learn mode…
                 </p>
               }
             >
@@ -142,7 +142,7 @@ export function NavigatorPage() {
               {!blocks && <PlaceTools />}
             </div>
           </div>
-          {/* Block Moon brings its own panels ("The sky now", the days along the bottom) */}
+          {/* Learn mode brings its own panels ("The sky now", the days along the bottom) */}
           {!blocks && (
             <>
               {comparing ? (
