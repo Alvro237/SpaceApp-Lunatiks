@@ -23,7 +23,7 @@
  * Earth is lit by earthshine (the Earth as a second light with its own disc and shadows, light.ts
  * earthshineRatio), with the exposure raised as a camera would (the view says so).
  *
- * Albedo: this place's own LROC WAC mosaic multiplies the radiance, as the photo views of the globe and of the polar
+ * Albedo: this place's own photo multiplies the displayed brightness (after the tone curve, writePixel), as the photo views of the globe and of the polar
  * map drape the mosaic over the LOLA relief. Where a detail tile has been read (detailPhoto.ts: the far ground the
  * ray casting finds visible, at the mosaic's own 100 m) it is used, and the ray steps no longer than DETAIL_STEP_M
  * there so the photo's detail is not stepped over; elsewhere the photo read over each ring's cells (rings.ts). The
@@ -342,13 +342,13 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
           const ea = ta * sa
           const na = ta * ca
           const alb = albedoAt(k, ea, na)
-          writePixel(px, 4 * (r * w + i), (R + (pR - R) * a) * alb, ta, ea, na, dTheta, grain, 255)
+          writePixel(px, 4 * (r * w + i), R + (pR - R) * a, alb, ta, ea, na, dTheta, grain, 255)
         }
         // antialiased top edge: the row the ground only partly covers
         const edge = r0 - 1
         if (edge >= 0 && edge < top && y < r0) {
           const alb = albedoAt(k, e, n)
-          writePixel(px, 4 * (edge * w + i), R * alb, t, e, n, dTheta, grain, Math.round(255 * Math.min(1, r0 - y)))
+          writePixel(px, 4 * (edge * w + i), R, alb, t, e, n, dTheta, grain, Math.round(255 * Math.min(1, r0 - y)))
         }
         if (r0 < top) top = r0
       }
@@ -371,8 +371,9 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
     }
     // beyond the rings (or beyond what can show), up to the mask: the shade of the ground where the ray stopped
     if (top > maskTop && pY === pY) {
-      const R = (pR !== pR ? radiance(pK, pU, pV, pT, pUp, sa, ca) : pR) * albedoAt(pK, pT * sa, pT * ca)
-      for (let r = Math.min(top, h) - 1; r >= maskTop; r--) writePixel(px, 4 * (r * w + i), R, pT, 0, 0, dTheta, null, 255)
+      const R = pR !== pR ? radiance(pK, pU, pV, pT, pUp, sa, ca) : pR
+      const alb = albedoAt(pK, pT * sa, pT * ca)
+      for (let r = Math.min(top, h) - 1; r >= maskTop; r--) writePixel(px, 4 * (r * w + i), R, alb, pT, 0, 0, dTheta, null, 255)
     }
   }
   return steps
@@ -383,10 +384,16 @@ const TONE_MAX = 4
 const TONE_STEPS = 512
 const TONE_LUT = Float32Array.from({ length: TONE_MAX * TONE_STEPS + 2 }, (_, i) => tone(i / TONE_STEPS))
 
+/**
+ * One pixel: the light (radiance without the albedo) through the tone curve, then times the photo's albedo, as the
+ * globe and the polar map multiply the photo by their light. Taken after the curve, the photo's contrast stays
+ * visible on brightly lit slopes, where the curve is flat and an albedo inside the radiance would vanish.
+ */
 function writePixel(
   px: Uint8ClampedArray,
   o: number,
   R: number,
+  albedo: number,
   t: number,
   e: number,
   n: number,
@@ -396,7 +403,7 @@ function writePixel(
 ): void {
   // partial edge pixels keep the higher alpha already written
   if (alpha < 255 && px[o + 3] >= alpha) return
-  let b = TONE_LUT[R > 0 ? (R < TONE_MAX ? (R * TONE_STEPS) | 0 : TONE_MAX * TONE_STEPS) : 0]
+  let b = TONE_LUT[R > 0 ? (R < TONE_MAX ? (R * TONE_STEPS) | 0 : TONE_MAX * TONE_STEPS) : 0] * albedo
   if (grain !== null && t < GRAIN_REACH_M) {
     // footprint of the pixel on the ground: t dTheta across the ray, about t^2 dTheta / h along it at grazing
     // incidence (h: eye height); their geometric mean picks the mip level, so far grain blurs out instead of aliasing
