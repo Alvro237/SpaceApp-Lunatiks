@@ -63,21 +63,26 @@ function RangeField({ field, disabled }: { field: PlannerField & { kind: 'range'
           ['lo', field.loLabel],
           ['hi', field.hiLabel],
         ] as const).map(([which, lbl]) => (
-          <div className="unit-input" key={which}>
-            <input
-              aria-label={`${field.label} (${lbl.toLowerCase()})`}
-              inputMode="decimal"
-              autoComplete="off"
-              disabled={disabled}
-              placeholder={`${lbl} · inactive`}
-              value={a.plannerValues[`${field.id}:${which}`] ?? ''}
-              onChange={(e) => a.setPlannerValue(`${field.id}:${which}`, e.target.value)}
-            />
-            {field.unit && (
-              <span className="unit" aria-hidden="true">
-                {field.unit}
-              </span>
-            )}
+          <div className="range-end" key={which}>
+            <span className="range-end-label" aria-hidden="true">
+              {lbl}
+            </span>
+            <div className="unit-input">
+              <input
+                aria-label={`${field.label} (${lbl.toLowerCase()})`}
+                inputMode="decimal"
+                autoComplete="off"
+                disabled={disabled}
+                placeholder="Inactive"
+                value={a.plannerValues[`${field.id}:${which}`] ?? ''}
+                onChange={(e) => a.setPlannerValue(`${field.id}:${which}`, e.target.value)}
+              />
+              {field.unit && (
+                <span className="unit" aria-hidden="true">
+                  {field.unit}
+                </span>
+              )}
+            </div>
           </div>
         ))}
       </div>
