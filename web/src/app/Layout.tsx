@@ -4,6 +4,8 @@ import { useApp } from '../state/store'
 import { BlockToggle } from '../blocks/BlockToggle'
 import { BrandMark } from '../ui/BrandMark'
 import { TourButton } from '../ui/Walkthrough'
+import { useCinematic } from '../state/cinematic'
+import { CinematicButton } from './Cinematic'
 
 const TITLES: Record<string, string> = { '/': 'Navigator', '/data': 'Data & methods', '/learn': 'Learn' }
 
@@ -13,6 +15,7 @@ export function Layout() {
   const set = useApp((s) => s.set)
   const blocks = useApp((s) => s.blocks)
   const onMap = pathname === '/'
+  const cinematic = useCinematic((s) => s.on) && onMap
   const main = useRef<HTMLElement>(null)
   const first = useRef(true)
 
@@ -24,7 +27,7 @@ export function Layout() {
   }, [pathname])
 
   return (
-    <div className={`app${onMap ? ' on-map' : ''}${onMap && blocks ? ' blocks-on' : ''}`}>
+    <div className={`app${onMap ? ' on-map' : ''}${onMap && blocks ? ' blocks-on' : ''}${cinematic ? ' is-cinematic' : ''}`}>
       <a className="skip" href="#main" onClick={(e) => (e.preventDefault(), main.current?.focus())}>
         Skip to content
       </a>
@@ -51,6 +54,7 @@ export function Layout() {
               </div>
             )}
             <BlockToggle />
+            {!blocks && <CinematicButton />}
           </div>
         )}
         <div className="bar-end">

@@ -288,3 +288,11 @@ export const IconMore = (p: P) => (
     <circle cx="19" cy="12" r="1.3" fill="currentColor" />
   </Svg>
 )
+
+/** Cinematic mode: a film frame with a play mark. */
+export const IconCinema = (p: P) => (
+  <Svg {...p}>
+    <rect x="3" y="5" width="18" height="14" rx="2" />
+    <path d="M7 5v14M17 5v14M3 9h4M3 15h4M17 9h4M17 15h4M10.5 10v4l3-2-3-2Z" />
+  </Svg>
+)

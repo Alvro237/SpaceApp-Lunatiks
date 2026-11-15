@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FLIGHT_S, POLE_LAT_LIMIT, dragOrbit, flightAt, moveOnSphere, IDLE_BEFORE_SPIN_MS, MAX_TILT, MIN_DIST, MOON_R_KM, NEAR_ENTER_KM, NEAR_LEAVE_KM, isNearView, OrbitRig, SURFACE_MAX_R_KM, TILT_3D, cameraPose, missionPickOutcome, nearPlaneKm, RELIEF_MAX, SPIN_DEG_PER_S, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon, zoomOrbitToward } from './orbit'
+import { CINEMA_DEG_PER_S, CINEMA_IDLE_MS, CINEMA_LAT, FLIGHT_S, POLE_LAT_LIMIT, dragOrbit, flightAt, moveOnSphere, IDLE_BEFORE_SPIN_MS, MAX_TILT, MIN_DIST, MOON_R_KM, NEAR_ENTER_KM, NEAR_LEAVE_KM, isNearView, OrbitRig, SURFACE_MAX_R_KM, TILT_3D, cameraPose, missionPickOutcome, nearPlaneKm, RELIEF_MAX, SPIN_DEG_PER_S, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon, zoomOrbitToward } from './orbit'
 
 describe('globe geometry', () => {
   it('puts the north pole up and longitude 0 toward +x', () => {
@@ -122,6 +122,55 @@ describe('idle spin', () => {
     // GlobeView calls setAnchored(useGlobe.anchored || mode === 'mission') every frame; mission mode alone is enough
     o.setAnchored(true)
     expect(o.isSpinning(IDLE_BEFORE_SPIN_MS)).toBe(false)
+  })
+})
+
+describe('cinematic mode', () => {
+  // setCinematic stamps its flight with the real clock: the steps below run well after it
+  const T = performance.now() + 1e6
+  const close = () => {
+    const o = new OrbitRig({ lat: -85, lon: 40, dist: MOON_R_KM + 200 }, 0)
+    o.goal.dist = o.now.dist = MOON_R_KM + 200
+    o.setTilt(TILT_3D)
+    return o
+  }
+
+  it('flies back to the whole Moon, straight down, then turns even when anchored', () => {
+    const o = close()
+    o.setAnchored(true)
+    o.setCinematic(true, 800, 600, 40)
+    expect(o.viewGoal.tilt).toBe(0)
+    expect(o.goal.lat).toBe(CINEMA_LAT)
+    expect(o.goal.dist).toBeGreaterThan(MOON_R_KM * 2)
+    o.step(FLIGHT_S, false, T)
+    expect(o.isFlying).toBe(false)
+    const lon = o.goal.lon
+    o.step(2, false, T + CINEMA_IDLE_MS)
+    expect(o.goal.lon - lon).toBeCloseTo(2 * CINEMA_DEG_PER_S, 9)
+  })
+
+  it('a drag pauses the turn briefly; leaving stops it', () => {
+    const o = close()
+    o.setCinematic(true, 800, 600, 40)
+    o.step(FLIGHT_S, false, T)
+    o.touch(T)
+    const lon = o.goal.lon
+    o.step(1, false, T + CINEMA_IDLE_MS - 1)
+    expect(o.goal.lon).toBe(lon)
+    o.setCinematic(false, 800, 600, 40)
+    // back to the usual rule: 20 s without a touch before it turns
+    o.touch(T)
+    o.step(1, false, T + 2 * CINEMA_IDLE_MS)
+    expect(o.goal.lon).toBe(lon)
+  })
+
+  it('turns at the slow idle speed when motion is reduced', () => {
+    const o = close()
+    o.setCinematic(true, 800, 600, 40)
+    o.step(FLIGHT_S, true, T)
+    const lon = o.goal.lon
+    o.step(1, true, T + CINEMA_IDLE_MS)
+    expect(o.goal.lon - lon).toBeCloseTo(SPIN_DEG_PER_S, 9)
   })
 })
 
