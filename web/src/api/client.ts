@@ -15,8 +15,6 @@ import type {
   CraterList,
   DatasetsMeta,
   Health,
-  LinkRequest,
-  LinkResponse,
   PowerRequest,
   PointHorizon,
   PowerResponse,
@@ -123,7 +121,6 @@ export const api = {
   areaSearch: (body: AreaSearchRequest, signal?: AbortSignal) =>
     request<AreaSearchResponse>('POST', '/api/v1/areas/search', body, signal),
   power: (body: PowerRequest, signal?: AbortSignal) => request<PowerResponse>('POST', '/api/v1/power', body, signal),
-  link: (body: LinkRequest, signal?: AbortSignal) => request<LinkResponse>('POST', '/api/v1/link', body, signal),
   radiation: (body: RadiationRequest, signal?: AbortSignal) => request<RadiationResponse>('POST', '/api/v1/radiation', body, signal),
   craters: (bbox: [number, number, number, number], minDiamKm: number, signal?: AbortSignal) =>
     request<CraterList>('GET', `/api/v1/craters?${q({ bbox: bbox.join(','), min_diam_km: minDiamKm })}`, undefined, signal),

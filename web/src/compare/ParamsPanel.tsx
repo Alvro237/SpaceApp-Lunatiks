@@ -1,22 +1,18 @@
 /**
- * Parameters of the comparison: the power model (POST /api/v1/power) and the radio link (POST /api/v1/link),
- * applied to every place picked with Multiselect at once so the places are compared under the same assumptions.
- *
- * The power inputs are the same ones as in the Power section (same store): what is typed in one is in the other.
- * No panel, battery, load, habitat or link-budget value has a cited default, so none is pre-filled; the example
- * button fills the guide's test values and says so. Typing changes the forms only: "Apply" asks the API, once per
- * place, and the answers appear in the results table of the comparison.
+ * Power parameters of the comparison (POST /api/v1/power), applied to every place picked with Multiselect at once so
+ * the places are compared under the same assumptions. The inputs are the same ones as in the Power section (same
+ * store): what is typed in one is in the other. No panel, battery, load or habitat value has a cited default, so none
+ * is pre-filled; the example button fills the guide's test values and says so. Typing changes the form only: "Apply"
+ * asks the API, once per place, and the answers appear in the results table. The radio link has its own "Link
+ * settings" in the comparison.
  */
 import { type ReactNode, useId, useState } from 'react'
-import type { LinkBand, LinkDirection } from '../api/types'
-import { BUDGET_FIELDS, type BudgetFieldSpec, buildLinkRequest } from '../panels/linkRequest'
 import { buildPowerRequest } from '../panels/powerRequest'
 import { ARRAY, BATTERY, COLONY_LOADS, EXAMPLE, EXAMPLE_COLONY, type FieldSpec, HABITAT, LOAD } from '../panels/powerSpecs'
-import { ContactSetting, HeightSetting, PanelSetting } from '../panels/Settings'
-import { LINK_NETWORKS, useLinkStore } from '../state/link'
+import { PanelSetting } from '../panels/Settings'
 import { type PowerModel, usePowerStore } from '../state/power'
 import { useApp } from '../state/store'
-import { IconAntenna, IconBattery, IconBolt, IconHabitat, IconPanel, IconSliders } from '../ui/icons'
+import { IconBattery, IconBolt, IconHabitat, IconPanel, IconSliders } from '../ui/icons'
 import { Tip } from '../ui/Tip'
 import { useApplied } from './applied'
 
@@ -25,12 +21,6 @@ const MODELS: { id: PowerModel; title: string; icon: (s: number) => ReactNode }[
   { id: 'battery', title: 'Battery', icon: (s) => <IconBattery size={s} /> },
   { id: 'colony', title: 'Colony', icon: (s) => <IconHabitat size={s} /> },
 ]
-const DIRECTIONS: { id: LinkDirection; label: string }[] = [
-  { id: 'downlink', label: 'Downlink' },
-  { id: 'uplink_low_power', label: 'Uplink low' },
-  { id: 'uplink_high_power', label: 'Uplink high' },
-]
-const BANDS: LinkBand[] = ['S', 'X', 'Ka']
 
 export function ParamsPanel() {
   const id = useId()
@@ -38,42 +28,25 @@ export function ParamsPanel() {
   const durationH = useApp((s) => s.durationH)
   const mastM = useApp((s) => s.mastM)
   const panel = useApp((s) => s.panel)
-  const commsMinFraction = useApp((s) => s.commsMinFraction)
   const power = usePowerStore()
-  const link = useLinkStore()
   const applied = useApplied()
-  const [useP, setUseP] = useState(true)
-  const [useL, setUseL] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   const apply = () => {
     // validate once without a place: the checks do not depend on it, so a missing value is reported here
     // instead of as an error under every place
+    const snapshot = { model: power.model, fields: { ...power.fields }, commsCritical: power.comms_critical, includeSizing: power.include_sizing }
     try {
-      if (useP) {
-        buildPowerRequest(
-          { model: power.model, fields: power.fields, commsCritical: power.comms_critical, includeSizing: power.include_sizing, panel, startMs, durationH, mastM },
-          null,
-        )
-      }
-      if (useL) {
-        buildLinkRequest(
-          { level: link.level, networks: link.networks, direction: link.direction, band: link.band, budget: link.budget, commsMinFraction, startMs, durationH, mastM },
-          null,
-        )
-      }
+      buildPowerRequest({ ...snapshot, panel, startMs, durationH, mastM }, null)
     } catch (e) {
       setError((e as Error).message)
       return
     }
     setError(null)
-    applied.apply({
-      power: useP ? { model: power.model, fields: { ...power.fields }, commsCritical: power.comms_critical, includeSizing: power.include_sizing } : null,
-      link: useL ? { level: link.level, networks: [...link.networks], direction: link.direction, band: link.band, budget: { ...link.budget } } : null,
-    })
+    applied.apply(snapshot)
   }
 
-  const field = (s: FieldSpec | BudgetFieldSpec, value: string, onChange: (v: string) => void) => (
+  const field = (s: FieldSpec, value: string, onChange: (v: string) => void) => (
     <div className="pfield" key={s.key}>
       <div className="pfield-top">
         <label htmlFor={`${id}-${s.key}`}>
@@ -93,7 +66,6 @@ export function ParamsPanel() {
     </div>
   )
   const pf = (s: FieldSpec) => field(s, power.fields[s.key] ?? '', (v) => power.setFields({ ...power.fields, [s.key]: v }))
-  const lf = (s: BudgetFieldSpec) => field(s, link.budget[s.key] ?? '', (v) => link.setBudget({ ...link.budget, [s.key]: v }))
 
   const group = (key: string, title: string, icon: ReactNode, tone: string, filled: string, body: ReactNode, open = false) => (
     <details key={key} className="opt-panel" open={open || undefined}>
@@ -106,7 +78,6 @@ export function ParamsPanel() {
     </details>
   )
   const count = (specs: FieldSpec[]) => `${specs.filter((s) => (power.fields[s.key] ?? '').trim()).length}/${specs.length}`
-  const bcount = `${BUDGET_FIELDS.filter((s) => (link.budget[s.key] ?? '').trim()).length}/${BUDGET_FIELDS.length}`
 
   return (
     <details className="cmp-params opt-panel">
@@ -114,16 +85,11 @@ export function ParamsPanel() {
         <span className="ios-icon ios-icon-orange">
           <IconSliders size={16} />
         </span>
-        <span className="opt-title">Power and link parameters</span>
-        <span className="opt-count">{applied.power || applied.link ? 'applied' : 'not applied'}</span>
+        <span className="opt-title">Power parameters</span>
+        <span className="opt-count">{applied.power ? 'applied' : 'not applied'}</span>
       </summary>
       <div className="opt-body">
-        <label className="check-row">
-          <input type="checkbox" checked={useP} onChange={(e) => setUseP(e.target.checked)} />
-          <span>Compare power</span>
-        </label>
-        {useP && (
-          <>
+        <>
             <div className="ios-list setting">
               <div className="ios-row stack">
                 <div className="ios-row-top">
@@ -185,84 +151,7 @@ export function ParamsPanel() {
               Fill example values
             </button>
             {power.usedExample && <span className="fine"> Example values, not recommendations.</span>}
-          </>
-        )}
-
-        <label className="check-row">
-          <input type="checkbox" checked={useL} onChange={(e) => setUseL(e.target.checked)} />
-          <span>Compare radio link</span>
-        </label>
-        {useL && (
-          <>
-            <ContactSetting />
-            <HeightSetting />
-            <div className="ios-list setting">
-              <div className="ios-row stack">
-                <div className="ios-row-top">
-                  <span className="ios-icon ios-icon-blue">
-                    <IconAntenna size={16} />
-                  </span>
-                  <span id={`${id}-lvl-l`} className="ios-label">
-                    Level
-                  </span>
-                  <Tip label="the link level">1: the place sees the Earth and a ground antenna sees the Moon. 2: also the link budget (Eb/N0 margin).</Tip>
-                </div>
-                <div className="seg" role="radiogroup" aria-labelledby={`${id}-lvl-l`}>
-                  {([1, 2] as const).map((l) => (
-                    <label key={l} className={`seg-item${link.level === l ? ' is-on' : ''}`}>
-                      <input type="radio" name={`${id}-lvl`} checked={link.level === l} onChange={() => link.setLevel(l)} />
-                      <span>{l === 1 ? 'Contact' : 'Link budget'}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <fieldset className="check-group">
-              <legend>Antenna networks</legend>
-              {LINK_NETWORKS.map((n) => (
-                <label key={n.id} className="check-row">
-                  <input type="checkbox" checked={link.networks.includes(n.id)} onChange={() => link.toggleNetwork(n.id)} />
-                  <span>{n.label}</span>
-                </label>
-              ))}
-            </fieldset>
-            <div className="ios-list setting">
-              <div className="ios-row stack">
-                <span id={`${id}-dir-l`} className="ios-label">
-                  Direction
-                </span>
-                <div className="seg" role="radiogroup" aria-labelledby={`${id}-dir-l`}>
-                  {DIRECTIONS.map((d) => (
-                    <label key={d.id} className={`seg-item${link.direction === d.id ? ' is-on' : ''}`}>
-                      <input type="radio" name={`${id}-dir`} checked={link.direction === d.id} onChange={() => link.setDirection(d.id)} />
-                      <span>{d.label}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-            </div>
-            {link.level === 2 &&
-              group(
-                'budget',
-                'Link budget',
-                <IconAntenna size={16} />,
-                'blue',
-                bcount,
-                <>
-                  <div className="seg" role="radiogroup" aria-label="Band">
-                    {BANDS.map((b) => (
-                      <label key={b} className={`seg-item${link.band === b ? ' is-on' : ''}`}>
-                        <input type="radio" name={`${id}-band`} checked={link.band === b} onChange={() => link.setBand(b)} />
-                        <span>{b} band</span>
-                      </label>
-                    ))}
-                  </div>
-                  {BUDGET_FIELDS.map(lf)}
-                </>,
-                true,
-              )}
-          </>
-        )}
+        </>
 
         {error && (
           <p role="alert" className="error">
@@ -270,11 +159,11 @@ export function ParamsPanel() {
           </p>
         )}
         <div className="opt-actions">
-          <button type="button" className="primary" disabled={!useP && !useL} onClick={apply}>
+          <button type="button" className="primary" onClick={apply}>
             Apply to all places
           </button>
-          {(applied.power || applied.link) && (
-            <button type="button" className="link" onClick={() => applied.apply({ power: null, link: null })}>
+          {applied.power && (
+            <button type="button" className="link" onClick={() => applied.apply(null)}>
               Clear results
             </button>
           )}
