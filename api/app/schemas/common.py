@@ -2,6 +2,10 @@
 
 Every such request names a place (catalogue ``site_id`` or manual ``lat``/``lon``) and a mission window;
 every response says which horizon it used and gives time results as a fraction and as time ranges.
+
+The height above the ground is not an input: panels, antennas and the habitat are taken 2 m above the ground in
+every MECH result (``MAST_M``, team decision 2026-11-14: most panels sit on structures). A ``mast_m`` sent by a
+client is ignored; ``mast_m_used`` in the response reports the height used.
 """
 from __future__ import annotations
 
@@ -12,6 +16,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 MAX_SAMPLES = 20_000
+MAST_M = 2.0      # m above the ground, fixed (team decision 2026-11-14); terrain masks exist for 0, 2, 5 and 10 m
 
 
 class WindowRequest(BaseModel):
@@ -21,8 +26,6 @@ class WindowRequest(BaseModel):
     start: datetime = Field(description="Start of the mission window, ISO 8601 UTC")
     duration_h: float = Field(gt=0.0, description="Mission window length, hours")
     step_min: float = Field(60.0, ge=1.0, le=1440.0, description="Sampling step, minutes")
-    mast_m: float = Field(2.0, ge=0.0, le=10.0, description=(
-        "Height of the panel or antenna above the ground, m; terrain masks exist for 0, 2, 5 and 10 m (nearest used)"))
     horizon: Literal["smooth_sphere", "terrain"] = Field("smooth_sphere", description=(
         "Manual coordinates only: 'terrain' ray-traces the skyline over the LOLA elevation grids where they cover the "
         "point (south of about 60 S; GET /api/v1/points/horizon shows it); 'smooth_sphere' (default) uses the "
@@ -53,7 +56,8 @@ class WindowResponse(BaseModel):
     horizon_kind: str = Field(description=(
         "terrain (LOLA mask) or smooth_sphere (no terrain mask: an estimate, not a bound; real terrain shortens light "
         "and comms in craters and lengthens them on peaks)"))
-    mast_m_used: float = Field(description="Mast height of the horizon mask actually used, m")
+    mast_m_used: float = Field(description=(
+        "Height above the ground the horizon is seen from (panels, antenna, habitat): fixed at 2 m, team decision, m"))
     start: str
     duration_h: float
     step_min: float

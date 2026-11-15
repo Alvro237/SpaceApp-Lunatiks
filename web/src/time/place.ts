@@ -1,7 +1,8 @@
 /**
  * Site model for any place with the API's rules: the stored terrain mask for catalogue sites that have one; for
- * manual coordinates the skyline the API ray-traced over LOLA terrain (GET /points/horizon) once it has answered;
- * smooth sphere elsewhere (no API, or outside the elevation grids).
+ * manual coordinates and for catalogue sites without a mask, the skyline the API ray-traced over the LOLA
+ * elevation grids (GET /points/horizon; they cover the whole Moon) once it has answered; smooth sphere only
+ * while the API has not answered (or is not deployed).
  */
 import type { Selection } from '../state/store'
 import { terrainRegistry } from '../terrain/registry'
@@ -34,6 +35,12 @@ export function placeModel(masks: HorizonMasks, sel: Selection, mastM: number, n
   if (sel.kind === 'site') {
     const site = masks.site(sel.id)
     if (!site) return null
+    // No stored pipeline mask: the skyline the API ray-traced at the site's coordinates (as the API's
+    // model_for_site), smooth sphere only until it answers.
+    if (!site.terrain.available && traced && traced.kind === 'terrain') {
+      const model = makeModel(site.lat, site.lon, traced.groundM, new Horizon(traced.values, 'terrain'), mastM)
+      return { model, name: names?.get(site.id) ?? site.name, mastUsedM: mastM, horizonSource: 'traced', demCellM: traced.cellM ?? undefined }
+    }
     const { horizon, mastUsedM } = masks.forSite(site, mastM)
     const ground = site.terrain.available ? (site.terrain.groundHeightM ?? 0) : 0
     return {
@@ -45,7 +52,7 @@ export function placeModel(masks: HorizonMasks, sel: Selection, mastM: number, n
   }
   if (traced && traced.kind === 'terrain') {
     const model = makeModel(sel.lat, sel.lon, traced.groundM, new Horizon(traced.values, 'terrain'), mastM)
-    return { model, name: pointName(sel.lat, sel.lon), mastUsedM: mastM, horizonSource: 'traced', demCellM: traced.cellM ?? undefined }
+    return { model, name: names?.get(`p:${sel.lat},${sel.lon}`) ?? pointName(sel.lat, sel.lon), mastUsedM: mastM, horizonSource: 'traced', demCellM: traced.cellM ?? undefined }
   }
   // Ground height from the LOLA tiles when the map has loaded them (as the API's model_for_point), else 0 m.
   const [x, y] = polarXY(sel.lat, sel.lon)

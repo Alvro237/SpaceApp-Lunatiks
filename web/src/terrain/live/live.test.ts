@@ -11,9 +11,12 @@ import {
   LIVE_LEVELS,
   LIVE_RANGE_PAD_M,
   type LiveSource,
+  cachedLiveLevels,
   TREK_100M,
   TREK_30M,
   TREK_5M,
+  REFINE_PAD_MIN_M,
+  descendantRanges,
   insideSource,
   liveConfigFromEnv,
   trekTileUrl,
@@ -94,9 +97,10 @@ describe('live levels: which tiles exist', () => {
     expect(count(9, DEM_10M)).toBe(12_544)
     expect(count(10, DEM_10M)).toBe(50_176)
     expect(count(11, TREK_5M)).toBe(24_336)
-    // z8 inside the 20 m square comes from PGDA (38^2 static z7 parents x 4, as before), the ring from Trek 30 m
-    expect(count(8, DEM_20M)).toBe(5776)
-    expect(count(8, TREK_30M)).toBeGreaterThan(0)
+    // z8 comes from Trek 30 m everywhere (the PGDA 20 m DEM is no longer read: config.ts, LIVE_LEVELS)
+    expect(count(8, DEM_20M)).toBe(0)
+    expect(count(8)).toBe(count(8, TREK_30M))
+    expect(count(8)).toBeGreaterThan(5776)
     expect(count(7)).toBe(count(7, TREK_30M))
     // brute force: every listed tile has its three siblings, lies inside its source, and no live tile is static
     const bad: string[] = []
@@ -109,6 +113,29 @@ describe('live levels: which tiles exist', () => {
     expect(tileset.height.tiles['8/90/90']).toEqual([-LIVE_RANGE_PAD_M, 100 + LIVE_RANGE_PAD_M])
     // the input is not modified
     expect(ts.levels).toHaveLength(8)
+  }, 30_000)
+
+  it('builds the table once per tileset and gives each caller its own ranges', () => {
+    const ts = staticTileset()
+    const cfg = { proxyBase: '/pgda/', levels: LIVE_LEVELS }
+    const fresh = withLiveLevels(ts, cfg)
+    const a = cachedLiveLevels(ts, cfg)
+    const b = cachedLiveLevels(ts, { ...cfg })
+    expect(a.tileset.levels).toEqual(fresh.tileset.levels)
+    expect([...a.live.keys()]).toEqual([...fresh.live.keys()])
+    // every tile, static or live, is found by key and by `in`, with the same range
+    const keys = Object.keys(fresh.tileset.height.tiles)
+    expect(keys.filter((k) => !(k in a.tileset.height.tiles))).toEqual([])
+    expect(keys.filter((k) => a.tileset.height.tiles[k] !== undefined && a.tileset.height.tiles[k].join() !== fresh.tileset.height.tiles[k].join())).toEqual([])
+    expect('99/0/0' in a.tileset.height.tiles).toBe(false)
+    expect(b.live).toBe(a.live) // same configuration: not built again
+    // an engine replaces ranges as tiles load: that must not reach the next engine
+    a.tileset.height.tiles['8/90/90'] = [1, 2]
+    expect(b.tileset.height.tiles['8/90/90']).toEqual(fresh.tileset.height.tiles['8/90/90'])
+    expect(cachedLiveLevels(ts, cfg).tileset.height.tiles['8/90/90']).toEqual(fresh.tileset.height.tiles['8/90/90'])
+    // another configuration is its own table, and no live levels returns the tileset itself
+    expect(cachedLiveLevels(ts, liveConfigFromEnv({ DEV: false })).live).not.toBe(a.live)
+    expect(cachedLiveLevels(ts, null).tileset).toBe(ts)
   }, 30_000)
 
   it('keeps Moon Trek without a proxy and drops the PGDA sources', () => {
@@ -323,5 +350,30 @@ describe('live levels: Moon Trek ImageServer tiles', () => {
     await readTrekTile('https://trek.example/t', g, store, fetchFn)
     expect(calls).toBe(2)
     expect(store.blocks.has('trek|https://trek.example/t')).toBe(true)
+  })
+})
+
+describe('height ranges of tiles not loaded yet', () => {
+  // a 5 x 5 tile (4 cells) whose height is 100 × column + row, so every square's range is known by hand
+  const n = 5
+  const h = Float32Array.from({ length: n * n }, (_, i) => 100 * (i % n) + Math.floor(i / n))
+
+  it('takes each descendant range from the samples over its square, widened by twice the cell size', () => {
+    const r = descendantRanges({ z: 3, x: 2, y: 5 }, h, n, 60, 2)
+    const pad = 120
+    // level 4: 2 x 2 children of 2 cells each; north-west covers columns 0-2 and rows 0-2
+    expect(r.get('4/4/10')).toEqual([0 - pad, 202 + pad])
+    expect(r.get('4/5/10')).toEqual([200 - pad, 402 + pad])
+    expect(r.get('4/4/11')).toEqual([2 - pad, 204 + pad])
+    expect(r.get('4/5/11')).toEqual([202 - pad, 404 + pad])
+    // level 5: one cell each; the south-east one covers columns 3-4, rows 3-4
+    expect(r.get('5/11/23')).toEqual([303 - pad, 404 + pad])
+    expect(r.size).toBe(4 + 16)
+  })
+
+  it('never widens by less than the minimum margin, and stops where a square would be under one cell', () => {
+    const r = descendantRanges({ z: 9, x: 0, y: 0 }, h, n, 7.5)
+    expect(r.get('10/0/0')).toEqual([0 - REFINE_PAD_MIN_M, 202 + REFINE_PAD_MIN_M])
+    expect(Math.max(...[...r.keys()].map((k) => parseKey(k).z))).toBe(11) // 4 cells: two levels, not REFINE_DEPTH
   })
 })

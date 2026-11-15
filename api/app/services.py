@@ -42,27 +42,35 @@ def iso_utc(t_ms: float) -> str:
 
 
 def model_for_site(store: DataStore, site: Site, mast_m: float) -> SiteModel:
-    """Catalogue site: LOLA terrain horizon when the pipeline computed one, smooth sphere otherwise."""
+    """Catalogue site: the pipeline's stored LOLA mask when it has one; otherwise the skyline ray-traced over
+    the LOLA elevation grids (point_horizon), with the grid's own height as the ground (site.ground_m is 0 at
+    those sites). Only a site outside every elevation grid would fall back to the smooth sphere; none does."""
+    if not site.has_terrain:
+        ph = point_horizon(store, site.lat, site.lon, mast_m)
+        if ph is not None:
+            return make_model(site.lat, site.lon, ph.ground_m, ph.profile, mast_m)
     return make_model(site.lat, site.lon, site.ground_m, store.horizons.for_site(site, mast_m), mast_m)
 
 
 def model_for_point(store: DataStore, lat: float, lon: float, mast_m: float,
                     horizon: Literal["terrain", "smooth_sphere"] = "smooth_sphere") -> SiteModel:
-    """Manual coordinates. ``horizon="terrain"``: skyline ray-traced over the LOLA elevation grids wherever they
-    cover the point (south of about 60 S; point_horizon), else the smooth sphere. ``"smooth_sphere"`` (default, the
-    contract the endpoints were built and validated on): ground height from the LOLA grid, smooth-sphere skyline.
+    """Manual coordinates. ``horizon="terrain"``: skyline ray-traced over the LOLA elevation grids (the polar
+    grids south of 60 S, the whole-Moon grid elsewhere; point_horizon). ``"smooth_sphere"`` (default, the
+    contract the endpoints were built and validated on): ground height from the LOLA grids, smooth-sphere skyline.
     Responses say which one they used (``horizon_kind``)."""
     ph = point_horizon(store, lat, lon, mast_m) if horizon == "terrain" else None
     if ph is not None:
         return make_model(lat, lon, ph.ground_m, ph.profile, mast_m)
-    ground = store.grids.sample("lola_elevation_60s", lat, lon) or 0.0
-    return make_model(lat, lon, ground, store.horizons.for_point(mast_m), mast_m)
+    ground = point_dem_heights(store, np.radians([lat]), np.radians([lon]))[0]
+    return make_model(lat, lon, 0.0 if np.isnan(ground) else float(ground), store.horizons.for_point(mast_m), mast_m)
 
 
 # ---------------------------------------------------------------------------- ray-traced horizon of a point
 
-# Finest first: each ray sample reads the finest grid that has data there.
-POINT_DEM_GRIDS = ("lola_elevation_80s", "lola_elevation_60s")
+# Finest first: each ray sample reads the finest grid that has data there. The whole-Moon 8 ppd grid
+# (about 3.8 km cells) closes the chain, so every point on the Moon gets a terrain skyline; its cell size
+# is reported (near_cell_m) so nobody mistakes a coarse skyline for the polar 240-960 m ones.
+POINT_DEM_GRIDS = ("lola_elevation_80s", "lola_elevation_60s", "lola_elevation_global")
 
 
 @dataclass(frozen=True)
@@ -244,18 +252,26 @@ class HorizonView:
 
 
 def horizon_view(store: DataStore, site: Site, mast_m: float, include_zone: bool) -> HorizonView:
-    """The site's skyline at the nearest stored mast (smooth sphere when it has no terrain), and optionally the
-    neighbours' 2 m masks."""
+    """The site's skyline: the pipeline's stored mask at the nearest stored mast when the site has one, else the
+    skyline ray-traced over the LOLA elevation grids (point_horizon, exact mast), and optionally the neighbours'
+    2 m masks. Only a site outside every elevation grid would fall back to the smooth sphere; none does."""
     zone = store.horizons.zone(site)
-    return HorizonView(profile=store.horizons.for_site(site, mast_m),
-                       mast_used_m=store.horizons.nearest_mast(mast_m) if site.has_terrain else mast_m,
+    if site.has_terrain:
+        profile, mast_used = store.horizons.for_site(site, mast_m), store.horizons.nearest_mast(mast_m)
+    else:
+        ph = point_horizon(store, site.lat, site.lon, mast_m)
+        profile = ph.profile if ph is not None else store.horizons.for_point(mast_m)
+        mast_used = mast_m
+    return HorizonView(profile=profile, mast_used_m=mast_used,
                        zone=zone if include_zone else [], zone_available=bool(zone))
 
 
 # ---------------------------------------------------------------------------- SW-1: where the ground height comes from
 
 def site_ground_source(site: Site) -> str:
-    return "lola_site" if site.has_terrain else "reference_sphere"
+    """Catalogue sites with a pipeline mask carry the finest DEM's height; the others are modelled with the
+    LOLA elevation grid's height at the site (model_for_site), which covers the whole Moon."""
+    return "lola_site" if site.has_terrain else "lola_grid"
 
 
 def point_ground_source(store: DataStore, lat: float, lon: float) -> str:

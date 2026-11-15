@@ -200,6 +200,142 @@
     "serverLastModified": "Fri, 07 Jul 2023 22:04:03 GMT"
    },
    "builtUtc": "2026-11-14T16:46:36+00:00"
+  },
+  "lp_hydrogen_60s": {
+   "file": "lp_hydrogen_60s.npz",
+   "description": "Hydrogen abundance, ppm by weight, from Lunar Prospector epithermal neutrons corrected by thermal neutrons (Feldman et al. 2001), 0.5 deg bins (the instrument footprint is about 45 km), south of 60 S. A special product of the LP team, not a peer-reviewed PDS archive",
+   "unit": "ppm",
+   "scale": 0.1,
+   "width": 485,
+   "height": 485,
+   "pixelM": 3840.0,
+   "xLeftM": -931200.0,
+   "yTopM": 931200.0,
+   "sourcePixelM": 15161.67521207474,
+   "aggregation": "value of the 0.5 deg latitude/longitude bin holding each cell centre (no resampling)",
+   "min": -16.976,
+   "max": 181.72,
+   "mean": 67.0503,
+   "validFraction": 0.7852,
+   "source": {
+    "agency": "NASA PDS Geosciences Node (Lunar Prospector neutron spectrometer, LANL LP Spectrometer Team)",
+    "url": "https://pds-geosciences.wustl.edu/missions/lunarp/reduced/hydrogenhd.txt",
+    "product": "https://pds-geosciences.wustl.edu/missions/lunarp/reduced_special.html",
+    "bytes": 14256401,
+    "serverLastModified": "Wed, 13 Aug 2008 15:55:14 GMT"
+   },
+   "builtUtc": "2026-11-14T18:15:05+00:00"
+  },
+  "lola_elevation_global": {
+   "file": "lola_elevation_global.npz",
+   "description": "Mean LOLA height above the 1737.4 km sphere, whole Moon (coarsest level of the ray-traced point horizon; the south polar grids are finer south of 60 S)",
+   "unit": "m",
+   "scale": 0.5,
+   "width": 2880,
+   "height": 1440,
+   "projection": "equirectangular",
+   "ppd": 8,
+   "pixelM": 3790.4,
+   "layout": "simple cylindrical; row 0 centred at 90 N minus half a pixel, column 0 centred at longitude 1/16 deg, longitude grows east 0..360; pixelM is the meridional pixel size (and the east-west size at the equator; east-west shrinks with cos(latitude))",
+   "sourcePixelM": 1895.2,
+   "aggregation": "2 x 2 area mean of LDEM_16 (16 ppd) to 8 ppd",
+   "min": -8728.875,
+   "max": 10552.375,
+   "mean": -519.2022,
+   "validFraction": 1.0,
+   "source": {
+    "agency": "NASA PDS Geosciences Node (LRO LOLA team, Smith et al.)",
+    "product": "LRO LOLA Gridded Data Record LDEM_16, version 3.1 (LRO-L-LOLA-4-GDR-V1.0)",
+    "url": "https://pds-geosciences.wustl.edu/lro/lro-l-lola-3-rdr-v1/lrolol_1xxx/data/lola_gdr/cylindrical/img/ldem_16.img",
+    "bytes": 33177600
+   },
+   "citation": "Smith, D. E., et al. (2010). The Lunar Orbiter Laser Altimeter investigation on the Lunar Reconnaissance Orbiter mission. Space Sci. Rev. 150, 209-241.",
+   "validation": {
+    "siteHeights": [
+     {
+      "site": "im-1",
+      "catalogueGroundM": 2592.0,
+      "gridM": 2683.6,
+      "differenceM": 91.6
+     },
+     {
+      "site": "im-2",
+      "catalogueGroundM": 5312.6,
+      "gridM": 5272.1,
+      "differenceM": -40.5
+     },
+     {
+      "site": "chandrayaan-3",
+      "catalogueGroundM": 529.2,
+      "gridM": 542.8,
+      "differenceM": 13.5
+     },
+     {
+      "site": "mons-malapert",
+      "catalogueGroundM": 4916.1,
+      "gridM": 4582.4,
+      "differenceM": -333.7
+     },
+     {
+      "site": "shackleton",
+      "catalogueGroundM": -2788.7,
+      "gridM": -2738.0,
+      "differenceM": 50.7
+     },
+     {
+      "site": "haworth",
+      "catalogueGroundM": -3315.7,
+      "gridM": -3329.4,
+      "differenceM": -13.7
+     },
+     {
+      "site": "faustini",
+      "catalogueGroundM": -2755.8,
+      "gridM": -2726.1,
+      "differenceM": 29.7
+     },
+     {
+      "site": "amundsen",
+      "catalogueGroundM": -3571.0,
+      "gridM": -3549.8,
+      "differenceM": 21.2
+     },
+     {
+      "site": "nobile",
+      "catalogueGroundM": 915.6,
+      "gridM": 865.9,
+      "differenceM": -49.7
+     },
+     {
+      "site": "de-gerlache",
+      "catalogueGroundM": -1220.9,
+      "gridM": -1580.6,
+      "differenceM": -359.7
+     },
+     {
+      "site": "cabeus",
+      "catalogueGroundM": -3735.8,
+      "gridM": -3474.8,
+      "differenceM": 261.1
+     },
+     {
+      "site": "shoemaker",
+      "catalogueGroundM": -3929.7,
+      "gridM": -3932.5,
+      "differenceM": -2.8
+     },
+     {
+      "site": "sverdrup",
+      "catalogueGroundM": -2888.9,
+      "gridM": -2893.9,
+      "differenceM": -5.0
+     }
+    ],
+    "maxAbsSiteDifferenceM": 359.7,
+    "note": "groundHeightM is the finest DEM at each site; the grid pixel is a 3.8 km-wide mean."
+   },
+   "builtUtc": "2026-11-14T21:52:42+00:00",
+   "builtBy": "pipeline/lunarnav/global_grid.py"
   }
  },
  "projection": "south polar stereographic, true scale at the pole, R = 1737400 m, MOON_ME; x = r sin(lon), y = r cos(lon), r = 2R tan((90 + lat)/2)",

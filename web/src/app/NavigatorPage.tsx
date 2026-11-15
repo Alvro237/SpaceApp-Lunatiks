@@ -3,25 +3,31 @@
  *   - Top left: where and when. In study mode a site search (catalogue and missions) with a coordinates button;
  *     in both modes the date pill (start and duration).
  *   - Next to them, the tool bar (Adobe-style options bar): mission filters in mission mode, then the active map
- *     view's own tools (zoom, view, layers), which it puts there through ToolPortal.
- *   - Right: the chosen place and its sections (the engine parameters live in the section they change).
+ *     view's own tools (zoom, view, layers), which it puts there through ToolPortal, then the place tools:
+ *     Multiselect and, for a single place, its sections (Power, Horizon, Earth link).
+ *   - Right: a side panel only on demand. The open section of the single place, or, with Multiselect on and two
+ *     or more places picked, the comparison. With neither, the map keeps the whole screen.
  *   - Bottom: the bare timeline.
+ * A right click on a place (or its ⋯ button in the panels) opens a small menu: rename it, choose its pointer
+ * colour, or remove it (a toast offers to undo the removal).
  * The panels report the space they cover so the map centres the Moon in the free area.
  *
- * Two systems share these top bars: the planner (the map, the place panel, the timeline) and Block Moon, the
+ * Two systems share these top bars: the planner (the map, the place panel, the timeline) and Educational mode, the
  * educational world of cubes (blocks/, SW-2). Loading and caching:
- *   - The planner stays mounted once loaded. While Block Moon is on it is paused (its canvas draws no frames),
+ *   - The planner stays mounted once loaded. While Educational mode is on it is paused (its canvas draws no frames),
  *     hidden and out of the tab order, so coming back is instant: same camera, tiles still in memory, no new WebGL.
- *   - Block Moon's code is a lazy chunk, fetched the first time (and prefetched when the pointer or the focus
+ *   - Educational mode's code is a lazy chunk, fetched the first time (and prefetched when the pointer or the focus
  *     reaches its switch). It unmounts when switched off and frees its GPU memory; the heights it builds from
  *     (globe, tileset, overview) stay in the shared React Query cache, so turning it on again downloads nothing.
  */
 import { type ReactNode, Suspense, lazy, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { loadBlockMode } from '../blocks/preload'
+import { ComparePanel } from '../compare/ComparePanel'
 import { Timeline } from '../charts/Timeline'
 import { DatePill } from '../panels/DatePill'
 import { MissionPanel } from '../panels/MissionPanel'
-import { PlacePanel } from '../panels/PlacePanel'
+import { PlaceMenu } from '../panels/PlaceMenu'
+import { PlaceTools, SectionDrawer } from '../panels/PlacePanel'
 import { CoordsButton, SiteSearch } from '../panels/SiteSearch'
 import { NowProvider } from '../panels/useNow'
 import { useInsets } from '../state/layout'
@@ -46,7 +52,7 @@ import { ToolSlotContext } from '../ui/toolSlotContext'
  */
 const reducedMotion = () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
-/** Block Moon, loaded the first time it is switched on (the same promise as the switch's prefetch). */
+/** Educational mode, loaded the first time it is switched on (the same promise as the switch's prefetch). */
 const BlockMode = lazy(loadBlockMode)
 
 export function NavigatorPage() {
@@ -55,8 +61,9 @@ export function NavigatorPage() {
   const mode = useApp((s) => s.mode)
   const scale = useApp((s) => s.scale)
   const section = usePanels((s) => s.section)
+  const comparing = useApp((s) => s.compareMode && s.compare.length >= 2)
   const blocks = useApp((s) => s.blocks)
-  // the horizon view belongs to the planner: it waits (section kept) while Block Moon is on
+  // the horizon view belongs to the planner: it waits (section kept) while Educational mode is on
   const horizonOn = section === 'horizon' && !blocks
   const root = useRef<HTMLDivElement>(null)
   // Transition between the map and the horizon view, derived from the section while rendering (no effect needed
@@ -86,7 +93,7 @@ export function NavigatorPage() {
           ref={root}
         >
           <h1 className="sr-only">Lunar Landing Site Navigator</h1>
-          {/* The map stays mounted (and keeps its camera and tiles) under the horizon view and under Block Moon:
+          {/* The map stays mounted (and keeps its camera and tiles) under the horizon view and under Educational mode:
               paused, hidden and out of the tab order. */}
           <div
             className={`map-layer${blocks ? ' is-dormant' : ''}`}
@@ -100,7 +107,7 @@ export function NavigatorPage() {
             <Suspense
               fallback={
                 <p className="map-loading" role="status">
-                  Loading Block Moon…
+                  Loading Educational mode…
                 </p>
               }
             >
@@ -124,7 +131,7 @@ export function NavigatorPage() {
             </div>
             <div className="toolstrip" role="toolbar" aria-label="Map tools">
               {!blocks && mode === 'mission' && (
-                <Popover label="Mission filters" button={<IconFilter size={18} />} buttonClass="tool-btn" align="left" className="mission-pop">
+                <Popover label="Mission filters" button={<IconFilter size={18} />} buttonClass="tool-btn" align="left" className="mission-pop" persistent>
                   <h2 className="pop-title">
                     <IconFilter size={18} /> Mission filters
                   </h2>
@@ -132,14 +139,19 @@ export function NavigatorPage() {
                 </Popover>
               )}
               <div className="toolslot" ref={setSlot} />
+              {!blocks && <PlaceTools />}
             </div>
           </div>
-          {/* Block Moon brings its own panels ("The sky now", the days along the bottom) */}
+          {/* Educational mode brings its own panels ("The sky now", the days along the bottom) */}
           {!blocks && (
             <>
-              <Float side="right" title="Place" wide={section !== null && section !== 'horizon'}>
-                <PlacePanel />
-              </Float>
+              {comparing ? (
+                <SidePanel wide>{(titleId) => <ComparePanel titleId={titleId} />}</SidePanel>
+              ) : (
+                section && <SidePanel wide={section === 'power'}>{(titleId) => <SectionDrawer titleId={titleId} />}</SidePanel>
+              )}
+              <RemovedToast />
+              <PlaceMenu />
               <QuestPanel />
               <div className="float float-bottom">
                 <Timeline />
@@ -152,22 +164,34 @@ export function NavigatorPage() {
   )
 }
 
-/** The place panel: folds to its title with its own button, and widens while a section is open. */
-function Float({ side, title, wide, children }: { side: 'left' | 'right'; title: string; wide?: boolean; children: ReactNode }) {
+/** The on-demand side panel: a region named by its content's heading (the content brings its own close button). */
+function SidePanel({ wide, children }: { wide?: boolean; children: (titleId: string) => ReactNode }) {
   const id = useId()
-  const [open, setOpen] = useState(true)
   return (
-    <section className={`float float-${side}${open ? '' : ' is-closed'}${wide ? ' is-wide' : ''}`} aria-labelledby={`${id}-h`}>
-      <div className="float-head">
-        <h2 id={`${id}-h`}>{title}</h2>
-        <button type="button" className="icon" aria-expanded={open} aria-controls={`${id}-b`} onClick={() => setOpen(!open)} aria-label={`${open ? 'Hide' : 'Show'} ${title}`}>
-          {open ? (side === 'left' ? '‹' : '›') : side === 'left' ? '›' : '‹'}
-        </button>
-      </div>
-      <div id={`${id}-b`} className="float-body" hidden={!open}>
-        {children}
-      </div>
+    <section className={`float float-right side-panel${wide ? ' is-wide' : ''}`} aria-labelledby={`${id}-t`}>
+      <div className="float-body">{children(`${id}-t`)}</div>
     </section>
+  )
+}
+
+/** "Removed X · Undo" after a right click on the map; it goes away by itself after a few seconds. */
+function RemovedToast() {
+  const removed = useApp((s) => s.lastRemoved)
+  const undo = useApp((s) => s.undoRemove)
+  const [expired, setExpired] = useState<number | null>(null)
+  useEffect(() => {
+    if (!removed) return
+    const t = window.setTimeout(() => setExpired(removed.seq), 7000)
+    return () => window.clearTimeout(t)
+  }, [removed])
+  if (!removed || expired === removed.seq) return null
+  return (
+    <div className="toast toast-undo" role="status">
+      Removed {removed.name}
+      <button type="button" className="link" onClick={undo}>
+        Undo
+      </button>
+    </div>
   )
 }
 

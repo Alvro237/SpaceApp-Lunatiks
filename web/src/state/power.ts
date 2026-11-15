@@ -37,12 +37,6 @@ export type PowerKey =
   | 'air_volume_m3'
   | 'air_pressure_pa'
   | 'metabolic_w_per_crew'
-  | 'reg_albedo'
-  | 'reg_emissivity'
-  | 'reg_conductivity_w_mk'
-  | 'reg_density_kg_m3'
-  | 'reg_heat_capacity_j_kgk'
-  | 'reg_geothermal_flux_w_m2'
 export type PowerFields = Partial<Record<PowerKey, string>>
 
 /** What the advanced model computes: the array alone, or the array feeding a battery and a load. */

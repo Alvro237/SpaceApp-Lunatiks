@@ -6,8 +6,11 @@
     GET /api/v1/points/horizon?lat=-85.5&lon=10&mast_m=2
 
 State and series use the smooth sphere by default (the contract they were validated on) and the skyline
-ray-traced over the LOLA elevation grids with ``horizon=terrain`` (south of about 60 S; services.point_horizon,
-logic.horizon.ray_traced_horizon); /points/horizon returns that skyline. ``horizon_kind`` always says which. The ground height comes from the same grids, and ``ground_source`` says so. The response builders are the site endpoints' own (routers/state.py), so a point and
+ray-traced over the LOLA elevation grids with ``horizon=terrain`` (services.point_horizon,
+logic.horizon.ray_traced_horizon: the polar grids south of 60 S, 240-960 m cells, and the whole-Moon 8 ppd grid
+elsewhere, 3.8 km cells — ``near_cell_m`` says which); /points/horizon returns that skyline. ``horizon_kind``
+always says which. The ground height comes from the same grids, and ``ground_source`` says so. The response
+builders are the site endpoints' own (routers/state.py), so a point and
 a site are shaped identically. A smooth sphere is an estimate, not a bound, so both responses add
 ``terrain_reference``: NASA's terrain-aware long-term values at the point against the smooth sphere's.
 Output format: docs/sw1-output-format.md.
@@ -32,8 +35,8 @@ from .state import series_response, state_response
 router = APIRouter(prefix="/points", tags=["points"])
 
 HORIZON_QUERY = Query("smooth_sphere", description=(
-    "'terrain': skyline ray-traced over the LOLA elevation grids where they cover the point (south of about 60 S; "
-    "see /points/horizon); 'smooth_sphere' (default): geometric dip"))
+    "'terrain': skyline ray-traced over the LOLA elevation grids (the polar grids south of 60 S, the whole-Moon "
+    "3.8 km grid elsewhere; see /points/horizon); 'smooth_sphere' (default): geometric dip"))
 
 
 def terrain_reference(store: DataStore, lat: float, lon: float, mast_m: float) -> TerrainReference | None:
@@ -85,7 +88,9 @@ METHOD = ("For each of 720 azimuths, march outward on the 1737.4 km sphere (quar
 VALIDATION = ("Against the 13 catalogue masks (LOLA 10-240 m, 2 m mast): median RMS 0.21 deg; 11 of 13 within "
               "0.5 deg RMS; worst Mons Malapert 3.25 deg and Haworth 2.07 deg RMS, where relief a few tens of metres "
               "across near the point lifts the real skyline (the computed one is lower there). Measured by "
-              "tests/test_point_horizon.py.")
+              "tests/test_point_horizon.py. Outside the polar grids the DEM is the whole-Moon 8 ppd grid "
+              "(3.8 km cells): relief narrower than a few cells is smoothed away in both directions (peaks down, "
+              "floors up), so that skyline screens a region; it is not a landing-ellipse horizon and not a bound.")
 
 
 @router.get("/horizon", response_model=PointHorizonResponse,

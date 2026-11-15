@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { polarXY } from '../terrain/tileset'
-import { dayBlocks, earthBlocks, gridHeightBilinear, offsetLatLon, sampleGlobal, earthSurface, groundBlocks, moonBlocks, sampleGround, simpleDuration, skyVector, sunBlocks } from './voxels'
+import { dayBlocks, earthBlocks, gridHeightBilinear, offsetLatLon, sampleGlobal, earthSurface, groundBlocks, groundTopNear, moonBlocks, sampleGround, simpleDuration, skyVector, sunBlocks } from './voxels'
 
 describe('skyVector', () => {
   it('points north, east, south and up as the scene axes say', () => {
@@ -31,7 +31,7 @@ describe('sampleGround', () => {
     expect(g.heightsM[2 * 5 + 2]).toBeCloseTo(0, 6)
   })
 
-  it('scales the curvature drop when asked (Block Moon draws it at true size under stretched relief)', () => {
+  it('scales the curvature drop when asked (Educational mode draws it at true size under stretched relief)', () => {
     const full = sampleGround(() => 0, polarXY, -85, 30, 5, 1000)!
     const quarter = sampleGround(() => 0, polarXY, -85, 30, 5, 1000, 0.25)!
     expect(quarter.heightsM[0]).toBeCloseTo(full.heightsM[0] * 0.25, 6)
@@ -174,5 +174,19 @@ describe('simpleDuration', () => {
     expect(simpleDuration(20 * 60_000)).toBe('20 minutes')
     expect(simpleDuration(13.7 * 3_600_000)).toBe('14 hours')
     expect(simpleDuration(19.8 * 86_400_000)).toBe('20 days')
+  })
+})
+
+describe('groundTopNear', () => {
+  // 5 x 5 columns, flat at 0 except a 7-cube tower at i = 4, j = 0 (x = +2, z = -2)
+  const columns = new Int16Array(25)
+  columns[4] = 7
+  it('gives the upper face of the tallest column within reach', () => {
+    expect(groundTopNear(columns, 0, 0, 1)).toBe(0.5)
+    expect(groundTopNear(columns, 1, -1, 1)).toBe(7.5)
+    expect(groundTopNear(columns, 0, 0, 2)).toBe(7.5)
+  })
+  it('is null outside the island', () => {
+    expect(groundTopNear(columns, 9, 0, 1)).toBeNull()
   })
 })

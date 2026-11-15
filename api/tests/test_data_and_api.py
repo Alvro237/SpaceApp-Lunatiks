@@ -98,3 +98,23 @@ def test_api_reference_endpoints():
     assert client.get("/api/v1/sites/nowhere").status_code == 404
     assert "grids" in client.get("/api/v1/meta/datasets").json()
     assert "max_slope" in client.get("/api/v1/meta/constraints").json()["hard_filters"]
+
+
+def test_global_elevation_grid_samples_the_whole_moon():
+    """The equirectangular whole-Moon grid: known heights, longitude wrap and pole clamp."""
+    import numpy as np
+    store = get_store()
+    g = store.grids
+    # Mare Tranquillitatis (Apollo 11) is a couple of kilometres below the sphere; the far-side
+    # highlands around Korolev are kilometres above it (LOLA, Smith et al. 2010).
+    assert -3000 < g.sample("lola_elevation_global", 0.674, 23.473) < -1000
+    assert g.sample("lola_elevation_global", -4.0, -157.0) > 1000
+    # polar height agrees with the finer polar grid within a coarse cell's smoothing
+    south = g.sample("lola_elevation_60s", -85.0, 20.0)
+    assert g.sample("lola_elevation_global", -85.0, 20.0) == pytest.approx(south, abs=1500)
+    # bilinear sampling wraps in longitude (0/360 seam) and is finite at the poles
+    seam = g.bilinear_many("lola_elevation_global", np.array([10.0, 10.0]), np.array([179.99, -179.99]))
+    assert np.all(np.isfinite(seam)) and abs(seam[0] - seam[1]) < 500
+    wrap = g.bilinear_many("lola_elevation_global", np.array([10.0, 10.0]), np.array([0.01, 359.99]))
+    assert np.all(np.isfinite(wrap)) and abs(wrap[0] - wrap[1]) < 500
+    assert np.isfinite(g.bilinear_many("lola_elevation_global", np.array([89.999, -89.999]), np.array([0.0, 0.0]))).all()

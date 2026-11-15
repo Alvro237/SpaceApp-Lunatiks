@@ -61,6 +61,27 @@ Numbers given as defaults below are placeholders for the owner to set with a cit
 `GET /api/v1/sites/{site_id}/horizon?mast_m=&include_zone=` returns the 720 azimuth values, `kind`, the mast
 actually used, and optionally the zone neighbours (`db/horizons.py: zone`).
 
+## SW-1 · Mission mode: area search
+
+**Status:** done in branch `feat/sw1-mission-areas`. **Files:** `routers/areas.py`, `schemas/areas.py`,
+`area_search.py` (glue), `logic/areas.py` (raster helpers, quadtree), `db/landings.py`, `tests/test_areas.py`.
+
+- `POST /api/v1/areas/search`: which cells of a bounded disc (centre south of 60 S, radius up to 400 km, at most
+  360 000 cells of 0.24 to 7.68 km) pass every filter given. No threshold has a default: a filter is on when its
+  value is sent. Answer: the raster (`codes_b64`, `score_b64`, uint8, row 0 at the top, south polar stereographic
+  grid in `grid`), cell counts, the funnel (cells in, out and without data per filter, in run order), the 12 largest
+  connected viable areas with their best cell and the catalogue sites inside, the window sampling used and the
+  assumptions in words. The last 16 answers are kept in memory (same request, same answer, no recomputation).
+- Funnel: map filters on every cell first (side, past landings, slope, elevation, permanent shadow, crater rims,
+  crater density, long-term Sun and Earth, open sky, dose, near a PSR, hydrogen), each cell reading every grid pixel inside it
+  (k x k sub-grid, k = cell / finest pixel, at most 8; slope and shadow take the worst, the rest the mean); then the
+  landing radius (a disc dilation of the failures); then the window filters (sunlight, darkness, contact, blackout,
+  Sun height and Earth at landing, mean power, light and contact left, Sun and Earth together, robust to a delay)
+  on at most `max_window_samples` samples placed by a quadtree, each with its own ray-traced horizon.
+- Filters the data cannot answer are not in the request (roughness: the LOLA roughness file has no confirmed
+  units; rocks: no open pole-wide boulder map; link margin, temperature, battery and colony: per spot, in the power
+  endpoints; solar storm risk: no forecast). Hydrogen reads `lp_hydrogen_60s` (Lunar Prospector, 0.5 deg bins).
+
 ## SW-1 · Manual coordinates
 
 **Status:** `points/state` and `points/series` done in branch `seryitron-branchito`, validated (output format:
@@ -118,7 +139,7 @@ actually used, and optionally the zone neighbours (`db/horizons.py: zone`).
 panels; timeline; mission mode; comparison), client generated from `/openapi.json`, web CI. Calls `/state`,
 `/series`, `/points/*`, `/candidates/search`, `/power`, `/craters` when they are deployed; contract for the
 terrain tiles in `docs/web-tileset.md`. Live terrain levels z8-z10 (20 m and 10 m LOLA DEMs read block by block
-from PGDA) on `feat/sw2-live-dem`; production needs the CORS proxy deployed (team decision). Block Moon, an educational mode drawn as a world of cubes from the same LOLA data and engine, on `feat/sw2-block-moon`. Deploy not set up (team decision). Typed client generated from `/openapi.json`; a GitHub Actions workflow running both test
+from PGDA) on `feat/sw2-live-dem`; production needs the CORS proxy deployed (team decision). Educational mode (formerly Learn mode and Block Moon), drawn as a world of cubes from the same LOLA data and engine, on `feat/sw2-block-moon`; its mission system redesigned for children (mission map, one step at a time with a button, twelve missions) on `feat/sw2-educational-missions`. Deploy not set up (team decision). Typed client generated from `/openapi.json`; a GitHub Actions workflow running both test
 suites; a public host that answers `/health` with no login. Ask the team before deploying anything.
 
 ---
@@ -151,7 +172,8 @@ one) as tests with the source of each date in `docs/references.md`.
 
 ## AERO-2 · Hard filters: communication hours and maximum blackout
 
-**Status:** in review (branch `feat/aero2-comms-filters`; level 1, line of sight only). **File:** `logic/constraints/comms.py`.
+**Status:** done (PR #15); they use the radio-link contact series when the context carries it (see the link section).
+**File:** `logic/constraints/comms.py`.
 
 - `comms_hours`: threshold `{ "min_hours": float }` or `{ "min_fraction": float }` over the mission window, from
   `ctx.series.comms(ctx.params)`. Fill `fraction` and `ranges`.
@@ -159,12 +181,13 @@ one) as tests with the source of each date in `docs/references.md`.
 
 ## AERO-2 · Radio link levels
 
-**Status:** levels 1 and 2 in review (branch `feat/aero2-link-level1`, built on `feat/aero2-ground-stations`: the
-station dataset, the Moon in the Earth-fixed frame, `logic/stations.py`, `db/stations.py`). `POST /api/v1/link` answers
-with the networks you select (`networks`), your own antennas (`custom_stations`) and a `direction` (downlink, uplink
-low or high power); level 2 adds a `budget` (frequency, EIRP, G/T, data rate, required Eb/N0: all supplied by the user,
-none is defaulted) and returns the Eb/N0 margin per antenna and the time the link is closed. `GET /api/v1/link/stations`
-lists the catalogue. The hard filters `comms_hours` / `max_blackout` use the combined contact series when the context
+**Status:** level 1 done; level 2 in review on `feat/aero2-link-level1` (built on the station dataset, the Moon in
+the Earth-fixed frame, `logic/stations.py`, `db/stations.py`). `POST /api/v1/link` answers with the networks you
+select (`networks`), your own antennas (`custom_stations`) and a `direction` (downlink, uplink low or high power).
+Level 2 adds a `budget` that needs only the lunar terminal's EIRP and the data rate: the band (S, X, Ka) or a typed
+frequency sets the carrier, each antenna uses its own downlink G/T (DSN 810-005, JAXA Misasa specification, or an
+estimate from the dish diameter), and the required Eb/N0 (9.6 dB) and margin (3 dB) have stated defaults. It returns
+the Eb/N0 margin per antenna and the time the link is closed. `GET /api/v1/link/stations` lists the catalogue. The hard filters `comms_hours` / `max_blackout` use the combined contact series when the context
 is built with `services.constraint_context(..., link_networks=[...])` (SW-2: pass the networks the user selected);
 without it they keep using the Earth's line of sight alone.
 **Files:** `logic/link.py`, `routers/link.py`, `schemas/link.py`, `tests/test_link.py`.
@@ -222,7 +245,9 @@ obscuration is the fraction of the solar disc covered by the Earth (`logic/eclip
 
 Contract = the team's API rules (2026-11-14), flat fields:
 
-- Input, always: `site_id` or `lat` + `lon`, `start`, `duration_h`, `step_min`, `mast_m`, `panel`, `level` (1-3).
+- Input, always: `site_id` or `lat` + `lon`, `start`, `duration_h`, `step_min`, `panel`, `level` (1-3).
+  Height above the ground fixed at 2 m for panels, antenna and habitat in every MECH endpoint, `/sweep` included
+  (team decision 2026-11-14: most panels sit on structures); `mast_m` is no longer an input, `mast_m_used` = 2.
   Level 2: `panel_area_m2`, `cell_efficiency`, `derating`. Level 3: `load_w`, `battery_capacity_wh`,
   `battery_initial_soc`, `battery_min_soc`, `charge_efficiency`, `discharge_efficiency`. Extra: `night_load_w`.
 - Response, always: `level`, `horizon_kind`, `assumptions[]`. Level 1: `t[]`, `sun_fraction[]`, `sun_el_deg[]`,
@@ -243,7 +268,7 @@ Level 4, colony analysis (team decision 2026-11-14; an extension beyond the API 
   Earth is visible; `comms_critical` false by default), `shed_soc` (deferrable loads off below it),
   `max_charge_w`, `max_discharge_w`, `habitat` (two-node model: `crew_count`, `t_set_k`, `t_min_k`, `ua_w_k`,
   `area_m2`, `skin_absorptivity`, `skin_emissivity`, `structure_mass_kg`, `structure_specific_heat_j_kgk`,
-  `air_volume_m3`, `air_pressure_pa`, optional `metabolic_w_per_crew`) and `regolith` (as `/thermal`).
+  `air_volume_m3`, `air_pressure_pa`, optional `metabolic_w_per_crew`); `regolith` optional (lunar default, Hayne et al. 2017).
   `duration_h` at least one synodic month (708.7 h); a year is recommended at the poles.
 - Heating: interior held at `t_set_k`; skin solved each step against sunlight on 0.5 x area, ground view factor
   0.5 (both team decisions), ground infrared from the regolith model; heater = leak - crew heat - electrical load
@@ -300,8 +325,10 @@ GCR dose per stay (CRaTER climatology). Every window equals the single-window en
 - `POST /api/v1/thermal`: regolith surface temperature from 1-D conduction (constant properties, geometric grid
   from the diurnal skin depth, explicit sub-steps) forced by the absorbed solar flux on flat ground (horizon and
   eclipses included); optional lumped equipment node; optional `limits` (`max_k`, `min_k`, discrete or
-  continuous) with fraction, longest run and ranges beyond each limit. Every property is an input (no cited
-  default yet). With test inputs (albedo 0.12, eps 0.95, k 0.002, rho 1500, c 600) the equator gives 386 K at
+  continuous) with fraction, longest run and ranges beyond each limit. Regolith defaults to lunar values
+  (`logic/thermal.py` `LUNAR_REGOLITH`, team decision 2026-11-14): albedo 0.12, emissivity 0.95 and heat flow
+  0.018 W/m2 from Hayne et al. 2017 Table A1, and k, rho, c as the one-layer equivalent of their global thermal
+  inertia (55 at 273 K): c = c_p(273 K) = 719.7, rho = 1478, k = 2.84e-3. Equipment values stay inputs. With test inputs (albedo 0.12, eps 0.95, k 0.002, rho 1500, c 600) the equator gives 386 K at
   noon and 96 K at night. Not modelled: terrain infrared (shadowed floors come out too cold: Shackleton 24 K),
   temperature-dependent properties, slope, spin-up before the window.
 - `max_temperature`: threshold `{ "max_k": float, "mode": "discrete" | "continuous", "max_hours_above": float,

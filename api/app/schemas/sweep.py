@@ -35,7 +35,6 @@ class SweepRequest(PowerInputs):
     landing_step_h: float = Field(24.0, gt=0.0, description="Hours between consecutive landing times")
     stay_h: float = Field(gt=0.0, description="Mission duration after each landing, hours")
     step_min: float = Field(60.0, ge=1.0, le=1440.0, description="Sampling step, minutes; must divide landing_step_h and stay_h")
-    mast_m: float = Field(2.0, ge=0.0, le=10.0, description="Height of the panel / antenna above the ground, m")
     panel: Literal["tracking", "vertical", "horizontal"] = "vertical"
     comms_min_fraction: float = Field(0.5, gt=0.0, le=1.0, description="Share of the Earth's disc needed for a link")
 

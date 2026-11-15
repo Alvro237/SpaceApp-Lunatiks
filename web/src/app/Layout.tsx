@@ -10,8 +10,6 @@ export function Layout() {
   const { pathname } = useLocation()
   const mode = useApp((s) => s.mode)
   const set = useApp((s) => s.set)
-  const compareMode = useApp((s) => s.compareMode)
-  const setCompareMode = useApp((s) => s.setCompareMode)
   const blocks = useApp((s) => s.blocks)
   const onMap = pathname === '/'
   const main = useRef<HTMLElement>(null)
@@ -36,7 +34,7 @@ export function Layout() {
           </span>
           <span>
             <span className="brand-name">Lunar Landing Site Navigator</span>
-            <span className="tagline">{onMap && blocks ? 'Block Moon · explore with simple answers' : 'Sun and Earth over the real lunar horizon'}</span>
+            <span className="tagline">{onMap && blocks ? 'Educational · missions and simple answers' : 'Sun and Earth over the real lunar horizon'}</span>
           </span>
         </div>
         {onMap && (
@@ -51,9 +49,6 @@ export function Layout() {
                     Mission
                   </button>
                 </div>
-                <button type="button" className="compare-toggle" aria-pressed={compareMode} onClick={() => setCompareMode(!compareMode)}>
-                  Compare
-                </button>
               </>
             )}
             <BlockToggle />

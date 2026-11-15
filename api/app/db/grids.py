@@ -1,5 +1,7 @@
-"""South-polar screening grids (data/grids): LOLA slope and elevation, long-term Sun illumination,
-Earth visibility, permanent shadow and sky visibility. See data/README.md for units and caveats."""
+"""Screening grids (data/grids): LOLA slope and elevation, long-term Sun illumination, Earth visibility,
+permanent shadow and sky visibility (all south polar stereographic), plus the whole-Moon LOLA elevation grid
+(``"projection": "equirectangular"`` in grids.json, sampled by latitude/longitude with longitude wrap).
+See data/README.md for units and caveats."""
 from __future__ import annotations
 
 import json
@@ -35,12 +37,24 @@ class GridRepository:
         v = self.sample_many(grid_id, np.array([lat]), np.array([lon]))[0]
         return None if np.isnan(v) else float(v)
 
+    def _is_equirectangular(self, grid_id: str) -> bool:
+        return self.meta(grid_id).get("projection") == "equirectangular"
+
     def sample_many(self, grid_id: str, lat, lon) -> np.ndarray:
         """Vectorised look-up; NaN outside the grid or where there is no data."""
         if grid_id not in self.index["grids"]:
             return np.full(np.shape(lat), np.nan)
+        if self._is_equirectangular(grid_id):
+            return self._sample_eq(grid_id, lat, lon)
+        return self.sample_xy(grid_id, *south_polar_xy(lat, lon))
+
+    def sample_xy(self, grid_id: str, x, y) -> np.ndarray:
+        """sample_many on projected south polar stereographic x, y (metres), for callers that already have them."""
+        if grid_id not in self.index["grids"]:
+            return np.full(np.shape(x), np.nan)
+        if self._is_equirectangular(grid_id):
+            raise ValueError(f"{grid_id} is equirectangular; sample it by latitude/longitude (sample_many)")
         m = self.meta(grid_id)
-        x, y = south_polar_xy(lat, lon)
         col = np.floor((x - m["xLeftM"]) / m["pixelM"]).astype(np.int64)
         row = np.floor((m["yTopM"] - y) / m["pixelM"]).astype(np.int64)
         inside = (col >= 0) & (col < m["width"]) & (row >= 0) & (row < m["height"])
@@ -54,8 +68,45 @@ class GridRepository:
         grid or where one of the four cells has no data. For continuous fields such as heights (ray tracing)."""
         if grid_id not in self.index["grids"]:
             return np.full(np.shape(lat), np.nan)
+        if self._is_equirectangular(grid_id):
+            return self._bilinear_eq(grid_id, lat, lon)
+        return self.bilinear_xy(grid_id, *south_polar_xy(lat, lon))
+
+    def _sample_eq(self, grid_id: str, lat, lon) -> np.ndarray:
+        """Nearest cell of an equirectangular grid: row 0 at 90 N, column 0 at longitude 0, longitude wraps east."""
         m = self.meta(grid_id)
-        x, y = south_polar_xy(lat, lon)
+        ppd = m["ppd"]
+        row = np.clip(np.floor((90.0 - np.asarray(lat, dtype=np.float64)) * ppd).astype(np.int64), 0, m["height"] - 1)
+        col = np.floor((np.asarray(lon, dtype=np.float64) % 360.0) * ppd).astype(np.int64) % m["width"]
+        raw = self._array(grid_id)[row, col]
+        return np.where(raw == NODATA, np.nan, raw * m["scale"])
+
+    def _bilinear_eq(self, grid_id: str, lat, lon) -> np.ndarray:
+        """bilinear_many on an equirectangular grid: columns wrap in longitude, rows clamp at the poles."""
+        m = self.meta(grid_id)
+        ppd = m["ppd"]
+        fy = np.clip((90.0 - np.asarray(lat, dtype=np.float64)) * ppd - 0.5, 0.0, m["height"] - 1.0)
+        fx = (np.asarray(lon, dtype=np.float64) % 360.0) * ppd - 0.5
+        r0 = np.minimum(np.floor(fy).astype(np.int64), m["height"] - 2)
+        c0 = np.floor(fx).astype(np.int64)
+        ty = fy - r0
+        tx = fx - c0
+        c0 %= m["width"]
+        c1 = (c0 + 1) % m["width"]
+        arr = self._array(grid_id)
+        q = [arr[r0, c0], arr[r0, c1], arr[r0 + 1, c0], arr[r0 + 1, c1]]
+        nodata = (q[0] == NODATA) | (q[1] == NODATA) | (q[2] == NODATA) | (q[3] == NODATA)
+        top = q[0] * (1.0 - tx) + q[1] * tx
+        bottom = q[2] * (1.0 - tx) + q[3] * tx
+        return np.where(nodata, np.nan, (top * (1.0 - ty) + bottom * ty) * m["scale"])
+
+    def bilinear_xy(self, grid_id: str, x, y) -> np.ndarray:
+        """bilinear_many on projected south polar stereographic x, y (metres)."""
+        if grid_id not in self.index["grids"]:
+            return np.full(np.shape(x), np.nan)
+        if self._is_equirectangular(grid_id):
+            raise ValueError(f"{grid_id} is equirectangular; sample it by latitude/longitude (bilinear_many)")
+        m = self.meta(grid_id)
         fx = (x - m["xLeftM"]) / m["pixelM"] - 0.5
         fy = (m["yTopM"] - y) / m["pixelM"] - 0.5
         c0 = np.floor(fx).astype(np.int64)
@@ -72,6 +123,17 @@ class GridRepository:
         bottom = q[2] * (1.0 - tx) + q[3] * tx
         v = (top * (1.0 - ty) + bottom * ty) * m["scale"]
         return np.where(inside & ~nodata, v, np.nan)
+
+    def float_array(self, grid_id: str) -> np.ndarray:
+        """The grid as float32 in physical units with NaN for no data, made once and kept (for tight loops that
+        interpolate many points: NaN then propagates through the arithmetic with no masks)."""
+        key = "f32:" + grid_id
+        if key not in self._arrays:
+            raw = self._array(grid_id)
+            arr = raw.astype(np.float32) * np.float32(self.meta(grid_id)["scale"])
+            arr[raw == NODATA] = np.nan
+            self._arrays[key] = arr
+        return self._arrays[key]
 
     def cell_centres(self, grid_id: str, step: int = 1) -> tuple[np.ndarray, np.ndarray]:
         """Projected x, y (metres) of cell centres, every ``step`` cells: use with

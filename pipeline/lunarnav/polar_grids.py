@@ -12,6 +12,9 @@ Sources
   * LOLA-derived illumination, Earth visibility, permanent shadow and sky visibility
     (Mazarico et al. 2011), PGDA product 69: plain GeoTIFFs downloaded once into
     ``data/raw/illumination`` and block-averaged here.
+  * Hydrogen abundance from the Lunar Prospector neutron spectrometer (Feldman et al. 2001), the LP team's
+    half-degree map on the PDS Geosciences Node (mode "lp_bins": an ASCII table of lat/lon bins, downloaded once
+    into ``data/raw/lunar_prospector`` and sampled bin by bin onto the polar grid; no smoothing added).
 
 All grids share the LOLA south polar stereographic projection (true scale at the pole,
 R = 1737.4 km, MOON_ME). Values are stored as int16 = round(value / scale), nodata -32768.
@@ -30,6 +33,7 @@ from datetime import datetime, timezone
 import numpy as np
 import rasterio
 import requests
+from rasterio.transform import Affine
 from rasterio.windows import Window
 
 from .config import DATA_DIR, GRID_DIR, PGDA_ILLUMINATION_BASE, PGDA_LOLA_BASE
@@ -37,6 +41,8 @@ from .dem import GDAL_OPTIONS
 
 NODATA = -32768
 ILLUM_DIR = DATA_DIR / "illumination"
+LP_DIR = DATA_DIR / "lunar_prospector"
+MOON_R_M = 1_737_400.0
 STRIP_ROWS = 256
 ATTEMPTS = 8
 
@@ -83,6 +89,15 @@ GRIDS: dict[str, dict] = {
         "mode": "local", "file": "SKYV_65S_240M.TIF", "factor": 4, "unit": "sr", "scale": 0.001,
         "product": "https://pgda.gsfc.nasa.gov/products/69",
         "description": "Sky visibility: solid angle of sky not obscured by topography, steradians (a flat plain sees 2 pi), south of 65 S",
+    },
+    "lp_hydrogen_60s": {
+        "mode": "lp_bins", "url": "https://pds-geosciences.wustl.edu/missions/lunarp/reduced/hydrogenhd.txt",
+        "file": "hydrogenhd.txt", "pixel_m": 3840.0, "lat_max": -60.0, "bin_deg": 0.5, "unit": "ppm", "scale": 0.1,
+        "product": "https://pds-geosciences.wustl.edu/missions/lunarp/reduced_special.html",
+        "agency": "NASA PDS Geosciences Node (Lunar Prospector neutron spectrometer, LANL LP Spectrometer Team)",
+        "description": "Hydrogen abundance, ppm by weight, from Lunar Prospector epithermal neutrons corrected by thermal "
+                       "neutrons (Feldman et al. 2001), 0.5 deg bins (the instrument footprint is about 45 km), south "
+                       "of 60 S. A special product of the LP team, not a peer-reviewed PDS archive",
     },
 }
 
@@ -175,6 +190,40 @@ def read_local(file: str, factor: int) -> tuple[np.ndarray, dict]:
     return out, meta
 
 
+def read_lp_bins(spec: dict) -> tuple[np.ndarray, dict]:
+    """Lunar Prospector special product (ASCII: lat_min, lat_max, lon_min, lon_max, value per 0.5 deg bin) onto a
+    south polar stereographic grid: each cell takes the value of the bin that holds its centre."""
+    path = LP_DIR / spec["file"]
+    if not path.exists():
+        LP_DIR.mkdir(parents=True, exist_ok=True)
+        r = requests.get(spec["url"], timeout=300)
+        r.raise_for_status()
+        path.write_bytes(r.content)
+    # a few bins hold "**********" (overflow in the producer's formatting, none south of 60 S): read as no data
+    rows = np.genfromtxt(path, comments="#", delimiter=",", missing_values="**********", filling_values=np.nan)
+    b = spec["bin_deg"]
+    n_lat, n_lon = int(round(180 / b)), int(round(360 / b))
+    table = np.full((n_lat, n_lon), np.nan)
+    i = np.floor((rows[:, 0] + 90.0) / b + 1e-6).astype(int)
+    j = np.floor((rows[:, 2] + 180.0) / b + 1e-6).astype(int)
+    table[i, j] = rows[:, 4]
+    px = spec["pixel_m"]
+    r_edge = 2.0 * MOON_R_M * np.tan(np.radians(90.0 + spec["lat_max"]) / 2.0)
+    n = int(np.ceil(2.0 * r_edge / px))
+    x_left, y_top = -n * px / 2.0, n * px / 2.0
+    xs = x_left + (np.arange(n) + 0.5) * px
+    ys = y_top - (np.arange(n) + 0.5) * px
+    gx, gy = np.meshgrid(xs, ys)
+    lat = np.degrees(2.0 * np.arctan(np.hypot(gx, gy) / (2.0 * MOON_R_M))) - 90.0
+    lon = np.degrees(np.arctan2(gx, gy))
+    bi = np.clip(np.floor((lat + 90.0) / b).astype(int), 0, n_lat - 1)
+    bj = np.clip(np.floor((lon + 180.0) / b).astype(int), 0, n_lon - 1)
+    out = np.where(lat <= spec["lat_max"], table[bi, bj], np.nan).astype(np.float32)
+    meta = {"transform": Affine(px, 0.0, x_left, 0.0, -px, y_top), "width": n, "height": n,
+            "source_pixel_m": float(np.radians(b) * MOON_R_M)}
+    return out, meta
+
+
 def _head(url: str) -> dict:
     try:
         r = requests.head(url, timeout=60, allow_redirects=True)
@@ -212,6 +261,10 @@ def build(only: list[str] | None = None) -> None:
             aggregation = (f"COG overview at decimation {spec['factor']} as published by the producer "
                            "(smoothing resampling, not a plain mean"
                            + ("; values below 0 clipped to 0)" if spec.get("clip_min") is not None else ")"))
+        elif spec["mode"] == "lp_bins":
+            values, meta = read_lp_bins(spec)
+            url, unit, scale = spec["url"], spec["unit"], spec["scale"]
+            aggregation = f"value of the {spec['bin_deg']} deg latitude/longitude bin holding each cell centre (no resampling)"
         else:
             values, meta = read_local(spec["file"], spec["factor"])
             url = f"{PGDA_ILLUMINATION_BASE}/{spec['file']}"
@@ -230,7 +283,8 @@ def build(only: list[str] | None = None) -> None:
             "aggregation": aggregation,
             "min": round(float(valid.min()), 4), "max": round(float(valid.max()), 4),
             "mean": round(float(valid.mean()), 4), "validFraction": round(float(valid.size / values.size), 4),
-            "source": {"agency": "NASA GSFC PGDA (LRO / LOLA)", "url": url, "product": spec["product"], **_head(url)},
+            "source": {"agency": spec.get("agency", "NASA GSFC PGDA (LRO / LOLA)"), "url": url, "product": spec["product"],
+                       **_head(url)},
             "builtUtc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }
         index_path.write_text(json.dumps(index, indent=1), encoding="utf-8")

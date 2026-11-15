@@ -1,6 +1,6 @@
 /**
- * Block Moon's panels, laid out like the navigator's: the place search and the date sit in the shared top bars
- * (NavigatorPage), the sky now on the right, the days along the bottom, and the mission log over the map on the
+ * Educational mode's panels, laid out like the navigator's: the place search and the date sit in the shared top bars
+ * (NavigatorPage), the sky now on the right, the days along the bottom, and the missions over the map on the
  * left. Every answer comes from the same engine and data as the planner's panels; "Why? And the real numbers"
  * opens them.
  */
@@ -8,7 +8,7 @@ import { useId, useState } from 'react'
 import { useNow } from '../panels/useNow'
 import { useApp } from '../state/store'
 import { MS_PER_DAY, MS_PER_HOUR, hasComms, isSunlit } from '../time/engine'
-import { SPEEDS, formatUtc } from '../time/clock'
+import { SPEEDS } from '../time/clock'
 import { useParams } from '../time/hooks'
 import { IconBack, IconChevron, IconPause, IconPlay, IconSpeed } from '../ui/icons'
 import { StoryCard } from './StoryCard'
@@ -62,7 +62,7 @@ function Sky() {
         {info && (
           <p className="blk-place">
             <span className="blk-place-name">{info.name}</span>
-            {view && <span className="blk-time">{formatUtc(view.tMs)}</span>}
+            {view && <span className="blk-time">{fmtMoment(view.tMs)}</span>}
           </p>
         )}
         {outOfRange && (
@@ -92,6 +92,11 @@ function Sky() {
                 )}
               </div>
             </div>
+            {view.eclipse > 0 && (
+              <p className="blk-eclipse" role="status">
+                {view.eclipse === 2 ? 'Eclipse! The Earth is hiding the whole Sun.' : 'Eclipse! The Earth is hiding part of the Sun.'}
+              </p>
+            )}
             {!terrain && (
               <p className="blk-note">Nobody has measured the skyline here, so these answers treat the Moon as smooth. Real hills could change them.</p>
             )}
@@ -121,6 +126,10 @@ function Sky() {
     </section>
   )
 }
+
+/** The date and time as a child reads them: "17 Oct 2026, 17:15" (Earth's clock, no time-zone letters). */
+const fmtMoment = (ms: number) =>
+  new Date(ms).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' })
 
 const fmtDay = (ms: number) => new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' })
 
@@ -152,7 +161,7 @@ function NextDays() {
           <h2 id={`${id}-h`} className="blk-days-title">
             Day by day
             <span className="blk-days-sum">
-              Sun on {sunDays} of {days} days · Earth on {earthDays}
+              Some Sun on {sunDays} of {days} days · Earth seen on {earthDays}
             </span>
           </h2>
           <div className="tl-icons" role="group" aria-label="Playback">
@@ -180,7 +189,7 @@ function NextDays() {
               onClick={() => setSpeed(SPEEDS[(speedAt + 1) % SPEEDS.length].id)}
             >
               <IconSpeed size={18} />
-              <span>{speed}/s</span>
+              <span>{SPEEDS[speedAt].label.replace('/ s', 'a second')}</span>
             </button>
           </div>
         </div>

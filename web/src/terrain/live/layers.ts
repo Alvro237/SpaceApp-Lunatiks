@@ -18,8 +18,12 @@
  * - Mean sunlight and mean Earth visibility, 18.6-year averages: AVGVISIB_65S_240M_201608(_EARTH).TIF, int16,
  *   scale 4e-5, 6420 px square of 240 m (south of about 65° S), 256 px tiles, no overviews.
  * - Permanent shadow: LPSR_65S_240M_201608.TIF, int16, scale 2.5e-5, offset 0.5, same grid.
- * - Slope: LDSM_80S_80MPP_ADJ.TIF (80 m, within 304 km of the pole) and LDSM_60S_240MPP_ADJ.TIF (240 m), float32
- *   degrees, COGs with overviews (PGDA product 90).
+ * - Slope: LDSM_83S_10MPP_ADJ.TIF (10 m, within 216 km of the pole; the grid of LDEM_83S_10MPP_ADJ, checked
+ *   2026-11-14), LDSM_80S_80MPP_ADJ.TIF (80 m, within 304 km) and LDSM_60S_240MPP_ADJ.TIF (240 m); float32 degrees,
+ *   no scale or offset, COGs of 512 x 512 blocks with overviews (PGDA product 90). 120-30 m cells (z6-z8) read the
+ *   80 m slope, 15 and 7.5 m cells (z9-z10) the 10 m slope. The 20 m slope (LDSM_80S_20MPP_ADJ) is not used: a z8
+ *   tile from it reads about 2.5 MB of PGDA blocks (measured 2026-11-14, as the 20 m DEM), four times a 10 m tile
+ *   of the view, for one level that the 10 m slope replaces as soon as the zoom goes on.
  */
 import type { TileKey, Tileset } from '../tileset'
 import { insideSource } from './config'
@@ -52,7 +56,8 @@ export const LIVE_LAYERS: Record<string, LiveLayerSource[]> = {
   earth_visibility: [{ file: 'MoonIllumination/AVGVISIB_65S_240M_201608_EARTH.TIF', ...ILLUMINATION }],
   permanent_shadow: [{ file: 'MoonIllumination/LPSR_65S_240M_201608.TIF', ...ILLUMINATION, scale: 2.5e-5, offset: 0.5 }],
   slope: [
-    { file: 'LOLA_20mpp/LDSM_80S_80MPP_ADJ.TIF', pixelM: 80, halfExtentM: 304_000, scale: 1, offset: 0, minZ: 6, maxZ: 6 },
+    { file: 'LOLA_20mpp/LDSM_83S_10MPP_ADJ.TIF', pixelM: 10, halfExtentM: 216_400, scale: 1, offset: 0, minZ: 9, maxZ: 10 },
+    { file: 'LOLA_20mpp/LDSM_80S_80MPP_ADJ.TIF', pixelM: 80, halfExtentM: 304_000, scale: 1, offset: 0, minZ: 6, maxZ: 8 },
     { file: 'LOLA_20mpp/LDSM_60S_240MPP_ADJ.TIF', pixelM: 240, halfExtentM: 931_200, scale: 1, offset: 0, maxZ: 5 },
   ],
 }

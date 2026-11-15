@@ -18,15 +18,17 @@ export function DatePill() {
   const startMs = useApp((s) => s.startMs)
   const durationH = useApp((s) => s.durationH)
   const days = Math.round(durationH / 24)
+  const shown = toInput(startMs).replace('T', ' ')
   return (
     <Popover
       label="Date and duration"
+      buttonLabel={`Date and duration: ${shown} UTC · ${days} d`}
       buttonClass="tool-btn pill-btn"
       button={
         <>
           <IconCalendar size={17} />
           <span className="pill-text">
-            {toInput(startMs).replace('T', ' ')} <span className="pill-muted">UTC · {days} d</span>
+            {shown} <span className="pill-muted">UTC · {days} d</span>
           </span>
         </>
       }
