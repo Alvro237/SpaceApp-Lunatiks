@@ -9,8 +9,11 @@
  * however long a step is. The view's projection is the linear one of project.ts (one CSS pixel is the same
  * number of degrees across and up).
  *
- * The skyline stays the site's horizon mask (the one the metrics use): nothing is drawn above it, and where the
- * rings end below it (beyond 164 km with the 5 m DEM) the band up to it takes the last ground's shade.
+ * The ground is drawn up to its own silhouette, so a ridge or a crater wall rising above the site's horizon mask
+ * shows as the wall it is, with its photo and its light (the mask comes from a coarser grid away from the poles:
+ * 3.8 km cells against the rings' 60-118 m, and misses near slopes). The mask, the skyline the metrics use, is drawn
+ * over it as a thin line (drawRelief.ts). Where the mask stands above the rings' ground instead, the band up to it
+ * takes the shade of the last ground the ray met.
  *
  * Shading: radiance of a lunar-Lambert surface (McEwen 1991), R = (1 - L) mu0 + 2 L mu0 / (mu0 + mu), with mu0 the
  * cosine of the incidence times the visible share of the solar disc (light.ts) and mu the cosine of the emission
@@ -202,7 +205,7 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
     let pT = 0
     let pUp = 0
     let pR = NaN
-    while (top > maskTop) {
+    while (top > 0) {
       // finest ring under the ray (rings only get coarser outwards)
       const e = t * sa
       const n = t * ca
@@ -236,7 +239,7 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
           pR = R
           pT = t
         } else if (pR !== pR) pR = radiance(pK, pU, pV, pT, pUp, sa, ca)
-        const r0 = Math.max(maskTop, Math.ceil(y))
+        const r0 = Math.max(0, Math.ceil(y))
         const span = pY - y
         for (let r = Math.min(top, h) - 1; r >= r0; r--) {
           const a = span > 1e-9 ? Math.min(1, Math.max(0, (r - y) / span)) : 0 // 0 at this step, 1 at the previous
@@ -244,7 +247,7 @@ export function renderRelief(out: ImageData, scale: number, c: ColumnCamera, hor
         }
         // antialiased top edge: the row the ground only partly covers
         const edge = r0 - 1
-        if (edge >= maskTop && edge < top && y < r0) writePixel(px, 4 * (edge * w + i), R, Math.round(255 * Math.min(1, r0 - y)))
+        if (edge >= 0 && edge < top && y < r0) writePixel(px, 4 * (edge * w + i), R, Math.round(255 * Math.min(1, r0 - y)))
         if (r0 < top) top = r0
       }
       pY = y

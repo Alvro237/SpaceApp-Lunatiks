@@ -120,7 +120,7 @@ export interface Ring extends RingSpec {
   fineShare?: number
   fineOffsetM?: number
   /**
-   * RING_N x RING_N albedo of the ground from this place's LROC WAC mosaic (photoAlbedo), 1 for the mosaic's mean
+   * RING_N x RING_N albedo of the ground from this place's LROC WAC mosaic (photoAlbedo), 1 for the ring's mean
    * brightness; absent where the photo could not be read (the ground is then plain regolith).
    */
   albedo?: Float32Array
@@ -246,22 +246,36 @@ export function photoUrl(lat: number, lon: number, cellM: number): string {
 }
 
 /**
- * Mean brightness of the WAC mosaic, as a fraction of the byte range: 0.308 for the global mosaic (globe/shaders.ts),
- * 0.331 for the south polar one (terrain/live/photo.ts); a byte at this level is albedo 1, the plain regolith.
+ * The photo as albedo, normalised ring by ring: each sample's brightness over the ring's mean brightness (the
+ * mosaic's photographed shadows, bytes under SHADOW_BYTE, left out of the mean), its departures from 1 stretched by
+ * PHOTO_CONTRAST. Normalising per ring keeps neighbouring rings at the same mean level, so no seam shows where
+ * one ring hands over to the next or where a ring has no photo (albedo 1); the stretch makes the mosaic's detail
+ * read on low-contrast ground (maria and plains photographed under a high Sun: a standard deviation of 0.15 of the
+ * mean at 26.6 N 150.9 E). The view says so on screen.
  */
-export const PHOTO_MEAN = 0.31
+export const PHOTO_CONTRAST = 1.8
+export const SHADOW_BYTE = 12
 /**
- * Albedo range kept from the photo. The mosaic holds the shadows it was photographed with (near the poles most of
- * the ground: median 0.016 within 60 km of the pole); a floor keeps that ground shaped by the light of the chosen
- * instant instead of black, and the cap keeps sunlit crater walls from blowing out.
+ * Albedo range kept. The mosaic holds the shadows it was photographed with (near the poles most of the ground:
+ * median 0.016 of the byte range within 60 km of the pole); the floor leaves that ground shaped by the light of the
+ * chosen instant instead of black, and the cap keeps sunlit crater walls from blowing out.
  */
 export const ALBEDO_MIN = 0.3
 export const ALBEDO_MAX = 2.2
 
-/** Grey bytes (one per sample, row 0 north) to albedo: byte / 255 / PHOTO_MEAN, clamped. */
-export function photoAlbedo(grey: ArrayLike<number>): Float32Array {
+/** Grey bytes (one per sample, row 0 north) to albedo: 1 + PHOTO_CONTRAST (byte / mean - 1), clamped; null if all shadow. */
+export function photoAlbedo(grey: ArrayLike<number>): Float32Array | null {
+  let sum = 0
+  let n = 0
+  for (let i = 0; i < grey.length; i++)
+    if (grey[i] >= SHADOW_BYTE) {
+      sum += grey[i]
+      n++
+    }
+  if (n < grey.length * 0.05) return null
+  const mean = sum / n
   const out = new Float32Array(grey.length)
-  for (let i = 0; i < grey.length; i++) out[i] = Math.min(ALBEDO_MAX, Math.max(ALBEDO_MIN, grey[i] / 255 / PHOTO_MEAN))
+  for (let i = 0; i < grey.length; i++) out[i] = Math.min(ALBEDO_MAX, Math.max(ALBEDO_MIN, 1 + PHOTO_CONTRAST * (grey[i] / mean - 1)))
   return out
 }
 
