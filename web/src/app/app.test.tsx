@@ -326,6 +326,21 @@ describe('navigator', () => {
     expect(screen.queryByRole('heading', { name: /Comparing/ })).toBeNull()
   })
 
+  it('mission mode: an example mission fills the region, the window and four filters in one click', async () => {
+    const user = userEvent.setup()
+    useApp.setState({ mode: 'mission' })
+    useAreas.setState({ center: null, enabled: {}, values: {}, result: null, raster: null })
+    const { container } = renderAt('/')
+    await user.click(await screen.findByRole('button', { name: 'Mission filters' }))
+    await user.click(screen.getByRole('button', { name: /Load example mission/ }))
+    expect(screen.getByText(/Example mission loaded/)).toHaveTextContent(/not requirements/)
+    expect(useAreas.getState().center).toEqual({ lat: -89.45, lon: 137.3 })
+    expect(useApp.getState().durationH).toBe(168)
+    expect(screen.getByRole('switch', { name: /Maximum slope/ })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('textbox', { name: /Maximum slope.*Steepest slope/ })).toHaveValue('10')
+    await noAxeViolations(container)
+  })
+
   it('keeps working from static data when the API is down', async () => {
     vi.stubGlobal('fetch', fakeFetch(false))
     const user = userEvent.setup()
