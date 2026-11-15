@@ -14,14 +14,19 @@ function pendingFetch() {
   return { calls, fetchMock }
 }
 
-const AREA_ANSWER = {
+const ANSWER = {
   grid: { projection: 'south polar stereographic', x_left_m: 0, y_top_m: 1000, cell_m: 960, nx: 1, ny: 1 },
   codes_b64: btoa(String.fromCharCode(3)),
   score_b64: btoa(String.fromCharCode(200)),
-  counts: { outside: 0, failed_static: 0, failed_window: 0, viable: 1, unknown: 0 },
+  limiting_b64: btoa(String.fromCharCode(0)),
+  layers: [{ category: 'power', label: 'Power and sunlight', measure: 'share sunlit', weight: 1, utility_b64: btoa(String.fromCharCode(196)) }],
+  weights: { power: 1 },
+  counts: { outside: 0, failed_static: 0, failed_window: 0, viable: 1, unknown: 0, failed_bound: 0 },
   funnel: [],
-  areas: [],
+  bound: null,
   window: { samples: 60, finest_tile_km: 1, coarsest_tile_km: 1, horizon_az_step_deg: 0.5, horizon_radius_km: 150 },
+  sites: [],
+  sites_dropped: 0,
   seconds: 0.4,
   assumptions: [],
 }
@@ -40,6 +45,12 @@ beforeEach(() => {
     plannerSelects: {},
     plannerValues: { battery_autonomy: '10' },
     result: null,
+    suit: null,
+    suitRequest: null,
+    suitLayers: [],
+    priority: [],
+    weights: {},
+    rerankSeq: 0,
     raster: null,
     isPreview: false,
   })
@@ -66,7 +77,69 @@ describe('usePlannerSearch', () => {
     })
     expect(calls).toHaveLength(1)
     expect(calls[0].body.max_window_samples).toBe(PREVIEW_SAMPLES)
-    expect((calls[0].body.filters as Record<string, unknown>).max_dark_h).toBe(48)
+    expect(calls[0].body.categories).toEqual(['power'])
+    expect(calls[0].body.criteria).toEqual([{ id: 'battery_autonomy_h', limit: 48 }])
+    expect(calls[0].body.priority).toEqual(['power'])
+    expect(calls[0].body.comms_min_fraction).toBe(0.5)
+    expect(calls[0].body.top_k).toBe(10)
+    expect(calls[0].body.region).toEqual({ center_lat: -84.79, center_lon: 29.2, radius_km: 20 })
+  })
+
+  it('posts to /api/v1/suitability/search and stores the answer, the request with it', async () => {
+    const { calls, fetchMock } = pendingFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    renderHook(() => usePlannerSearch())
+    act(() => {
+      vi.advanceTimersByTime(500)
+    })
+    expect(String(fetchMock.mock.calls[0][0])).toMatch(/\/api\/v1\/suitability\/search$/)
+    calls[0].resolve(new Response(JSON.stringify(ANSWER), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    await act(async () => {
+      await Promise.resolve()
+    })
+    await vi.waitFor(() => expect(useAreas.getState().suit).not.toBeNull())
+    expect(useAreas.getState().isPreview).toBe(true)
+    expect(useAreas.getState().raster?.score[0]).toBe(Math.floor((196 / 250) * 255 + 0.5))
+    expect(useAreas.getState().suitRequest?.max_window_samples).toBe(PREVIEW_SAMPLES)
+  })
+
+  it('reordering the priorities sends no request; the next request carries the order', async () => {
+    const { calls, fetchMock } = pendingFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    useAreas.setState({ categoriesOn: { power: true, earth: true } })
+    renderHook(() => usePlannerSearch())
+    act(() => {
+      vi.advanceTimersByTime(500)
+    })
+    expect(calls).toHaveLength(1)
+    expect(calls[0].body.priority).toEqual(['power', 'earth'])
+    act(() => {
+      useAreas.getState().setPriority(['earth', 'power'])
+    })
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+    expect(calls).toHaveLength(1)
+    act(() => {
+      useAreas.getState().setPlannerValue('battery_autonomy', '24')
+    })
+    act(() => {
+      vi.advanceTimersByTime(500)
+    })
+    expect(calls).toHaveLength(2)
+    expect(calls[1].body.priority).toEqual(['earth', 'power'])
+  })
+
+  it('an invalid input sends nothing and is reported', () => {
+    const { calls, fetchMock } = pendingFetch()
+    vi.stubGlobal('fetch', fetchMock)
+    useAreas.setState({ plannerValues: { battery_autonomy: 'abc' } })
+    const { result } = renderHook(() => usePlannerSearch())
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+    expect(calls).toHaveLength(0)
+    expect(result.current.error).toMatch(/Battery autonomy: must be a number/)
   })
 
   it('a newer change aborts the request in flight', async () => {
@@ -95,7 +168,7 @@ describe('usePlannerSearch', () => {
     act(() => {
       vi.advanceTimersByTime(500)
     })
-    calls[0].resolve(new Response(JSON.stringify(AREA_ANSWER), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+    calls[0].resolve(new Response(JSON.stringify(ANSWER), { status: 200, headers: { 'Content-Type': 'application/json' } }))
     await act(async () => {
       result.current.simulate()
     })

@@ -8,11 +8,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from . import config
 from .db.store import get_store
 from .routers import (areas, earth, horizon, link, meta, points, power, radiation, sites, state, sun, sweep,
-                      thermal, validation, verdict)
+                      suitability, thermal, validation, verdict)
 
 
 @asynccontextmanager
@@ -32,6 +33,7 @@ def create_app() -> FastAPI:
     )
     app.add_middleware(CORSMiddleware, allow_origins=config.CORS_ORIGINS, allow_methods=["GET", "POST"],
                        allow_headers=["*"])
+    app.add_middleware(GZipMiddleware, minimum_size=1000)   # the suitability utility layers compress well
     app.include_router(meta.health_router)
     # One router per endpoint group; register new ones here (see CLAUDE.md, "Adding an endpoint").
     app.include_router(sites.router, prefix=config.API_PREFIX)
@@ -49,6 +51,7 @@ def create_app() -> FastAPI:
     app.include_router(validation.router, prefix=config.API_PREFIX)
     app.include_router(areas.router, prefix=config.API_PREFIX)
     app.include_router(link.router, prefix=config.API_PREFIX)
+    app.include_router(suitability.router, prefix=config.API_PREFIX)
     return app
 
 

@@ -29,7 +29,11 @@
 
 .region-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: stretch; }
 .region-row > * { min-width: 0; }
-.range-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.range-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+/* the two ends of a range (Sun height at landing): each one shrinks with the panel, labelled above */
+.range-end { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.range-end .unit-input { min-width: 0; }
+.range-end-label { font-size: 0.75rem; color: var(--muted); }
 
 .disclosure {
   display: flex;
@@ -73,3 +77,21 @@
    (their bottoms follow --inset-bottom, measured from the timeline). */
 .navigator.is-mission .float-bottom { left: 10px; right: 10px; }
 .navigator.is-mission .float-right { max-height: calc(100vh - var(--inset-top) - var(--inset-bottom) - 22px); }
+
+/* Stage B: detailed battery model fields, priorities, the right panel's counts and per-site category bars. */
+.battery-params { padding: 0 10px 10px; display: grid; gap: 6px; }
+.battery-param { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 9rem); gap: 8px; align-items: center; }
+.battery-param .ios-label { font-size: 0.8rem; }
+.priority-list { list-style: none; padding: 0; margin: 0; }
+.priority-list .ios-row { gap: 6px; }
+.priority-list .ios-label { flex: 1; }
+.cell-counts { width: 100%; font-size: 0.8rem; margin: 4px 0 8px; border-collapse: collapse; }
+.cell-counts th { text-align: left; font-weight: 500; padding: 2px 8px 2px 0; }
+.cell-counts td { text-align: right; padding: 2px 0; white-space: nowrap; }
+.score-weights { margin: 0 0 8px; padding-left: 18px; }
+.site-cats { list-style: none; margin: 4px 0; padding: 0; display: grid; gap: 2px; font-size: 0.75rem; }
+.site-cats li { display: grid; grid-template-columns: minmax(0, 1fr) 60px 3.6rem; gap: 6px; align-items: center; }
+.site-cat-value { text-align: right; }
+.site-bar { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+.site-bar > span { display: block; height: 100%; background: var(--accent); }
+.sw-bound { background: repeating-linear-gradient(-45deg, #e8a13e 0 2px, transparent 2px 6px), repeating-linear-gradient(45deg, #e8a13e 0 2px, #6b5a44 2px 6px); }

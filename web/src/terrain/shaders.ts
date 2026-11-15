@@ -78,7 +78,7 @@ uniform sampler2D uLut;      // 256 x 1 colour map
 uniform vec2 uElevRange;
 uniform vec3 uHighlight;     // x, y (m) and radius (m) of the selected place ring
 uniform float uDiscR;        // the map is the disc of this projected radius (m) around the pole
-uniform sampler2D uArea;     // mission mode: r = code (0 outside, 1 fails static, 2 fails window, 3 viable, 4 unknown), g = score
+uniform sampler2D uArea;     // mission mode: r = code (0 outside, 1 fails static, 2 fails window, 3 viable, 4 unknown, 5 ruled out by the bound), g = score
 uniform vec4 uAreaXf;        // x left, y top, width, height of the search raster (m)
 uniform float uHasArea;
 uniform vec3 uRegion;        // x, y (m) and radius (m) of the search region ring
@@ -224,6 +224,10 @@ void main() {
         if (edge) colour = vec3(0.93, 1.0, 0.96);
       } else if (code == 2) {
         colour = mix(colour * 0.8, vec3(0.93, 0.62, 0.22), 0.14 + 0.4 * hatch);
+      } else if (code == 5) {
+        // ruled out by the ephemeris bound: the code-2 colour, cross-hatched (both diagonals)
+        float cross = max(hatch, step(mod(gl_FragCoord.x - gl_FragCoord.y, 7.0), 1.5));
+        colour = mix(colour * 0.8, vec3(0.93, 0.62, 0.22), 0.14 + 0.4 * cross);
       } else if (code == 4) {
         colour = mix(colour * 0.8, vec3(0.72, 0.74, 0.92), 0.15 + 0.55 * dots);
       } else {

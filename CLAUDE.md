@@ -163,6 +163,7 @@ work: merged, tested, called on a running server. Not before.
 | Endpoint | `POST /api/v1/areas/search` | `routers/areas.py`, `area_search.py`, `logic/areas.py` | SW-1 | Mission mode: paints the cells of a region that pass the filters (map filters, landing radius, window filters on quadtree samples with traced horizons); connected areas |
 | Endpoint | `POST /api/v1/link`, `GET /api/v1/link/stations` | `routers/link.py`, `logic/link.py`, `logic/stations.py`, `db/stations.py` | AERO-2 | Radio link level 1: the site sees the Earth AND a selected DSN/ESA/JAXA or custom antenna sees the Moon |
 | Hard filter | `comms_hours`, `max_blackout` | `logic/constraints/comms.py` | AERO-2 | Earth-contact time and longest blackout over the window (site side, line of sight) |
+| Endpoint | `POST /api/v1/suitability/search`, `GET /api/v1/suitability/criteria`, `/features` | `routers/suitability.py`, `suitability_search.py`, `logic/suitability.py`, `logic/bounds.py` | SW-2 | Ordered funnel with ephemeris bound; every input a hard limit; score per category by priority (ROC); top sites with pros/cons |
 
 Also in place and verified: the engine in `app/logic` (ephemeris, geometry, horizon, disc-visible fraction,
 series, metrics, time ranges, next sunset/Earthset; reproduces JPL Horizons to better than 0.01 degrees) and the
