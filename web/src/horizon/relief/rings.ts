@@ -1,42 +1,78 @@
 /**
  * The real ground around a place for the horizon view: nested LOLA height grids ("rings") centred on the observer,
- * each four times coarser and four times wider than the one inside it, so the detail follows the eye. With the
- * 5 m DEM the four rings are 5, 20, 80 and 320 m cells over 2.56, 10.2, 41 and 164 km squares (512 x 512 samples
- * each); with the 30 m DEM they start at 30 m (15 km), with the 100 m DEM at 100 m (51 km).
+ * each four times coarser and four times wider than the one inside it, so the detail follows the eye. Near the
+ * south or north pole the four rings are 5, 20, 80 and 320 m cells over 2.56, 10.2, 41 and 164 km squares
+ * (512 x 512 samples each); farther out they start at 30 m (to 75°) or 100 m (to 45°); elsewhere on the Moon at
+ * 60 m, half the 118 m cell of the global LOLA DEM. No ring is added once the previous one reaches MAX_REACH_M
+ * (the skyline masks are traced to 250 km).
  *
- * Source: NASA Moon Trek's ArcGIS ImageServer (JPL), the LOLA south-polar DEMs v04 the map's live levels read
- * (terrain/live/config.ts: 5 m to 87.5 S, 30 m to 75 S, 100 m to 45 S). One exportImage request per ring returns a
- * float32 GeoTIFF whose pixel centres are the ring's samples, in the LOLA south polar stereographic projection,
- * resampled bilinearly on the server; one extra row is asked for and dropped, as for the map tiles (Moon Trek
- * answers the last row with zeros otherwise). Measured 2026-11-15 at 89.5 S: 0.5-1.2 MB and 1.5-2 s per ring.
+ * Source: NASA Moon Trek's ArcGIS ImageServer (JPL): the LOLA polar DEMs v04 (5 m to 87.5°, 30 m to 75°, 100 m to
+ * 45°, south and north; the same files as the map's live levels, terrain/live/config.ts) and the LOLA global DEM
+ * 256 px/deg v06 (the globe's, globe/detail/grid.ts). One exportImage request per ring, asked for in a
+ * stereographic projection centred on the place itself (bboxSR and imageSR given as WKT on the IAU 2000 Moon
+ * sphere, 1737.4 km): the server reprojects the DEM (bilinearly), so every ring, anywhere on the Moon, is a square
+ * of true metres around the observer. One extra row is asked for and dropped (Moon Trek answers the last row with
+ * zeros). Measured 2026-11-15: 0.5-1.2 MB and 1.5-2 s per ring (89.5 S with the 5 m DEM; Apollo 11 with the global
+ * DEM: -1927 m at the site, the level of the mare).
  *
- * Geometry: the rings are laid in the stereographic plane, and the view works in the observer's local east-north-up
- * frame (metres). Over a ring the projection is a similarity to within its scale-factor change (k = 1.0019 at
- * 85 S; it changes by less than 1e-3 across the 164 km ring), so (x, y) = (x0, y0) + k0 (e E + n N), with E and N the
- * east and north unit vectors of the plane at the observer. The ground's curvature is kept exactly to second order:
- * a point at horizontal distance d and height h lies h - d^2 / (2 R) above the observer's level plane.
+ * Geometry: in the local stereographic plane the scale is 1 at the observer and 1 + (d / 2R)^2 at distance d
+ * (1.002 at the 164 km edge), north is +y and east is +x, so the plane is the observer's east-north frame. The
+ * ground's curvature is kept exactly to second order: a point at horizontal distance d and height h lies
+ * h - d^2 / (2 R) above the observer's level plane (light.ts, render.ts).
  */
 import { fromArrayBuffer } from 'geotiff'
-import { TREK_100M, TREK_30M, TREK_5M, TREK_IMAGE_SERVER, TREK_EXTRA_ROWS, type LiveSource } from '../../terrain/live/config'
+import { TREK_EXTRA_ROWS, TREK_IMAGE_SERVER } from '../../terrain/live/config'
 import { R_M, polarXY, scaleFactor } from '../../terrain/tileset'
 
 /** Samples across a ring. */
 export const RING_N = 512
 /** Each ring's cell is this many times the one inside it. */
 export const RING_RATIO = 4
-export const RING_COUNT = 4
-/** Sources tried for a ring, finest first. */
-export const RELIEF_SOURCES: LiveSource[] = [TREK_5M, TREK_30M, TREK_100M]
+export const RING_COUNT = 5
+/** No ring is added once the previous one reaches this far from the observer, metres. */
+export const MAX_REACH_M = 250_000
+
+export interface ReliefSource {
+  /** Moon Trek ImageServer service name. */
+  file: string
+  /** Cell of the first ring read from it, metres. */
+  pixelM: number
+  /** The DEM's own cell, metres (what the view reports). */
+  demM: number
+  /** Polar DEMs: the pole and the half-width of their square in the polar stereographic plane, metres. */
+  pole: 'S' | 'N' | null
+  halfExtentM: number
+}
+
+const polar = (pole: 'S' | 'N', res: string, pixelM: number, halfExtentM: number): ReliefSource => ({
+  file: `LRO_LOLA_DEM_${pole}Pole${res}_v04`,
+  pixelM,
+  demM: pixelM,
+  pole,
+  halfExtentM,
+})
+
+/** The polar DEMs (terrain/live/config.ts; the same extents in both hemispheres) and the global one, finest first. */
+export const RELIEF_SOURCES: ReliefSource[] = [
+  polar('S', '875_5mp', 5, 75_840),
+  polar('N', '875_5mp', 5, 75_840),
+  polar('S', '75_30mp', 30, 457_440),
+  polar('N', '75_30mp', 30, 457_440),
+  polar('S', '45_100mp', 100, 1_440_000),
+  polar('N', '45_100mp', 100, 1_440_000),
+  // the global DEM's cell is 118 m; its first ring is laid at half of that, bilinear between the DEM's samples
+  { file: 'LRO_LOLA_DEM_Global_256ppd_v06', pixelM: 60, demM: 118, pole: null, halfExtentM: Infinity },
+]
 
 export interface RingSpec {
-  /** Cell size in the stereographic plane, metres (ground cell = cellM / k0). */
+  /** Cell size, metres (local stereographic plane: true metres at the observer). */
   cellM: number
-  source: LiveSource
+  source: ReliefSource
   url: string
 }
 
 export interface Ring extends RingSpec {
-  /** RING_N x RING_N heights above the 1737.4 km sphere, metres; row 0 is the top (largest y) of the plane. */
+  /** RING_N x RING_N heights above the 1737.4 km sphere, metres; row 0 is the north edge. */
   heights: Float32Array
   min: number
   max: number
@@ -53,14 +89,9 @@ export interface PlaneFrame {
   N: [number, number]
 }
 
-const DEG = Math.PI / 180
-
+/** The local stereographic plane of a place: centred on it, scale 1 there, east +x, north +y. */
 export function planeFrame(lat: number, lon: number): PlaneFrame {
-  const [x0, y0] = polarXY(lat, lon)
-  const s = Math.sin(lon * DEG)
-  const c = Math.cos(lon * DEG)
-  // polarXY: (x, y) = r (sin lon, cos lon), r grows northwards; d/dlon is r (cos lon, -sin lon), eastwards
-  return { lat, lon, x0, y0, k0: scaleFactor(lat), N: [s, c], E: [c, -s] }
+  return { lat, lon, x0: 0, y0: 0, k0: 1, E: [1, 0], N: [0, 1] }
 }
 
 /** Plane coordinates of a local (east, north) offset in metres. */
@@ -75,41 +106,57 @@ export function planeToEnu(f: PlaneFrame, x: number, y: number): [number, number
   return [(dx * f.E[0] + dy * f.E[1]) / f.k0, (dx * f.N[0] + dy * f.N[1]) / f.k0]
 }
 
-/** Half-width of a ring in the plane, metres (the outer edge of its outermost samples' cells). */
+/** Half-width of a ring, metres (the outer edge of its outermost samples' cells). */
 export const ringHalf = (cellM: number) => (RING_N / 2) * cellM
 
-/** Does the square of half-width `half` centred on (x, y) lie inside the source? */
-const inside = (s: LiveSource, x: number, y: number, half: number) => Math.max(Math.abs(x), Math.abs(y)) + half <= s.halfExtentM
+/** Does a square of half-width `half` (ground metres, any orientation) around the place lie inside the source? */
+function covers(s: ReliefSource, lat: number, lon: number, half: number): boolean {
+  if (s.pole === null) return true
+  if ((s.pole === 'S') !== lat < 0) return false
+  // the polar DEMs are squares in their polar stereographic plane; north mirrors south
+  const [x, y] = polarXY(-Math.abs(lat), lon)
+  return Math.max(Math.abs(x), Math.abs(y)) + half * Math.SQRT2 * scaleFactor(-Math.abs(lat)) <= s.halfExtentM
+}
 
 /**
- * The rings for a place, or null where no south-polar DEM covers it (north of 45 S). The first ring's cell is the
- * finest source's pixel that covers it; each ring reads the finest source that covers its whole square.
+ * The rings for a place, or null for invalid coordinates. The first ring's cell is that of the finest source
+ * covering it; each ring reads the finest source covering its whole square (the global DEM covers everything).
  */
 export function ringSpecs(lat: number, lon: number): RingSpec[] | null {
-  if (!(lat < 0)) return null
-  const [x0, y0] = polarXY(lat, lon)
-  const base = RELIEF_SOURCES.find((s) => inside(s, x0, y0, ringHalf(s.pixelM)))
-  if (!base) return null
+  if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90) return null
+  const base = RELIEF_SOURCES.find((s) => covers(s, lat, lon, ringHalf(s.pixelM)))!
   const specs: RingSpec[] = []
   for (let j = 0; j < RING_COUNT; j++) {
     const cellM = base.pixelM * RING_RATIO ** j
-    const source = RELIEF_SOURCES.find((s) => inside(s, x0, y0, ringHalf(cellM)))
-    if (!source) break
-    specs.push({ cellM, source, url: ringUrl(source, x0, y0, cellM) })
+    if (j > 0 && ringHalf(cellM / RING_RATIO) >= MAX_REACH_M) break
+    const source = RELIEF_SOURCES.find((s) => covers(s, lat, lon, ringHalf(cellM)))!
+    specs.push({ cellM, source, url: ringUrl(source, lat, lon, cellM) })
   }
   return specs
 }
 
-/**
- * exportImage URL of a ring: the box is the ring's cells (sample centres on the grid), widened downwards by
- * TREK_EXTRA_ROWS cells. Coordinates are rounded to the millimetre so the same place always asks the same URL.
- */
-export function ringUrl(source: LiveSource, x0: number, y0: number, cellM: number): string {
-  const h = ringHalf(cellM)
-  const r = (v: number) => Math.round(v * 1000) / 1000
-  const bbox = [r(x0 - h), r(y0 - h - TREK_EXTRA_ROWS * cellM), r(x0 + h), r(y0 + h)].join(',')
+/** WKT of the stereographic projection centred on a place, on the IAU 2000 Moon sphere, as ArcGIS reads it. */
+export function localStereoWkt(lat: number, lon: number): string {
+  const r = (v: number) => Math.round(v * 1e6) / 1e6
   return (
-    `${TREK_IMAGE_SERVER}${source.file}/ImageServer/exportImage?bbox=${bbox}&size=${RING_N},${RING_N + TREK_EXTRA_ROWS}` +
+    'PROJCS["Moon_Local_Stereographic",GEOGCS["GCS_Moon_2000",DATUM["D_Moon_2000",SPHEROID["Moon_2000_IAU_IAG",1737400.0,0.0]],' +
+    'PRIMEM["Reference_Meridian",0.0],UNIT["Degree",0.0174532925199433]],PROJECTION["Stereographic"],' +
+    `PARAMETER["False_Easting",0.0],PARAMETER["False_Northing",0.0],PARAMETER["Central_Meridian",${r(lon)}],` +
+    `PARAMETER["Scale_Factor",1.0],PARAMETER["Latitude_Of_Origin",${r(lat)}],UNIT["Meter",1.0]]`
+  )
+}
+
+/**
+ * exportImage URL of a ring: the box is the ring's cells (sample centres on the grid) in the place's own
+ * stereographic plane, widened downwards by TREK_EXTRA_ROWS cells.
+ */
+export function ringUrl(source: ReliefSource, lat: number, lon: number, cellM: number): string {
+  const h = ringHalf(cellM)
+  const sr = encodeURIComponent(JSON.stringify({ wkt: localStereoWkt(lat, lon) }))
+  const bbox = [-h, -h - TREK_EXTRA_ROWS * cellM, h, h].join(',')
+  return (
+    `${TREK_IMAGE_SERVER}${source.file}/ImageServer/exportImage?bbox=${bbox}&bboxSR=${sr}&imageSR=${sr}` +
+    `&size=${RING_N},${RING_N + TREK_EXTRA_ROWS}` +
     '&format=tiff&pixelType=F32&compression=LZ77&interpolation=RSP_BilinearInterpolation&f=image'
   )
 }
@@ -164,21 +211,6 @@ export function loadRing(spec: RingSpec, fetchFn: typeof fetch = (u, i) => fetch
   cache.set(spec.url, p)
   p.catch(() => cache.delete(spec.url))
   return p
-}
-
-/** Bilinear height of a ring at a plane point, or NaN outside its samples. */
-export function ringHeight(ring: Pick<Ring, 'heights' | 'cellM'>, f: PlaneFrame, x: number, y: number): number {
-  const n = RING_N
-  const u = (x - f.x0) / ring.cellM + (n - 1) / 2
-  const v = (f.y0 - y) / ring.cellM + (n - 1) / 2
-  if (!(u >= 0 && v >= 0 && u <= n - 1 && v <= n - 1)) return NaN
-  const i = Math.min(n - 2, Math.floor(u))
-  const j = Math.min(n - 2, Math.floor(v))
-  const fu = u - i
-  const fv = v - j
-  const H = ring.heights
-  const o = j * n + i
-  return (H[o] * (1 - fu) + H[o + 1] * fu) * (1 - fv) + (H[o + n] * (1 - fu) + H[o + n + 1] * fu) * fv
 }
 
 /** Height of the curved ground below the observer's level plane at horizontal distance d: d^2 / (2 R). */

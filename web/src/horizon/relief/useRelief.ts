@@ -22,7 +22,7 @@ export type ReliefStatus = 'unavailable' | 'loading' | 'ready' | 'failed'
 export interface Relief {
   status: ReliefStatus
   scene: ReliefScene | null
-  /** Finest DEM cell at the observer, metres, and the outermost ring's reach, km. */
+  /** Cell of the DEM read at the observer, metres, and the outermost ring's reach, km. */
   cellM: number | null
   reachKm: number | null
   /** Duration of the last lighting pass in the slowest worker, ms. */
@@ -127,8 +127,8 @@ export function useRelief(lat: number | undefined, lon: number | undefined, mast
 
   return useMemo<Relief>(() => {
     if (!specs || specs.length === 0) return { status: 'unavailable', scene: null, cellM: null, reachKm: null, lightMs: null }
-    const cellM = specs[0].cellM / (frame?.k0 ?? 1)
-    const reachKm = (specs[specs.length - 1].cellM * 256) / (frame?.k0 ?? 1) / 1000
+    const cellM = specs[0].source.demM
+    const reachKm = (specs[specs.length - 1].cellM * 256) / 1000
     if (failed === key) return { status: 'failed', scene: null, cellM, reachKm, lightMs: null }
     if (!stack || !frame || !normals || normals.stack !== stack) return { status: 'loading', scene: null, cellM, reachKm, lightMs: null }
     const lit = light && light.stack === stack ? light : null

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { R_M, polarLatLon } from '../../terrain/tileset'
+import { R_M } from '../../terrain/tileset'
 import { GroundStack, discFractionAbove, ringNormals, ringSunlight, sampleEnu } from './light'
 import { renderRelief, tone } from './render'
-import { RING_COUNT, RING_N, RING_RATIO, enuToPlane, planeFrame, planeToEnu, ringSpecs, ringUrl } from './rings'
+import { RING_COUNT, RING_N, RING_RATIO, enuToPlane, planeFrame, planeToEnu, ringSpecs } from './rings'
 
 const D = Math.PI / 180
 const C = (RING_N - 1) / 2
@@ -25,36 +25,41 @@ function synthetic(lat: number, lon: number, base: number, height: (e: number, n
 }
 
 describe('ring geometry', () => {
-  it('maps local east and north to the plane and back, north towards the equator', () => {
-    const f = planeFrame(-85, 40)
-    const [x, y] = enuToPlane(f, 1200, -3400)
-    const [e, n] = planeToEnu(f, x, y)
-    expect(e).toBeCloseTo(1200, 6)
-    expect(n).toBeCloseTo(-3400, 6)
-    // 10 km north: latitude rises by 10 / (R pi / 180) degrees (0.3298°)
-    const [lat] = polarLatLon(...enuToPlane(f, 0, 10_000))
-    expect(lat + 85).toBeCloseTo(10_000 / ((R_M * Math.PI) / 180), 3)
-    // 10 km east at constant latitude, to first order: longitude grows by 10 km / (R cos lat)
-    const [lat2, lon2] = polarLatLon(...enuToPlane(f, 10_000, 0))
-    // (second order: a great circle eastwards drifts polewards by (d / R)^2 tan(lat) / 2 = 0.011°)
-    expect(Math.abs(lat2 + 85)).toBeLessThan(0.015)
-    expect(lon2 - 40).toBeCloseTo(10_000 / (R_M * Math.cos(85 * D)) / D, 1)
+  it('lays every ring in the stereographic plane of the place: east is +x, north is +y, true metres', () => {
+    const f = planeFrame(12.3, -45.6)
+    expect(enuToPlane(f, 1200, -3400)).toEqual([1200, -3400])
+    expect(planeToEnu(f, 1200, -3400)).toEqual([1200, -3400])
+    // a sample's (east, north) offset: column i grows eastwards, row j southwards, the centre is (0, 0)
+    expect(sampleEnu(f, 5, C, C)).toEqual([0, 0])
+    expect(sampleEnu(f, 5, C + 10, C - 4)).toEqual([50, 20])
   })
 
-  it('chooses the 5 m DEM near the pole, the 30 m DEM at 80 S and nothing north of 45 S', () => {
-    const pole = ringSpecs(-89.5, 0)!
-    expect(pole.map((s) => s.cellM)).toEqual([5, 20, 80, 320])
-    expect(pole[0].source.pixelM).toBe(5)
+  it('chooses the finest DEM covering the place, at either pole, and the global DEM elsewhere', () => {
+    const south = ringSpecs(-89.5, 0)!
+    expect(south.map((s) => s.cellM)).toEqual([5, 20, 80, 320, 1280])
+    expect(south[0].source.file).toBe('LRO_LOLA_DEM_SPole875_5mp_v04')
+    const north = ringSpecs(89.5, 0)!
+    expect(north[0].source.file).toBe('LRO_LOLA_DEM_NPole875_5mp_v04')
     expect(ringSpecs(-80, 10)![0].cellM).toBe(30)
     expect(ringSpecs(-60, 10)![0].cellM).toBe(100)
-    expect(ringSpecs(-20, 10)).toBeNull()
-    expect(ringSpecs(10, 10)).toBeNull()
+    // Apollo 11: the global LOLA DEM (118 m), first ring at 60 m; rings stop once one reaches past 250 km
+    const a11 = ringSpecs(0.674, 23.473)!
+    expect(a11.map((s) => s.cellM)).toEqual([60, 240, 960, 3840])
+    expect(a11.every((s) => s.source.file === 'LRO_LOLA_DEM_Global_256ppd_v06')).toBe(true)
+    expect(ringSpecs(Number.NaN, 0)).toBeNull()
   })
 
-  it('asks Moon Trek for the ring box with one extra row below', () => {
-    const url = ringUrl({ kind: 'trek', file: 'X', pixelM: 5, halfExtentM: 1e6 }, 0, 15161, 5)
-    expect(url).toContain('bbox=-1280,13876,1280,16441')
+  it('asks Moon Trek for the ring box in a stereographic projection centred on the place, one extra row below', () => {
+    const [spec] = ringSpecs(0.674, 23.473)!
+    const url = decodeURIComponent(spec.url)
+    expect(url).toContain('bbox=-15360,-15420,15360,15360')
     expect(url).toContain(`size=${RING_N},${RING_N + 1}`)
+    const wkt: string = JSON.parse(new URL(spec.url).searchParams.get('imageSR')!).wkt
+    expect(new URL(spec.url).searchParams.get('bboxSR')).toBe(new URL(spec.url).searchParams.get('imageSR'))
+    expect(wkt).toContain('PROJECTION["Stereographic"]')
+    expect(wkt).toContain('PARAMETER["Latitude_Of_Origin",0.674]')
+    expect(wkt).toContain('PARAMETER["Central_Meridian",23.473]')
+    expect(wkt).toContain('SPHEROID["Moon_2000_IAU_IAG",1737400.0,0.0]')
   })
 })
 
