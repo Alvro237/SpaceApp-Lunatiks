@@ -157,6 +157,16 @@ function Nav({ active }: { active: number }) {
           <li>
             <a href="#mobile" aria-current={active === 6 ? 'true' : undefined}>Mobile</a>
           </li>
+          {REPO_URL && (
+            <li className="nav-out">
+              <a href={REPO_URL}>
+                GitHub
+                <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+                  <path d="M4 2.5h5.5V8M9.5 2.5 2.5 9.5" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </a>
+            </li>
+          )}
         </ul>
       </nav>
       <a className="btn btn-primary btn-sm" href={APP_URL}>
@@ -535,7 +545,7 @@ export function Landing() {
               )}
               {REPO_URL && (
                 <li>
-                  <a href={REPO_URL}>Source code</a>
+                  <a href={REPO_URL}>Source code on GitHub</a>
                 </li>
               )}
             </ul>

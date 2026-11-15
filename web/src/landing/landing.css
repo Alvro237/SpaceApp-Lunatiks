@@ -62,6 +62,14 @@ a { color: inherit; }
 .nav nav a { display: block; padding: 8px 12px; border-radius: 999px; text-decoration: none; color: var(--muted); font-size: 0.94rem; transition: color 0.2s, background 0.2s; }
 .nav nav a:hover { color: var(--text); background: rgba(255, 255, 255, 0.06); }
 .nav nav a[aria-current] { color: var(--text); }
+/* the link out of the page (the source repository): set apart from the section links by a hairline, with an arrow */
+.nav .nav-out { margin-left: 6px; padding-left: 6px; border-left: 1px solid var(--card-border); }
+.nav .nav-out a { display: flex; align-items: center; gap: 6px; color: var(--text); }
+/* below this width the bar has no room for it beside the button (the button was pushed off the edge at 880 px); the
+   same link is in the closing section */
+@media (max-width: 1100px) {
+  .nav .nav-out { display: none; }
+}
 
 /* ---------- buttons ---------- */
 .btn {
