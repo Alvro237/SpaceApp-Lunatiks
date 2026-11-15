@@ -190,6 +190,8 @@ export class TerrainEngine {
     uAreaXf: { value: new THREE.Vector4(0, 0, 1, 1) },
     uHasArea: { value: 0 },
     uRegion: { value: new THREE.Vector3(0, 0, 0) },
+    // Stage A colours (mission-planner-ui-spec.md 4.3): 1 continuous (red-yellow-green), 4 colour-blind (viridis)
+    uAreaMode: { value: 1 },
   }
   private areaTexture: THREE.DataTexture | null = null
 
@@ -381,6 +383,13 @@ export class TerrainEngine {
     const r = this.shared.uRegion.value
     if (r.x === x && r.y === y && r.z === radiusM) return
     r.set(x, y, radiusM)
+    this.version++
+  }
+
+  /** Stage A display mode of the viable cells (4.3): 1 continuous (red-yellow-green), 4 colour-blind (viridis). */
+  setAreaMode(mode: 1 | 4): void {
+    if (this.shared.uAreaMode.value === mode) return
+    this.shared.uAreaMode.value = mode
     this.version++
   }
 

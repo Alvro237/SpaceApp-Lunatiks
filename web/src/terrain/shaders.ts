@@ -82,6 +82,19 @@ uniform sampler2D uArea;     // mission mode: r = code (0 outside, 1 fails stati
 uniform vec4 uAreaXf;        // x left, y top, width, height of the search raster (m)
 uniform float uHasArea;
 uniform vec3 uRegion;        // x, y (m) and radius (m) of the search region ring
+uniform int uAreaMode;       // viable cells (code 3): 1 continuous (red-yellow-green), 4 colour-blind (viridis)
+
+// Stage A colour ramps (mission-planner-ui-spec.md 4.3; first spec 9.6 rdylgn/viridis end and mid points).
+vec3 rdylgn(float s) {
+  vec3 r = vec3(0.647, 0.0, 0.149), y = vec3(1.0, 1.0, 0.749), g = vec3(0.0, 0.408, 0.216);
+  return s < 0.5 ? mix(r, y, s * 2.0) : mix(y, g, (s - 0.5) * 2.0);
+}
+vec3 viridis(float s) {
+  vec3 c0 = vec3(0.267, 0.005, 0.329), c1 = vec3(0.230, 0.322, 0.546), c2 = vec3(0.128, 0.567, 0.551),
+       c3 = vec3(0.369, 0.789, 0.383), c4 = vec3(0.993, 0.906, 0.144);
+  float t = clamp(s, 0.0, 1.0) * 4.0;
+  return t < 1.0 ? mix(c0, c1, t) : t < 2.0 ? mix(c1, c2, t - 1.0) : t < 3.0 ? mix(c2, c3, t - 2.0) : mix(c3, c4, t - 3.0);
+}
 in vec2 vUv;
 in vec2 vMap;
 in float vHeight;
@@ -203,7 +216,8 @@ void main() {
       float dots = step(length(mod(gl_FragCoord.xy, 6.0) - 3.0), 1.2);
       if (code == 3) {
         float s = texelFetch(uArea, c, 0).g;
-        colour = mix(colour, mix(vec3(0.10, 0.55, 0.42), vec3(0.36, 0.92, 0.62), s), 0.62);
+        vec3 ramp = uAreaMode == 4 ? viridis(s) : rdylgn(s);
+        colour = mix(colour, ramp, 0.7);
         vec2 f = fract(p);
         bool edge = (f.x < fw.x && areaCode(c - ivec2(1, 0), n) != 3) || (f.x > 1.0 - fw.x && areaCode(c + ivec2(1, 0), n) != 3)
                  || (f.y < fw.y && areaCode(c - ivec2(0, 1), n) != 3) || (f.y > 1.0 - fw.y && areaCode(c + ivec2(0, 1), n) != 3);

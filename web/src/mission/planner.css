@@ -1,0 +1,75 @@
+/*
+ * Mission planner panel (mission-planner-ui-spec.md section 3). --planner-w scales with the window so labels and
+ * the Stage B reasons below them (long sentences, not short badges: "Comes with the suitability search" and the
+ * data-gap notes) have room to read without wrapping into a narrow, cramped column; --planner-top / --planner-
+ * -bottom are set at runtime.
+ */
+.navigator { --planner-w: clamp(320px, 27vw, 460px); --planner-bottom: 0px; --planner-top: calc(var(--inset-top) + 59px); }
+
+.planner-panel {
+  left: 10px;
+  width: var(--planner-w);
+  top: var(--planner-top); /* 8px below the date pill, measured at runtime; a fallback height until the first layout pass */
+  bottom: calc(var(--planner-bottom) + 12px);
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+}
+.planner-panel.is-closed { width: auto; bottom: auto; }
+.planner-body { flex: 1; overflow-y: auto; }
+.planner-foot { flex: none; padding: 8px 12px 10px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+.planner-status { margin: 0; flex: 1; font-size: 0.78rem; color: var(--muted); }
+.planner-landings-toggle { font-size: 0.78rem; gap: 6px; white-space: nowrap; }
+.planner-landings-toggle input { margin: 0; }
+
+/* AdvancedInputs.tsx (3.3): every field is an .ios-row.stack (same padding and divider as the switch rows
+   and PlannerBasics), except the "Near or far side" radio group, the one field still nested as a plain
+   .pfield under its switch row: give it the list's own left/right gutter. */
+.filter-list .pfield { padding: 0 10px 10px; margin: 0; }
+
+.region-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: 6px; align-items: stretch; }
+.region-row > * { min-width: 0; }
+.range-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+
+.disclosure {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  margin: 10px 0 4px;
+  padding: 0 4px;
+  background: transparent;
+  border: 0;
+  font-weight: 600;
+  color: var(--text);
+}
+.disclosure-chevron { display: inline-flex; transition: transform 0.15s ease; }
+.disclosure-chevron.is-open { transform: rotate(90deg); }
+
+.results-empty { padding: 12px 4px; }
+
+/* Stage A score legend (4.3): the ramp with its 0, 0.33, 0.67, 1 ticks. */
+.score-legend { margin: 6px 0 10px; }
+.score-ramp {
+  height: 10px;
+  border-radius: 5px;
+  margin: 6px 0 4px;
+  background: linear-gradient(to right, rgb(165, 0, 38), rgb(255, 255, 191), rgb(0, 104, 55));
+}
+.score-ramp.is-viridis { background: linear-gradient(to right, rgb(68, 1, 84), rgb(59, 82, 139), rgb(33, 145, 140), rgb(94, 201, 98), rgb(253, 231, 37)); }
+.score-ticks { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--muted); }
+
+@media (max-width: 700px) {
+  .planner-panel, .planner-panel.is-closed { position: static; width: auto; max-height: none; margin: 8px; bottom: auto; top: auto; }
+}
+
+/* The date pill moved into the panel (mission mode has no pill at the top left). */
+.planner-date { flex: none; padding: 0 12px 10px; display: grid; gap: 6px; }
+.planner-date .pop { width: 100%; }
+.planner-date .pill-btn { width: 100%; justify-content: flex-start; }
+
+/* The timeline spans the whole width in mission mode, as in Study; the side panels end above it
+   (their bottoms follow --inset-bottom, measured from the timeline). */
+.navigator.is-mission .float-bottom { left: 10px; right: 10px; }
+.navigator.is-mission .float-right { max-height: calc(100vh - var(--inset-top) - var(--inset-bottom) - 22px); }

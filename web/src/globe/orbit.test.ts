@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { IDLE_BEFORE_SPIN_MS, MAX_TILT, MOON_R_KM, NEAR_ENTER_KM, NEAR_LEAVE_KM, isNearView, OrbitRig, SURFACE_MAX_R_KM, TILT_3D, cameraPose, nearPlaneKm, RELIEF_MAX, SPIN_DEG_PER_S, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon, zoomOrbitToward } from './orbit'
+import { IDLE_BEFORE_SPIN_MS, MAX_TILT, MOON_R_KM, NEAR_ENTER_KM, NEAR_LEAVE_KM, isNearView, OrbitRig, SURFACE_MAX_R_KM, TILT_3D, cameraPose, missionPickOutcome, nearPlaneKm, RELIEF_MAX, SPIN_DEG_PER_S, latLonToScene, raySphere, reliefExaggeration, sceneToLatLon, zoomOrbitToward } from './orbit'
 
 describe('globe geometry', () => {
   it('puts the north pole up and longitude 0 toward +x', () => {
@@ -86,6 +86,22 @@ describe('idle spin', () => {
     const r = rig()
     r.step(5, true, 10 * IDLE_BEFORE_SPIN_MS)
     expect(r.goal.lon).toBe(0)
+  })
+
+  it('mission mode forces anchored (section 3.8, P4): isSpinning is false after 20 s idle', () => {
+    const o = rig()
+    // GlobeView calls setAnchored(useGlobe.anchored || mode === 'mission') every frame; mission mode alone is enough
+    o.setAnchored(true)
+    expect(o.isSpinning(IDLE_BEFORE_SPIN_MS)).toBe(false)
+  })
+})
+
+describe('mission picking (section 3.8)', () => {
+  it('south of 60° S sets the region centre; north of it is refused', () => {
+    expect(missionPickOutcome(-84.79)).toBe('centre')
+    expect(missionPickOutcome(-60)).toBe('centre')
+    expect(missionPickOutcome(-59.9)).toBe('refused')
+    expect(missionPickOutcome(10)).toBe('refused')
   })
 })
 

@@ -6,6 +6,9 @@
  * Catalogue sites are buttons over the globe; the panels hold the same information as text.
  */
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
+import { Line2 } from 'three/examples/jsm/lines/Line2.js'
+import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js'
+import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js'
 import { SkyMap } from './skyMap'
 import { StarField } from './starField'
 import { ToolPortal } from '../ui/ToolSlot'
@@ -17,6 +20,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { type KeyboardEvent, type MouseEvent, type PointerEvent, type WheelEvent, useEffect, useMemo, useRef, useState } from 'react'
 import * as THREE from 'three'
 import { useInsets } from '../state/layout'
+import { useAreas } from '../state/areas'
 import { type MarkerStyle, type ViewMode, useApp } from '../state/store'
 import { MarkerSet } from '../map/markerSet'
 import { type MapSite, useMapSites } from '../map/useMapSites'
@@ -26,9 +30,10 @@ import { useEphemeris, useMasks } from '../time/hooks'
 import { DATA_BASE } from '../time/staticData'
 import { GlobeDetail } from './detail/globeDetail'
 import { type PhotoBase, loadPhotoBase } from './detail/photoBase'
-import { MIN_DIST, MOON_R_KM, type Orbit, OrbitRig, RELIEF_MAX, TILT_3D, cameraPose, isNearView, latLonToScene, nearPlaneKm, raySphere, reliefExaggeration, sceneToLatLon } from './orbit'
+import { MIN_DIST, MOON_R_KM, type Orbit, OrbitRig, RELIEF_MAX, TILT_3D, cameraPose, isNearView, latLonToScene, missionPickOutcome, nearPlaneKm, raySphere, reliefExaggeration, sceneToLatLon } from './orbit'
 import { PATCH_LEVELS, holeOf, patchGeometry, patchWindows } from './patch'
 import { GLOBE_FRAG, GLOBE_VERT, PATCH_VERT } from './shaders'
+import { IconCrosshair } from '../ui/icons'
 import { WebGLGuard } from '../ui/WebGLGuard'
 
 const FOV = 35
@@ -108,6 +113,14 @@ export function GlobeView() {
   /** The mesh's relief exaggeration, to half a unit (for the caption and the markers' height). */
   const [exag, setExag] = useState(RELIEF_MAX)
   const anchored = useGlobe((s) => s.anchored)
+  const regionCenter = useAreas((s) => s.center)
+  const regionRadiusKm = useAreas((s) => s.radiusKm)
+  const [regionToast, setRegionToast] = useState<string | null>(null)
+  useEffect(() => {
+    if (!regionToast) return
+    const t = setTimeout(() => setRegionToast(null), 3000)
+    return () => clearTimeout(t)
+  }, [regionToast])
   // 2D or 3D: the app's view, shared with the polar map and kept in the address (the camera lives in the orbit rig).
   // 3D tilts the view; 2D sets it straight down with north up again, whatever turn it had.
   const view = useApp((s) => s.view)
@@ -196,6 +209,7 @@ export function GlobeView() {
         setApp({ view: '2d' })
       },
       Enter: () => goTo(orbit.goal.lat <= MAP_DISC_LAT ? orbit.goal.lat : -90, orbit.goal.lat <= MAP_DISC_LAT ? orbit.goal.lon : 0),
+      ...(mode === 'mission' && useAreas.getState().center ? { c: centreOnRegion, C: centreOnRegion } : {}),
     }
     const fn = keys[e.key]
     if (fn) {
@@ -253,8 +267,31 @@ export function GlobeView() {
     pendingClick.current = setTimeout(() => {
       pendingClick.current = null
       if (mode === 'study') select({ kind: 'point', lat: Math.round(ll[0] * 1e4) / 1e4, lon: Math.round(ll[1] * 1e4) / 1e4 })
-      else orbit.turnTo(ll[0], ll[1])
+      else if (mode === 'mission') {
+        if (missionPickOutcome(ll[0]) === 'centre') {
+          const lat = Math.round(ll[0] * 1e4) / 1e4
+          const lon = Math.round(ll[1] * 1e4) / 1e4
+          useAreas.getState().set({ center: { lat, lon }, pickArmed: false })
+          goTo(lat, lon)
+        } else setRegionToast('The search covers south of 60° S')
+      } else orbit.turnTo(ll[0], ll[1])
     }, DOUBLE_CLICK_MS)
+  }
+  // A centre typed or chosen in the planner panel (not only a click here) flies down into the map, which then
+  // frames the whole region (TerrainView). A click already flew there itself.
+  useEffect(() => {
+    let prev = useAreas.getState().center
+    return useAreas.subscribe((a) => {
+      if (a.center === prev) return
+      prev = a.center
+      if (!a.center || useApp.getState().mode !== 'mission' || orbit.isDiving) return
+      if (a.center.lat <= MAP_DISC_LAT) orbit.dive(a.center.lat, a.center.lon, ENTER_MAP_DIST * 0.98)
+    })
+  }, [orbit])
+  /** Repeats the fly-to of the last region centre ("Centre on region", 3.8). */
+  const centreOnRegion = () => {
+    const c = useAreas.getState().center
+    if (c) goTo(c.lat, c.lon)
   }
   // a double click comes closer to the place under the pointer, anywhere on the Moon
   const onDoubleClick = (e: MouseEvent<HTMLDivElement>) => {
@@ -310,6 +347,7 @@ export function GlobeView() {
               exag={exag}
               onExag={setExag}
               onEnter={(lat, lon) => enterMap(lat, lon)}
+              region={mode === 'mission' && regionCenter ? { lat: regionCenter.lat, lon: regionCenter.lon, radiusKm: regionRadiusKm } : null}
             />
           </Canvas>
           </WebGLGuard>
@@ -359,6 +397,11 @@ export function GlobeView() {
         >
           <IconPin />
         </button>
+        {mode === 'mission' && (
+          <button type="button" disabled={!regionCenter} onClick={centreOnRegion} aria-label="Centre on region" title="Centre on region (C)">
+            <IconCrosshair />
+          </button>
+        )}
         <button
           type="button"
           aria-pressed={surface === 'photo'}
@@ -375,6 +418,11 @@ export function GlobeView() {
           : `Global LOLA topography (relief ×${exag}; 118 m detail from NASA Moon Trek as you zoom)`}
         {' · lit by the Sun at the chosen time'}
       </p>
+      {regionToast && (
+        <p className="toast" role="alert">
+          {regionToast}
+        </p>
+      )}
     </>
   )
 }
@@ -428,6 +476,33 @@ interface SceneProps {
   exag: number
   onExag: (exag: number) => void
   onEnter: (lat: number, lon: number) => void
+  /** Mission mode's search region, drawn as a ring on the sphere (3.8); null hides it. */
+  region: { lat: number; lon: number; radiusKm: number } | null
+}
+
+/** 128-point ring on the sphere at the given latitude/longitude and angular radius, 0.2 % above the surface. */
+function regionRingPoints(lat: number, lon: number, radiusKm: number): Float32Array {
+  const n = 128
+  const out = new Float32Array((n + 1) * 3)
+  const r = MOON_R_KM * 1.002
+  const theta = radiusKm / MOON_R_KM
+  const c = new THREE.Vector3(...latLonToScene(lat, lon, 1))
+  const up = new THREE.Vector3(0, 1, 0)
+  const e1 = up.clone().cross(c)
+  if (e1.lengthSq() < 1e-9) e1.set(1, 0, 0)
+  e1.normalize()
+  const e2 = c.clone().cross(e1)
+  for (let i = 0; i <= n; i++) {
+    const a = (i / n) * Math.PI * 2
+    const p = c
+      .clone()
+      .multiplyScalar(Math.cos(theta))
+      .addScaledVector(e1, Math.sin(theta) * Math.cos(a))
+      .addScaledVector(e2, Math.sin(theta) * Math.sin(a))
+      .multiplyScalar(r)
+    out.set([p.x, p.y, p.z], i * 3)
+  }
+  return out
 }
 
 /** Height (m) of the global grid at a point, nearest sample. */
@@ -438,9 +513,35 @@ function globeHeight(data: SceneProps['data'], lat: number, lon: number): number
   return data.heights[row * width + col]
 }
 
-function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, onExag, onEnter }: SceneProps) {
+function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, onExag, onEnter, region }: SceneProps) {
   const { camera, size, scene, gl, setDpr, viewport } = useThree()
   const [markersSet] = useState(() => new MarkerSet())
+  const [regionRing] = useState(() => {
+    const g = new LineGeometry()
+    g.setPositions(new Float32Array(3 * 129))
+    const m = new LineMaterial({ color: '#fadb73', linewidth: 2, depthTest: false, transparent: true })
+    const line = new Line2(g, m)
+    line.visible = false
+    line.renderOrder = 22
+    return line
+  })
+  useEffect(() => {
+    scene.add(regionRing)
+    return () => {
+      scene.remove(regionRing)
+      regionRing.geometry.dispose()
+      ;(regionRing.material as LineMaterial).dispose()
+    }
+  }, [scene, regionRing])
+  useEffect(() => {
+    if (!region) {
+      regionRing.visible = false
+      return
+    }
+    regionRing.geometry.setPositions(regionRingPoints(region.lat, region.lon, region.radiusKm))
+    regionRing.computeLineDistances()
+    regionRing.visible = true
+  }, [region, regionRing])
   /** What the last drawn frame showed (camera, canvas, Sun, relief, detail tiles): a frame is drawn when it differs. */
   const drawn = useRef({ sig: new Float64Array(40), at: Infinity, was: false })
   const sceneVersion = useRef(0)
@@ -580,7 +681,8 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
   const near = useRef<boolean | null>(null)
 
   useFrame((_, dt) => {
-    orbit.setAnchored(useGlobe.getState().anchored)
+    // no idle rotation in mission mode (P4): forced anchored, without touching the user's own pin, restored on leaving
+    orbit.setAnchored(useGlobe.getState().anchored || useApp.getState().mode === 'mission')
     orbit.fit(size.width, size.height, useInsets.getState(), FOV)
     orbit.step(dt, reduced)
     const n = orbit.now
@@ -599,6 +701,7 @@ function GlobeScene({ data, orbit, sites, markerStyle, pickRef, surface, exag, o
 
     const cam = camera as THREE.PerspectiveCamera
     placeCamera(cam, n, orbit.view.tilt, orbit.view.heading, size.width, size.height)
+    if (regionRing.visible) (regionRing.material as LineMaterial).resolution.set(size.width, size.height)
 
     // the Sun at the active instant
     const { tMs } = useApp.getState()
